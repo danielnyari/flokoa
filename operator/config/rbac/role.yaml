@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - agent.flokoa.ai
+  resources:
+  - agents
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - agent.flokoa.ai
+  resources:
+  - agents/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - agent.flokoa.ai
+  resources:
+  - agents/status
+  verbs:
+  - get
+  - patch
+  - update
