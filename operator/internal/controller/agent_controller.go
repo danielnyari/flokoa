@@ -1,33 +1,36 @@
-/*
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controller
 
 import (
 	"context"
+	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// AgentReconciler reconciles a Agent object
+const (
+	agentFinalizer = "agent.flokoa.ai/finalizer"
+)
+
+const (
+	ConditionTypeReady       = "Ready"
+	ReasonDeploymentReady    = "DeploymentReady"
+	ReasonDeploymentNotReady = "DeploymentNotReady"
+	ReasonReconcileError     = "ReconcileError"
+)
+
 type AgentReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -36,28 +39,258 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Agent object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := log.FromContext(ctx)
+	logger.Info("Reconciling Agent", "name", req.Name, "namespace", req.Namespace)
 
-	// TODO(user): your logic here
+	agent := &agentv1alpha1.Agent{}
+	if err := r.Get(ctx, req.NamespacedName, agent); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Handle deletion
+	if !agent.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
+			controllerutil.RemoveFinalizer(agent, agentFinalizer)
+			if err := r.Update(ctx, agent); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer
+	if !controllerutil.ContainsFinalizer(agent, agentFinalizer) {
+		controllerutil.AddFinalizer(agent, agentFinalizer)
+		if err := r.Update(ctx, agent); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Reconcile Deployment
+	deployment, err := r.reconcileDeployment(ctx, agent)
+	if err != nil {
+		logger.Error(err, "Failed to reconcile Deployment")
+		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
+		_ = r.Status().Update(ctx, agent)
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile Service
+	service, err := r.reconcileService(ctx, agent)
+	if err != nil {
+		logger.Error(err, "Failed to reconcile Service")
+		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
+		_ = r.Status().Update(ctx, agent)
+		return ctrl.Result{}, err
+	}
+
+	// Update status
+	agent.Status.Phase = r.calculatePhase(deployment)
+	agent.Status.Backend = "core"
+	agent.Status.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local", service.Name, service.Namespace)
+	agent.Status.Replicas = deployment.Status.Replicas
+	agent.Status.AvailableReplicas = deployment.Status.AvailableReplicas
+	agent.Status.ObservedGeneration = agent.Generation
+
+	if deployment.Status.AvailableReplicas > 0 {
+		r.setCondition(agent, ConditionTypeReady, metav1.ConditionTrue, ReasonDeploymentReady, "Agent is ready")
+	} else {
+		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonDeploymentNotReady, "Waiting for pods")
+	}
+
+	if err := r.Status().Update(ctx, agent); err != nil {
+		logger.Error(err, "Failed to update Agent status")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
+func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent) (*appsv1.Deployment, error) {
+	desired := r.buildDeployment(agent)
+
+	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	existing := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, existing)
+
+	if apierrors.IsNotFound(err) {
+		if err := r.Create(ctx, desired); err != nil {
+			return nil, fmt.Errorf("failed to create Deployment: %w", err)
+		}
+		return desired, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Deployment: %w", err)
+	}
+
+	existing.Spec = desired.Spec
+	if err := r.Update(ctx, existing); err != nil {
+		return nil, fmt.Errorf("failed to update Deployment: %w", err)
+	}
+
+	return existing, nil
+}
+
+func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent) *appsv1.Deployment {
+	labels := r.buildLabels(agent)
+	rt := &agent.Spec.Runtime
+
+	replicas := int32(1)
+	if rt.Replicas != nil {
+		replicas = *rt.Replicas
+	}
+
+	// Use the container spec directly from the CRD
+	container := rt.Container
+
+	// Ensure the container has a name
+	if container.Name == "" {
+		container.Name = "agent"
+	}
+
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agent.Name,
+			Namespace: agent.Namespace,
+			Labels:    labels,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers:         []corev1.Container{container},
+					Volumes:            rt.Volumes,
+					ImagePullSecrets:   rt.ImagePullSecrets,
+					ServiceAccountName: rt.ServiceAccountName,
+					SecurityContext:    rt.SecurityContext,
+					NodeSelector:       rt.NodeSelector,
+					Tolerations:        rt.Tolerations,
+					Affinity:           rt.Affinity,
+				},
+			},
+		},
+	}
+}
+
+func (r *AgentReconciler) reconcileService(ctx context.Context, agent *agentv1alpha1.Agent) (*corev1.Service, error) {
+	desired := r.buildService(agent)
+
+	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	existing := &corev1.Service{}
+	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, existing)
+
+	if apierrors.IsNotFound(err) {
+		if err := r.Create(ctx, desired); err != nil {
+			return nil, fmt.Errorf("failed to create Service: %w", err)
+		}
+		return desired, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Service: %w", err)
+	}
+
+	existing.Spec.Ports = desired.Spec.Ports
+	existing.Spec.Selector = desired.Spec.Selector
+	if err := r.Update(ctx, existing); err != nil {
+		return nil, fmt.Errorf("failed to update Service: %w", err)
+	}
+
+	return existing, nil
+}
+
+func (r *AgentReconciler) buildService(agent *agentv1alpha1.Agent) *corev1.Service {
+	labels := r.buildLabels(agent)
+
+	// Build service ports from container ports
+	var servicePorts []corev1.ServicePort
+	for _, cp := range agent.Spec.Runtime.Container.Ports {
+		servicePorts = append(servicePorts, corev1.ServicePort{
+			Name:       cp.Name,
+			Port:       cp.ContainerPort,
+			TargetPort: intstr.FromInt32(cp.ContainerPort),
+			Protocol:   cp.Protocol,
+		})
+	}
+
+	// Default to port 80 -> 8080 if no ports defined
+	if len(servicePorts) == 0 {
+		servicePorts = []corev1.ServicePort{
+			{
+				Name:       "http",
+				Port:       80,
+				TargetPort: intstr.FromInt32(8080),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		}
+	}
+
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agent.Name,
+			Namespace: agent.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports:    servicePorts,
+			Type:     corev1.ServiceTypeClusterIP,
+		},
+	}
+}
+
+func (r *AgentReconciler) buildLabels(agent *agentv1alpha1.Agent) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       agent.Name,
+		"app.kubernetes.io/instance":   agent.Name,
+		"app.kubernetes.io/managed-by": "flokoa-operator",
+		"flokoa.ai/agent":              agent.Name,
+	}
+}
+
+func (r *AgentReconciler) calculatePhase(deployment *appsv1.Deployment) string {
+	if deployment.Status.AvailableReplicas > 0 {
+		return "Running"
+	}
+	return "Pending"
+}
+
+func (r *AgentReconciler) setCondition(agent *agentv1alpha1.Agent, conditionType string, status metav1.ConditionStatus, reason, message string) {
+	condition := metav1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		ObservedGeneration: agent.Generation,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	}
+	meta.SetStatusCondition(&agent.Status.Conditions, condition)
+}
+
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&agentv1alpha1.Agent{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		Named("agent").
 		Complete(r)
 }
