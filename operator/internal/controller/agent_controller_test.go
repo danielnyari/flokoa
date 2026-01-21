@@ -607,5 +607,628 @@ var _ = Describe("Agent Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
+
+		// HIGH PRIORITY TEST: Deletion and cleanup logic
+		Context("Deletion with finalizers", func() {
+			It("should clean up owned resources before removing finalizer", func() {
+				By("Creating an Agent")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Container: corev1.Container{
+								Image: "nginx:latest",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				By("Reconciling to add finalizer and create resources")
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Requeue).To(BeTrue())
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying Deployment and Service exist")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				service := &corev1.Service{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, service)
+				}, timeout, interval).Should(Succeed())
+
+				By("Deleting the Agent")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
+
+				By("Reconciling to process deletion")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying finalizer was removed")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				if err == nil {
+					Expect(controllerutil.ContainsFinalizer(agent, agentFinalizer)).To(BeFalse())
+				} else {
+					// Agent may already be deleted
+					Expect(errors.IsNotFound(err)).To(BeTrue())
+				}
+
+				By("Verifying owned resources are cleaned up by Kubernetes garbage collection")
+				// Note: Owned resources will be deleted by Kubernetes GC since we set OwnerReference
+				// In a real cluster, this happens automatically, but in envtest we verify the reference exists
+				deployment = &appsv1.Deployment{}
+				err = k8sClient.Get(ctx, typeNamespacedName, deployment)
+				if err == nil {
+					// Verify owner reference is set (GC will clean this up)
+					Expect(deployment.OwnerReferences).NotTo(BeEmpty())
+					Expect(deployment.OwnerReferences[0].Name).To(Equal(agentName))
+				}
+			})
+
+			It("should not block deletion if owned resources are manually deleted", func() {
+				By("Creating an Agent")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Container: corev1.Container{
+								Image: "nginx:latest",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				By("Reconciling to create resources")
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Requeue).To(BeTrue())
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Manually deleting owned Deployment and Service")
+				deployment := &appsv1.Deployment{}
+				err = k8sClient.Get(ctx, typeNamespacedName, deployment)
+				if err == nil {
+					Expect(k8sClient.Delete(ctx, deployment)).To(Succeed())
+				}
+
+				service := &corev1.Service{}
+				err = k8sClient.Get(ctx, typeNamespacedName, service)
+				if err == nil {
+					Expect(k8sClient.Delete(ctx, service)).To(Succeed())
+				}
+
+				By("Deleting the Agent")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
+
+				By("Reconciling to process deletion")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying finalizer was removed despite missing resources")
+				// Agent deletion should complete successfully
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, typeNamespacedName, agent)
+					return errors.IsNotFound(err) || !controllerutil.ContainsFinalizer(agent, agentFinalizer)
+				}, timeout, interval).Should(BeTrue())
+			})
+
+			It("should handle deletion when DeletionTimestamp is set", func() {
+				By("Creating an Agent with finalizer")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       agentName,
+						Namespace:  agentNamespace,
+						Finalizers: []string{agentFinalizer},
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Container: corev1.Container{
+								Image: "nginx:latest",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Deleting the Agent")
+				Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
+
+				By("Verifying DeletionTimestamp is set")
+				err := k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.DeletionTimestamp.IsZero()).To(BeFalse())
+
+				By("Reconciling to process deletion")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying Agent is eventually deleted")
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, typeNamespacedName, agent)
+					return errors.IsNotFound(err)
+				}, timeout, interval).Should(BeTrue())
+			})
+		})
+
+		// HIGH PRIORITY TEST: Helper functions
+		Context("Helper functions", func() {
+			Describe("buildLabels", func() {
+				It("should generate correct standard labels", func() {
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-agent",
+							Namespace: "default",
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					labels := reconciler.buildLabels(agent)
+
+					Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/name", "test-agent"))
+					Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/instance", "test-agent"))
+					Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flokoa-operator"))
+					Expect(labels).To(HaveKeyWithValue("flokoa.ai/agent", "test-agent"))
+				})
+
+				It("should use Agent name in labels", func() {
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "my-custom-agent",
+							Namespace: "custom-namespace",
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					labels := reconciler.buildLabels(agent)
+
+					Expect(labels["app.kubernetes.io/name"]).To(Equal("my-custom-agent"))
+					Expect(labels["flokoa.ai/agent"]).To(Equal("my-custom-agent"))
+				})
+			})
+
+			Describe("calculatePhase", func() {
+				It("should return Running when availableReplicas > 0", func() {
+					deployment := &appsv1.Deployment{
+						Status: appsv1.DeploymentStatus{
+							AvailableReplicas: 3,
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					phase := reconciler.calculatePhase(deployment)
+					Expect(phase).To(Equal("Running"))
+				})
+
+				It("should return Pending when availableReplicas = 0", func() {
+					deployment := &appsv1.Deployment{
+						Status: appsv1.DeploymentStatus{
+							AvailableReplicas: 0,
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					phase := reconciler.calculatePhase(deployment)
+					Expect(phase).To(Equal("Pending"))
+				})
+
+				It("should return Running when availableReplicas = 1", func() {
+					deployment := &appsv1.Deployment{
+						Status: appsv1.DeploymentStatus{
+							AvailableReplicas: 1,
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					phase := reconciler.calculatePhase(deployment)
+					Expect(phase).To(Equal("Running"))
+				})
+			})
+
+			Describe("setCondition", func() {
+				It("should add new condition to Agent status", func() {
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Generation: 1,
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					reconciler.setCondition(agent, "Ready", metav1.ConditionTrue, "TestReason", "Test message")
+
+					condition := meta.FindStatusCondition(agent.Status.Conditions, "Ready")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("TestReason"))
+					Expect(condition.Message).To(Equal("Test message"))
+					Expect(condition.ObservedGeneration).To(Equal(int64(1)))
+				})
+
+				It("should update existing condition", func() {
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Generation: 1,
+						},
+						Status: agentv1alpha1.AgentStatus{
+							Conditions: []metav1.Condition{
+								{
+									Type:               "Ready",
+									Status:             metav1.ConditionFalse,
+									Reason:             "OldReason",
+									Message:            "Old message",
+									ObservedGeneration: 1,
+									LastTransitionTime: metav1.Now(),
+								},
+							},
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					reconciler.setCondition(agent, "Ready", metav1.ConditionTrue, "NewReason", "New message")
+
+					condition := meta.FindStatusCondition(agent.Status.Conditions, "Ready")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("NewReason"))
+					Expect(condition.Message).To(Equal("New message"))
+				})
+
+				It("should preserve other conditions when updating one", func() {
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Generation: 1,
+						},
+						Status: agentv1alpha1.AgentStatus{
+							Conditions: []metav1.Condition{
+								{
+									Type:               "Ready",
+									Status:             metav1.ConditionTrue,
+									Reason:             "Reason1",
+									Message:            "Message1",
+									ObservedGeneration: 1,
+									LastTransitionTime: metav1.Now(),
+								},
+								{
+									Type:               "Available",
+									Status:             metav1.ConditionTrue,
+									Reason:             "Reason2",
+									Message:            "Message2",
+									ObservedGeneration: 1,
+									LastTransitionTime: metav1.Now(),
+								},
+							},
+						},
+					}
+
+					reconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					reconciler.setCondition(agent, "Ready", metav1.ConditionFalse, "UpdatedReason", "Updated message")
+
+					Expect(agent.Status.Conditions).To(HaveLen(2))
+					readyCondition := meta.FindStatusCondition(agent.Status.Conditions, "Ready")
+					Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+					Expect(readyCondition.Reason).To(Equal("UpdatedReason"))
+
+					availableCondition := meta.FindStatusCondition(agent.Status.Conditions, "Available")
+					Expect(availableCondition).NotTo(BeNil())
+					Expect(availableCondition.Reason).To(Equal("Reason2"))
+				})
+			})
+		})
+
+		// HIGH PRIORITY TEST: Spec updates and reconciliation state
+		Context("Spec updates and reconciliation state", func() {
+			It("should detect and reconcile spec changes", func() {
+				By("Creating an Agent")
+				replicas := int32(1)
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Replicas: &replicas,
+							Container: corev1.Container{
+								Image: "nginx:latest",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				By("Initial reconciliation")
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Requeue).To(BeTrue())
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying initial Deployment")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, typeNamespacedName, deployment)
+					return err == nil && deployment.Spec.Replicas != nil && *deployment.Spec.Replicas == 1
+				}, timeout, interval).Should(BeTrue())
+
+				By("Updating Agent spec")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				newReplicas := int32(5)
+				agent.Spec.Runtime.Replicas = &newReplicas
+				Expect(k8sClient.Update(ctx, agent)).To(Succeed())
+
+				By("Reconciling after spec update")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying Deployment was updated")
+				Eventually(func() int32 {
+					err := k8sClient.Get(ctx, typeNamespacedName, deployment)
+					if err != nil || deployment.Spec.Replicas == nil {
+						return 0
+					}
+					return *deployment.Spec.Replicas
+				}, timeout, interval).Should(Equal(int32(5)))
+
+				By("Verifying ObservedGeneration was updated")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.Status.ObservedGeneration).To(Equal(agent.Generation))
+			})
+
+			It("should reconcile manually modified Deployments", func() {
+				By("Creating an Agent")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Container: corev1.Container{
+								Image: "nginx:latest",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				By("Initial reconciliation")
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Requeue).To(BeTrue())
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying Deployment exists")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				originalImage := deployment.Spec.Template.Spec.Containers[0].Image
+				Expect(originalImage).To(Equal("nginx:latest"))
+
+				By("Manually modifying the Deployment")
+				deployment.Spec.Template.Spec.Containers[0].Image = "nginx:alpine"
+				Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
+
+				By("Verifying manual modification")
+				Eventually(func() string {
+					err := k8sClient.Get(ctx, typeNamespacedName, deployment)
+					if err != nil {
+						return ""
+					}
+					return deployment.Spec.Template.Spec.Containers[0].Image
+				}, timeout, interval).Should(Equal("nginx:alpine"))
+
+				By("Reconciling to restore desired state")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying Deployment restored to original spec")
+				Eventually(func() string {
+					err := k8sClient.Get(ctx, typeNamespacedName, deployment)
+					if err != nil {
+						return ""
+					}
+					return deployment.Spec.Template.Spec.Containers[0].Image
+				}, timeout, interval).Should(Equal("nginx:latest"))
+			})
+
+			It("should update Service when container ports change", func() {
+				By("Creating an Agent with initial ports")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Container: corev1.Container{
+								Image: "nginx:latest",
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: 8080,
+										Protocol:      corev1.ProtocolTCP,
+									},
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				By("Initial reconciliation")
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Requeue).To(BeTrue())
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying initial Service ports")
+				service := &corev1.Service{}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, typeNamespacedName, service)
+					return err == nil && len(service.Spec.Ports) == 1 && service.Spec.Ports[0].Port == 8080
+				}, timeout, interval).Should(BeTrue())
+
+				By("Updating Agent with new ports")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				agent.Spec.Runtime.Container.Ports = []corev1.ContainerPort{
+					{
+						Name:          "http",
+						ContainerPort: 3000,
+						Protocol:      corev1.ProtocolTCP,
+					},
+					{
+						Name:          "metrics",
+						ContainerPort: 9090,
+						Protocol:      corev1.ProtocolTCP,
+					},
+				}
+				Expect(k8sClient.Update(ctx, agent)).To(Succeed())
+
+				By("Reconciling after port update")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying Service ports updated")
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, typeNamespacedName, service)
+					if err != nil || len(service.Spec.Ports) != 2 {
+						return false
+					}
+					return service.Spec.Ports[0].Port == 3000 && service.Spec.Ports[1].Port == 9090
+				}, timeout, interval).Should(BeTrue())
+			})
+		})
 	})
 })
