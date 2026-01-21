@@ -94,13 +94,16 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Name:  "agent",
-								Image: "nginx:latest",
-								Ports: []corev1.ContainerPort{
-									{
-										ContainerPort: 8080,
-										Protocol:      corev1.ProtocolTCP,
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+									Ports: []corev1.ContainerPort{
+										{
+											ContainerPort: 8080,
+											Protocol:      corev1.ProtocolTCP,
+										},
 									},
 								},
 							},
@@ -151,13 +154,13 @@ var _ = Describe("Agent Controller", func() {
 				Expect(service.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt32(8080)))
 
 				By("Verifying the Agent status was updated")
-				Eventually(func() string {
+				Eventually(func() agentv1alpha1.AgentPhase {
 					err := k8sClient.Get(ctx, typeNamespacedName, agent)
 					if err != nil {
 						return ""
 					}
 					return agent.Status.Phase
-				}, timeout, interval).Should(Equal("Pending"))
+				}, timeout, interval).Should(Equal(agentv1alpha1.AgentPhasePending))
 
 				Expect(agent.Status.Backend).To(Equal("core"))
 				Expect(agent.Status.URL).To(ContainSubstring(agentName))
@@ -172,8 +175,11 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Image: "nginx:latest",
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
 							},
 						},
 					},
@@ -213,9 +219,12 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Replicas: &replicas,
-							Container: corev1.Container{
-								Image: "nginx:latest",
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Replicas: &replicas,
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
 							},
 						},
 					},
@@ -261,18 +270,21 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Image: "nginx:latest",
-								Ports: []corev1.ContainerPort{
-									{
-										Name:          "http",
-										ContainerPort: 3000,
-										Protocol:      corev1.ProtocolTCP,
-									},
-									{
-										Name:          "metrics",
-										ContainerPort: 9090,
-										Protocol:      corev1.ProtocolTCP,
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+									Ports: []corev1.ContainerPort{
+										{
+											Name:          "http",
+											ContainerPort: 3000,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "metrics",
+											ContainerPort: 9090,
+											Protocol:      corev1.ProtocolTCP,
+										},
 									},
 								},
 							},
@@ -325,16 +337,19 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Image: "nginx:latest",
-								Resources: corev1.ResourceRequirements{
-									Limits: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("500m"),
-										corev1.ResourceMemory: resource.MustParse("512Mi"),
-									},
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("100m"),
-										corev1.ResourceMemory: resource.MustParse("128Mi"),
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+									Resources: corev1.ResourceRequirements{
+										Limits: corev1.ResourceList{
+											corev1.ResourceCPU:    resource.MustParse("500m"),
+											corev1.ResourceMemory: resource.MustParse("512Mi"),
+										},
+										Requests: corev1.ResourceList{
+											corev1.ResourceCPU:    resource.MustParse("100m"),
+											corev1.ResourceMemory: resource.MustParse("128Mi"),
+										},
 									},
 								},
 							},
@@ -387,8 +402,11 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Image: "nginx:latest",
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
 							},
 						},
 					},
@@ -440,8 +458,11 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Image: "nginx:latest",
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
 							},
 						},
 					},
@@ -488,8 +509,11 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Image: "nginx:latest",
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
 							},
 						},
 					},
@@ -547,8 +571,11 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Container: corev1.Container{
-								Image: "nginx:latest",
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
 							},
 						},
 					},

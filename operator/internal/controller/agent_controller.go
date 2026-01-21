@@ -144,15 +144,20 @@ func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv
 
 func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent) *appsv1.Deployment {
 	labels := r.buildLabels(agent)
-	rt := &agent.Spec.Runtime
+	spec := agent.Spec.Runtime.Spec
+
+	// Default spec if not provided
+	if spec == nil {
+		spec = &agentv1alpha1.StandardRuntimeSpec{}
+	}
 
 	replicas := int32(1)
-	if rt.Replicas != nil {
-		replicas = *rt.Replicas
+	if spec.Replicas != nil {
+		replicas = *spec.Replicas
 	}
 
 	// Use the container spec directly from the CRD
-	container := rt.Container
+	container := spec.Container
 
 	// Ensure the container has a name
 	if container.Name == "" {
@@ -176,13 +181,13 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent) *appsv1.De
 				},
 				Spec: corev1.PodSpec{
 					Containers:         []corev1.Container{container},
-					Volumes:            rt.Volumes,
-					ImagePullSecrets:   rt.ImagePullSecrets,
-					ServiceAccountName: rt.ServiceAccountName,
-					SecurityContext:    rt.SecurityContext,
-					NodeSelector:       rt.NodeSelector,
-					Tolerations:        rt.Tolerations,
-					Affinity:           rt.Affinity,
+					Volumes:            spec.Volumes,
+					ImagePullSecrets:   spec.ImagePullSecrets,
+					ServiceAccountName: spec.ServiceAccountName,
+					SecurityContext:    spec.SecurityContext,
+					NodeSelector:       spec.NodeSelector,
+					Tolerations:        spec.Tolerations,
+					Affinity:           spec.Affinity,
 				},
 			},
 		},
@@ -220,16 +225,19 @@ func (r *AgentReconciler) reconcileService(ctx context.Context, agent *agentv1al
 
 func (r *AgentReconciler) buildService(agent *agentv1alpha1.Agent) *corev1.Service {
 	labels := r.buildLabels(agent)
+	spec := agent.Spec.Runtime.Spec
 
 	// Build service ports from container ports
 	var servicePorts []corev1.ServicePort
-	for _, cp := range agent.Spec.Runtime.Container.Ports {
-		servicePorts = append(servicePorts, corev1.ServicePort{
-			Name:       cp.Name,
-			Port:       cp.ContainerPort,
-			TargetPort: intstr.FromInt32(cp.ContainerPort),
-			Protocol:   cp.Protocol,
-		})
+	if spec != nil {
+		for _, cp := range spec.Container.Ports {
+			servicePorts = append(servicePorts, corev1.ServicePort{
+				Name:       cp.Name,
+				Port:       cp.ContainerPort,
+				TargetPort: intstr.FromInt32(cp.ContainerPort),
+				Protocol:   cp.Protocol,
+			})
+		}
 	}
 
 	// Default to port 80 -> 8080 if no ports defined
@@ -267,11 +275,11 @@ func (r *AgentReconciler) buildLabels(agent *agentv1alpha1.Agent) map[string]str
 	}
 }
 
-func (r *AgentReconciler) calculatePhase(deployment *appsv1.Deployment) string {
+func (r *AgentReconciler) calculatePhase(deployment *appsv1.Deployment) agentv1alpha1.AgentPhase {
 	if deployment.Status.AvailableReplicas > 0 {
-		return "Running"
+		return agentv1alpha1.AgentPhaseRunning
 	}
-	return "Pending"
+	return agentv1alpha1.AgentPhasePending
 }
 
 func (r *AgentReconciler) setCondition(agent *agentv1alpha1.Agent, conditionType string, status metav1.ConditionStatus, reason, message string) {

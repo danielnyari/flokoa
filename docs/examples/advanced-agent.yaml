@@ -1,0 +1,134 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: advanced-agent
+  labels:
+    app.kubernetes.io/name: advanced-agent
+    app.kubernetes.io/component: ai-agent
+    app.kubernetes.io/managed-by: flokoa-operator
+    environment: production
+spec:
+  framework: langchain
+
+  runtime:
+    type: standard
+    spec:
+      replicas: 3
+
+      # Service account for RBAC
+      serviceAccountName: agent-sa
+
+      # Container configuration
+      container:
+      name: agent
+      image: ghcr.io/example/langchain-agent:v2.1.0
+
+      ports:
+      - containerPort: 8080
+        name: http
+        protocol: TCP
+      - containerPort: 9090
+        name: metrics
+        protocol: TCP
+
+      env:
+      - name: AGENT_MODE
+        value: "production"
+      - name: ENABLE_TRACING
+        value: "true"
+      - name: OTEL_ENDPOINT
+        value: "http://otel-collector:4317"
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: agent-secrets
+            key: api-key
+
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "1000m"
+          memory: "1Gi"
+
+        # Volume mounts for configuration
+        volumeMounts:
+        - name: config
+          mountPath: /etc/agent
+          readOnly: true
+        - name: cache
+          mountPath: /var/cache/agent
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes:
+      - name: config
+        configMap:
+          name: agent-config
+      - name: cache
+        emptyDir:
+          sizeLimit: 1Gi
+
+      # Image pull secrets for private registries
+      imagePullSecrets:
+      - name: ghcr-secret
+
+      # Pod-level security context
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Node scheduling
+      nodeSelector:
+        workload-type: ai-agents
+
+      tolerations:
+      - key: "ai-workload"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+      affinity:
+        # Prefer spreading across zones
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - advanced-agent
+              topologyKey: topology.kubernetes.io/zone

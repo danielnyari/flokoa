@@ -7,20 +7,61 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Framework represents the AI framework used by the agent
+// +kubebuilder:validation:Enum=pydantic-ai;langchain;crewai;marvin;autogen;custom
+type Framework string
+
+const (
+	FrameworkPydanticAI Framework = "pydantic-ai"
+	FrameworkLangChain  Framework = "langchain"
+	FrameworkCrewAI     Framework = "crewai"
+	FrameworkMarvin     Framework = "marvin"
+	FrameworkAutogen    Framework = "autogen"
+	FrameworkA2A        Framework = "a2a"
+)
+
+// AgentPhase represents the current phase of the agent lifecycle
+// +kubebuilder:validation:Enum=Pending;Running;Failed
+type AgentPhase string
+
+const (
+	AgentPhasePending AgentPhase = "Pending"
+	AgentPhaseRunning AgentPhase = "Running"
+	AgentPhaseFailed  AgentPhase = "Failed"
+)
+
+// RuntimeType represents the type of runtime backend for the agent
+// +kubebuilder:validation:Enum=standard
+type RuntimeType string
+
+const (
+	RuntimeTypeStandard RuntimeType = "standard"
+)
+
 // AgentSpec defines the desired state of an Agent
 type AgentSpec struct {
-	// Runtime configuration - maps to the underlying Deployment
+	// Runtime configuration - specifies the backend and configuration
 	Runtime RuntimeSpec `json:"runtime"`
 
 	// Explicit framework declaration (for observability/tooling)
-	// +kubebuilder:validation:Enum=pydantic-ai;langchain;crewai;marvin;autogen;custom
 	// +optional
-	Framework string `json:"framework,omitempty"`
+	Framework Framework `json:"framework,omitempty"`
 }
 
-// RuntimeSpec defines the Deployment configuration for the agent.
-// Uses corev1 types directly where possible.
+// RuntimeSpec defines the runtime backend and its configuration
 type RuntimeSpec struct {
+	// Type of runtime backend
+	// +kubebuilder:default=standard
+	Type RuntimeType `json:"type"`
+
+	// Spec contains the runtime-specific configuration
+	// +optional
+	Spec *StandardRuntimeSpec `json:"spec,omitempty"`
+}
+
+// StandardRuntimeSpec defines the configuration for the standard (Deployment-based) runtime.
+// Uses corev1 types directly where possible.
+type StandardRuntimeSpec struct {
 	// Number of replicas
 	// +kubebuilder:default=1
 	// +optional
@@ -61,8 +102,7 @@ type RuntimeSpec struct {
 // AgentStatus defines the observed state of Agent
 type AgentStatus struct {
 	// Current phase: Pending, Running, Failed
-	// +kubebuilder:validation:Enum=Pending;Running;Failed
-	Phase string `json:"phase,omitempty"`
+	Phase AgentPhase `json:"phase,omitempty"`
 
 	// Backend being used (core, knative)
 	Backend string `json:"backend,omitempty"`
@@ -80,7 +120,7 @@ type AgentStatus struct {
 	LastToolSync *metav1.Time `json:"lastToolSync,omitempty"`
 
 	// Detected framework (if auto-detected)
-	DetectedFramework string `json:"detectedFramework,omitempty"`
+	DetectedFramework Framework `json:"detectedFramework,omitempty"`
 
 	// Standard conditions
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

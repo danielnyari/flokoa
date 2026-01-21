@@ -1,33 +1,40 @@
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: Agent
 metadata:
+  name: basic-agent
   labels:
-    app.kubernetes.io/name: operator
-    app.kubernetes.io/managed-by: kustomize
-  name: agent-sample
+    app.kubernetes.io/name: basic-agent
+    app.kubernetes.io/component: ai-agent
+    app.kubernetes.io/managed-by: flokoa-operator
 spec:
+  # Framework declaration for observability and tooling
   framework: pydantic-ai
 
   runtime:
     type: standard
     spec:
-      replicas: 1
+      # Number of agent replicas
+      replicas: 2
 
+      # Container configuration
       container:
         name: agent
-        image: ghcr.io/example/agent:latest
+        image: ghcr.io/example/pydantic-ai-agent:v1.0.0
 
+        # Container ports
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
 
+        # Environment variables
         env:
         - name: AGENT_MODE
-          value: "development"
+          value: "production"
         - name: LOG_LEVEL
           value: "info"
 
+        # Resource limits
         resources:
           requests:
             cpu: "100m"
@@ -36,6 +43,7 @@ spec:
             cpu: "500m"
             memory: "512Mi"
 
+        # Health checks
         livenessProbe:
           httpGet:
             path: /health

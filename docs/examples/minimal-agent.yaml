@@ -1,0 +1,14 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: minimal-agent
+spec:
+  runtime:
+    type: standard
+    spec:
+      container:
+        name: agent
+        image: ghcr.io/example/simple-agent:latest
+        ports:
+        - containerPort: 8080
+          name: http
