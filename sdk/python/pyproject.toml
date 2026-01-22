@@ -1,6 +1,6 @@
 [project]
-name = "flokoa-sdk"
-version = "0.1.0"
+name = "flokoa"
+version = "0.0.1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -11,6 +11,16 @@ dependencies = [
     "pydantic>=2.12.5",
 ]
 
+[project.scripts]
+flokoa = "flokoa.__main__:main"
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "flokoa"
+
 [project.optional-dependencies]
 pydantic-ai = [
     "pydantic-ai>=1.44.0",
@@ -18,5 +28,5 @@ pydantic-ai = [
 
 [dependency-groups]
 pydantic-ai = [
-    "flokoa-sdk[pydantic-ai]",
+    "flokoa[pydantic-ai]",
 ]
