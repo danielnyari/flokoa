@@ -1,0 +1,36 @@
+repos:
+  - repo: local
+    hooks:
+      - id: generate-schemas
+        name: Generate JSON Schemas
+        entry: bash -c 'uv run generate-schemas && git add schemas/*.schema.json'
+        language: system
+        files: ^scentry/events/.*\.py$
+        pass_filenames: false
+        always_run: false
+        stages: [pre-commit]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: "v6.0.0"
+    hooks:
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+        include: scentry/.*\.ya?ml$
+      - id: check-json
+        exclude: ^(.devcontainer/devcontainer.json|schemas/.*\.schema\.json)
+      - id: pretty-format-json
+        exclude: ^(.devcontainer/devcontainer.json|schemas/.*\.schema\.json)
+        args: [--autofix, --no-sort-keys]
+      - id: end-of-file-fixer
+        exclude: ^schemas/.*\.schema\.json$
+      - id: trailing-whitespace
+        exclude: ^schemas/.*\.schema\.json$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: "v0.14.8"
+    hooks:
+      - id: ruff-check
+        args: [ --exit-non-zero-on-fix ]
+      - id: ruff-format
