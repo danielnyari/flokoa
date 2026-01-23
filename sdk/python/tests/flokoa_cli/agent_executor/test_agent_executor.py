@@ -4,8 +4,6 @@ import pytest
 
 from src.flokoa.types import ToolDefinition, ToolType
 
-from tests.flokoa_cli.fixtures.agent import dummy_agent, dummy_agent_executor
-
 
 @pytest.fixture
 def tools_config():

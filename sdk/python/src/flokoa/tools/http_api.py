@@ -1,5 +1,7 @@
 from typing import Any
+
 import httpx
+
 
 async def call_http_api_tool(endpoint: str, method: str, params: dict[str, Any]) -> dict[str, Any]:
     """Call an external API tool."""

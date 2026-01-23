@@ -1,12 +1,13 @@
 import logging
-from typing import Callable, override
+from typing import override
 
-from pydantic_ai import Agent, FunctionToolset, Tool
-from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
+from pydantic_ai import FunctionToolset, Tool
 
 from flokoa.agent_executor import FlokoaAgentExecutor
+from flokoa.exceptions import CancelNotSupportedError
 from flokoa.types import ToolDefinition as FlokoaToolDefinition
 
 logger = logging.getLogger(__name__)
@@ -48,4 +49,4 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
 
     @override
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
-        raise Exception("cancel not supported")
+        raise CancelNotSupportedError("cancel not supported")

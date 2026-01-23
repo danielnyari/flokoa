@@ -1,7 +1,8 @@
 from typing import override
+
+import pytest
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
-import pytest
 
 from src.flokoa.agent_executor import FlokoaAgentExecutor
 

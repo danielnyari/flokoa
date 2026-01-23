@@ -2,9 +2,8 @@ import importlib
 import os
 import sys
 
-import uvicorn
 import click
-
+import uvicorn
 from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
@@ -13,14 +12,15 @@ from a2a.types import (
     AgentCard,
     AgentSkill,
 )
-from flokoa.integrations import get_executor_cls, IntegrationType
+
+from flokoa.integrations import IntegrationType, get_executor_cls
 
 
 @click.command()
 @click.argument("agent")
-@click.option('--host', 'host', default='localhost')
-@click.option('--port', 'port', default=10001)
-@click.option('--framework', type=click.Choice(IntegrationType, case_sensitive=False))
+@click.option("--host", "host", default="localhost")
+@click.option("--port", "port", default=10001)
+@click.option("--framework", type=click.Choice(IntegrationType, case_sensitive=False))
 def main(agent: str, host: str, port: int, framework: str) -> None:
     """Run a Flokoa agent server."""
     # Add current working directory to path for local module imports
@@ -29,20 +29,20 @@ def main(agent: str, host: str, port: int, framework: str) -> None:
         sys.path.insert(0, cwd)
 
     skill = AgentSkill(
-        id='hello_world',
-        name='Returns hello world',
-        description='just returns hello world',
-        tags=['hello world'],
-        examples=['hi', 'hello world'],
+        id="hello_world",
+        name="Returns hello world",
+        description="just returns hello world",
+        tags=["hello world"],
+        examples=["hi", "hello world"],
     )
 
     agent_card = AgentCard(
-        name='Hello World Agent',
-        description='Just a hello world agent',
-        url=f'http://{host}:{port}/',
-        version='1.0.0',
-        default_input_modes=['application/json'],
-        default_output_modes=['application/json'],
+        name="Hello World Agent",
+        description="Just a hello world agent",
+        url=f"http://{host}:{port}/",
+        version="1.0.0",
+        default_input_modes=["application/json"],
+        default_output_modes=["application/json"],
         capabilities=AgentCapabilities(streaming=False),
         skills=[skill],
     )
@@ -75,5 +75,5 @@ def main(agent: str, host: str, port: int, framework: str) -> None:
     uvicorn.run(server.build(), host=host, port=port)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

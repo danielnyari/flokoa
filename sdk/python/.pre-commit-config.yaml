@@ -21,7 +21,7 @@ repos:
     rev: "v0.14.8"
     hooks:
       - id: ruff-check
-        args: [ --exit-non-zero-on-fix ]
+        args: [ --fix ]
         exclude: ^sdk/python/tests/
       - id: ruff-format
         exclude: ^sdk/python/tests/

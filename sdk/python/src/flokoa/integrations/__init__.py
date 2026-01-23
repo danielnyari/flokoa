@@ -36,10 +36,7 @@ def get_executor_cls(name: IntegrationType) -> type[FlokoaAgentExecutor]:
         return _loaded[name]
 
     extra = _EXTRA_NAMES.get(name, name.value)
-    raise ImportError(
-        f"flokoa[{extra}] is not installed. "
-        f"Install it with: pip install flokoa[{extra}]"
-    )
+    raise ImportError(f"flokoa[{extra}] is not installed. Install it with: pip install flokoa[{extra}]")
 
 
 # Load available integrations
