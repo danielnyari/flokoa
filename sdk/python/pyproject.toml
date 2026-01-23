@@ -35,8 +35,9 @@ pydantic-ai = [
 ]
 dev = [
     "pre-commit>=4.0.0",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
 ]
-
 
 
 [tool.ty.environment]
@@ -45,6 +46,7 @@ python-version = "3.10"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff]
 target-version = "py39"

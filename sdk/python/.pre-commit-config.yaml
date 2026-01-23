@@ -1,15 +1,4 @@
 repos:
-  - repo: local
-    hooks:
-      - id: generate-schemas
-        name: Generate JSON Schemas
-        entry: bash -c 'uv run generate-schemas && git add schemas/*.schema.json'
-        language: system
-        files: ^scentry/events/.*\.py$
-        pass_filenames: false
-        always_run: false
-        stages: [pre-commit]
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: "v6.0.0"
     hooks:
@@ -33,4 +22,6 @@ repos:
     hooks:
       - id: ruff-check
         args: [ --exit-non-zero-on-fix ]
+        exclude: ^sdk/python/tests/
       - id: ruff-format
+        exclude: ^sdk/python/tests/
