@@ -1,0 +1,75 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: product-search
+  labels:
+    app.kubernetes.io/name: product-search
+    app.kubernetes.io/component: ai-tool
+    app.kubernetes.io/managed-by: flokoa-operator
+spec:
+  type: http-api
+  description: "Search for products in the catalog"
+
+  httpApi:
+    # External API
+    url: "https://api.example.com/v1/products"
+    method: GET
+    timeoutSeconds: 30
+    headers:
+      Accept: "application/json"
+
+
+    # Internal K8s service (use instead of url, auth typically not needed)
+    # serviceRef:
+    #   name: inventory-service
+    #   namespace: backend
+    #   port: 8080
+    # path: "/api/v1/products"
+    # method: GET
+    # timeoutSeconds: 30
+
+  # Option 1: Inline schemas
+  # For GET: inputSchema fields become query params
+  # For POST/PUT/PATCH: inputSchema becomes JSON body
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: "Search query string"
+      category:
+        type: string
+        description: "Product category to filter by"
+      limit:
+        type: integer
+        description: "Maximum number of results"
+        default: 10
+    required:
+      - query
+
+  outputSchema:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            price:
+              type: number
+      totalCount:
+        type: integer
+        description: "Total matching products"
+
+  # Option 2: Reference OpenAPI spec (use instead of inputSchema/outputSchema)
+  # Schemas are auto-derived from httpApi.url + httpApi.method
+  # openApiSchemaRef:
+  #   url: "https://api.example.com/openapi.json"
+  #   # OR from ConfigMap:
+  #   # configMapRef:
+  #   #   name: api-openapi-spec
+  #   #   key: openapi.json

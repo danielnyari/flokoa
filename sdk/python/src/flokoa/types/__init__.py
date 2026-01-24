@@ -3,18 +3,11 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from flokoa.types.api_tool import APIToolSpec
+
 
 class ToolType(StrEnum):
     API = "api"
-
-
-class APIToolSpec(BaseModel):
-    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True, frozen=True)
-    endpoint: Annotated[str, Field(description="The HTTP endpoint URL for the API tool.")]
-    method: Annotated[
-        str,
-        Field(description="The HTTP method to use when calling the API tool (e.g., GET, POST)."),
-    ]
 
 
 ToolSpecUnion = APIToolSpec

@@ -7,6 +7,7 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
   - services
   verbs:
   - create
@@ -20,6 +21,7 @@ rules:
   - agent.flokoa.ai
   resources:
   - agents
+  - agenttools
   verbs:
   - create
   - delete
@@ -32,12 +34,14 @@ rules:
   - agent.flokoa.ai
   resources:
   - agents/finalizers
+  - agenttools/finalizers
   verbs:
   - update
 - apiGroups:
   - agent.flokoa.ai
   resources:
   - agents/status
+  - agenttools/status
   verbs:
   - get
   - patch

@@ -20,4 +20,13 @@ resources:
   kind: Agent
   path: github.com/danielnyari/flokoa/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: flokoa.ai
+  group: agent
+  kind: AgentTool
+  path: github.com/danielnyari/flokoa/api/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -22,7 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- agenttool_admin_role.yaml
+- agenttool_editor_role.yaml
+- agenttool_viewer_role.yaml
 - agent_admin_role.yaml
 - agent_editor_role.yaml
 - agent_viewer_role.yaml
-

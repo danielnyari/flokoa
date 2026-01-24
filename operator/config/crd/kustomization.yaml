@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/agent.flokoa.ai_agents.yaml
+- bases/agent.flokoa.ai_agenttools.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
