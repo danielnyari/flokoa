@@ -19,6 +19,27 @@ pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture
+def mock_http_api(monkeypatch):
+    """Mock the HTTP API calls to avoid real network requests.
+
+    The production code uses dynamic lookup via flokoa_tools.call_http_api_tool,
+    so we patch the attribute on the flokoa.tools module.
+    """
+
+    async def mock_call_http_api_tool(endpoint: str, method: str, params: dict):
+        # Return mock data based on the endpoint
+        if "weather" in endpoint:
+            return {"temperature": 20, "condition": "sunny", "location": params.get("location", "unknown")}
+        elif "email" in endpoint:
+            return {"sent": True, "to": params.get("to"), "subject": params.get("subject")}
+        return {"success": True, "params": params}
+
+    # Patch on the flokoa.tools module where dynamic lookup happens
+    monkeypatch.setattr("flokoa.tools.call_http_api_tool", mock_call_http_api_tool)
+    return mock_call_http_api_tool
+
+
+@pytest.fixture
 def api_tool_definition():
     """Create a sample API tool definition."""
     return ToolDefinition(
@@ -79,8 +100,11 @@ def multiple_tool_definitions():
 
 
 @pytest.fixture
-def tools_file(tmp_path, multiple_tool_definitions, monkeypatch):
-    """Create a tools configuration file and patch load_tools."""
+def tools_file(tmp_path, multiple_tool_definitions, monkeypatch, mock_http_api):
+    """Create a tools configuration file and patch load_tools.
+
+    Depends on mock_http_api to ensure HTTP mocking is set up first.
+    """
     tools_config = [
         {
             "name": td.name,
@@ -125,7 +149,10 @@ def pydantic_agent():
 
 @pytest.fixture
 def pydantic_agent_executor(pydantic_agent, tools_file):
-    """Create a PydanticAIAgentExecutor with patched tool loading."""
+    """Create a PydanticAIAgentExecutor with patched tool loading and mocked HTTP.
+
+    HTTP mocking is handled via tools_file -> mock_http_api dependency chain.
+    """
     return PydanticAIAgentExecutor(pydantic_agent)
 
 
@@ -212,19 +239,23 @@ class TestPydanticAIAgentExecutorGetToolset:
 class TestPydanticAIAgentExecutorToolInjectionWithTestModel:
     """Tests for tool injection using TestModel."""
 
-    async def test_both_native_and_injected_tools_are_visible(self, pydantic_agent, pydantic_agent_executor):
-        """Verify that both native agent tools and injected tools are visible to the model.
+    async def test_all_tools_are_callable(self, pydantic_agent, pydantic_agent_executor):
+        """Verify that both native and injected tools can be called by TestModel.
 
         This is the core test case: users create agents with their own tools,
-        and Flokoa injects additional tools alongside them.
+        and Flokoa injects additional tools that can all be executed.
         """
-        # Call only the native tool to verify it works, while checking all tools are visible
-        test_model = TestModel(call_tools=["get_user_name"])
+        # TestModel calls all tools by default
+        test_model = TestModel()
 
         with pydantic_agent.override(model=test_model):
             toolset = pydantic_agent_executor._get_toolset()
-            await pydantic_agent.run("What's the weather for user 123?", toolsets=[toolset])
+            result = await pydantic_agent.run("What's the weather for user 123?", toolsets=[toolset])
 
+            # Verify the agent completed successfully (all tools were callable)
+            assert result.output is not None
+
+            # Verify all tools were available
             assert test_model.last_model_request_parameters is not None
             function_tools = test_model.last_model_request_parameters.function_tools
             tool_names = [t.name for t in function_tools]
@@ -241,8 +272,7 @@ class TestPydanticAIAgentExecutorToolInjectionWithTestModel:
 
     async def test_tools_have_correct_schema_in_model_request(self, pydantic_agent, pydantic_agent_executor):
         """Verify that both native and injected tools have correct JSON schema."""
-        # Call only native tool to avoid injected tool execution issues
-        test_model = TestModel(call_tools=["get_user_name"])
+        test_model = TestModel()
 
         with pydantic_agent.override(model=test_model):
             toolset = pydantic_agent_executor._get_toolset()
@@ -332,10 +362,9 @@ class TestPydanticAIAgentExecutorToolInjectionWithFunctionModel:
 class TestPydanticAIAgentExecutorExecuteMethod:
     """Tests for the execute method with full integration."""
 
-    async def test_execute_injects_tools_alongside_native_tools(self, pydantic_agent, pydantic_agent_executor):
-        """Verify that execute injects tools while preserving native agent tools."""
-        # Call only native tool to verify it works
-        test_model = TestModel(call_tools=["get_user_name"])
+    async def test_execute_calls_all_tools(self, pydantic_agent, pydantic_agent_executor):
+        """Verify that execute can call both native and injected tools."""
+        test_model = TestModel()
 
         mock_context = MagicMock()
         mock_context.get_user_input.return_value = "What's the weather?"
@@ -346,10 +375,10 @@ class TestPydanticAIAgentExecutorExecuteMethod:
         with pydantic_agent.override(model=test_model):
             await pydantic_agent_executor.execute(mock_context, mock_event_queue)
 
-            # Verify event was enqueued
+            # Verify event was enqueued (execution completed)
             mock_event_queue.enqueue_event.assert_called_once()
 
-            # Verify both native and injected tools were available
+            # Verify all tools were available and callable
             assert test_model.last_model_request_parameters is not None
             function_tools = test_model.last_model_request_parameters.function_tools
             tool_names = [t.name for t in function_tools]
@@ -364,8 +393,7 @@ class TestPydanticAIAgentExecutorExecuteMethod:
     async def test_execute_enqueues_agent_output(self, pydantic_agent, pydantic_agent_executor):
         """Verify that execute enqueues the agent's output as an event."""
         expected_output = "The weather is sunny!"
-        # Call only native tool to avoid injected tool execution issues
-        test_model = TestModel(call_tools=["get_user_name"], custom_output_text=expected_output)
+        test_model = TestModel(custom_output_text=expected_output)
 
         mock_context = MagicMock()
         mock_context.get_user_input.return_value = "Weather?"
@@ -383,14 +411,15 @@ class TestPydanticAIAgentExecutorExecuteMethod:
 class TestPydanticAIAgentExecutorToolCallableMapping:
     """Tests for tool callable mapping functionality."""
 
-    def test_get_tool_callable_returns_api_handler(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
-        """Verify that API tools use the HTTP API handler."""
+    def test_get_tool_callable_returns_api_wrapper(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
+        """Verify that API tools return a wrapper that calls the HTTP API handler."""
         monkeypatch.setattr(pydantic_agent_executor, "_tool_definitions", [api_tool_definition])
 
         callable_fn = pydantic_agent_executor._get_tool_callable(api_tool_definition)
 
         assert callable(callable_fn)
-        assert callable_fn.__name__ == "call_http_api_tool"
+        # The wrapper accepts schema parameters and forwards to call_http_api_tool
+        assert callable_fn.__name__ == "api_tool_wrapper"
 
     def test_tool_callable_is_async(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
         """Verify that tool callables are async functions."""

@@ -1,14 +1,17 @@
 import logging
-from typing import override
+from typing import Any, Callable, override
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
 from pydantic_ai import FunctionToolset, Tool
 
+# Import module for dynamic lookup (allows mocking in tests)
+from flokoa import tools as flokoa_tools
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.exceptions import CancelNotSupportedError
 from flokoa.types import ToolDefinition as FlokoaToolDefinition
+from flokoa.types import ToolType
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,26 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
     A2A AgentExecutor that wraps a PydanticAI agent with automatic
     flokoa tool injection from /etc/flokoa/tools.json.
     """
+
+    def _get_tool_callable(self, tool_definition: FlokoaToolDefinition) -> Callable[..., Any]:
+        """Create a callable that accepts schema parameters and calls the underlying tool.
+
+        The wrapper function accepts **kwargs matching the tool's input schema,
+        and passes them to the appropriate tool handler with the tool's configuration.
+        """
+        if tool_definition.type == ToolType.API:
+            endpoint = tool_definition.spec.endpoint
+            method = tool_definition.spec.method
+
+            async def api_tool_wrapper(**kwargs: Any) -> dict[str, Any]:
+                # Dynamic lookup allows mocking in tests
+                return await flokoa_tools.call_http_api_tool(
+                    endpoint=endpoint, method=method, params=kwargs
+                )
+
+            return api_tool_wrapper
+
+        return super()._get_tool_callable(tool_definition)
 
     def _create_tool(self, tool_definition: FlokoaToolDefinition) -> Tool:
         tool_callable = self._get_tool_callable(tool_definition)
