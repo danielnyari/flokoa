@@ -4,6 +4,47 @@ metadata:
   labels:
     app.kubernetes.io/name: operator
     app.kubernetes.io/managed-by: kustomize
-  name: agenttool-sample
+  name: agenttool-sample3
 spec:
-  # TODO(user): Add fields here
+  type: http-api
+  description: "Search for products in the catalog"
+
+  httpApi:
+    url: "https://api.example.com/v2/products"
+    method: GET
+    timeoutSeconds: 30
+    headers:
+      Accept: "application/json"
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: "Search query string"
+      category:
+        type: string
+        description: "Product category to filter by"
+      limit:
+        type: integer
+        description: "Maximum number of results"
+        default: 10
+    required:
+      - query
+
+  outputSchema:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            price:
+              type: number
+      totalCount:
+        type: integer
+        description: "Total matching products"

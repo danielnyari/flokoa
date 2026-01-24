@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.1
+VERSION ?= 0.0.2
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -152,6 +152,39 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
+
+##@ Python SDK
+
+PYTHON_SDK_DIR ?= ../sdk/python/src/
+PYTHON_MODELS_DIR ?= $(PYTHON_SDK_DIR)/flokoa/types
+PYTHON_VENV ?= $(LOCALBIN)/venv
+DATAMODEL_CODEGEN ?= $(PYTHON_VENV)/bin/datamodel-codegen
+
+.PHONY: python-venv
+python-venv: $(PYTHON_VENV) ## Create Python virtual environment with datamodel-code-generator.
+$(PYTHON_VENV):
+	@echo "Creating Python virtual environment..."
+	@python3 -m venv $(PYTHON_VENV)
+	@$(PYTHON_VENV)/bin/pip install --upgrade pip
+	@$(PYTHON_VENV)/bin/pip install datamodel-code-generator
+	@echo "Python virtual environment created at $(PYTHON_VENV)"
+
+.PHONY: generate-python-models
+generate-python-models: manifests python-venv ## Generate Python Pydantic v2 models from CRD schemas.
+	@echo "Generating Python models from CRD schemas..."
+	@mkdir -p $(PYTHON_MODELS_DIR)
+	@# Extract AgentToolSpec schema
+	@yq eval '.spec.versions[0].schema.openAPIV3Schema.properties.spec' \
+		config/crd/bases/agent.flokoa.ai_agenttools.yaml > /tmp/agenttool_spec_schema.json
+	@# Generate Pydantic v2 models
+	@$(DATAMODEL_CODEGEN) \
+		--input /tmp/agenttool_spec_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--class-name AgentToolSpec \
+		--output $(PYTHON_MODELS_DIR)/agenttool.py
+	@rm /tmp/agenttool_spec_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agenttool.py"
 
 ##@ Build
 
