@@ -124,7 +124,7 @@ var _ = Describe("AgentTool Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				By("Verifying finalizer was added")
 				Eventually(func() bool {
@@ -230,7 +230,7 @@ var _ = Describe("AgentTool Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile validates schema and creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -297,7 +297,7 @@ var _ = Describe("AgentTool Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile validates schema
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -382,7 +382,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile validates ConfigMap reference
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -436,7 +436,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile should fail due to missing ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -504,7 +504,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile should fail due to missing key
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -553,7 +553,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile validates (URL validation is deferred to runtime)
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -603,7 +603,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile updates status
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -650,7 +650,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -703,7 +703,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -784,7 +784,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -841,7 +841,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -911,7 +911,7 @@ paths:
 						NamespacedName: testNamespacedName,
 					})
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.Requeue).To(BeTrue())
+					Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 					// Second reconcile creates ConfigMap
 					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -980,7 +980,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -1036,7 +1036,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -1129,7 +1129,7 @@ paths:
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile validates and stores
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{

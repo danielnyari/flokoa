@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	corev1 "k8s.io/api/core/v1"
@@ -96,7 +97,7 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := r.Update(ctx, agentTool); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Validate schemas
@@ -192,11 +193,8 @@ func (r *AgentToolReconciler) validateOpenApiSchemaRef(ctx context.Context, agen
 		}
 	}
 
-	// URL validation would happen at runtime when fetching the spec
-	if ref.URL != "" && ref.ConfigMapRef == nil {
-		// Just validate it's not empty for now
-		// Actual fetch validation would be done by the agent runtime
-	}
+	// URL reference validation is deferred to runtime when fetching the spec
+	// since we can't validate external URL availability at reconcile time
 
 	return nil
 }
