@@ -46,6 +46,36 @@ type AgentSpec struct {
 	// Explicit framework declaration (for observability/tooling)
 	// +optional
 	Framework Framework `json:"framework,omitempty"`
+
+	// Tools available to this agent - can be inline definitions or references to AgentTool resources
+	// +optional
+	Tools []ToolEntry `json:"tools,omitempty"`
+}
+
+// ToolEntry represents either an inline tool definition or a reference to an AgentTool resource
+type ToolEntry struct {
+	// Name of the tool (required for inline tools, used as identifier)
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Inline tool definition - defines the tool directly in the Agent spec
+	// Uses the same spec as AgentTool for consistency
+	// +optional
+	Inline *AgentToolSpec `json:"inline,omitempty"`
+
+	// Reference to an existing AgentTool resource
+	// +optional
+	ToolRef *ToolRef `json:"toolRef,omitempty"`
+}
+
+// ToolRef references an existing AgentTool resource
+type ToolRef struct {
+	// Name of the AgentTool resource
+	Name string `json:"name"`
+
+	// Namespace of the AgentTool (defaults to Agent's namespace)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // RuntimeSpec defines the runtime backend and its configuration

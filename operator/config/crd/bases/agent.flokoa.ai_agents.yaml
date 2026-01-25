@@ -4547,6 +4547,135 @@ spec:
                 required:
                 - type
                 type: object
+              tools:
+                description: Tools available to this agent - can be inline definitions
+                  or references to AgentTool resources
+                items:
+                  description: ToolEntry represents either an inline tool definition
+                    or a reference to an AgentTool resource
+                  properties:
+                    inline:
+                      description: |-
+                        Inline tool definition - defines the tool directly in the Agent spec
+                        Uses the same spec as AgentTool for consistency
+                      properties:
+                        description:
+                          description: Human-readable description for the LLM
+                          type: string
+                        httpApi:
+                          description: HTTP API specific configuration
+                          properties:
+                            headers:
+                              additionalProperties:
+                                type: string
+                              description: HTTP headers to include
+                              type: object
+                            method:
+                              description: HTTP method
+                              enum:
+                              - GET
+                              - POST
+                              - PUT
+                              - PATCH
+                              - DELETE
+                              type: string
+                            path:
+                              description: Path on the service (used with serviceRef,
+                                or appended to URL)
+                              type: string
+                            serviceRef:
+                              description: Reference to a Kubernetes service (alternative
+                                to URL)
+                              properties:
+                                name:
+                                  description: Service name
+                                  type: string
+                                namespace:
+                                  description: Namespace (defaults to AgentTool's
+                                    namespace)
+                                  type: string
+                                port:
+                                  description: Port number
+                                  format: int32
+                                  type: integer
+                                portName:
+                                  description: Port name (alternative to port number)
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            timeoutSeconds:
+                              default: 30
+                              description: Timeout in seconds
+                              format: int32
+                              type: integer
+                            url:
+                              description: External API URL
+                              type: string
+                          required:
+                          - method
+                          type: object
+                        inputSchema:
+                          description: |-
+                            Input schema - JSON Schema defining what the agent provides
+                            For GET: becomes query params, for POST/PUT/PATCH: becomes JSON body
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        openApiSchemaRef:
+                          description: Reference to an OpenAPI spec (alternative to
+                            inputSchema/outputSchema)
+                          properties:
+                            configMapRef:
+                              description: Reference to a ConfigMap containing the
+                                OpenAPI spec
+                              properties:
+                                key:
+                                  description: Key in the ConfigMap
+                                  type: string
+                                name:
+                                  description: ConfigMap name
+                                  type: string
+                              required:
+                              - key
+                              - name
+                              type: object
+                            url:
+                              description: URL to fetch the OpenAPI spec from
+                              type: string
+                          type: object
+                        outputSchema:
+                          description: Output schema - JSON Schema defining what the
+                            tool returns
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type:
+                          description: Type of tool
+                          enum:
+                          - http-api
+                          type: string
+                      required:
+                      - description
+                      - type
+                      type: object
+                    name:
+                      description: Name of the tool (required for inline tools, used
+                        as identifier)
+                      type: string
+                    toolRef:
+                      description: Reference to an existing AgentTool resource
+                      properties:
+                        name:
+                          description: Name of the AgentTool resource
+                          type: string
+                        namespace:
+                          description: Namespace of the AgentTool (defaults to Agent's
+                            namespace)
+                          type: string
+                      required:
+                      - name
+                      type: object
+                  type: object
+                type: array
             required:
             - runtime
             type: object
