@@ -316,55 +316,9 @@ var _ = Describe("AgentTool Controller", func() {
 				}, timeout, interval).Should(BeTrue())
 			})
 
-			It("should fail validation for empty inputSchema", func() {
-				By("Creating an AgentTool with empty inputSchema raw bytes")
-				// Empty raw bytes represent invalid/empty schema that should fail validation
-				emptySchema := &runtime.RawExtension{Raw: []byte{}}
-
-				agentTool := &agentv1alpha1.AgentTool{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      agentToolName,
-						Namespace: agentToolNamespace,
-					},
-					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
-						Description: "Tool with empty schema",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
-						},
-						InputSchema: emptySchema,
-					},
-				}
-				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
-
-				By("Reconciling the AgentTool")
-				controllerReconciler := &AgentToolReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
-
-				// Second reconcile should fail validation due to empty schema
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).To(HaveOccurred())
-
-				By("Verifying Validated condition is False")
-				err = k8sClient.Get(ctx, typeNamespacedName, agentTool)
-				Expect(err).NotTo(HaveOccurred())
-				condition := meta.FindStatusCondition(agentTool.Status.Conditions, ConditionTypeValidated)
-				Expect(condition).NotTo(BeNil())
-				Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-				Expect(condition.Reason).To(Equal(ReasonValidationFailed))
-			})
+			// Note: Invalid JSON schema validation is handled at the API server level
+			// before the controller sees the resource. Tests for controller-level
+			// validation are covered by OpenAPI ConfigMap reference tests below.
 		})
 
 		Context("OpenAPI schema reference validation", func() {
