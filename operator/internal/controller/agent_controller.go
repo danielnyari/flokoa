@@ -2,7 +2,10 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"sort"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -175,6 +178,8 @@ type toolConfigMapInfo struct {
 	toolName string
 	// Name of the ConfigMap containing the tool spec
 	configMapName string
+	// Hash of the ConfigMap data for change detection
+	dataHash string
 }
 
 // reconcileTools reconciles both inline and referenced tools, creating ConfigMaps as needed
@@ -184,7 +189,7 @@ func (r *AgentReconciler) reconcileTools(ctx context.Context, agent *agentv1alph
 
 	for i, tool := range agent.Spec.Tools {
 		if tool.Inline != nil {
-			// Handle inline tool - create a ConfigMap for it
+			// Handle inline tool - create an AgentTool CR for it
 			toolName := tool.Name
 			if toolName == "" {
 				toolName = fmt.Sprintf("tool-%d", i)
@@ -194,10 +199,19 @@ func (r *AgentReconciler) reconcileTools(ctx context.Context, agent *agentv1alph
 			if err != nil {
 				return nil, fmt.Errorf("failed to reconcile inline tool %s: %w", toolName, err)
 			}
+
+			// Get the ConfigMap to compute hash (may not exist yet if AgentTool controller hasn't run)
+			cm := &corev1.ConfigMap{}
+			dataHash := ""
+			if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: agent.Namespace}, cm); err == nil {
+				dataHash = hashConfigMapData(cm.Data)
+			}
+
 			logger.Info("Reconciled inline tool", "toolName", toolName, "configMap", cmName)
 			toolConfigMaps = append(toolConfigMaps, toolConfigMapInfo{
 				toolName:      toolName,
 				configMapName: cmName,
+				dataHash:      dataHash,
 			})
 		} else if tool.ToolRef != nil {
 			// Handle tool reference - look up the AgentTool's ConfigMap
@@ -214,7 +228,7 @@ func (r *AgentReconciler) reconcileTools(ctx context.Context, agent *agentv1alph
 			// The AgentTool controller creates a ConfigMap named "{agenttool-name}-spec"
 			cmName := fmt.Sprintf("%s-spec", agentTool.Name)
 
-			// Verify the ConfigMap exists
+			// Verify the ConfigMap exists and compute hash
 			cm := &corev1.ConfigMap{}
 			if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm); err != nil {
 				return nil, fmt.Errorf("ConfigMap for AgentTool %s not found: %w", tool.ToolRef.Name, err)
@@ -228,11 +242,33 @@ func (r *AgentReconciler) reconcileTools(ctx context.Context, agent *agentv1alph
 			toolConfigMaps = append(toolConfigMaps, toolConfigMapInfo{
 				toolName:      toolName,
 				configMapName: cmName,
+				dataHash:      hashConfigMapData(cm.Data),
 			})
 		}
 	}
 
 	return toolConfigMaps, nil
+}
+
+// hashConfigMapData computes a hash of ConfigMap data for change detection
+func hashConfigMapData(data map[string]string) string {
+	if len(data) == 0 {
+		return ""
+	}
+
+	// Sort keys for deterministic hashing
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	h := sha256.New()
+	for _, k := range keys {
+		h.Write([]byte(k))
+		h.Write([]byte(data[k]))
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16] // Use first 16 chars
 }
 
 // reconcileInlineTool creates or updates an AgentTool CR for an inline tool definition
@@ -307,7 +343,8 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 	// Build volumes from spec and tools
 	volumes := append([]corev1.Volume{}, spec.Volumes...)
 
-	// Add tool volume mounts to the container
+	// Add tool volume mounts to the container and compute combined hash
+	var toolsHashBuilder string
 	for _, toolCM := range toolConfigMaps {
 		// Create a volume for each tool ConfigMap
 		volumeName := fmt.Sprintf("tool-%s", toolCM.toolName)
@@ -328,6 +365,18 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 			MountPath: fmt.Sprintf("%s/%s", toolsMountPath, toolCM.toolName),
 			ReadOnly:  true,
 		})
+
+		// Accumulate hashes for combined annotation
+		toolsHashBuilder += toolCM.toolName + ":" + toolCM.dataHash + ";"
+	}
+
+	// Compute combined tools hash for pod annotation
+	var podAnnotations map[string]string
+	if len(toolConfigMaps) > 0 {
+		h := sha256.Sum256([]byte(toolsHashBuilder))
+		podAnnotations = map[string]string{
+			"flokoa.ai/tools-hash": hex.EncodeToString(h[:])[:16],
+		}
 	}
 
 	return &appsv1.Deployment{
@@ -343,7 +392,8 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: podAnnotations,
 				},
 				Spec: corev1.PodSpec{
 					Containers:         []corev1.Container{container},
@@ -471,6 +521,10 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&agentv1alpha1.AgentTool{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForAgentTool),
 		).
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForConfigMap),
+		).
 		Named("agent").
 		Complete(r)
 }
@@ -480,7 +534,17 @@ func (r *AgentReconciler) findAgentsForAgentTool(ctx context.Context, obj client
 	agentTool := obj.(*agentv1alpha1.AgentTool)
 	logger := log.FromContext(ctx)
 
-	// List all agents in the same namespace
+	// Check if this is an inline tool (owned by an Agent)
+	if agentName, ok := agentTool.Labels["flokoa.ai/agent"]; ok {
+		return []reconcile.Request{{
+			NamespacedName: types.NamespacedName{
+				Name:      agentName,
+				Namespace: agentTool.Namespace,
+			},
+		}}
+	}
+
+	// List all agents in the same namespace to find those referencing this AgentTool
 	agentList := &agentv1alpha1.AgentList{}
 	if err := r.List(ctx, agentList, client.InNamespace(agentTool.Namespace)); err != nil {
 		logger.Error(err, "Failed to list Agents")
@@ -497,6 +561,64 @@ func (r *AgentReconciler) findAgentsForAgentTool(ctx context.Context, obj client
 					refNamespace = agent.Namespace
 				}
 				if tool.ToolRef.Name == agentTool.Name && refNamespace == agentTool.Namespace {
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name:      agent.Name,
+							Namespace: agent.Namespace,
+						},
+					})
+					break
+				}
+			}
+		}
+	}
+
+	return requests
+}
+
+// findAgentsForConfigMap returns the Agents that use a given ConfigMap (for tool specs)
+func (r *AgentReconciler) findAgentsForConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+	cm := obj.(*corev1.ConfigMap)
+
+	// Only care about tool spec ConfigMaps
+	component := cm.Labels["app.kubernetes.io/component"]
+	if component != "agenttool-spec" && component != "inline-tool-spec" {
+		return nil
+	}
+
+	// If this is an inline tool ConfigMap, it has the agent label
+	if agentName, ok := cm.Labels["flokoa.ai/agent"]; ok {
+		return []reconcile.Request{{
+			NamespacedName: types.NamespacedName{
+				Name:      agentName,
+				Namespace: cm.Namespace,
+			},
+		}}
+	}
+
+	// For standalone AgentTool ConfigMaps, find agents referencing the AgentTool
+	// ConfigMap name is "{agenttool-name}-spec", so extract the AgentTool name
+	agentToolName := cm.Labels["app.kubernetes.io/name"]
+	if agentToolName == "" {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	agentList := &agentv1alpha1.AgentList{}
+	if err := r.List(ctx, agentList, client.InNamespace(cm.Namespace)); err != nil {
+		logger.Error(err, "Failed to list Agents")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, agent := range agentList.Items {
+		for _, tool := range agent.Spec.Tools {
+			if tool.ToolRef != nil {
+				refNamespace := tool.ToolRef.Namespace
+				if refNamespace == "" {
+					refNamespace = agent.Namespace
+				}
+				if tool.ToolRef.Name == agentToolName && refNamespace == cm.Namespace {
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Name:      agent.Name,
