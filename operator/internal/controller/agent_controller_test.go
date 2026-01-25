@@ -1630,6 +1630,514 @@ var _ = Describe("Agent Controller", func() {
 
 				Expect(deployment.Spec.Template.Annotations).To(BeNil())
 			})
+
+			It("should produce same hash for same ConfigMap data", func() {
+				By("Creating two ConfigMaps with identical data")
+				data1 := map[string]string{
+					"spec.json": `{"type":"http-api","description":"Test"}`,
+					"other.txt": "some content",
+				}
+				data2 := map[string]string{
+					"other.txt": "some content",
+					"spec.json": `{"type":"http-api","description":"Test"}`,
+				}
+
+				hash1 := hashConfigMapData(data1)
+				hash2 := hashConfigMapData(data2)
+
+				Expect(hash1).To(Equal(hash2))
+				Expect(hash1).NotTo(BeEmpty())
+			})
+
+			It("should produce different hash for different ConfigMap data", func() {
+				By("Creating two ConfigMaps with different data")
+				data1 := map[string]string{
+					"spec.json": `{"type":"http-api","description":"Original"}`,
+				}
+				data2 := map[string]string{
+					"spec.json": `{"type":"http-api","description":"Modified"}`,
+				}
+
+				hash1 := hashConfigMapData(data1)
+				hash2 := hashConfigMapData(data2)
+
+				Expect(hash1).NotTo(Equal(hash2))
+			})
+
+			It("should return empty hash for empty ConfigMap data", func() {
+				hash := hashConfigMapData(map[string]string{})
+				Expect(hash).To(BeEmpty())
+
+				hash = hashConfigMapData(nil)
+				Expect(hash).To(BeEmpty())
+			})
+		})
+
+		Context("findAgentsForAgentTool handler", func() {
+			var agentToolName string
+			var agent1Name string
+			var agent2Name string
+
+			BeforeEach(func() {
+				agentToolName = fmt.Sprintf("shared-tool-%d", time.Now().UnixNano())
+				agent1Name = fmt.Sprintf("agent1-%d", time.Now().UnixNano())
+				agent2Name = fmt.Sprintf("agent2-%d", time.Now().UnixNano())
+			})
+
+			AfterEach(func() {
+				// Cleanup agents
+				for _, name := range []string{agent1Name, agent2Name} {
+					agent := &agentv1alpha1.Agent{}
+					err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, agent)
+					if err == nil {
+						if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
+							controllerutil.RemoveFinalizer(agent, agentFinalizer)
+							_ = k8sClient.Update(ctx, agent)
+						}
+						_ = k8sClient.Delete(ctx, agent)
+					}
+				}
+
+				// Cleanup AgentTools
+				agentToolList := &agentv1alpha1.AgentToolList{}
+				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
+				for _, at := range agentToolList.Items {
+					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
+						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
+						_ = k8sClient.Update(ctx, &at)
+					}
+					_ = k8sClient.Delete(ctx, &at)
+				}
+			})
+
+			It("should find all agents referencing an AgentTool", func() {
+				By("Creating a shared AgentTool")
+				agentTool := &agentv1alpha1.AgentTool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentToolName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentToolSpec{
+						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Description: "Shared tool",
+						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+							URL:    "https://api.example.com",
+							Method: agentv1alpha1.HTTPMethodGet,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
+
+				By("Creating two agents that reference the same tool")
+				for _, name := range []string{agent1Name, agent2Name} {
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      name,
+							Namespace: agentNamespace,
+						},
+						Spec: agentv1alpha1.AgentSpec{
+							Runtime: agentv1alpha1.RuntimeSpec{
+								Type: agentv1alpha1.RuntimeTypeStandard,
+								Spec: &agentv1alpha1.StandardRuntimeSpec{
+									Container: corev1.Container{
+										Image: "nginx:latest",
+									},
+								},
+							},
+							Tools: []agentv1alpha1.ToolEntry{
+								{
+									ToolRef: &agentv1alpha1.ToolRef{
+										Name: agentToolName,
+									},
+								},
+							},
+						},
+					}
+					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+				}
+
+				By("Calling findAgentsForAgentTool")
+				reconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				requests := reconciler.findAgentsForAgentTool(ctx, agentTool)
+
+				By("Verifying both agents are returned")
+				Expect(requests).To(HaveLen(2))
+
+				names := []string{requests[0].Name, requests[1].Name}
+				Expect(names).To(ContainElement(agent1Name))
+				Expect(names).To(ContainElement(agent2Name))
+			})
+
+			It("should find agent for inline tool via label", func() {
+				By("Creating an inline AgentTool with agent label")
+				inlineAgentTool := &agentv1alpha1.AgentTool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-inline-tool", agent1Name),
+						Namespace: agentNamespace,
+						Labels: map[string]string{
+							"flokoa.ai/agent": agent1Name,
+						},
+					},
+					Spec: agentv1alpha1.AgentToolSpec{
+						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Description: "Inline tool",
+						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+							URL:    "https://api.example.com",
+							Method: agentv1alpha1.HTTPMethodGet,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, inlineAgentTool)).To(Succeed())
+
+				By("Calling findAgentsForAgentTool")
+				reconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				requests := reconciler.findAgentsForAgentTool(ctx, inlineAgentTool)
+
+				By("Verifying the owning agent is returned")
+				Expect(requests).To(HaveLen(1))
+				Expect(requests[0].Name).To(Equal(agent1Name))
+			})
+
+			It("should return empty for unreferenced AgentTool", func() {
+				By("Creating an AgentTool that no agent references")
+				agentTool := &agentv1alpha1.AgentTool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentToolName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentToolSpec{
+						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Description: "Unreferenced tool",
+						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+							URL:    "https://api.example.com",
+							Method: agentv1alpha1.HTTPMethodGet,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
+
+				By("Calling findAgentsForAgentTool")
+				reconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				requests := reconciler.findAgentsForAgentTool(ctx, agentTool)
+
+				By("Verifying no agents are returned")
+				Expect(requests).To(BeEmpty())
+			})
+		})
+
+		Context("findAgentsForConfigMap handler", func() {
+			var agentToolName string
+
+			BeforeEach(func() {
+				agentToolName = fmt.Sprintf("cm-tool-%d", time.Now().UnixNano())
+			})
+
+			AfterEach(func() {
+				// Cleanup AgentTools
+				agentToolList := &agentv1alpha1.AgentToolList{}
+				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
+				for _, at := range agentToolList.Items {
+					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
+						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
+						_ = k8sClient.Update(ctx, &at)
+					}
+					_ = k8sClient.Delete(ctx, &at)
+				}
+			})
+
+			It("should find agent for agenttool-spec ConfigMap", func() {
+				By("Creating an AgentTool")
+				agentTool := &agentv1alpha1.AgentTool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentToolName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentToolSpec{
+						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Description: "Test tool",
+						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+							URL:    "https://api.example.com",
+							Method: agentv1alpha1.HTTPMethodGet,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
+
+				By("Creating the AgentTool's ConfigMap with proper labels")
+				toolConfigMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Namespace: agentNamespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/name":      agentToolName,
+							"app.kubernetes.io/component": "agenttool-spec",
+						},
+					},
+					Data: map[string]string{
+						"spec.json": `{"type":"http-api"}`,
+					},
+				}
+				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
+
+				By("Creating an Agent that references the tool")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
+							},
+						},
+						Tools: []agentv1alpha1.ToolEntry{
+							{
+								ToolRef: &agentv1alpha1.ToolRef{
+									Name: agentToolName,
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Calling findAgentsForConfigMap")
+				reconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				requests := reconciler.findAgentsForConfigMap(ctx, toolConfigMap)
+
+				By("Verifying the agent is returned")
+				Expect(requests).To(HaveLen(1))
+				Expect(requests[0].Name).To(Equal(agentName))
+			})
+
+			It("should find agent for inline-tool-spec ConfigMap via label", func() {
+				By("Creating an inline tool ConfigMap with agent label")
+				inlineConfigMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-inline-tool-spec", agentName),
+						Namespace: agentNamespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/component": "inline-tool-spec",
+							"flokoa.ai/agent":             agentName,
+						},
+					},
+					Data: map[string]string{
+						"spec.json": `{"type":"http-api"}`,
+					},
+				}
+				Expect(k8sClient.Create(ctx, inlineConfigMap)).To(Succeed())
+
+				By("Calling findAgentsForConfigMap")
+				reconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				requests := reconciler.findAgentsForConfigMap(ctx, inlineConfigMap)
+
+				By("Verifying the agent is returned")
+				Expect(requests).To(HaveLen(1))
+				Expect(requests[0].Name).To(Equal(agentName))
+			})
+
+			It("should ignore ConfigMaps without tool component label", func() {
+				By("Creating a ConfigMap without tool labels")
+				regularConfigMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "regular-configmap",
+						Namespace: agentNamespace,
+					},
+					Data: map[string]string{
+						"config": "some value",
+					},
+				}
+				Expect(k8sClient.Create(ctx, regularConfigMap)).To(Succeed())
+
+				By("Calling findAgentsForConfigMap")
+				reconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				requests := reconciler.findAgentsForConfigMap(ctx, regularConfigMap)
+
+				By("Verifying no agents are returned")
+				Expect(requests).To(BeEmpty())
+			})
+		})
+
+		Context("Multiple agents with shared tool", func() {
+			var agentToolName string
+			var agent1Name string
+			var agent2Name string
+
+			BeforeEach(func() {
+				agentToolName = fmt.Sprintf("shared-tool-%d", time.Now().UnixNano())
+				agent1Name = fmt.Sprintf("agent1-%d", time.Now().UnixNano())
+				agent2Name = fmt.Sprintf("agent2-%d", time.Now().UnixNano())
+			})
+
+			AfterEach(func() {
+				// Cleanup agents
+				for _, name := range []string{agent1Name, agent2Name} {
+					agent := &agentv1alpha1.Agent{}
+					err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, agent)
+					if err == nil {
+						if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
+							controllerutil.RemoveFinalizer(agent, agentFinalizer)
+							_ = k8sClient.Update(ctx, agent)
+						}
+						_ = k8sClient.Delete(ctx, agent)
+					}
+				}
+
+				// Cleanup AgentTools
+				agentToolList := &agentv1alpha1.AgentToolList{}
+				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
+				for _, at := range agentToolList.Items {
+					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
+						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
+						_ = k8sClient.Update(ctx, &at)
+					}
+					_ = k8sClient.Delete(ctx, &at)
+				}
+			})
+
+			It("should update all agents when shared tool ConfigMap changes", func() {
+				By("Creating a shared AgentTool")
+				agentTool := &agentv1alpha1.AgentTool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentToolName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentToolSpec{
+						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Description: "Shared tool",
+						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+							URL:    "https://api.example.com",
+							Method: agentv1alpha1.HTTPMethodGet,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
+
+				By("Creating the AgentTool's ConfigMap")
+				toolConfigMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Namespace: agentNamespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/name":      agentToolName,
+							"app.kubernetes.io/component": "agenttool-spec",
+						},
+					},
+					Data: map[string]string{
+						"spec.json": `{"type":"http-api","description":"Original"}`,
+					},
+				}
+				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
+
+				By("Creating two agents referencing the shared tool")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				initialHashes := make(map[string]string)
+
+				for _, name := range []string{agent1Name, agent2Name} {
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      name,
+							Namespace: agentNamespace,
+						},
+						Spec: agentv1alpha1.AgentSpec{
+							Runtime: agentv1alpha1.RuntimeSpec{
+								Type: agentv1alpha1.RuntimeTypeStandard,
+								Spec: &agentv1alpha1.StandardRuntimeSpec{
+									Container: corev1.Container{
+										Image: "nginx:latest",
+									},
+								},
+							},
+							Tools: []agentv1alpha1.ToolEntry{
+								{
+									ToolRef: &agentv1alpha1.ToolRef{
+										Name: agentToolName,
+									},
+								},
+							},
+						},
+					}
+					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+					// Reconcile to add finalizer
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: types.NamespacedName{Name: name, Namespace: agentNamespace},
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					// Reconcile to create resources
+					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: types.NamespacedName{Name: name, Namespace: agentNamespace},
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					// Get initial hash
+					deployment := &appsv1.Deployment{}
+					err = k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, deployment)
+					Expect(err).NotTo(HaveOccurred())
+					initialHashes[name] = deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
+				}
+
+				By("Updating the shared ConfigMap")
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      fmt.Sprintf("%s-spec", agentToolName),
+					Namespace: agentNamespace,
+				}, toolConfigMap)
+				Expect(err).NotTo(HaveOccurred())
+
+				toolConfigMap.Data["spec.json"] = `{"type":"http-api","description":"Updated"}`
+				Expect(k8sClient.Update(ctx, toolConfigMap)).To(Succeed())
+
+				By("Reconciling both agents")
+				for _, name := range []string{agent1Name, agent2Name} {
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: types.NamespacedName{Name: name, Namespace: agentNamespace},
+					})
+					Expect(err).NotTo(HaveOccurred())
+				}
+
+				By("Verifying both agents have updated hashes")
+				for _, name := range []string{agent1Name, agent2Name} {
+					deployment := &appsv1.Deployment{}
+					err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, deployment)
+					Expect(err).NotTo(HaveOccurred())
+
+					newHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
+					Expect(newHash).NotTo(Equal(initialHashes[name]))
+				}
+			})
 		})
 	})
 })
