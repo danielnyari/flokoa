@@ -4555,8 +4555,9 @@ spec:
                     or a reference to an AgentTool resource
                   properties:
                     inline:
-                      description: Inline tool definition - defines the tool directly
-                        in the Agent spec
+                      description: |-
+                        Inline tool definition - defines the tool directly in the Agent spec
+                        Uses the same spec as AgentTool for consistency
                       properties:
                         description:
                           description: Human-readable description for the LLM
@@ -4615,8 +4616,9 @@ spec:
                           - method
                           type: object
                         inputSchema:
-                          description: Input schema - JSON Schema defining what the
-                            agent provides
+                          description: |-
+                            Input schema - JSON Schema defining what the agent provides
+                            For GET: becomes query params, for POST/PUT/PATCH: becomes JSON body
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
                         openApiSchemaRef:

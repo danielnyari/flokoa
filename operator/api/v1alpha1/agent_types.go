@@ -5,7 +5,6 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Framework represents the AI framework used by the agent
@@ -60,39 +59,13 @@ type ToolEntry struct {
 	Name string `json:"name,omitempty"`
 
 	// Inline tool definition - defines the tool directly in the Agent spec
+	// Uses the same spec as AgentTool for consistency
 	// +optional
-	Inline *InlineToolSpec `json:"inline,omitempty"`
+	Inline *AgentToolSpec `json:"inline,omitempty"`
 
 	// Reference to an existing AgentTool resource
 	// +optional
 	ToolRef *ToolRef `json:"toolRef,omitempty"`
-}
-
-// InlineToolSpec defines an inline tool specification (mirrors AgentToolSpec)
-type InlineToolSpec struct {
-	// Type of tool
-	Type AgentToolType `json:"type"`
-
-	// Human-readable description for the LLM
-	Description string `json:"description"`
-
-	// HTTP API specific configuration
-	// +optional
-	HTTPApi *HTTPApiSpec `json:"httpApi,omitempty"`
-
-	// Input schema - JSON Schema defining what the agent provides
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	InputSchema *runtime.RawExtension `json:"inputSchema,omitempty"`
-
-	// Output schema - JSON Schema defining what the tool returns
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	OutputSchema *runtime.RawExtension `json:"outputSchema,omitempty"`
-
-	// Reference to an OpenAPI spec (alternative to inputSchema/outputSchema)
-	// +optional
-	OpenApiSchemaRef *OpenApiSchemaRef `json:"openApiSchemaRef,omitempty"`
 }
 
 // ToolRef references an existing AgentTool resource
