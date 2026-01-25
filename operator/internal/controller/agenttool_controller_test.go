@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -315,9 +316,10 @@ var _ = Describe("AgentTool Controller", func() {
 				}, timeout, interval).Should(BeTrue())
 			})
 
-			It("should fail validation for invalid inputSchema", func() {
-				By("Creating an AgentTool with invalid inputSchema (not valid JSON)")
-				invalidSchema := []byte(`{"type": invalid}`)
+			It("should fail validation for empty inputSchema", func() {
+				By("Creating an AgentTool with empty inputSchema raw bytes")
+				// Empty raw bytes represent invalid/empty schema that should fail validation
+				emptySchema := &runtime.RawExtension{Raw: []byte{}}
 
 				agentTool := &agentv1alpha1.AgentTool{
 					ObjectMeta: metav1.ObjectMeta{
@@ -326,12 +328,12 @@ var _ = Describe("AgentTool Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
 						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
-						Description: "Tool with invalid schema",
+						Description: "Tool with empty schema",
 						HTTPApi: &agentv1alpha1.HTTPApiSpec{
 							URL:    "https://api.example.com",
 							Method: agentv1alpha1.HTTPMethodGet,
 						},
-						InputSchema: &runtime.RawExtension{Raw: invalidSchema},
+						InputSchema: emptySchema,
 					},
 				}
 				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
@@ -349,7 +351,7 @@ var _ = Describe("AgentTool Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Requeue).To(BeTrue())
 
-				// Second reconcile should fail validation
+				// Second reconcile should fail validation due to empty schema
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: typeNamespacedName,
 				})
@@ -920,7 +922,8 @@ paths:
 				}
 
 				for _, method := range methods {
-					testName := fmt.Sprintf("test-tool-%s-%d", method, time.Now().UnixNano())
+					// Use lowercase method name for valid Kubernetes resource name
+					testName := fmt.Sprintf("test-tool-%s-%d", strings.ToLower(string(method)), time.Now().UnixNano())
 					testNamespacedName := types.NamespacedName{
 						Name:      testName,
 						Namespace: agentToolNamespace,
