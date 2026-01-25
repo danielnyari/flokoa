@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -71,7 +72,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if err := r.Update(ctx, agent); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Reconcile Deployment
@@ -282,6 +283,7 @@ func (r *AgentReconciler) calculatePhase(deployment *appsv1.Deployment) agentv1a
 	return agentv1alpha1.AgentPhasePending
 }
 
+//nolint:unparam // conditionType is parameterized for future extensibility
 func (r *AgentReconciler) setCondition(agent *agentv1alpha1.Agent, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	condition := metav1.Condition{
 		Type:               conditionType,
