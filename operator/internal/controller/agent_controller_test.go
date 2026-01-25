@@ -1356,5 +1356,280 @@ var _ = Describe("Agent Controller", func() {
 				Expect(condition.Message).To(ContainSubstring("2 tools"))
 			})
 		})
+
+		Context("Tool change propagation", func() {
+			var agentToolName string
+
+			BeforeEach(func() {
+				agentToolName = fmt.Sprintf("test-agenttool-%d", time.Now().UnixNano())
+			})
+
+			AfterEach(func() {
+				// Cleanup all AgentTool resources
+				agentToolList := &agentv1alpha1.AgentToolList{}
+				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
+				for _, at := range agentToolList.Items {
+					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
+						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
+						_ = k8sClient.Update(ctx, &at)
+					}
+					_ = k8sClient.Delete(ctx, &at)
+				}
+			})
+
+			It("should add tools-hash annotation to pod template", func() {
+				By("Creating an AgentTool resource")
+				agentTool := &agentv1alpha1.AgentTool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentToolName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentToolSpec{
+						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Description: "Test tool",
+						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+							URL:    "https://api.example.com",
+							Method: agentv1alpha1.HTTPMethodGet,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
+
+				By("Creating the AgentTool's ConfigMap")
+				toolConfigMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Namespace: agentNamespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/name":      agentToolName,
+							"app.kubernetes.io/component": "agenttool-spec",
+						},
+					},
+					Data: map[string]string{
+						"spec.json": `{"type":"http-api","description":"Test tool"}`,
+					},
+				}
+				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
+
+				By("Creating an Agent that references the AgentTool")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+								},
+							},
+						},
+						Tools: []agentv1alpha1.ToolEntry{
+							{
+								ToolRef: &agentv1alpha1.ToolRef{
+									Name: agentToolName,
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying pod template has tools-hash annotation")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				Expect(deployment.Spec.Template.Annotations).To(HaveKey("flokoa.ai/tools-hash"))
+				initialHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
+				Expect(initialHash).NotTo(BeEmpty())
+			})
+
+			It("should update tools-hash when ConfigMap changes", func() {
+				By("Creating an AgentTool resource")
+				agentTool := &agentv1alpha1.AgentTool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentToolName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentToolSpec{
+						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Description: "Original description",
+						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+							URL:    "https://api.example.com",
+							Method: agentv1alpha1.HTTPMethodGet,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
+
+				By("Creating the AgentTool's ConfigMap")
+				toolConfigMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Namespace: agentNamespace,
+						Labels: map[string]string{
+							"app.kubernetes.io/name":      agentToolName,
+							"app.kubernetes.io/component": "agenttool-spec",
+						},
+					},
+					Data: map[string]string{
+						"spec.json": `{"type":"http-api","description":"Original description"}`,
+					},
+				}
+				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
+
+				By("Creating an Agent that references the AgentTool")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+								},
+							},
+						},
+						Tools: []agentv1alpha1.ToolEntry{
+							{
+								ToolRef: &agentv1alpha1.ToolRef{
+									Name: agentToolName,
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Getting the initial tools-hash")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				initialHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
+				Expect(initialHash).NotTo(BeEmpty())
+
+				By("Updating the ConfigMap content")
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      fmt.Sprintf("%s-spec", agentToolName),
+					Namespace: agentNamespace,
+				}, toolConfigMap)
+				Expect(err).NotTo(HaveOccurred())
+
+				toolConfigMap.Data["spec.json"] = `{"type":"http-api","description":"Updated description"}`
+				Expect(k8sClient.Update(ctx, toolConfigMap)).To(Succeed())
+
+				By("Reconciling the Agent again")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying the tools-hash has changed")
+				err = k8sClient.Get(ctx, typeNamespacedName, deployment)
+				Expect(err).NotTo(HaveOccurred())
+
+				updatedHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
+				Expect(updatedHash).NotTo(BeEmpty())
+				Expect(updatedHash).NotTo(Equal(initialHash))
+			})
+
+			It("should not have tools-hash annotation when no tools are configured", func() {
+				By("Creating an Agent without tools")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying pod template has no tools-hash annotation")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				Expect(deployment.Spec.Template.Annotations).To(BeNil())
+			})
+		})
 	})
 })
