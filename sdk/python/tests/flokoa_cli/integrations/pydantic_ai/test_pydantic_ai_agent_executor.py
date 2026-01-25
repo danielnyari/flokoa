@@ -9,8 +9,9 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
-from src.flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
-from src.flokoa.types import APIToolSpec, ToolDefinition, ToolType
+from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
+from flokoa.types import ToolDefinition, ToolType
+from flokoa.types.agenttool import AgentToolSpec, HttpApi, Method, Type
 
 # Block real model requests during testing
 models.ALLOW_MODEL_REQUESTS = False
@@ -49,23 +50,25 @@ def api_tool_definition():
     """Create a sample API tool definition."""
     return ToolDefinition(
         name="get_weather",
-        description="Get the current weather for a location",
-        type=ToolType.API,
-        input_json_schema={
-            "type": "object",
-            "properties": {
-                "location": {"type": "string", "description": "The city name"},
+        spec=AgentToolSpec(
+            type=Type.http_api,
+            description="Get the current weather for a location",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "The city name"},
+                },
+                "required": ["location"],
             },
-            "required": ["location"],
-        },
-        output_json_schema={
-            "type": "object",
-            "properties": {
-                "temperature": {"type": "number"},
-                "condition": {"type": "string"},
+            outputSchema={
+                "type": "object",
+                "properties": {
+                    "temperature": {"type": "number"},
+                    "condition": {"type": "string"},
+                },
             },
-        },
-        spec=APIToolSpec(endpoint="https://api.weather.com/current", method="GET"),
+            httpApi=HttpApi(url="https://api.weather.com/current", method=Method.GET),
+        ),
     )
 
 
@@ -75,31 +78,35 @@ def multiple_tool_definitions():
     return [
         ToolDefinition(
             name="get_weather",
-            description="Get the current weather for a location",
-            type=ToolType.API,
-            input_json_schema={
-                "type": "object",
-                "properties": {"location": {"type": "string"}},
-                "required": ["location"],
-            },
-            output_json_schema={"type": "object"},
-            spec=APIToolSpec(endpoint="https://api.weather.com/current", method="GET"),
+            spec=AgentToolSpec(
+                type=Type.http_api,
+                description="Get the current weather for a location",
+                inputSchema={
+                    "type": "object",
+                    "properties": {"location": {"type": "string"}},
+                    "required": ["location"],
+                },
+                outputSchema={"type": "object"},
+                httpApi=HttpApi(url="https://api.weather.com/current", method=Method.GET),
+            ),
         ),
         ToolDefinition(
             name="send_email",
-            description="Send an email to a recipient",
-            type=ToolType.API,
-            input_json_schema={
-                "type": "object",
-                "properties": {
-                    "to": {"type": "string"},
-                    "subject": {"type": "string"},
-                    "body": {"type": "string"},
+            spec=AgentToolSpec(
+                type=Type.http_api,
+                description="Send an email to a recipient",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "to": {"type": "string"},
+                        "subject": {"type": "string"},
+                        "body": {"type": "string"},
+                    },
+                    "required": ["to", "subject", "body"],
                 },
-                "required": ["to", "subject", "body"],
-            },
-            output_json_schema={"type": "object"},
-            spec=APIToolSpec(endpoint="https://api.email.com/send", method="POST"),
+                outputSchema={"type": "object"},
+                httpApi=HttpApi(url="https://api.email.com/send", method=Method.POST),
+            ),
         ),
     ]
 
@@ -113,11 +120,16 @@ def tools_file(tmp_path, multiple_tool_definitions, monkeypatch, mock_http_api):
     tools_config = [
         {
             "name": td.name,
-            "description": td.description,
-            "type": td.type.value,
-            "inputJSONSchema": td.input_json_schema,
-            "outputJSONSchema": td.output_json_schema,
-            "spec": {"endpoint": td.spec.endpoint, "method": td.spec.method},
+            "spec": {
+                "type": td.spec.type.value,
+                "description": td.spec.description,
+                "inputSchema": td.spec.inputSchema,
+                "outputSchema": td.spec.outputSchema,
+                "httpApi": {
+                    "url": td.spec.httpApi.url,
+                    "method": td.spec.httpApi.method.value,
+                },
+            },
         }
         for td in multiple_tool_definitions
     ]
@@ -492,7 +504,7 @@ class TestPydanticAIAgentExecutorProperties:
 
         assert len(definitions) == 2
         assert definitions[0].name == "get_weather"
-        assert definitions[0].type == ToolType.API
+        assert definitions[0].type == ToolType.HTTP_API
 
     def test_agent_property_returns_injected_agent(self, pydantic_agent, pydantic_agent_executor):
         """Verify that agent property returns the injected agent."""

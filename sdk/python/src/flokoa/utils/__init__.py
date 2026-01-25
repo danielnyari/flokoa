@@ -1,8 +1,28 @@
 from flokoa.types import ToolDefinition
+from flokoa.types.agenttool import AgentToolSpec
 
 
 def load_tools() -> list[ToolDefinition]:
-    """Load tool definitions from /etc/flokoa/tools.json."""
+    """Load tool definitions from /etc/flokoa/tools.json.
+
+    The JSON format matches the Kubernetes AgentTool CRD structure:
+    [
+        {
+            "name": "tool_name",
+            "spec": {
+                "type": "http-api",
+                "description": "Tool description",
+                "inputSchema": {...},
+                "outputSchema": {...},
+                "httpApi": {
+                    "url": "https://api.example.com",
+                    "method": "GET"
+                }
+            },
+            "metadata": {...}  // optional
+        }
+    ]
+    """
     import json
     import os
 
@@ -16,12 +36,8 @@ def load_tools() -> list[ToolDefinition]:
     definitions = [
         ToolDefinition(
             name=t["name"],
-            description=t["description"],
-            input_json_schema=t["inputSchema"],
-            output_json_schema=t["outputSchema"],
-            type=t.get("type", "api"),
+            spec=AgentToolSpec(**t["spec"]),
             metadata=t.get("metadata", None),
-            spec=t.get("spec", {}),
         )
         for t in tools_config
     ]

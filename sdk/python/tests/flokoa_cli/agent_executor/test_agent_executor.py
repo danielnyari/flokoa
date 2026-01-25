@@ -2,28 +2,34 @@ import json
 
 import pytest
 
-from src.flokoa.types import ToolDefinition, ToolType
+from flokoa.types import ToolDefinition, ToolType
+from flokoa.types.agenttool import AgentToolSpec
 
 
 @pytest.fixture
 def tools_config():
+    """Tool configuration in the new AgentToolSpec format."""
     return [
         {
             "name": "test_api_tool",
-            "description": "A test API tool",
-            "inputSchema": {"type": "object", "properties": {"input": {"type": "string"}}},
-            "outputSchema": {"type": "object", "properties": {"output": {"type": "string"}}},
-            "type": "api",
-            "spec": {"endpoint": "https://api.example.com/test", "method": "POST"},
+            "spec": {
+                "type": "http-api",
+                "description": "A test API tool",
+                "inputSchema": {"type": "object", "properties": {"input": {"type": "string"}}},
+                "outputSchema": {"type": "object", "properties": {"output": {"type": "string"}}},
+                "httpApi": {"url": "https://api.example.com/test", "method": "POST"},
+            },
         },
         {
             "name": "another_api_tool",
-            "description": "Another API tool",
-            "inputSchema": {"type": "object"},
-            "outputSchema": {"type": "object"},
-            "type": "api",
             "metadata": {"version": "2.0"},
-            "spec": {"endpoint": "https://api.example.com/another", "method": "GET"},
+            "spec": {
+                "type": "http-api",
+                "description": "Another API tool",
+                "inputSchema": {"type": "object"},
+                "outputSchema": {"type": "object"},
+                "httpApi": {"url": "https://api.example.com/another", "method": "GET"},
+            },
         },
     ]
 
@@ -39,17 +45,13 @@ def tools_file(tools_config, monkeypatch, tmp_path):
         return [
             ToolDefinition(
                 name=t["name"],
-                description=t["description"],
-                input_json_schema=t["inputSchema"],
-                output_json_schema=t["outputSchema"],
-                type=t.get("type", "api"),
+                spec=AgentToolSpec(**t["spec"]),
                 metadata=t.get("metadata", None),
-                spec=t.get("spec", {}),
             )
             for t in tools_cfg
         ]
 
-    monkeypatch.setattr("src.flokoa.agent_executor.load_tools", patched_load_tools)
+    monkeypatch.setattr("flokoa.agent_executor.load_tools", patched_load_tools)
     return tools_file
 
 
@@ -68,7 +70,7 @@ class TestFlokoaAgentExecutorProperties:
         definitions = dummy_agent_executor.tool_definitions
         assert len(definitions) == 2
         assert definitions[0].name == "test_api_tool"
-        assert definitions[0].type == ToolType.API
+        assert definitions[0].type == ToolType.HTTP_API
         assert definitions[1].metadata == {"version": "2.0"}
 
     def test_agent_returns_injected_agent(self, dummy_agent, dummy_agent_executor):
