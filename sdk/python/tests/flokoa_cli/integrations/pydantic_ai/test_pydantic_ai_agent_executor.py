@@ -24,9 +24,14 @@ def mock_http_api(monkeypatch):
 
     The production code uses dynamic lookup via flokoa_tools.call_http_api_tool,
     so we patch the attribute on the flokoa.tools module.
+
+    Returns a MagicMock that can be used to assert calls.
     """
+    mock = MagicMock()
 
     async def mock_call_http_api_tool(endpoint: str, method: str, params: dict):
+        # Track the call (using MagicMock to avoid async coroutine warnings)
+        mock(endpoint=endpoint, method=method, params=params)
         # Return mock data based on the endpoint
         if "weather" in endpoint:
             return {"temperature": 20, "condition": "sunny", "location": params.get("location", "unknown")}
@@ -36,7 +41,7 @@ def mock_http_api(monkeypatch):
 
     # Patch on the flokoa.tools module where dynamic lookup happens
     monkeypatch.setattr("flokoa.tools.call_http_api_tool", mock_call_http_api_tool)
-    return mock_call_http_api_tool
+    return mock
 
 
 @pytest.fixture
@@ -239,7 +244,9 @@ class TestPydanticAIAgentExecutorGetToolset:
 class TestPydanticAIAgentExecutorToolInjectionWithTestModel:
     """Tests for tool injection using TestModel."""
 
-    async def test_all_tools_are_callable(self, pydantic_agent, pydantic_agent_executor):
+    async def test_all_tools_are_callable_and_called_with_correct_params(
+        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+    ):
         """Verify that both native and injected tools can be called by TestModel.
 
         This is the core test case: users create agents with their own tools,
@@ -270,7 +277,30 @@ class TestPydanticAIAgentExecutorToolInjectionWithTestModel:
             # Total: 1 native + 2 injected = 3 tools
             assert len(tool_names) == 3
 
-    async def test_tools_have_correct_schema_in_model_request(self, pydantic_agent, pydantic_agent_executor):
+            # Verify injected tools were called with correct parameters
+            # TestModel generates test data based on schema, so we check the call structure
+            calls = mock_http_api.call_args_list
+            assert len(calls) == 2  # get_weather and send_email were called
+
+            # Find the weather call and email call
+            weather_call = next(c for c in calls if "weather" in c.kwargs["endpoint"])
+            email_call = next(c for c in calls if "email" in c.kwargs["endpoint"])
+
+            # Verify weather tool was called with correct endpoint and method
+            assert weather_call.kwargs["endpoint"] == "https://api.weather.com/current"
+            assert weather_call.kwargs["method"] == "GET"
+            assert "location" in weather_call.kwargs["params"]
+
+            # Verify email tool was called with correct endpoint and method
+            assert email_call.kwargs["endpoint"] == "https://api.email.com/send"
+            assert email_call.kwargs["method"] == "POST"
+            assert "to" in email_call.kwargs["params"]
+            assert "subject" in email_call.kwargs["params"]
+            assert "body" in email_call.kwargs["params"]
+
+    async def test_tools_have_correct_schema_in_model_request(
+        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+    ):
         """Verify that both native and injected tools have correct JSON schema."""
         test_model = TestModel()
 
@@ -362,8 +392,10 @@ class TestPydanticAIAgentExecutorToolInjectionWithFunctionModel:
 class TestPydanticAIAgentExecutorExecuteMethod:
     """Tests for the execute method with full integration."""
 
-    async def test_execute_calls_all_tools(self, pydantic_agent, pydantic_agent_executor):
-        """Verify that execute can call both native and injected tools."""
+    async def test_execute_calls_all_tools_with_correct_params(
+        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+    ):
+        """Verify that execute calls both native and injected tools with correct params."""
         test_model = TestModel()
 
         mock_context = MagicMock()
@@ -390,7 +422,18 @@ class TestPydanticAIAgentExecutorExecuteMethod:
             assert "get_weather" in tool_names
             assert "send_email" in tool_names
 
-    async def test_execute_enqueues_agent_output(self, pydantic_agent, pydantic_agent_executor):
+            # Verify injected tools were called with correct parameters
+            calls = mock_http_api.call_args_list
+            assert len(calls) == 2  # Both injected tools were called
+
+            # Verify each tool was called with correct endpoint and method
+            endpoints_called = {c.kwargs["endpoint"] for c in calls}
+            assert "https://api.weather.com/current" in endpoints_called
+            assert "https://api.email.com/send" in endpoints_called
+
+    async def test_execute_enqueues_agent_output(
+        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+    ):
         """Verify that execute enqueues the agent's output as an event."""
         expected_output = "The weather is sunny!"
         test_model = TestModel(custom_output_text=expected_output)
