@@ -123,7 +123,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				By("Reconciling the Agent again to create resources")
 				// Second reconcile creates the Deployment and Service
@@ -242,7 +242,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates resources
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -304,7 +304,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates resources
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -369,7 +369,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates resources
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -424,7 +424,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates resources and updates status
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -480,7 +480,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates resources and updates status
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -531,7 +531,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates resources
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -593,7 +593,7 @@ var _ = Describe("Agent Controller", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Requeue).To(BeTrue())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile creates resources
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
