@@ -5,6 +5,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Framework represents the AI framework used by the agent
@@ -46,6 +47,62 @@ type AgentSpec struct {
 	// Explicit framework declaration (for observability/tooling)
 	// +optional
 	Framework Framework `json:"framework,omitempty"`
+
+	// Tools available to this agent - can be inline definitions or references to AgentTool resources
+	// +optional
+	Tools []ToolEntry `json:"tools,omitempty"`
+}
+
+// ToolEntry represents either an inline tool definition or a reference to an AgentTool resource
+type ToolEntry struct {
+	// Name of the tool (required for inline tools, used as identifier)
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Inline tool definition - defines the tool directly in the Agent spec
+	// +optional
+	Inline *InlineToolSpec `json:"inline,omitempty"`
+
+	// Reference to an existing AgentTool resource
+	// +optional
+	ToolRef *ToolRef `json:"toolRef,omitempty"`
+}
+
+// InlineToolSpec defines an inline tool specification (mirrors AgentToolSpec)
+type InlineToolSpec struct {
+	// Type of tool
+	Type AgentToolType `json:"type"`
+
+	// Human-readable description for the LLM
+	Description string `json:"description"`
+
+	// HTTP API specific configuration
+	// +optional
+	HTTPApi *HTTPApiSpec `json:"httpApi,omitempty"`
+
+	// Input schema - JSON Schema defining what the agent provides
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	InputSchema *runtime.RawExtension `json:"inputSchema,omitempty"`
+
+	// Output schema - JSON Schema defining what the tool returns
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	OutputSchema *runtime.RawExtension `json:"outputSchema,omitempty"`
+
+	// Reference to an OpenAPI spec (alternative to inputSchema/outputSchema)
+	// +optional
+	OpenApiSchemaRef *OpenApiSchemaRef `json:"openApiSchemaRef,omitempty"`
+}
+
+// ToolRef references an existing AgentTool resource
+type ToolRef struct {
+	// Name of the AgentTool resource
+	Name string `json:"name"`
+
+	// Namespace of the AgentTool (defaults to Agent's namespace)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // RuntimeSpec defines the runtime backend and its configuration

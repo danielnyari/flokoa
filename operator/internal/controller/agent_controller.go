@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
@@ -27,9 +30,17 @@ const (
 
 const (
 	ConditionTypeReady       = "Ready"
+	ConditionTypeToolsReady  = "ToolsReady"
 	ReasonDeploymentReady    = "DeploymentReady"
 	ReasonDeploymentNotReady = "DeploymentNotReady"
 	ReasonReconcileError     = "ReconcileError"
+	ReasonToolsSynced        = "ToolsSynced"
+	ReasonToolSyncFailed     = "ToolSyncFailed"
+)
+
+const (
+	// toolsMountPath is the path where tool configurations are mounted
+	toolsMountPath = "/etc/flokoa/tools"
 )
 
 type AgentReconciler struct {
@@ -40,8 +51,10 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/finalizers,verbs=update
+// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -75,8 +88,22 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
+	// Reconcile tools (inline and referenced) - creates ConfigMaps and returns volume/mount info
+	toolConfigMaps, err := r.reconcileTools(ctx, agent)
+	if err != nil {
+		logger.Error(err, "Failed to reconcile tools")
+		r.setCondition(agent, ConditionTypeToolsReady, metav1.ConditionFalse, ReasonToolSyncFailed, err.Error())
+		_ = r.Status().Update(ctx, agent)
+		return ctrl.Result{}, err
+	}
+	if len(agent.Spec.Tools) > 0 {
+		r.setCondition(agent, ConditionTypeToolsReady, metav1.ConditionTrue, ReasonToolsSynced, fmt.Sprintf("Synced %d tools", len(toolConfigMaps)))
+		now := metav1.Now()
+		agent.Status.LastToolSync = &now
+	}
+
 	// Reconcile Deployment
-	deployment, err := r.reconcileDeployment(ctx, agent)
+	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
@@ -115,8 +142,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent) (*appsv1.Deployment, error) {
-	desired := r.buildDeployment(agent)
+func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo) (*appsv1.Deployment, error) {
+	desired := r.buildDeployment(agent, toolConfigMaps)
 
 	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
@@ -143,7 +170,134 @@ func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv
 	return existing, nil
 }
 
-func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent) *appsv1.Deployment {
+// toolConfigMapInfo holds information about a tool's ConfigMap for mounting
+type toolConfigMapInfo struct {
+	// Name of the tool
+	toolName string
+	// Name of the ConfigMap containing the tool spec
+	configMapName string
+}
+
+// reconcileTools reconciles both inline and referenced tools, creating ConfigMaps as needed
+func (r *AgentReconciler) reconcileTools(ctx context.Context, agent *agentv1alpha1.Agent) ([]toolConfigMapInfo, error) {
+	logger := log.FromContext(ctx)
+	var toolConfigMaps []toolConfigMapInfo
+
+	for i, tool := range agent.Spec.Tools {
+		if tool.Inline != nil {
+			// Handle inline tool - create a ConfigMap for it
+			toolName := tool.Name
+			if toolName == "" {
+				toolName = fmt.Sprintf("tool-%d", i)
+			}
+
+			cmName, err := r.reconcileInlineTool(ctx, agent, toolName, tool.Inline)
+			if err != nil {
+				return nil, fmt.Errorf("failed to reconcile inline tool %s: %w", toolName, err)
+			}
+			logger.Info("Reconciled inline tool", "toolName", toolName, "configMap", cmName)
+			toolConfigMaps = append(toolConfigMaps, toolConfigMapInfo{
+				toolName:      toolName,
+				configMapName: cmName,
+			})
+		} else if tool.ToolRef != nil {
+			// Handle tool reference - look up the AgentTool's ConfigMap
+			namespace := tool.ToolRef.Namespace
+			if namespace == "" {
+				namespace = agent.Namespace
+			}
+
+			agentTool := &agentv1alpha1.AgentTool{}
+			if err := r.Get(ctx, types.NamespacedName{Name: tool.ToolRef.Name, Namespace: namespace}, agentTool); err != nil {
+				return nil, fmt.Errorf("failed to get referenced AgentTool %s/%s: %w", namespace, tool.ToolRef.Name, err)
+			}
+
+			// The AgentTool controller creates a ConfigMap named "{agenttool-name}-spec"
+			cmName := fmt.Sprintf("%s-spec", agentTool.Name)
+
+			// Verify the ConfigMap exists
+			cm := &corev1.ConfigMap{}
+			if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm); err != nil {
+				return nil, fmt.Errorf("ConfigMap for AgentTool %s not found: %w", tool.ToolRef.Name, err)
+			}
+
+			toolName := tool.Name
+			if toolName == "" {
+				toolName = agentTool.Name
+			}
+			logger.Info("Found referenced tool", "toolName", toolName, "configMap", cmName)
+			toolConfigMaps = append(toolConfigMaps, toolConfigMapInfo{
+				toolName:      toolName,
+				configMapName: cmName,
+			})
+		}
+	}
+
+	return toolConfigMaps, nil
+}
+
+// reconcileInlineTool creates or updates a ConfigMap for an inline tool definition
+func (r *AgentReconciler) reconcileInlineTool(ctx context.Context, agent *agentv1alpha1.Agent, toolName string, spec *agentv1alpha1.InlineToolSpec) (string, error) {
+	// Convert InlineToolSpec to AgentToolSpec for consistent JSON structure
+	toolSpec := agentv1alpha1.AgentToolSpec{
+		Type:             spec.Type,
+		Description:      spec.Description,
+		HTTPApi:          spec.HTTPApi,
+		InputSchema:      spec.InputSchema,
+		OutputSchema:     spec.OutputSchema,
+		OpenApiSchemaRef: spec.OpenApiSchemaRef,
+	}
+
+	specJSON, err := json.Marshal(toolSpec)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal inline tool spec: %w", err)
+	}
+
+	cmName := fmt.Sprintf("%s-tool-%s", agent.Name, toolName)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: agent.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       toolName,
+				"app.kubernetes.io/component":  "inline-tool-spec",
+				"app.kubernetes.io/managed-by": "flokoa-operator",
+				"flokoa.ai/agent":              agent.Name,
+			},
+		},
+		Data: map[string]string{
+			"spec.json": string(specJSON),
+		},
+	}
+
+	// Set owner reference so the ConfigMap is cleaned up when the Agent is deleted
+	if err := controllerutil.SetControllerReference(agent, cm, r.Scheme); err != nil {
+		return "", fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	// Create or update ConfigMap
+	existingCM := &corev1.ConfigMap{}
+	err = r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: agent.Namespace}, existingCM)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Create(ctx, cm); err != nil {
+				return "", fmt.Errorf("failed to create ConfigMap: %w", err)
+			}
+		} else {
+			return "", fmt.Errorf("failed to get ConfigMap: %w", err)
+		}
+	} else {
+		existingCM.Data = cm.Data
+		existingCM.Labels = cm.Labels
+		if err := r.Update(ctx, existingCM); err != nil {
+			return "", fmt.Errorf("failed to update ConfigMap: %w", err)
+		}
+	}
+
+	return cmName, nil
+}
+
+func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo) *appsv1.Deployment {
 	labels := r.buildLabels(agent)
 	spec := agent.Spec.Runtime.Spec
 
@@ -165,6 +319,32 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent) *appsv1.De
 		container.Name = "agent"
 	}
 
+	// Build volumes from spec and tools
+	volumes := append([]corev1.Volume{}, spec.Volumes...)
+
+	// Add tool volume mounts to the container
+	for _, toolCM := range toolConfigMaps {
+		// Create a volume for each tool ConfigMap
+		volumeName := fmt.Sprintf("tool-%s", toolCM.toolName)
+		volumes = append(volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: toolCM.configMapName,
+					},
+				},
+			},
+		})
+
+		// Add volume mount for this tool - each tool gets its own subdirectory
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: fmt.Sprintf("%s/%s", toolsMountPath, toolCM.toolName),
+			ReadOnly:  true,
+		})
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      agent.Name,
@@ -182,7 +362,7 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent) *appsv1.De
 				},
 				Spec: corev1.PodSpec{
 					Containers:         []corev1.Container{container},
-					Volumes:            spec.Volumes,
+					Volumes:            volumes,
 					ImagePullSecrets:   spec.ImagePullSecrets,
 					ServiceAccountName: spec.ServiceAccountName,
 					SecurityContext:    spec.SecurityContext,
@@ -301,6 +481,48 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&agentv1alpha1.Agent{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.ConfigMap{}).
+		Watches(
+			&agentv1alpha1.AgentTool{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForAgentTool),
+		).
 		Named("agent").
 		Complete(r)
+}
+
+// findAgentsForAgentTool returns the Agents that reference a given AgentTool
+func (r *AgentReconciler) findAgentsForAgentTool(ctx context.Context, obj client.Object) []reconcile.Request {
+	agentTool := obj.(*agentv1alpha1.AgentTool)
+	logger := log.FromContext(ctx)
+
+	// List all agents in the same namespace
+	agentList := &agentv1alpha1.AgentList{}
+	if err := r.List(ctx, agentList, client.InNamespace(agentTool.Namespace)); err != nil {
+		logger.Error(err, "Failed to list Agents")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, agent := range agentList.Items {
+		// Check if this agent references the updated AgentTool
+		for _, tool := range agent.Spec.Tools {
+			if tool.ToolRef != nil {
+				refNamespace := tool.ToolRef.Namespace
+				if refNamespace == "" {
+					refNamespace = agent.Namespace
+				}
+				if tool.ToolRef.Name == agentTool.Name && refNamespace == agentTool.Namespace {
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name:      agent.Name,
+							Namespace: agent.Namespace,
+						},
+					})
+					break
+				}
+			}
+		}
+	}
+
+	return requests
 }
