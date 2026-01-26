@@ -38,6 +38,36 @@ const (
 	RuntimeTypeStandard RuntimeType = "standard"
 )
 
+// AgentSkill describes a specific capability or function the agent can perform.
+// Based on the A2A protocol AgentSkill definition.
+type AgentSkill struct {
+	// Unique identifier for the skill
+	ID string `json:"id"`
+
+	// Human-readable name for the skill
+	Name string `json:"name"`
+
+	// Detailed description of what the skill does
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Keywords for categorization and discovery
+	// +optional
+	Tags []string `json:"tags,omitempty"`
+
+	// Sample prompts or use cases demonstrating the skill
+	// +optional
+	Examples []string `json:"examples,omitempty"`
+
+	// Supported MIME types for input (e.g., "text/plain", "application/json")
+	// +optional
+	InputModes []string `json:"inputModes,omitempty"`
+
+	// Supported MIME types for output (e.g., "text/plain", "application/json")
+	// +optional
+	OutputModes []string `json:"outputModes,omitempty"`
+}
+
 // AgentSpec defines the desired state of an Agent
 type AgentSpec struct {
 	// Runtime configuration - specifies the backend and configuration
@@ -50,6 +80,10 @@ type AgentSpec struct {
 	// Tools available to this agent - can be inline definitions or references to AgentTool resources
 	// +optional
 	Tools []ToolEntry `json:"tools,omitempty"`
+
+	// Skills that this agent can perform (A2A protocol compatible)
+	// +optional
+	Skills []AgentSkill `json:"skills,omitempty"`
 }
 
 // ToolEntry represents either an inline tool definition or a reference to an AgentTool resource

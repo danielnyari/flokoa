@@ -4547,6 +4547,49 @@ spec:
                 required:
                 - type
                 type: object
+              skills:
+                description: Skills that this agent can perform (A2A protocol compatible)
+                items:
+                  description: |-
+                    AgentSkill describes a specific capability or function the agent can perform.
+                    Based on the A2A protocol AgentSkill definition.
+                  properties:
+                    description:
+                      description: Detailed description of what the skill does
+                      type: string
+                    examples:
+                      description: Sample prompts or use cases demonstrating the skill
+                      items:
+                        type: string
+                      type: array
+                    id:
+                      description: Unique identifier for the skill
+                      type: string
+                    inputModes:
+                      description: Supported MIME types for input (e.g., "text/plain",
+                        "application/json")
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: Human-readable name for the skill
+                      type: string
+                    outputModes:
+                      description: Supported MIME types for output (e.g., "text/plain",
+                        "application/json")
+                      items:
+                        type: string
+                      type: array
+                    tags:
+                      description: Keywords for categorization and discovery
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - id
+                  - name
+                  type: object
+                type: array
               tools:
                 description: Tools available to this agent - can be inline definitions
                   or references to AgentTool resources
