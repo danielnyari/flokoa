@@ -28,9 +28,12 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         The wrapper function accepts **kwargs matching the tool's input schema,
         and passes them to the appropriate tool handler with the tool's configuration.
         """
-        if tool_definition.type == ToolType.API:
-            endpoint = tool_definition.spec.endpoint
-            method = tool_definition.spec.method
+        if tool_definition.type == ToolType.HTTP_API:
+            http_api = tool_definition.spec.httpApi
+            if http_api is None:
+                raise ValueError(f"Tool '{tool_definition.name}' has type http-api but no httpApi configuration")
+            endpoint = http_api.url or ""
+            method = http_api.method.value
 
             async def api_tool_wrapper(**kwargs: Any) -> dict[str, Any]:
                 # Dynamic lookup allows mocking in tests

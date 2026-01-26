@@ -149,14 +149,14 @@ var _ = Describe("AgentTool Controller", func() {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: agentToolNamespace}, cm)
 				}, timeout, interval).Should(Succeed())
 
-				Expect(cm.Data).To(HaveKey("spec.json"))
+				Expect(cm.Data).To(HaveKey(fmt.Sprintf("%s-spec.json", agentToolName)))
 				Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", agentToolName))
 				Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "agenttool-spec"))
 				Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flokoa-operator"))
 
 				By("Verifying ConfigMap contains valid spec JSON")
 				var spec agentv1alpha1.AgentToolSpec
-				err = json.Unmarshal([]byte(cm.Data["spec.json"]), &spec)
+				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &spec)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.Type).To(Equal(agentv1alpha1.AgentToolTypeHTTPAPI))
 				Expect(spec.Description).To(Equal("Test tool for fetching weather data"))
@@ -719,7 +719,7 @@ paths:
 				}, timeout, interval).Should(Succeed())
 
 				var initialSpec agentv1alpha1.AgentToolSpec
-				err = json.Unmarshal([]byte(cm.Data["spec.json"]), &initialSpec)
+				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &initialSpec)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(initialSpec.Description).To(Equal("Original description"))
 
@@ -743,14 +743,14 @@ paths:
 						return ""
 					}
 					var spec agentv1alpha1.AgentToolSpec
-					if err := json.Unmarshal([]byte(cm.Data["spec.json"]), &spec); err != nil {
+					if err := json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &spec); err != nil {
 						return ""
 					}
 					return spec.Description
 				}, timeout, interval).Should(Equal("Updated description"))
 
 				var updatedSpec agentv1alpha1.AgentToolSpec
-				err = json.Unmarshal([]byte(cm.Data["spec.json"]), &updatedSpec)
+				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &updatedSpec)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedSpec.HTTPApi.URL).To(Equal("https://api.example.com/v2"))
 			})
@@ -857,7 +857,7 @@ paths:
 				}, timeout, interval).Should(Succeed())
 
 				var spec agentv1alpha1.AgentToolSpec
-				err = json.Unmarshal([]byte(cm.Data["spec.json"]), &spec)
+				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &spec)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.HTTPApi.ServiceRef).NotTo(BeNil())
 				Expect(spec.HTTPApi.ServiceRef.Name).To(Equal("my-backend-service"))
@@ -927,7 +927,7 @@ paths:
 					}, timeout, interval).Should(Succeed())
 
 					var spec agentv1alpha1.AgentToolSpec
-					err = json.Unmarshal([]byte(cm.Data["spec.json"]), &spec)
+					err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", testName)]), &spec)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(spec.HTTPApi.Method).To(Equal(method))
 
@@ -996,7 +996,7 @@ paths:
 				}, timeout, interval).Should(Succeed())
 
 				var spec agentv1alpha1.AgentToolSpec
-				err = json.Unmarshal([]byte(cm.Data["spec.json"]), &spec)
+				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &spec)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*spec.HTTPApi.TimeoutSeconds).To(Equal(int32(60)))
 				Expect(spec.HTTPApi.Headers).To(HaveLen(3))

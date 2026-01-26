@@ -1,29 +1,45 @@
+import json
+import os
+from glob import glob
+
 from flokoa.types import ToolDefinition
+from flokoa.types.agenttool import AgentToolSpec
+
+TOOLS_PATH = "/etc/flokoa/tools/"
 
 
 def load_tools() -> list[ToolDefinition]:
-    """Load tool definitions from /etc/flokoa/tools.json."""
-    import json
-    import os
+    """Load tool definitions from /etc/flokoa/tools/.
 
-    tools_path = "/etc/flokoa/tools.json"
-    if not os.path.exists(tools_path):
+    The JSON format matches the Kubernetes AgentTool CRD structure:
+    {
+        "name": "tool_name",
+        "spec": {
+            "type": "http-api",
+            "description": "Tool description",
+            "inputSchema": {...},
+            "outputSchema": {...},
+            "httpApi": {
+                "url": "https://api.example.com",
+                "method": "GET"
+            }
+        },
+        "metadata": {...}  // optional
+    }
+    """
+    if not os.path.exists(TOOLS_PATH):
         return []
 
-    with open(tools_path) as f:
-        tools_config = json.load(f)
+    definitions: list[ToolDefinition] = []
 
-    definitions = [
-        ToolDefinition(
-            name=t["name"],
-            description=t["description"],
-            input_json_schema=t["inputSchema"],
-            output_json_schema=t["outputSchema"],
-            type=t.get("type", "api"),
-            metadata=t.get("metadata", None),
-            spec=t.get("spec", {}),
-        )
-        for t in tools_config
-    ]
+    for filename in glob(os.path.join(TOOLS_PATH, "*.json")):
+        with open(filename) as f:
+            tool_cfg = json.load(f)
+            tool_definition = ToolDefinition(
+                name=tool_cfg["name"],
+                spec=AgentToolSpec(**tool_cfg["spec"]),
+                metadata=tool_cfg.get("metadata", None),
+            )
+            definitions.append(tool_definition)
 
     return definitions
