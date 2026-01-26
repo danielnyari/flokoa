@@ -6,6 +6,9 @@
   "python.testing.pytestEnabled": true,
   "python.testing.cwd": "${workspaceFolder}/sdk/python",
   "python.defaultInterpreterPath": "${workspaceFolder}/sdk/python/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/sdk/python/src"
+  ],
   "go.testFlags": [
     "-v"
   ],

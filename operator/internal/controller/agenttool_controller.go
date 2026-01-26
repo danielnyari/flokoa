@@ -221,7 +221,7 @@ func (r *AgentToolReconciler) reconcileConfigMap(ctx context.Context, agentTool 
 			},
 		},
 		Data: map[string]string{
-			"spec.json": string(specJSON),
+			fmt.Sprintf("%s-spec.json", agentTool.Name): string(specJSON),
 		},
 	}
 
@@ -245,7 +245,7 @@ func (r *AgentToolReconciler) reconcileConfigMap(ctx context.Context, agentTool 
 	} else {
 		// Update data with new spec JSON
 		logger.Info("Updating ConfigMap", "name", cmName)
-		existingCM.Data["spec.json"] = string(specJSON)
+		existingCM.Data[fmt.Sprintf("%s-spec.json", agentTool.Name)] = string(specJSON)
 		if err := r.Update(ctx, existingCM); err != nil {
 			return fmt.Errorf("failed to update ConfigMap: %w", err)
 		}
