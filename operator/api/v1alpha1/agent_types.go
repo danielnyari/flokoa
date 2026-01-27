@@ -4,6 +4,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -48,28 +49,74 @@ type AgentSkill struct {
 	Name string `json:"name"`
 
 	// Detailed description of what the skill does
-	// +optional
-	Description string `json:"description,omitempty"`
+	Description string `json:"description"`
 
 	// Keywords for categorization and discovery
-	// +optional
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags"`
 
 	// Sample prompts or use cases demonstrating the skill
 	// +optional
 	Examples []string `json:"examples,omitempty"`
 
-	// Supported MIME types for input (e.g., "text/plain", "application/json")
+	// Supported input MIME types for this skill, overriding the agent's defaults
 	// +optional
 	InputModes []string `json:"inputModes,omitempty"`
 
-	// Supported MIME types for output (e.g., "text/plain", "application/json")
+	// Supported output MIME types for this skill, overriding the agent's defaults
 	// +optional
 	OutputModes []string `json:"outputModes,omitempty"`
+
+	// Security schemes necessary for the agent to leverage this skill
+	// Each map entry represents security schemes that must be used together (AND)
+	// Multiple entries represent alternatives (OR)
+	// +optional
+	Security []map[string][]string `json:"security,omitempty"`
+}
+
+type InputOutputMode string
+
+const (
+	InputOutputModeText InputOutputMode = "text"
+	InputOutputModeJSON InputOutputMode = "application/json"
+)
+
+type AgentExtension struct {
+	Description string                          `json:"description,omitempty"`
+	Params      map[string]apiextensionsv1.JSON `json:"params,omitempty"`
+	Required    bool                            `json:"required,omitempty"`
+	URI         string                          `json:"uri,omitempty"`
+}
+
+type AgentCapabilities struct {
+	Extensions             []AgentExtension `json:"extensions,omitempty"`
+	PushNotifications      bool             `json:"pushNotifications,omitempty"`
+	StateTransitionHistroy bool             `json:"stateTransitionHistroy,omitempty"`
+	Streaming              bool             `json:"streaming,omitempty"`
+}
+
+type AgentCard struct {
+	Name string `json:"name"`
+
+	Description string `json:"description"`
+
+	Version string `json:"version"`
+
+	// +kubebuilder:default={"application/json"}
+	DefaultInputModes []InputOutputMode `json:"defaultInputModes"`
+
+	// +kubebuilder:default={"application/json"}
+	DefaultOutputModes []InputOutputMode `json:"defaultOutputModes"`
+
+	// +kubebuilder:default={streaming: false}
+	Capabilities AgentCapabilities `json:"capabilities"`
+
+	Skills []AgentSkill `json:"skills"`
 }
 
 // AgentSpec defines the desired state of an Agent
 type AgentSpec struct {
+	Card AgentCard `json:"card"`
+
 	// Runtime configuration - specifies the backend and configuration
 	Runtime RuntimeSpec `json:"runtime"`
 
@@ -80,10 +127,6 @@ type AgentSpec struct {
 	// Tools available to this agent - can be inline definitions or references to AgentTool resources
 	// +optional
 	Tools []ToolEntry `json:"tools,omitempty"`
-
-	// Skills that this agent can perform (A2A protocol compatible)
-	// +optional
-	Skills []AgentSkill `json:"skills,omitempty"`
 }
 
 // ToolEntry represents either an inline tool definition or a reference to an AgentTool resource

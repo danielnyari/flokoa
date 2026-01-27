@@ -14,6 +14,7 @@ from a2a.types import (
 )
 
 from flokoa.integrations import IntegrationType, get_executor_cls
+from flokoa.utils import load_agent_card
 
 
 @click.command()
@@ -28,24 +29,28 @@ def main(agent: str, host: str, port: int, framework: str) -> None:
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    skill = AgentSkill(
-        id="hello_world",
-        name="Returns hello world",
-        description="just returns hello world",
-        tags=["hello world"],
-        examples=["hi", "hello world"],
-    )
+    # Try to load agent card from mounted ConfigMap (Kubernetes deployment)
+    # Falls back to default values for local development
+    agent_card = load_agent_card(url=f"http://{host}:{port}/")
 
-    agent_card = AgentCard(
-        name="Hello World Agent",
-        description="Just a hello world agent",
-        url=f"http://{host}:{port}/",
-        version="1.0.0",
-        default_input_modes=["application/json"],
-        default_output_modes=["application/json"],
-        capabilities=AgentCapabilities(streaming=False),
-        skills=[skill],
-    )
+    if agent_card is None:
+        # Default agent card for local development
+        skill = AgentSkill(
+            id="default",
+            name="Default Skill",
+            description="Default skill for local development",
+            tags=["default"],
+        )
+        agent_card = AgentCard(
+            name="Flokoa Agent",
+            description="A Flokoa agent (local development mode)",
+            url=f"http://{host}:{port}/",
+            version="0.0.1",
+            default_input_modes=["application/json"],
+            default_output_modes=["application/json"],
+            capabilities=AgentCapabilities(streaming=False),
+            skills=[skill],
+        )
 
     executor_cls = get_executor_cls(framework)
     agent_parts = agent.split(":")

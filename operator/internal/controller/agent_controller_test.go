@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -37,6 +38,23 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
+
+// minimalCard creates a minimal valid AgentCard for testing
+func minimalCard() agentv1alpha1.AgentCard {
+	return agentv1alpha1.AgentCard{
+		Name:        "Test Agent",
+		Description: "A test agent",
+		Version:     "1.0.0",
+		Skills: []agentv1alpha1.AgentSkill{
+			{
+				ID:          "test-skill",
+				Name:        "Test Skill",
+				Description: "A test skill",
+				Tags:        []string{"test"},
+			},
+		},
+	}
+}
 
 var _ = Describe("Agent Controller", func() {
 	Context("When reconciling an Agent resource", func() {
@@ -94,6 +112,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -175,6 +194,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -219,6 +239,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -270,6 +291,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -337,6 +359,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -402,6 +425,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -458,6 +482,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -509,6 +534,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -571,6 +597,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -661,6 +688,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -795,6 +823,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -900,15 +929,16 @@ var _ = Describe("Agent Controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				container := deployment.Spec.Template.Spec.Containers[0]
-				Expect(container.VolumeMounts).To(HaveLen(2))
+				Expect(container.VolumeMounts).To(HaveLen(3)) // 2 tools + 1 agent-card
 
 				// Find both volume mounts
-				mountPaths := make([]string, 0, 2)
+				mountPaths := make([]string, 0, 3)
 				for _, vm := range container.VolumeMounts {
 					mountPaths = append(mountPaths, vm.MountPath)
 				}
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-one"))
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-two"))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa"))
 			})
 		})
 
@@ -974,6 +1004,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1052,6 +1083,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1140,6 +1172,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1256,6 +1289,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1339,14 +1373,15 @@ var _ = Describe("Agent Controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				container := deployment.Spec.Template.Spec.Containers[0]
-				Expect(container.VolumeMounts).To(HaveLen(2))
+				Expect(container.VolumeMounts).To(HaveLen(3)) // 2 tools + 1 agent-card
 
-				mountPaths := make([]string, 0, 2)
+				mountPaths := make([]string, 0, 3)
 				for _, vm := range container.VolumeMounts {
 					mountPaths = append(mountPaths, vm.MountPath)
 				}
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/inline-tool"))
 				Expect(mountPaths).To(ContainElement(fmt.Sprintf("/etc/flokoa/tools/%s", agentToolName)))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa"))
 
 				By("Verifying ToolsReady condition shows 2 tools synced")
 				err = k8sClient.Get(ctx, typeNamespacedName, agent)
@@ -1418,6 +1453,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1509,6 +1545,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1590,6 +1627,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1736,6 +1774,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
+							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -1898,6 +1937,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -2072,6 +2112,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
+							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -2137,6 +2178,403 @@ var _ = Describe("Agent Controller", func() {
 					newHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
 					Expect(newHash).NotTo(Equal(initialHashes[name]))
 				}
+			})
+		})
+
+		Context("AgentCard ConfigMap", func() {
+			It("should create AgentCard ConfigMap with correct JSON data", func() {
+				By("Creating an Agent with a Card")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Card: agentv1alpha1.AgentCard{
+							Name:               "Test Agent",
+							Description:        "A test agent for unit testing",
+							Version:            "1.0.0",
+							DefaultInputModes:  []agentv1alpha1.InputOutputMode{agentv1alpha1.InputOutputModeJSON},
+							DefaultOutputModes: []agentv1alpha1.InputOutputMode{agentv1alpha1.InputOutputModeText},
+							Capabilities: agentv1alpha1.AgentCapabilities{
+								Streaming: true,
+							},
+							Skills: []agentv1alpha1.AgentSkill{
+								{
+									ID:          "skill-1",
+									Name:        "Test Skill",
+									Description: "A test skill",
+									Tags:        []string{"test", "demo"},
+									Examples:    []string{"example 1", "example 2"},
+								},
+							},
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying the AgentCard ConfigMap was created")
+				configMapName := fmt.Sprintf("%s-agent-card", agentName)
+				configMap := &corev1.ConfigMap{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Name:      configMapName,
+						Namespace: agentNamespace,
+					}, configMap)
+				}, timeout, interval).Should(Succeed())
+
+				By("Verifying ConfigMap labels")
+				Expect(configMap.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", agentName))
+				Expect(configMap.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "agent-card"))
+				Expect(configMap.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flokoa-operator"))
+				Expect(configMap.Labels).To(HaveKeyWithValue("flokoa.ai/agent", agentName))
+
+				By("Verifying ConfigMap contains valid JSON")
+				Expect(configMap.Data).To(HaveKey("agent-card.json"))
+				cardJSON := configMap.Data["agent-card.json"]
+				Expect(cardJSON).NotTo(BeEmpty())
+
+				By("Verifying JSON content matches AgentCard")
+				var card agentv1alpha1.AgentCard
+				err = json.Unmarshal([]byte(cardJSON), &card)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(card.Name).To(Equal("Test Agent"))
+				Expect(card.Description).To(Equal("A test agent for unit testing"))
+				Expect(card.Version).To(Equal("1.0.0"))
+				Expect(card.DefaultInputModes).To(ContainElement(agentv1alpha1.InputOutputModeJSON))
+				Expect(card.DefaultOutputModes).To(ContainElement(agentv1alpha1.InputOutputModeText))
+				Expect(card.Capabilities.Streaming).To(BeTrue())
+				Expect(card.Skills).To(HaveLen(1))
+				Expect(card.Skills[0].ID).To(Equal("skill-1"))
+				Expect(card.Skills[0].Name).To(Equal("Test Skill"))
+			})
+
+			It("should mount AgentCard ConfigMap in Deployment", func() {
+				By("Creating an Agent with a Card")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Card: agentv1alpha1.AgentCard{
+							Name:        "Mount Test Agent",
+							Description: "Testing volume mount",
+							Version:     "1.0.0",
+							Skills:      []agentv1alpha1.AgentSkill{{ID: "test", Name: "Test", Description: "Test skill", Tags: []string{"test"}}},
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying Deployment has agent-card volume")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				var agentCardVolume *corev1.Volume
+				for i := range deployment.Spec.Template.Spec.Volumes {
+					if deployment.Spec.Template.Spec.Volumes[i].Name == "agent-card" {
+						agentCardVolume = &deployment.Spec.Template.Spec.Volumes[i]
+						break
+					}
+				}
+				Expect(agentCardVolume).NotTo(BeNil())
+				Expect(agentCardVolume.ConfigMap.Name).To(Equal(fmt.Sprintf("%s-agent-card", agentName)))
+
+				By("Verifying container has agent-card volume mount")
+				container := deployment.Spec.Template.Spec.Containers[0]
+				var agentCardMount *corev1.VolumeMount
+				for i := range container.VolumeMounts {
+					if container.VolumeMounts[i].Name == "agent-card" {
+						agentCardMount = &container.VolumeMounts[i]
+						break
+					}
+				}
+				Expect(agentCardMount).NotTo(BeNil())
+				Expect(agentCardMount.MountPath).To(Equal("/etc/flokoa"))
+				Expect(agentCardMount.ReadOnly).To(BeTrue())
+			})
+
+			It("should inject FLOKOA_AGENT_URL environment variable", func() {
+				By("Creating an Agent")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Card: agentv1alpha1.AgentCard{
+							Name:        "URL Test Agent",
+							Description: "Testing URL injection",
+							Version:     "1.0.0",
+							Skills:      []agentv1alpha1.AgentSkill{{ID: "test", Name: "Test", Description: "Test skill", Tags: []string{"test"}}},
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying container has FLOKOA_AGENT_URL env var")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				container := deployment.Spec.Template.Spec.Containers[0]
+				var agentURLEnv *corev1.EnvVar
+				for i := range container.Env {
+					if container.Env[i].Name == "FLOKOA_AGENT_URL" {
+						agentURLEnv = &container.Env[i]
+						break
+					}
+				}
+				Expect(agentURLEnv).NotTo(BeNil())
+				expectedURL := fmt.Sprintf("http://%s.%s.svc.cluster.local", agentName, agentNamespace)
+				Expect(agentURLEnv.Value).To(Equal(expectedURL))
+			})
+
+			It("should update AgentCard ConfigMap when Agent spec changes", func() {
+				By("Creating an Agent with initial Card")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Card: agentv1alpha1.AgentCard{
+							Name:        "Original Name",
+							Description: "Original description",
+							Version:     "1.0.0",
+							Skills:      []agentv1alpha1.AgentSkill{{ID: "test", Name: "Test", Description: "Test skill", Tags: []string{"test"}}},
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying initial ConfigMap content")
+				configMapName := fmt.Sprintf("%s-agent-card", agentName)
+				configMap := &corev1.ConfigMap{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Name:      configMapName,
+						Namespace: agentNamespace,
+					}, configMap)
+				}, timeout, interval).Should(Succeed())
+
+				var initialCard agentv1alpha1.AgentCard
+				err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &initialCard)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(initialCard.Name).To(Equal("Original Name"))
+
+				By("Updating the Agent Card")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+
+				agent.Spec.Card.Name = "Updated Name"
+				agent.Spec.Card.Description = "Updated description"
+				agent.Spec.Card.Version = "2.0.0"
+				Expect(k8sClient.Update(ctx, agent)).To(Succeed())
+
+				By("Reconciling again")
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying ConfigMap was updated")
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      configMapName,
+					Namespace: agentNamespace,
+				}, configMap)
+				Expect(err).NotTo(HaveOccurred())
+
+				var updatedCard agentv1alpha1.AgentCard
+				err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &updatedCard)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updatedCard.Name).To(Equal("Updated Name"))
+				Expect(updatedCard.Description).To(Equal("Updated description"))
+				Expect(updatedCard.Version).To(Equal("2.0.0"))
+			})
+
+			It("should preserve user-defined env vars when adding FLOKOA_AGENT_URL", func() {
+				By("Creating an Agent with existing env vars")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Card: agentv1alpha1.AgentCard{
+							Name:        "Env Test Agent",
+							Description: "Testing env preservation",
+							Version:     "1.0.0",
+							Skills:      []agentv1alpha1.AgentSkill{{ID: "test", Name: "Test", Description: "Test skill", Tags: []string{"test"}}},
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "nginx:latest",
+									Env: []corev1.EnvVar{
+										{Name: "MY_VAR", Value: "my-value"},
+										{Name: "ANOTHER_VAR", Value: "another-value"},
+									},
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				By("Reconciling the Agent")
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying all env vars are present")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				container := deployment.Spec.Template.Spec.Containers[0]
+				envNames := make([]string, 0, len(container.Env))
+				for _, env := range container.Env {
+					envNames = append(envNames, env.Name)
+				}
+
+				Expect(envNames).To(ContainElement("MY_VAR"))
+				Expect(envNames).To(ContainElement("ANOTHER_VAR"))
+				Expect(envNames).To(ContainElement("FLOKOA_AGENT_URL"))
 			})
 		})
 	})
