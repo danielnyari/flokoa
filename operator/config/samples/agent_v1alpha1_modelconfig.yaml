@@ -9,12 +9,12 @@ spec:
   modelRef:
     name: openai-gpt4o
   parameters:
-    temperature: 0.9
+    temperature: "0.9"
     maxTokens: 4096
-    topP: 0.95
+    topP: "0.95"
   openai:
-    frequencyPenalty: 0.5
-    presencePenalty: 0.5
+    frequencyPenalty: "0.5"
+    presencePenalty: "0.5"
 ---
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelConfig
@@ -27,13 +27,13 @@ spec:
   modelRef:
     name: openai-gpt4o
   parameters:
-    temperature: 0.1
+    temperature: "0.1"
     maxTokens: 2048
-    topP: 0.9
+    topP: "0.9"
     seed: 42
   openai:
-    frequencyPenalty: 0.0
-    presencePenalty: 0.0
+    frequencyPenalty: "0.0"
+    presencePenalty: "0.0"
 ---
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelConfig
@@ -62,7 +62,7 @@ spec:
     name: anthropic-claude-sonnet
   parameters:
     maxTokens: 16000
-    temperature: 1.0  # Required for extended thinking
+    temperature: "1.0"  # Required for extended thinking
   anthropic:
     thinking:
       type: enabled
@@ -79,9 +79,9 @@ spec:
   modelRef:
     name: anthropic-claude-sonnet
   parameters:
-    temperature: 0.3
+    temperature: "0.3"
     maxTokens: 1024
-    topP: 0.9
+    topP: "0.9"
   anthropic:
     thinking:
       type: disabled
@@ -97,5 +97,5 @@ spec:
   modelRef:
     name: ollama-llama
   parameters:
-    temperature: 0.7
+    temperature: "0.7"
     maxTokens: 2048

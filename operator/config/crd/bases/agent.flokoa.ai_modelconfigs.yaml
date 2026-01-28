@@ -136,20 +136,18 @@ spec:
                 description: OpenAI-specific parameters
                 properties:
                   frequencyPenalty:
-                    description: FrequencyPenalty penalizes frequent tokens (-2.0
-                      to 2.0)
-                    maximum: 2
-                    minimum: -2
-                    type: number
+                    description: |-
+                      FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
+                    type: string
                   logProbs:
                     description: LogProbs enables returning log probabilities
                     type: boolean
                   presencePenalty:
-                    description: PresencePenalty penalizes tokens already in the context
-                      (-2.0 to 2.0)
-                    maximum: 2
-                    minimum: -2
-                    type: number
+                    description: |-
+                      PresencePenalty penalizes tokens already in the context (-2.0 to 2.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
+                    type: string
                   reasoningEffort:
                     description: ReasoningEffort controls the reasoning effort for
                       reasoning models (o1, o3, etc.)
@@ -218,11 +216,10 @@ spec:
                       type: string
                     type: array
                   temperature:
-                    description: Temperature controls randomness in the output (0.0
-                      to 2.0)
-                    maximum: 2
-                    minimum: 0
-                    type: number
+                    description: |-
+                      Temperature controls randomness in the output (0.0 to 2.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.7", "1.0")
+                    type: string
                   topK:
                     description: TopK limits the number of tokens to consider for
                       each step
@@ -230,10 +227,10 @@ spec:
                     minimum: 1
                     type: integer
                   topP:
-                    description: TopP controls nucleus sampling (0.0 to 1.0)
-                    maximum: 1
-                    minimum: 0
-                    type: number
+                    description: |-
+                      TopP controls nucleus sampling (0.0 to 1.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.9", "0.95")
+                    type: string
                 type: object
             required:
             - modelRef

@@ -75,10 +75,9 @@ type ModelRef struct {
 // ModelParameters defines common model parameters
 type ModelParameters struct {
 	// Temperature controls randomness in the output (0.0 to 2.0)
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=2
+	// Specified as a string to avoid floating point issues (e.g., "0.7", "1.0")
 	// +optional
-	Temperature *float64 `json:"temperature,omitempty"`
+	Temperature string `json:"temperature,omitempty"`
 
 	// MaxTokens is the maximum number of tokens to generate
 	// +kubebuilder:validation:Minimum=1
@@ -86,10 +85,9 @@ type ModelParameters struct {
 	MaxTokens *int32 `json:"maxTokens,omitempty"`
 
 	// TopP controls nucleus sampling (0.0 to 1.0)
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=1
+	// Specified as a string to avoid floating point issues (e.g., "0.9", "0.95")
 	// +optional
-	TopP *float64 `json:"topP,omitempty"`
+	TopP string `json:"topP,omitempty"`
 
 	// TopK limits the number of tokens to consider for each step
 	// +kubebuilder:validation:Minimum=1
@@ -108,16 +106,14 @@ type ModelParameters struct {
 // OpenAIParameters defines OpenAI-specific model parameters
 type OpenAIParameters struct {
 	// FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
-	// +kubebuilder:validation:Minimum=-2
-	// +kubebuilder:validation:Maximum=2
+	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
 	// +optional
-	FrequencyPenalty *float64 `json:"frequencyPenalty,omitempty"`
+	FrequencyPenalty string `json:"frequencyPenalty,omitempty"`
 
 	// PresencePenalty penalizes tokens already in the context (-2.0 to 2.0)
-	// +kubebuilder:validation:Minimum=-2
-	// +kubebuilder:validation:Maximum=2
+	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
 	// +optional
-	PresencePenalty *float64 `json:"presencePenalty,omitempty"`
+	PresencePenalty string `json:"presencePenalty,omitempty"`
 
 	// ReasoningEffort controls the reasoning effort for reasoning models (o1, o3, etc.)
 	// +optional
