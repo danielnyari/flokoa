@@ -15,7 +15,7 @@ type Framework string
 const (
 	FrameworkPydanticAI Framework = "pydantic-ai"
 	FrameworkLangChain  Framework = "langchain"
-	FrameworkCrewAI     Framework = "crewai"
+	FrameworkADK        Framework = "google-adk"
 	FrameworkMarvin     Framework = "marvin"
 	FrameworkAutogen    Framework = "autogen"
 	FrameworkA2A        Framework = "a2a"

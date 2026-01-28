@@ -2,4 +2,5 @@
 resources:
 - agent_v1alpha1_agent.yaml
 - agent_v1alpha1_agenttool.yaml
+- agent_v1alpha1_model.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
