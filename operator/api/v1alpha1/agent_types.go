@@ -125,6 +125,11 @@ type AgentSpec struct {
 	// Runtime configuration - specifies the backend and configuration
 	Runtime RuntimeSpec `json:"runtime"`
 
+	// Model specifies the LLM model to use for this agent.
+	// Can reference a Model resource directly (uses defaults) or a ModelConfig resource (full parameters).
+	// +optional
+	Model *AgentModelRef `json:"model,omitempty"`
+
 	// Framework explicitly declares the AI framework used by the agent.
 	// Used for observability and tooling integration.
 	// +optional
@@ -161,6 +166,32 @@ type ToolRef struct {
 	Name string `json:"name"`
 
 	// Namespace of the AgentTool. Defaults to the Agent's namespace if not specified.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// AgentModelRef specifies the model to use for the agent.
+// Exactly one of ModelRef or ConfigRef must be specified.
+type AgentModelRef struct {
+	// ModelRef references a Model resource directly.
+	// Uses default parameters for the model.
+	// +optional
+	ModelRef *NamespacedRef `json:"modelRef,omitempty"`
+
+	// ConfigRef references a ModelConfig resource.
+	// Provides full control over model parameters (temperature, maxTokens, etc.).
+	// +optional
+	ConfigRef *NamespacedRef `json:"configRef,omitempty"`
+}
+
+// NamespacedRef references a resource by name and optional namespace.
+type NamespacedRef struct {
+	// Name of the resource.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Namespace of the resource. Defaults to the referencing resource's namespace if not specified.
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }

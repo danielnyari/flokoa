@@ -179,6 +179,44 @@ spec:
                 - autogen
                 - a2a
                 type: string
+              model:
+                description: |-
+                  Model specifies the LLM model to use for this agent.
+                  Can reference a Model resource directly (uses defaults) or a ModelConfig resource (full parameters).
+                properties:
+                  configRef:
+                    description: |-
+                      ConfigRef references a ModelConfig resource.
+                      Provides full control over model parameters (temperature, maxTokens, etc.).
+                    properties:
+                      name:
+                        description: Name of the resource.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace of the resource. Defaults to the referencing
+                          resource's namespace if not specified.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  modelRef:
+                    description: |-
+                      ModelRef references a Model resource directly.
+                      Uses default parameters for the model.
+                    properties:
+                      name:
+                        description: Name of the resource.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace of the resource. Defaults to the referencing
+                          resource's namespace if not specified.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               runtime:
                 description: Runtime configuration - specifies the backend and configuration
                 properties:

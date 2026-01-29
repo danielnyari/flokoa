@@ -34,11 +34,14 @@ const (
 const (
 	ConditionTypeReady       = "Ready"
 	ConditionTypeToolsReady  = "ToolsReady"
+	ConditionTypeModelReady  = "ModelReady"
 	ReasonDeploymentReady    = "DeploymentReady"
 	ReasonDeploymentNotReady = "DeploymentNotReady"
 	ReasonReconcileError     = "ReconcileError"
 	ReasonToolsSynced        = "ToolsSynced"
 	ReasonToolSyncFailed     = "ToolSyncFailed"
+	ReasonModelResolved      = "ModelResolved"
+	ReasonModelResolveFailed = "ModelResolveFailed"
 )
 
 const (
@@ -50,6 +53,12 @@ const (
 	agentCardConfigMapKey = "agent-card.json"
 	// agentCardMountPath is the file path where the agent card is mounted
 	agentCardMountPath = "/etc/flokoa/agent-card.json"
+	// modelVolumeName is the name of the volume for the model ConfigMap
+	modelVolumeName = "model-config"
+	// modelConfigMapKey is the key in the ConfigMap for the model JSON
+	modelConfigMapKey = "model.json"
+	// modelMountPath is the file path where the model config is mounted
+	modelMountPath = "/etc/flokoa/model.json"
 )
 
 type AgentReconciler struct {
@@ -61,9 +70,11 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/finalizers,verbs=update
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttools,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models,verbs=get;list;watch
+// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=modelconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -120,8 +131,22 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile Model configuration (if specified)
+	var modelInfo *resolvedModelInfo
+	if agent.Spec.Model != nil {
+		modelInfo, err = r.reconcileModel(ctx, agent)
+		if err != nil {
+			logger.Error(err, "Failed to reconcile Model")
+			r.setCondition(agent, ConditionTypeModelReady, metav1.ConditionFalse, ReasonModelResolveFailed, err.Error())
+			_ = r.Status().Update(ctx, agent)
+			return ctrl.Result{}, err
+		}
+		r.setCondition(agent, ConditionTypeModelReady, metav1.ConditionTrue, ReasonModelResolved,
+			fmt.Sprintf("Model %s/%s resolved", modelInfo.provider, modelInfo.model))
+	}
+
 	// Reconcile Deployment
-	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap)
+	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
@@ -160,8 +185,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string) (*appsv1.Deployment, error) {
-	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap)
+func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo) (*appsv1.Deployment, error) {
+	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap, modelInfo)
 
 	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
@@ -385,7 +410,155 @@ func (r *AgentReconciler) reconcileAgentCardConfigMap(ctx context.Context, agent
 	return configMapName, nil
 }
 
-func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string) *appsv1.Deployment {
+// resolvedModelInfo holds the resolved model configuration for use in deployment
+type resolvedModelInfo struct {
+	// provider is the model provider type
+	provider agentv1alpha1.ModelProvider
+	// model is the model identifier
+	model string
+	// configMapName is the name of the ConfigMap containing the model config
+	configMapName string
+	// envVars are non-secret environment variables to add to the container
+	envVars []corev1.EnvVar
+	// secretEnvVars are environment variables sourced from secrets
+	secretEnvVars []corev1.EnvVar
+}
+
+// reconcileModel resolves the model reference and creates the model ConfigMap.
+// It handles both direct Model references and ModelConfig references.
+func (r *AgentReconciler) reconcileModel(ctx context.Context, agent *agentv1alpha1.Agent) (*resolvedModelInfo, error) {
+	logger := log.FromContext(ctx)
+
+	if agent.Spec.Model == nil {
+		return nil, nil
+	}
+
+	var model *agentv1alpha1.Model
+	var modelConfig *agentv1alpha1.ModelConfig
+
+	// Resolve the model reference
+	if agent.Spec.Model.ModelRef != nil {
+		// Direct Model reference
+		modelRef := agent.Spec.Model.ModelRef
+		namespace := modelRef.Namespace
+		if namespace == "" {
+			namespace = agent.Namespace
+		}
+
+		model = &agentv1alpha1.Model{}
+		if err := r.Get(ctx, types.NamespacedName{Name: modelRef.Name, Namespace: namespace}, model); err != nil {
+			return nil, fmt.Errorf("failed to get Model %s/%s: %w", namespace, modelRef.Name, err)
+		}
+		logger.Info("Resolved Model reference", "model", model.Name, "provider", model.Spec.Provider)
+
+	} else if agent.Spec.Model.ConfigRef != nil {
+		// ModelConfig reference - need to resolve the Model from it
+		configRef := agent.Spec.Model.ConfigRef
+		namespace := configRef.Namespace
+		if namespace == "" {
+			namespace = agent.Namespace
+		}
+
+		modelConfig = &agentv1alpha1.ModelConfig{}
+		if err := r.Get(ctx, types.NamespacedName{Name: configRef.Name, Namespace: namespace}, modelConfig); err != nil {
+			return nil, fmt.Errorf("failed to get ModelConfig %s/%s: %w", namespace, configRef.Name, err)
+		}
+
+		// Resolve the Model from ModelConfig
+		modelNamespace := modelConfig.Spec.ModelRef.Namespace
+		if modelNamespace == "" {
+			modelNamespace = modelConfig.Namespace
+		}
+
+		model = &agentv1alpha1.Model{}
+		if err := r.Get(ctx, types.NamespacedName{Name: modelConfig.Spec.ModelRef.Name, Namespace: modelNamespace}, model); err != nil {
+			return nil, fmt.Errorf("failed to get Model %s/%s from ModelConfig: %w", modelNamespace, modelConfig.Spec.ModelRef.Name, err)
+		}
+		logger.Info("Resolved ModelConfig reference", "modelConfig", modelConfig.Name, "model", model.Name, "provider", model.Spec.Provider)
+
+	} else {
+		return nil, fmt.Errorf("either modelRef or configRef must be specified")
+	}
+
+	// Get the provider handler
+	modelProviderHandler, ok := GetProviderHandler(model.Spec.Provider)
+	if !ok {
+		return nil, fmt.Errorf("unsupported model provider: %s", model.Spec.Provider)
+	}
+
+	// Build provider-specific configuration
+	modelProviderConfig, err := modelProviderHandler.BuildConfig(model, modelConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build provider config: %w", err)
+	}
+
+	// Create the model ConfigMap
+	configMapName, err := r.reconcileModelConfigMap(ctx, agent, modelProviderConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reconcile model ConfigMap: %w", err)
+	}
+
+	return &resolvedModelInfo{
+		provider:      modelProviderConfig.Provider,
+		model:         modelProviderConfig.Model,
+		configMapName: configMapName,
+		envVars:       modelProviderConfig.EnvVars,
+		secretEnvVars: modelProviderConfig.SecretEnvVars,
+	}, nil
+}
+
+// reconcileModelConfigMap creates or updates the ConfigMap containing the model configuration.
+func (r *AgentReconciler) reconcileModelConfigMap(ctx context.Context, agent *agentv1alpha1.Agent, config *ModelProviderConfig) (string, error) {
+	configMapName := fmt.Sprintf("%s-model", agent.Name)
+
+	// Serialize the config to JSON
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal model config to JSON: %w", err)
+	}
+
+	desired := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: agent.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       agent.Name,
+				"app.kubernetes.io/component":  "model-config",
+				"app.kubernetes.io/managed-by": "flokoa-operator",
+				"flokoa.ai/agent":              agent.Name,
+			},
+		},
+		Data: map[string]string{
+			modelConfigMapKey: string(configJSON),
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
+		return "", fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	existing := &corev1.ConfigMap{}
+	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: agent.Namespace}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Create(ctx, desired); err != nil {
+				return "", fmt.Errorf("failed to create model ConfigMap: %w", err)
+			}
+			return configMapName, nil
+		}
+		return "", fmt.Errorf("failed to get model ConfigMap: %w", err)
+	}
+
+	existing.Data = desired.Data
+	existing.Labels = desired.Labels
+	if err := r.Update(ctx, existing); err != nil {
+		return "", fmt.Errorf("failed to update model ConfigMap: %w", err)
+	}
+
+	return configMapName, nil
+}
+
+func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo) *appsv1.Deployment {
 	labels := r.buildLabels(agent)
 	spec := agent.Spec.Runtime.Spec
 
@@ -438,6 +611,35 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 		SubPath:   agentCardConfigMapKey,
 		ReadOnly:  true,
 	})
+
+	// Add model configuration if specified
+	if modelInfo != nil {
+		// Add model ConfigMap volume
+		volumes = append(volumes, corev1.Volume{
+			Name: modelVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: modelInfo.configMapName,
+					},
+				},
+			},
+		})
+
+		// Add model volume mount
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      modelVolumeName,
+			MountPath: modelMountPath,
+			SubPath:   modelConfigMapKey,
+			ReadOnly:  true,
+		})
+
+		// Add non-secret environment variables from provider config
+		container.Env = append(container.Env, modelInfo.envVars...)
+
+		// Add secret-sourced environment variables
+		container.Env = append(container.Env, modelInfo.secretEnvVars...)
+	}
 
 	// Add tool volume mounts to the container and compute combined hash
 	var toolsHashBuilder string
