@@ -22,6 +22,8 @@ rules:
   resources:
   - agents
   - agenttools
+  - modelconfigs
+  - models
   verbs:
   - create
   - delete
@@ -35,6 +37,8 @@ rules:
   resources:
   - agents/finalizers
   - agenttools/finalizers
+  - modelconfigs/finalizers
+  - models/finalizers
   verbs:
   - update
 - apiGroups:
@@ -42,6 +46,8 @@ rules:
   resources:
   - agents/status
   - agenttools/status
+  - modelconfigs/status
+  - models/status
   verbs:
   - get
   - patch

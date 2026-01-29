@@ -4,6 +4,12 @@ metadata:
   labels:
     app.kubernetes.io/name: operator
     app.kubernetes.io/managed-by: kustomize
-  name: model-sample
+  name: openai-gpt4o
 spec:
-  # TODO(user): Add fields here
+  provider: openai
+  model: gpt-4o
+  apiKeySecretRef:
+    name: openai-credentials
+    key: api-key
+  openai:
+    timeoutSeconds: 120

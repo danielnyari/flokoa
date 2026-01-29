@@ -51,7 +51,10 @@ var _ = Describe("Model Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: agentv1alpha1.ModelSpec{
+						Provider: agentv1alpha1.ModelProviderOpenAI,
+						Model:    "gpt-4o",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

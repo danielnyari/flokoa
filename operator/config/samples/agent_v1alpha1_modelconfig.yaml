@@ -4,6 +4,14 @@ metadata:
   labels:
     app.kubernetes.io/name: operator
     app.kubernetes.io/managed-by: kustomize
-  name: modelconfig-sample
+  name: gpt4o-creative
 spec:
-  # TODO(user): Add fields here
+  modelRef:
+    name: openai-gpt4o
+  parameters:
+    temperature: "0.9"
+    maxTokens: 4096
+    topP: "0.95"
+  openai:
+    frequencyPenalty: "0.5"
+    presencePenalty: "0.5"

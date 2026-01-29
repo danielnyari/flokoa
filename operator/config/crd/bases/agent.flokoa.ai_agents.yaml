@@ -168,23 +168,26 @@ spec:
                 - version
                 type: object
               framework:
-                description: Explicit framework declaration (for observability/tooling)
+                description: |-
+                  Framework explicitly declares the AI framework used by the agent.
+                  Used for observability and tooling integration.
                 enum:
                 - pydantic-ai
                 - langchain
                 - crewai
                 - marvin
                 - autogen
-                - custom
+                - a2a
                 type: string
               runtime:
                 description: Runtime configuration - specifies the backend and configuration
                 properties:
                   spec:
-                    description: Spec contains the runtime-specific configuration
+                    description: Spec contains the runtime-specific configuration.
                     properties:
                       affinity:
-                        description: Affinity rules
+                        description: Affinity specifies scheduling constraints for
+                          the pod.
                         properties:
                           nodeAffinity:
                             description: Describes node affinity scheduling rules
@@ -1108,7 +1111,8 @@ spec:
                             type: object
                         type: object
                       container:
-                        description: Container spec
+                        description: Container defines the main container spec for
+                          the agent pod.
                         properties:
                           args:
                             description: |-
@@ -2543,7 +2547,8 @@ spec:
                         - name
                         type: object
                       imagePullSecrets:
-                        description: Image pull secrets
+                        description: ImagePullSecrets is a list of references to secrets
+                          for pulling container images.
                         items:
                           description: |-
                             LocalObjectReference contains enough information to let you locate the
@@ -2564,15 +2569,17 @@ spec:
                       nodeSelector:
                         additionalProperties:
                           type: string
-                        description: Node selector
+                        description: NodeSelector is a selector for scheduling pods
+                          to nodes matching specific labels.
                         type: object
                       replicas:
                         default: 1
-                        description: Number of replicas
+                        description: Replicas is the number of desired pod replicas.
                         format: int32
+                        minimum: 0
                         type: integer
                       securityContext:
-                        description: Pod-level security context
+                        description: SecurityContext holds pod-level security attributes.
                         properties:
                           appArmorProfile:
                             description: |-
@@ -2805,10 +2812,12 @@ spec:
                             type: object
                         type: object
                       serviceAccountName:
-                        description: Service account to use
+                        description: ServiceAccountName is the name of the ServiceAccount
+                          to use for the pod.
                         type: string
                       tolerations:
-                        description: Tolerations
+                        description: Tolerations allow the pod to schedule onto nodes
+                          with matching taints.
                         items:
                           description: |-
                             The pod this Toleration is attached to tolerates any taint that matches
@@ -2847,7 +2856,7 @@ spec:
                           type: object
                         type: array
                       volumes:
-                        description: Volumes to mount into the pod
+                        description: Volumes to mount into the pod.
                         items:
                           description: Volume represents a named volume in a pod that
                             may be accessed by any container in the pod.
@@ -4652,7 +4661,7 @@ spec:
                     type: object
                   type:
                     default: standard
-                    description: Type of runtime backend
+                    description: Type specifies the runtime backend to use.
                     enum:
                     - standard
                     type: string
@@ -4660,30 +4669,37 @@ spec:
                 - type
                 type: object
               tools:
-                description: Tools available to this agent - can be inline definitions
-                  or references to AgentTool resources
+                description: Tools available to this agent. Can be inline definitions
+                  or references to AgentTool resources.
                 items:
-                  description: ToolEntry represents either an inline tool definition
-                    or a reference to an AgentTool resource
+                  description: |-
+                    ToolEntry represents either an inline tool definition or a reference to an AgentTool resource.
+                    Exactly one of Inline or ToolRef must be specified.
                   properties:
                     inline:
                       description: |-
-                        Inline tool definition - defines the tool directly in the Agent spec
-                        Uses the same spec as AgentTool for consistency
+                        Inline defines the tool directly in the Agent spec.
+                        Uses the same spec as AgentTool for consistency.
                       properties:
                         description:
-                          description: Human-readable description for the LLM
+                          description: Description is a human-readable description
+                            for the LLM to understand the tool's purpose.
+                          minLength: 1
                           type: string
                         httpApi:
-                          description: HTTP API specific configuration
+                          description: |-
+                            HTTPApi contains HTTP API-specific configuration.
+                            Required when Type is "http-api".
                           properties:
                             headers:
                               additionalProperties:
                                 type: string
-                              description: HTTP headers to include
+                              description: Headers are additional HTTP headers to
+                                include in the request.
                               type: object
                             method:
-                              description: HTTP method
+                              description: Method is the HTTP method to use for the
+                                request.
                               enum:
                               - GET
                               - POST
@@ -4692,76 +4708,96 @@ spec:
                               - DELETE
                               type: string
                             path:
-                              description: Path on the service (used with serviceRef,
-                                or appended to URL)
+                              description: Path is appended to the URL or service
+                                endpoint.
                               type: string
                             serviceRef:
-                              description: Reference to a Kubernetes service (alternative
-                                to URL)
+                              description: |-
+                                ServiceRef references a Kubernetes service as the target endpoint.
+                                Mutually exclusive with URL.
                               properties:
                                 name:
-                                  description: Service name
+                                  description: Name is the service name.
+                                  minLength: 1
                                   type: string
                                 namespace:
-                                  description: Namespace (defaults to AgentTool's
-                                    namespace)
+                                  description: Namespace is the service namespace.
+                                    Defaults to the AgentTool's namespace.
                                   type: string
                                 port:
-                                  description: Port number
+                                  description: |-
+                                    Port is the service port number.
+                                    Mutually exclusive with PortName.
                                   format: int32
+                                  maximum: 65535
+                                  minimum: 1
                                   type: integer
                                 portName:
-                                  description: Port name (alternative to port number)
+                                  description: |-
+                                    PortName is the service port name.
+                                    Mutually exclusive with Port.
                                   type: string
                               required:
                               - name
                               type: object
                             timeoutSeconds:
                               default: 30
-                              description: Timeout in seconds
+                              description: TimeoutSeconds is the request timeout in
+                                seconds.
                               format: int32
+                              maximum: 300
+                              minimum: 1
                               type: integer
                             url:
-                              description: External API URL
+                              description: |-
+                                URL is the external API endpoint to call.
+                                Mutually exclusive with ServiceRef.
                               type: string
                           required:
                           - method
                           type: object
                         inputSchema:
                           description: |-
-                            Input schema - JSON Schema defining what the agent provides
-                            For GET: becomes query params, for POST/PUT/PATCH: becomes JSON body
+                            InputSchema is a JSON Schema defining the input the agent provides to the tool.
+                            For GET requests: becomes query parameters.
+                            For POST/PUT/PATCH requests: becomes the JSON body.
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
                         openApiSchemaRef:
-                          description: Reference to an OpenAPI spec (alternative to
-                            inputSchema/outputSchema)
+                          description: OpenApiSchemaRef references an OpenAPI spec
+                            as an alternative to InputSchema/OutputSchema.
                           properties:
                             configMapRef:
-                              description: Reference to a ConfigMap containing the
-                                OpenAPI spec
+                              description: |-
+                                ConfigMapRef references a ConfigMap containing the OpenAPI spec.
+                                Mutually exclusive with URL.
                               properties:
                                 key:
-                                  description: Key in the ConfigMap
+                                  description: Key is the key in the ConfigMap containing
+                                    the data.
+                                  minLength: 1
                                   type: string
                                 name:
-                                  description: ConfigMap name
+                                  description: Name is the ConfigMap name.
+                                  minLength: 1
                                   type: string
                               required:
                               - key
                               - name
                               type: object
                             url:
-                              description: URL to fetch the OpenAPI spec from
+                              description: |-
+                                URL is the endpoint to fetch the OpenAPI spec from.
+                                Mutually exclusive with ConfigMapRef.
                               type: string
                           type: object
                         outputSchema:
-                          description: Output schema - JSON Schema defining what the
-                            tool returns
+                          description: OutputSchema is a JSON Schema defining what
+                            the tool returns.
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
                         type:
-                          description: Type of tool
+                          description: Type specifies the kind of tool (e.g., http-api).
                           enum:
                           - http-api
                           type: string
@@ -4770,18 +4806,20 @@ spec:
                       - type
                       type: object
                     name:
-                      description: Name of the tool (required for inline tools, used
-                        as identifier)
+                      description: Name of the tool. Required for inline tools, used
+                        as identifier.
+                      minLength: 1
                       type: string
                     toolRef:
-                      description: Reference to an existing AgentTool resource
+                      description: ToolRef references an existing AgentTool resource.
                       properties:
                         name:
-                          description: Name of the AgentTool resource
+                          description: Name of the AgentTool resource.
+                          minLength: 1
                           type: string
                         namespace:
-                          description: Namespace of the AgentTool (defaults to Agent's
-                            namespace)
+                          description: Namespace of the AgentTool. Defaults to the
+                            Agent's namespace if not specified.
                           type: string
                       required:
                       - name
@@ -4793,17 +4831,20 @@ spec:
             - runtime
             type: object
           status:
-            description: AgentStatus defines the observed state of Agent
+            description: AgentStatus defines the observed state of Agent.
             properties:
               availableReplicas:
-                description: Available replicas
+                description: AvailableReplicas is the number of replicas that are
+                  ready and available.
                 format: int32
                 type: integer
               backend:
-                description: Backend being used (core, knative)
+                description: Backend indicates the runtime backend being used (e.g.,
+                  standard).
                 type: string
               conditions:
-                description: Standard conditions
+                description: Conditions represent the latest available observations
+                  of the agent's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -4860,36 +4901,39 @@ spec:
                   type: object
                 type: array
               detectedFramework:
-                description: Detected framework (if auto-detected)
+                description: DetectedFramework is the AI framework detected from the
+                  container image.
                 enum:
                 - pydantic-ai
                 - langchain
                 - crewai
                 - marvin
                 - autogen
-                - custom
+                - a2a
                 type: string
               lastToolSync:
-                description: Last time tools were synced
+                description: LastToolSync is the last time tools were synchronized
+                  to the agent.
                 format: date-time
                 type: string
               observedGeneration:
-                description: Observed generation
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
                 format: int64
                 type: integer
               phase:
-                description: 'Current phase: Pending, Running, Failed'
+                description: Phase represents the current lifecycle phase of the agent.
                 enum:
                 - Pending
                 - Running
                 - Failed
                 type: string
               replicas:
-                description: Current replica count
+                description: Replicas is the current number of pod replicas.
                 format: int32
                 type: integer
               url:
-                description: Endpoint URL for invoking the agent
+                description: URL is the endpoint for invoking the agent.
                 type: string
             type: object
         type: object

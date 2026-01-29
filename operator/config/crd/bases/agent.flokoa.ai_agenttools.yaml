@@ -44,21 +44,26 @@ spec:
           metadata:
             type: object
           spec:
-            description: AgentToolSpec defines the desired state of AgentTool
+            description: AgentToolSpec defines the desired state of AgentTool.
             properties:
               description:
-                description: Human-readable description for the LLM
+                description: Description is a human-readable description for the LLM
+                  to understand the tool's purpose.
+                minLength: 1
                 type: string
               httpApi:
-                description: HTTP API specific configuration
+                description: |-
+                  HTTPApi contains HTTP API-specific configuration.
+                  Required when Type is "http-api".
                 properties:
                   headers:
                     additionalProperties:
                       type: string
-                    description: HTTP headers to include
+                    description: Headers are additional HTTP headers to include in
+                      the request.
                     type: object
                   method:
-                    description: HTTP method
+                    description: Method is the HTTP method to use for the request.
                     enum:
                     - GET
                     - POST
@@ -67,72 +72,94 @@ spec:
                     - DELETE
                     type: string
                   path:
-                    description: Path on the service (used with serviceRef, or appended
-                      to URL)
+                    description: Path is appended to the URL or service endpoint.
                     type: string
                   serviceRef:
-                    description: Reference to a Kubernetes service (alternative to
-                      URL)
+                    description: |-
+                      ServiceRef references a Kubernetes service as the target endpoint.
+                      Mutually exclusive with URL.
                     properties:
                       name:
-                        description: Service name
+                        description: Name is the service name.
+                        minLength: 1
                         type: string
                       namespace:
-                        description: Namespace (defaults to AgentTool's namespace)
+                        description: Namespace is the service namespace. Defaults
+                          to the AgentTool's namespace.
                         type: string
                       port:
-                        description: Port number
+                        description: |-
+                          Port is the service port number.
+                          Mutually exclusive with PortName.
                         format: int32
+                        maximum: 65535
+                        minimum: 1
                         type: integer
                       portName:
-                        description: Port name (alternative to port number)
+                        description: |-
+                          PortName is the service port name.
+                          Mutually exclusive with Port.
                         type: string
                     required:
                     - name
                     type: object
                   timeoutSeconds:
                     default: 30
-                    description: Timeout in seconds
+                    description: TimeoutSeconds is the request timeout in seconds.
                     format: int32
+                    maximum: 300
+                    minimum: 1
                     type: integer
                   url:
-                    description: External API URL
+                    description: |-
+                      URL is the external API endpoint to call.
+                      Mutually exclusive with ServiceRef.
                     type: string
                 required:
                 - method
                 type: object
               inputSchema:
                 description: |-
-                  Input schema - JSON Schema defining what the agent provides
-                  For GET: becomes query params, for POST/PUT/PATCH: becomes JSON body
+                  InputSchema is a JSON Schema defining the input the agent provides to the tool.
+                  For GET requests: becomes query parameters.
+                  For POST/PUT/PATCH requests: becomes the JSON body.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               openApiSchemaRef:
-                description: Reference to an OpenAPI spec (alternative to inputSchema/outputSchema)
+                description: OpenApiSchemaRef references an OpenAPI spec as an alternative
+                  to InputSchema/OutputSchema.
                 properties:
                   configMapRef:
-                    description: Reference to a ConfigMap containing the OpenAPI spec
+                    description: |-
+                      ConfigMapRef references a ConfigMap containing the OpenAPI spec.
+                      Mutually exclusive with URL.
                     properties:
                       key:
-                        description: Key in the ConfigMap
+                        description: Key is the key in the ConfigMap containing the
+                          data.
+                        minLength: 1
                         type: string
                       name:
-                        description: ConfigMap name
+                        description: Name is the ConfigMap name.
+                        minLength: 1
                         type: string
                     required:
                     - key
                     - name
                     type: object
                   url:
-                    description: URL to fetch the OpenAPI spec from
+                    description: |-
+                      URL is the endpoint to fetch the OpenAPI spec from.
+                      Mutually exclusive with ConfigMapRef.
                     type: string
                 type: object
               outputSchema:
-                description: Output schema - JSON Schema defining what the tool returns
+                description: OutputSchema is a JSON Schema defining what the tool
+                  returns.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               type:
-                description: Type of tool
+                description: Type specifies the kind of tool (e.g., http-api).
                 enum:
                 - http-api
                 type: string
@@ -141,10 +168,11 @@ spec:
             - type
             type: object
           status:
-            description: AgentToolStatus defines the observed state of AgentTool
+            description: AgentToolStatus defines the observed state of AgentTool.
             properties:
               conditions:
-                description: Standard conditions
+                description: Conditions represent the latest available observations
+                  of the tool's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -201,7 +229,8 @@ spec:
                   type: object
                 type: array
               observedGeneration:
-                description: Observed generation
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
                 format: int64
                 type: integer
             type: object
