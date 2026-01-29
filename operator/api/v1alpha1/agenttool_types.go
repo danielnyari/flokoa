@@ -21,126 +21,156 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// AgentToolType represents the type of tool
+// AgentToolType represents the type of tool.
 // +kubebuilder:validation:Enum=http-api
 type AgentToolType string
 
 const (
+	// AgentToolTypeHTTPAPI represents a tool that calls an HTTP API.
 	AgentToolTypeHTTPAPI AgentToolType = "http-api"
 )
 
-// HTTPMethod represents HTTP methods
+// HTTPMethod represents HTTP methods for API calls.
 // +kubebuilder:validation:Enum=GET;POST;PUT;PATCH;DELETE
 type HTTPMethod string
 
 const (
-	HTTPMethodGet    HTTPMethod = "GET"
-	HTTPMethodPost   HTTPMethod = "POST"
-	HTTPMethodPut    HTTPMethod = "PUT"
-	HTTPMethodPatch  HTTPMethod = "PATCH"
+	// HTTPMethodGet represents the HTTP GET method.
+	HTTPMethodGet HTTPMethod = "GET"
+	// HTTPMethodPost represents the HTTP POST method.
+	HTTPMethodPost HTTPMethod = "POST"
+	// HTTPMethodPut represents the HTTP PUT method.
+	HTTPMethodPut HTTPMethod = "PUT"
+	// HTTPMethodPatch represents the HTTP PATCH method.
+	HTTPMethodPatch HTTPMethod = "PATCH"
+	// HTTPMethodDelete represents the HTTP DELETE method.
 	HTTPMethodDelete HTTPMethod = "DELETE"
 )
 
-// AgentToolSpec defines the desired state of AgentTool
+// AgentToolSpec defines the desired state of AgentTool.
 type AgentToolSpec struct {
-	// Type of tool
+	// Type specifies the kind of tool (e.g., http-api).
+	// +kubebuilder:validation:Required
 	Type AgentToolType `json:"type"`
 
-	// Human-readable description for the LLM
+	// Description is a human-readable description for the LLM to understand the tool's purpose.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Description string `json:"description"`
 
-	// HTTP API specific configuration
+	// HTTPApi contains HTTP API-specific configuration.
+	// Required when Type is "http-api".
 	// +optional
 	HTTPApi *HTTPApiSpec `json:"httpApi,omitempty"`
 
-	// Input schema - JSON Schema defining what the agent provides
-	// For GET: becomes query params, for POST/PUT/PATCH: becomes JSON body
+	// InputSchema is a JSON Schema defining the input the agent provides to the tool.
+	// For GET requests: becomes query parameters.
+	// For POST/PUT/PATCH requests: becomes the JSON body.
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	InputSchema *runtime.RawExtension `json:"inputSchema,omitempty"`
 
-	// Output schema - JSON Schema defining what the tool returns
+	// OutputSchema is a JSON Schema defining what the tool returns.
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	OutputSchema *runtime.RawExtension `json:"outputSchema,omitempty"`
 
-	// Reference to an OpenAPI spec (alternative to inputSchema/outputSchema)
+	// OpenApiSchemaRef references an OpenAPI spec as an alternative to InputSchema/OutputSchema.
 	// +optional
 	OpenApiSchemaRef *OpenApiSchemaRef `json:"openApiSchemaRef,omitempty"`
 }
 
-// HTTPApiSpec defines configuration for HTTP API tools
+// HTTPApiSpec defines configuration for HTTP API tools.
+// Either URL or ServiceRef must be specified to define the target endpoint.
 type HTTPApiSpec struct {
-	// External API URL
+	// URL is the external API endpoint to call.
+	// Mutually exclusive with ServiceRef.
 	// +optional
 	URL string `json:"url,omitempty"`
 
-	// Reference to a Kubernetes service (alternative to URL)
+	// ServiceRef references a Kubernetes service as the target endpoint.
+	// Mutually exclusive with URL.
 	// +optional
 	ServiceRef *ServiceRef `json:"serviceRef,omitempty"`
 
-	// Path on the service (used with serviceRef, or appended to URL)
+	// Path is appended to the URL or service endpoint.
 	// +optional
 	Path string `json:"path,omitempty"`
 
-	// HTTP method
+	// Method is the HTTP method to use for the request.
+	// +kubebuilder:validation:Required
 	Method HTTPMethod `json:"method"`
 
-	// Timeout in seconds
+	// TimeoutSeconds is the request timeout in seconds.
 	// +kubebuilder:default=30
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=300
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 
-	// HTTP headers to include
+	// Headers are additional HTTP headers to include in the request.
 	// +optional
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// ServiceRef references a Kubernetes service
+// ServiceRef references a Kubernetes service.
 type ServiceRef struct {
-	// Service name
+	// Name is the service name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Namespace (defaults to AgentTool's namespace)
+	// Namespace is the service namespace. Defaults to the AgentTool's namespace.
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 
-	// Port number
+	// Port is the service port number.
+	// Mutually exclusive with PortName.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	Port *int32 `json:"port,omitempty"`
 
-	// Port name (alternative to port number)
+	// PortName is the service port name.
+	// Mutually exclusive with Port.
 	// +optional
 	PortName string `json:"portName,omitempty"`
 }
 
-// OpenApiSchemaRef references an OpenAPI specification
+// OpenApiSchemaRef references an OpenAPI specification.
+// Either URL or ConfigMapRef must be specified.
 type OpenApiSchemaRef struct {
-	// URL to fetch the OpenAPI spec from
+	// URL is the endpoint to fetch the OpenAPI spec from.
+	// Mutually exclusive with ConfigMapRef.
 	// +optional
 	URL string `json:"url,omitempty"`
 
-	// Reference to a ConfigMap containing the OpenAPI spec
+	// ConfigMapRef references a ConfigMap containing the OpenAPI spec.
+	// Mutually exclusive with URL.
 	// +optional
 	ConfigMapRef *ConfigMapKeyRef `json:"configMapRef,omitempty"`
 }
 
-// ConfigMapKeyRef references a key in a ConfigMap
+// ConfigMapKeyRef references a key in a ConfigMap.
 type ConfigMapKeyRef struct {
-	// ConfigMap name
+	// Name is the ConfigMap name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Key in the ConfigMap
+	// Key is the key in the ConfigMap containing the data.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Key string `json:"key"`
 }
 
-// AgentToolStatus defines the observed state of AgentTool
+// AgentToolStatus defines the observed state of AgentTool.
 type AgentToolStatus struct {
-	// Standard conditions
+	// Conditions represent the latest available observations of the tool's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// Observed generation
+	// ObservedGeneration is the most recent generation observed by the controller.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
