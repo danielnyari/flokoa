@@ -2,10 +2,71 @@ import json
 import os
 from glob import glob
 
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+
 from flokoa.types import ToolDefinition
+from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
 from flokoa.types.agenttool import AgentToolSpec
 
 TOOLS_PATH = "/etc/flokoa/tools/"
+AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
+
+
+def load_agent_card(url: str | None = None) -> AgentCard | None:
+    """Load agent card from /etc/flokoa/agent-card.json.
+
+    Args:
+        url: Override URL for the agent card. If not provided, uses FLOKOA_AGENT_URL
+             environment variable or defaults to empty string.
+
+    Returns:
+        AgentCard (a2a type) if the file exists, None otherwise.
+
+    The JSON format matches the Kubernetes Agent CRD card structure.
+    """
+    if not os.path.exists(AGENT_CARD_PATH):
+        return None
+
+    with open(AGENT_CARD_PATH) as f:
+        card_data = json.load(f)
+
+    # Validate using generated Flokoa AgentCard type
+    flokoa_card = FlokoaAgentCard.model_validate(card_data)
+
+    # Get URL from parameter, env var, or default
+    agent_url = url or os.environ.get("FLOKOA_AGENT_URL", "")
+
+    # Convert skills from Flokoa format to a2a format
+    skills = [
+        AgentSkill(
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            tags=skill.tags,
+            examples=skill.examples,
+            input_modes=skill.inputModes,
+            output_modes=skill.outputModes,
+        )
+        for skill in flokoa_card.skills
+    ]
+
+    # Convert capabilities
+    capabilities = AgentCapabilities(
+        streaming=flokoa_card.capabilities.streaming or False,
+        push_notifications=flokoa_card.capabilities.pushNotifications or False,
+        state_transition_history=flokoa_card.capabilities.stateTransitionHistroy or False,
+    )
+
+    return AgentCard(
+        name=flokoa_card.name,
+        description=flokoa_card.description,
+        version=flokoa_card.version,
+        url=agent_url,
+        default_input_modes=flokoa_card.defaultInputModes,
+        default_output_modes=flokoa_card.defaultOutputModes,
+        capabilities=capabilities,
+        skills=skills,
+    )
 
 
 def load_tools() -> list[ToolDefinition]:

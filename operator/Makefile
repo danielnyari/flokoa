@@ -176,7 +176,7 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@# Extract AgentToolSpec schema
 	@yq eval '.spec.versions[0].schema.openAPIV3Schema.properties.spec' \
 		config/crd/bases/agent.flokoa.ai_agenttools.yaml > /tmp/agenttool_spec_schema.json
-	@# Generate Pydantic v2 models
+	@# Generate AgentToolSpec Pydantic v2 models
 	@$(DATAMODEL_CODEGEN) \
 		--input /tmp/agenttool_spec_schema.json \
 		--input-file-type jsonschema \
@@ -185,6 +185,18 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--output $(PYTHON_MODELS_DIR)/agenttool.py
 	@rm /tmp/agenttool_spec_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agenttool.py"
+	@# Extract AgentCard schema
+	@yq eval '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.card' \
+		config/crd/bases/agent.flokoa.ai_agents.yaml > /tmp/agentcard_schema.json
+	@# Generate AgentCard Pydantic v2 models
+	@$(DATAMODEL_CODEGEN) \
+		--input /tmp/agentcard_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--class-name AgentCard \
+		--output $(PYTHON_MODELS_DIR)/agentcard.py
+	@rm /tmp/agentcard_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentcard.py"
 
 ##@ Build
 

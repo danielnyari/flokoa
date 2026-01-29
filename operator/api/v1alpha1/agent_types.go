@@ -4,6 +4,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -14,16 +15,11 @@ type Framework string
 const (
 	// FrameworkPydanticAI represents the Pydantic AI framework.
 	FrameworkPydanticAI Framework = "pydantic-ai"
-	// FrameworkLangChain represents the LangChain framework.
-	FrameworkLangChain Framework = "langchain"
-	// FrameworkCrewAI represents the CrewAI framework.
-	FrameworkCrewAI Framework = "crewai"
-	// FrameworkMarvin represents the Marvin framework.
-	FrameworkMarvin Framework = "marvin"
-	// FrameworkAutogen represents the Autogen framework.
-	FrameworkAutogen Framework = "autogen"
-	// FrameworkA2A represents the Agent-to-Agent protocol.
-	FrameworkA2A Framework = "a2a"
+	FrameworkLangChain  Framework = "langchain"
+	FrameworkADK        Framework = "google-adk"
+	FrameworkMarvin     Framework = "marvin"
+	FrameworkAutogen    Framework = "autogen"
+	FrameworkA2A        Framework = "a2a"
 )
 
 // AgentPhase represents the current phase of the agent lifecycle.
@@ -48,10 +44,85 @@ const (
 	RuntimeTypeStandard RuntimeType = "standard"
 )
 
-// AgentSpec defines the desired state of an Agent.
+// AgentSkill describes a specific capability or function the agent can perform.
+// Based on the A2A protocol AgentSkill definition.
+type AgentSkill struct {
+	// Unique identifier for the skill
+	ID string `json:"id"`
+
+	// Human-readable name for the skill
+	Name string `json:"name"`
+
+	// Detailed description of what the skill does
+	Description string `json:"description"`
+
+	// Keywords for categorization and discovery
+	Tags []string `json:"tags"`
+
+	// Sample prompts or use cases demonstrating the skill
+	// +optional
+	Examples []string `json:"examples,omitempty"`
+
+	// Supported input MIME types for this skill, overriding the agent's defaults
+	// +optional
+	InputModes []string `json:"inputModes,omitempty"`
+
+	// Supported output MIME types for this skill, overriding the agent's defaults
+	// +optional
+	OutputModes []string `json:"outputModes,omitempty"`
+
+	// Security schemes necessary for the agent to leverage this skill
+	// Each map entry represents security schemes that must be used together (AND)
+	// Multiple entries represent alternatives (OR)
+	// +optional
+	Security []map[string][]string `json:"security,omitempty"`
+}
+
+type InputOutputMode string
+
+const (
+	InputOutputModeText InputOutputMode = "text"
+	InputOutputModeJSON InputOutputMode = "application/json"
+)
+
+type AgentExtension struct {
+	Description string                          `json:"description,omitempty"`
+	Params      map[string]apiextensionsv1.JSON `json:"params,omitempty"`
+	Required    bool                            `json:"required,omitempty"`
+	URI         string                          `json:"uri,omitempty"`
+}
+
+type AgentCapabilities struct {
+	Extensions             []AgentExtension `json:"extensions,omitempty"`
+	PushNotifications      bool             `json:"pushNotifications,omitempty"`
+	StateTransitionHistroy bool             `json:"stateTransitionHistroy,omitempty"`
+	Streaming              bool             `json:"streaming,omitempty"`
+}
+
+type AgentCard struct {
+	Name string `json:"name"`
+
+	Description string `json:"description"`
+
+	Version string `json:"version"`
+
+	// +kubebuilder:default={"application/json"}
+	DefaultInputModes []InputOutputMode `json:"defaultInputModes"`
+
+	// +kubebuilder:default={"application/json"}
+	DefaultOutputModes []InputOutputMode `json:"defaultOutputModes"`
+
+	// +kubebuilder:default={streaming: false}
+	Capabilities AgentCapabilities `json:"capabilities"`
+
+	Skills []AgentSkill `json:"skills"`
+}
+
+// AgentSpec defines the desired state of an Agent
 type AgentSpec struct {
-	// Runtime configuration specifies the backend and its configuration.
-	// +kubebuilder:validation:Required
+	Card AgentCard `json:"card"`
+
+	// Runtime configuration - specifies the backend and configuration
 	Runtime RuntimeSpec `json:"runtime"`
 
 	// Framework explicitly declares the AI framework used by the agent.

@@ -55,6 +55,118 @@ spec:
           spec:
             description: AgentSpec defines the desired state of an Agent
             properties:
+              card:
+                properties:
+                  capabilities:
+                    default:
+                      streaming: false
+                    properties:
+                      extensions:
+                        items:
+                          properties:
+                            description:
+                              type: string
+                            params:
+                              additionalProperties:
+                                x-kubernetes-preserve-unknown-fields: true
+                              type: object
+                            required:
+                              type: boolean
+                            uri:
+                              type: string
+                          type: object
+                        type: array
+                      pushNotifications:
+                        type: boolean
+                      stateTransitionHistroy:
+                        type: boolean
+                      streaming:
+                        type: boolean
+                    type: object
+                  defaultInputModes:
+                    default:
+                    - application/json
+                    items:
+                      type: string
+                    type: array
+                  defaultOutputModes:
+                    default:
+                    - application/json
+                    items:
+                      type: string
+                    type: array
+                  description:
+                    type: string
+                  name:
+                    type: string
+                  skills:
+                    items:
+                      description: |-
+                        AgentSkill describes a specific capability or function the agent can perform.
+                        Based on the A2A protocol AgentSkill definition.
+                      properties:
+                        description:
+                          description: Detailed description of what the skill does
+                          type: string
+                        examples:
+                          description: Sample prompts or use cases demonstrating the
+                            skill
+                          items:
+                            type: string
+                          type: array
+                        id:
+                          description: Unique identifier for the skill
+                          type: string
+                        inputModes:
+                          description: Supported input MIME types for this skill,
+                            overriding the agent's defaults
+                          items:
+                            type: string
+                          type: array
+                        name:
+                          description: Human-readable name for the skill
+                          type: string
+                        outputModes:
+                          description: Supported output MIME types for this skill,
+                            overriding the agent's defaults
+                          items:
+                            type: string
+                          type: array
+                        security:
+                          description: |-
+                            Security schemes necessary for the agent to leverage this skill
+                            Each map entry represents security schemes that must be used together (AND)
+                            Multiple entries represent alternatives (OR)
+                          items:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            type: object
+                          type: array
+                        tags:
+                          description: Keywords for categorization and discovery
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - description
+                      - id
+                      - name
+                      - tags
+                      type: object
+                    type: array
+                  version:
+                    type: string
+                required:
+                - capabilities
+                - defaultInputModes
+                - defaultOutputModes
+                - description
+                - name
+                - skills
+                - version
+                type: object
               framework:
                 description: Explicit framework declaration (for observability/tooling)
                 enum:
@@ -4677,6 +4789,7 @@ spec:
                   type: object
                 type: array
             required:
+            - card
             - runtime
             type: object
           status:
