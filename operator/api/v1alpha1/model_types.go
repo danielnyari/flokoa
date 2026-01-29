@@ -26,14 +26,14 @@ import (
 type ModelProvider string
 
 const (
-	ModelProviderOpenAI           ModelProvider = "openai"
-	ModelProviderAnthropic        ModelProvider = "anthropic"
-	ModelProviderAzureOpenAI      ModelProvider = "azure-openai"
-	ModelProviderOllama           ModelProvider = "ollama"
-	ModelProviderGemini           ModelProvider = "gemini"
-	ModelProviderGeminiVertex     ModelProvider = "gemini-vertex"
-	ModelProviderAnthropicVertex  ModelProvider = "anthropic-vertex"
-	ModelProviderBedrock          ModelProvider = "bedrock"
+	ModelProviderOpenAI          ModelProvider = "openai"
+	ModelProviderAnthropic       ModelProvider = "anthropic"
+	ModelProviderAzureOpenAI     ModelProvider = "azure-openai"
+	ModelProviderOllama          ModelProvider = "ollama"
+	ModelProviderGemini          ModelProvider = "gemini"
+	ModelProviderGeminiVertex    ModelProvider = "gemini-vertex"
+	ModelProviderAnthropicVertex ModelProvider = "anthropic-vertex"
+	ModelProviderBedrock         ModelProvider = "bedrock"
 )
 
 // ModelSpec defines the desired state of Model

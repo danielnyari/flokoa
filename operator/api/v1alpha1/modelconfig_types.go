@@ -177,8 +177,9 @@ type ThinkingConfig struct {
 	// +kubebuilder:default=disabled
 	Type ThinkingType `json:"type"`
 
-	// BudgetTokens is the maximum number of tokens for thinking (required when enabled)
-	// Must be >= 1024 and less than maxTokens
+	// BudgetTokens is the maximum number of tokens for thinking.
+	// When type is "enabled", this should be set and must be >= 1024.
+	// It should also be less than maxTokens, but this is not enforced by the schema.
 	// +kubebuilder:validation:Minimum=1024
 	// +optional
 	BudgetTokens *int32 `json:"budgetTokens,omitempty"`
