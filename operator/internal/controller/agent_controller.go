@@ -44,12 +44,12 @@ const (
 const (
 	// toolsMountPath is the path where tool configurations are mounted
 	toolsMountPath = "/etc/flokoa/tools"
-	// agentCardMountPath is the path where the agent card configuration is mounted
-	agentCardMountPath = "/etc/flokoa/agent-card.json"
 	// agentCardVolumeName is the name of the volume for the agent card ConfigMap
 	agentCardVolumeName = "agent-card"
 	// agentCardConfigMapKey is the key in the ConfigMap for the agent card JSON
 	agentCardConfigMapKey = "agent-card.json"
+	// agentCardMountPath is the file path where the agent card is mounted
+	agentCardMountPath = "/etc/flokoa/agent-card.json"
 )
 
 type AgentReconciler struct {
@@ -431,10 +431,11 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 		},
 	})
 
-	// Add agent card volume mount
+	// Add agent card volume mount using SubPath to avoid overwriting /etc/flokoa
 	container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 		Name:      agentCardVolumeName,
-		MountPath: "/etc/flokoa",
+		MountPath: agentCardMountPath,
+		SubPath:   agentCardConfigMapKey,
 		ReadOnly:  true,
 	})
 

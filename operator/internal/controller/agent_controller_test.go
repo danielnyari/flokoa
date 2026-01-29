@@ -938,7 +938,7 @@ var _ = Describe("Agent Controller", func() {
 				}
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-one"))
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-two"))
-				Expect(mountPaths).To(ContainElement("/etc/flokoa"))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa/agent-card.json"))
 			})
 		})
 
@@ -1381,7 +1381,7 @@ var _ = Describe("Agent Controller", func() {
 				}
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/inline-tool"))
 				Expect(mountPaths).To(ContainElement(fmt.Sprintf("/etc/flokoa/tools/%s", agentToolName)))
-				Expect(mountPaths).To(ContainElement("/etc/flokoa"))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa/agent-card.json"))
 
 				By("Verifying ToolsReady condition shows 2 tools synced")
 				err = k8sClient.Get(ctx, typeNamespacedName, agent)
@@ -2350,7 +2350,8 @@ var _ = Describe("Agent Controller", func() {
 					}
 				}
 				Expect(agentCardMount).NotTo(BeNil())
-				Expect(agentCardMount.MountPath).To(Equal("/etc/flokoa"))
+				Expect(agentCardMount.MountPath).To(Equal("/etc/flokoa/agent-card.json"))
+				Expect(agentCardMount.SubPath).To(Equal("agent-card.json"))
 				Expect(agentCardMount.ReadOnly).To(BeTrue())
 			})
 
