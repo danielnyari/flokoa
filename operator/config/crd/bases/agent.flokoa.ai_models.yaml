@@ -98,32 +98,6 @@ spec:
                     default: "2024-02-01"
                     description: APIVersion is the Azure OpenAI API version
                     type: string
-                  azureADTokenSecretRef:
-                    description: |-
-                      AzureADTokenSecretRef references a secret containing an Azure AD token
-                      Use this instead of apiKeySecretRef for Azure AD authentication
-                    properties:
-                      key:
-                        description: The key of the secret to select from.  Must be
-                          a valid secret key.
-                        type: string
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                      optional:
-                        description: Specify whether the Secret or its key must be
-                          defined
-                        type: boolean
-                    required:
-                    - key
-                    type: object
-                    x-kubernetes-map-type: atomic
                   deploymentName:
                     description: DeploymentName is the name of the model deployment
                     type: string
@@ -144,87 +118,13 @@ spec:
               bedrock:
                 description: Bedrock-specific configuration
                 properties:
-                  accessKeySecretRef:
-                    description: AccessKeySecretRef references a secret containing
-                      the AWS access key ID
-                    properties:
-                      key:
-                        description: The key of the secret to select from.  Must be
-                          a valid secret key.
-                        type: string
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                      optional:
-                        description: Specify whether the Secret or its key must be
-                          defined
-                        type: boolean
-                    required:
-                    - key
-                    type: object
-                    x-kubernetes-map-type: atomic
+                  inferenceProfileARN:
+                    description: InferenceProfileARN is the ARN of the Bedrock inference
+                      profile to use
+                    type: string
                   region:
                     description: Region is the AWS region
                     type: string
-                  roleARN:
-                    description: RoleARN is an optional IAM role to assume
-                    type: string
-                  secretKeySecretRef:
-                    description: SecretKeySecretRef references a secret containing
-                      the AWS secret access key
-                    properties:
-                      key:
-                        description: The key of the secret to select from.  Must be
-                          a valid secret key.
-                        type: string
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                      optional:
-                        description: Specify whether the Secret or its key must be
-                          defined
-                        type: boolean
-                    required:
-                    - key
-                    type: object
-                    x-kubernetes-map-type: atomic
-                  sessionTokenSecretRef:
-                    description: SessionTokenSecretRef references a secret containing
-                      the AWS session token (optional)
-                    properties:
-                      key:
-                        description: The key of the secret to select from.  Must be
-                          a valid secret key.
-                        type: string
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                      optional:
-                        description: Specify whether the Secret or its key must be
-                          defined
-                        type: boolean
-                    required:
-                    - key
-                    type: object
-                    x-kubernetes-map-type: atomic
                 required:
                 - region
                 type: object

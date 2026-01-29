@@ -128,11 +128,6 @@ type AzureOpenAIModelSpec struct {
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
-	// AzureADTokenSecretRef references a secret containing an Azure AD token
-	// Use this instead of apiKeySecretRef for Azure AD authentication
-	// +optional
-	AzureADTokenSecretRef *corev1.SecretKeySelector `json:"azureADTokenSecretRef,omitempty"`
-
 	// Timeout in seconds for API requests
 	// +kubebuilder:default=60
 	// +optional
@@ -177,21 +172,9 @@ type BedrockModelSpec struct {
 	// Region is the AWS region
 	Region string `json:"region"`
 
-	// AccessKeySecretRef references a secret containing the AWS access key ID
+	// InferenceProfileARN is the ARN of the Bedrock inference profile to use
 	// +optional
-	AccessKeySecretRef *corev1.SecretKeySelector `json:"accessKeySecretRef,omitempty"`
-
-	// SecretKeySecretRef references a secret containing the AWS secret access key
-	// +optional
-	SecretKeySecretRef *corev1.SecretKeySelector `json:"secretKeySecretRef,omitempty"`
-
-	// SessionTokenSecretRef references a secret containing the AWS session token (optional)
-	// +optional
-	SessionTokenSecretRef *corev1.SecretKeySelector `json:"sessionTokenSecretRef,omitempty"`
-
-	// RoleARN is an optional IAM role to assume
-	// +optional
-	RoleARN string `json:"roleARN,omitempty"`
+	InferenceProfileARN string `json:"inferenceProfileARN,omitempty"`
 }
 
 // TLSConfig defines TLS settings for custom endpoints
