@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -43,6 +44,12 @@ const (
 const (
 	// toolsMountPath is the path where tool configurations are mounted
 	toolsMountPath = "/etc/flokoa/tools"
+	// agentCardVolumeName is the name of the volume for the agent card ConfigMap
+	agentCardVolumeName = "agent-card"
+	// agentCardConfigMapKey is the key in the ConfigMap for the agent card JSON
+	agentCardConfigMapKey = "agent-card.json"
+	// agentCardMountPath is the file path where the agent card is mounted
+	agentCardMountPath = "/etc/flokoa/agent-card.json"
 )
 
 type AgentReconciler struct {
@@ -104,8 +111,17 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		agent.Status.LastToolSync = &now
 	}
 
+	// Reconcile AgentCard ConfigMap
+	agentCardConfigMap, err := r.reconcileAgentCardConfigMap(ctx, agent)
+	if err != nil {
+		logger.Error(err, "Failed to reconcile AgentCard ConfigMap")
+		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
+		_ = r.Status().Update(ctx, agent)
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile Deployment
-	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps)
+	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
@@ -144,8 +160,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo) (*appsv1.Deployment, error) {
-	desired := r.buildDeployment(agent, toolConfigMaps)
+func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string) (*appsv1.Deployment, error) {
+	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap)
 
 	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
@@ -318,7 +334,58 @@ func (r *AgentReconciler) reconcileInlineTool(ctx context.Context, agent *agentv
 	return fmt.Sprintf("%s-spec", agentToolName), nil
 }
 
-func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo) *appsv1.Deployment {
+// reconcileAgentCardConfigMap creates or updates a ConfigMap containing the AgentCard as JSON
+func (r *AgentReconciler) reconcileAgentCardConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
+	configMapName := fmt.Sprintf("%s-agent-card", agent.Name)
+
+	// Serialize the AgentCard to JSON
+	cardJSON, err := json.Marshal(agent.Spec.Card)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal AgentCard to JSON: %w", err)
+	}
+
+	desired := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: agent.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       agent.Name,
+				"app.kubernetes.io/component":  "agent-card",
+				"app.kubernetes.io/managed-by": "flokoa-operator",
+				"flokoa.ai/agent":              agent.Name,
+			},
+		},
+		Data: map[string]string{
+			agentCardConfigMapKey: string(cardJSON),
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
+		return "", fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	existing := &corev1.ConfigMap{}
+	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: agent.Namespace}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Create(ctx, desired); err != nil {
+				return "", fmt.Errorf("failed to create AgentCard ConfigMap: %w", err)
+			}
+			return configMapName, nil
+		}
+		return "", fmt.Errorf("failed to get AgentCard ConfigMap: %w", err)
+	}
+
+	existing.Data = desired.Data
+	existing.Labels = desired.Labels
+	if err := r.Update(ctx, existing); err != nil {
+		return "", fmt.Errorf("failed to update AgentCard ConfigMap: %w", err)
+	}
+
+	return configMapName, nil
+}
+
+func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string) *appsv1.Deployment {
 	labels := r.buildLabels(agent)
 	spec := agent.Spec.Runtime.Spec
 
@@ -340,8 +407,37 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 		container.Name = "agent"
 	}
 
+	// Compute the agent URL for the FLOKOA_AGENT_URL env var
+	agentURL := fmt.Sprintf("http://%s.%s.svc.cluster.local", agent.Name, agent.Namespace)
+
+	// Add FLOKOA_AGENT_URL environment variable
+	container.Env = append(container.Env, corev1.EnvVar{
+		Name:  "FLOKOA_AGENT_URL",
+		Value: agentURL,
+	})
+
 	// Build volumes from spec and tools
 	volumes := append([]corev1.Volume{}, spec.Volumes...)
+
+	// Add agent card ConfigMap volume
+	volumes = append(volumes, corev1.Volume{
+		Name: agentCardVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: agentCardConfigMap,
+				},
+			},
+		},
+	})
+
+	// Add agent card volume mount using SubPath to avoid overwriting /etc/flokoa
+	container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+		Name:      agentCardVolumeName,
+		MountPath: agentCardMountPath,
+		SubPath:   agentCardConfigMapKey,
+		ReadOnly:  true,
+	})
 
 	// Add tool volume mounts to the container and compute combined hash
 	var toolsHashBuilder string
