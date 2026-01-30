@@ -4,12 +4,13 @@ from glob import glob
 
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
-from flokoa.types import ToolDefinition
+from flokoa.types import ModelConfig, ToolDefinition
 from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
 from flokoa.types.agenttool import AgentToolSpec
 
 TOOLS_PATH = "/etc/flokoa/tools/"
 AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
+MODEL_CONFIG_PATH = "/etc/flokoa/model.json"
 
 
 def load_agent_card(url: str | None = None) -> AgentCard | None:
@@ -104,3 +105,44 @@ def load_tools() -> list[ToolDefinition]:
             definitions.append(tool_definition)
 
     return definitions
+
+
+def load_model_config() -> ModelConfig | None:
+    """Load model configuration from /etc/flokoa/model.json.
+
+    Returns:
+        ModelConfig if the file exists, None otherwise.
+
+    The JSON format matches the Kubernetes operator's ModelProviderConfig structure:
+    {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "config": {
+            "baseURL": "https://api.openai.com/v1",
+            "organizationID": "org-...",
+            "timeoutSeconds": 60,
+            "defaultHeaders": {...}
+        },
+        "parameters": {
+            "temperature": "0.7",
+            "maxTokens": 4096,
+            "openai": {
+                "frequencyPenalty": "0.5"
+            }
+        }
+    }
+
+    Note: API keys and other secrets are injected as environment variables
+    by the operator (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) and are not
+    included in this configuration file.
+
+    For local development without the operator, this function returns None,
+    allowing the agent to use its default model configuration.
+    """
+    if not os.path.exists(MODEL_CONFIG_PATH):
+        return None
+
+    with open(MODEL_CONFIG_PATH) as f:
+        config_data = json.load(f)
+
+    return ModelConfig.model_validate(config_data)

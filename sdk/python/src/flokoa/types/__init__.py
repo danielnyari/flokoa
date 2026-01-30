@@ -4,6 +4,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from flokoa.types.agenttool import AgentToolSpec, Type
+from flokoa.types.modelconfig import ModelConfig, ModelParameters, ModelProvider
 
 
 class ToolType(StrEnum):
