@@ -1,7 +1,13 @@
-"""Model configuration types leveraging PydanticAI's ModelSettings.
+"""Model configuration types for PydanticAI integration.
 
 These types represent the model configuration that is mounted at /etc/flokoa/model.json
 by the Flokoa operator when an Agent references a Model or ModelConfig resource.
+
+The configuration maps to PydanticAI's provider/model architecture:
+- provider: identifies which PydanticAI provider to use (OpenAIProvider, AnthropicProvider, etc.)
+- config: provider-specific connection kwargs (base_url, timeout, etc.)
+- model: the model name to pass to the model class
+- settings: model settings compatible with pydantic_ai.settings.ModelSettings
 """
 
 from __future__ import annotations
@@ -11,15 +17,20 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-# Type alias for settings - compatible with PydanticAI's ModelSettings TypedDict
-# We use dict[str, Any] because ModelSettings contains httpx.Timeout which
-# Pydantic can't directly serialize. At runtime, the dict is compatible with
-# ModelSettings and can be passed directly to PydanticAI agents.
-ModelSettings = dict[str, Any]
-
 
 class ModelProvider(str, Enum):
-    """Model provider enum matching the Kubernetes CRD ModelProvider enum."""
+    """Model provider enum matching the Kubernetes CRD ModelProvider enum.
+
+    These map to PydanticAI providers:
+    - OPENAI -> pydantic_ai.providers.openai.OpenAIProvider
+    - ANTHROPIC -> pydantic_ai.providers.anthropic.AnthropicProvider
+    - AZURE_OPENAI -> pydantic_ai.providers.azure.AzureOpenAIProvider
+    - OLLAMA -> pydantic_ai.providers.ollama.OllamaProvider
+    - GEMINI -> pydantic_ai.providers.google.GoogleProvider
+    - GEMINI_VERTEX -> pydantic_ai.providers.google_vertex.GoogleVertexProvider
+    - ANTHROPIC_VERTEX -> pydantic_ai.providers.anthropic (with Vertex config)
+    - BEDROCK -> pydantic_ai.providers.bedrock.BedrockProvider
+    """
 
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
@@ -34,9 +45,33 @@ class ModelProvider(str, Enum):
 class ModelConfig(BaseModel):
     """Model configuration loaded from /etc/flokoa/model.json.
 
-    This represents the resolved configuration for an LLM model provider,
-    created by the Flokoa operator when reconciling an Agent with a Model
-    or ModelConfig reference.
+    This maps to PydanticAI's provider/model architecture:
+
+    1. Using with PydanticAI Agent (simple):
+
+        from pydantic_ai import Agent
+        from flokoa.utils import load_model_config
+
+        config = load_model_config()
+        agent = Agent(config.get_model_name(), model_settings=config.settings)
+
+    2. Using with PydanticAI Provider/Model (full control):
+
+        from pydantic_ai.providers.openai import OpenAIProvider
+        from pydantic_ai.models.openai import OpenAIModel
+
+        config = load_model_config()
+
+        # Provider handles connection config (base_url, api_key from env, etc.)
+        provider = OpenAIProvider(base_url=config.base_url)
+
+        # Model uses the provider and settings
+        model = OpenAIModel(
+            model_name=config.model,
+            provider=provider,
+            settings=config.settings  # Compatible with pydantic_ai.settings.ModelSettings
+        )
+        agent = Agent(model)
 
     The JSON structure matches the operator's ModelProviderConfig:
     {
@@ -55,18 +90,9 @@ class ModelConfig(BaseModel):
         }
     }
 
-    The `settings` field uses PydanticAI's ModelSettings TypedDict, allowing
-    direct usage with PydanticAI models:
-
-        from pydantic_ai import Agent
-        from flokoa.utils import load_model_config
-
-        config = load_model_config()
-        agent = Agent('openai:gpt-4o', model_settings=config.settings)
-
-    Note: API keys and other secrets are injected as environment variables
-    by the operator (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) and are not
-    included in this configuration file.
+    Note: API keys are injected as environment variables by the operator
+    (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) and read automatically by
+    PydanticAI providers.
     """
 
     provider: ModelProvider = Field(
@@ -81,9 +107,9 @@ class ModelConfig(BaseModel):
         default=None,
         description="Provider-specific connection configuration (baseURL, timeout, headers, etc.).",
     )
-    settings: ModelSettings | None = Field(
+    settings: dict[str, Any] | None = Field(
         default=None,
-        description="Model settings compatible with PydanticAI's ModelSettings.",
+        description="Model settings compatible with pydantic_ai.settings.ModelSettings.",
     )
 
     @property
@@ -108,13 +134,10 @@ class ModelConfig(BaseModel):
         return self.config.get("defaultHeaders")
 
     def get_model_name(self) -> str:
-        """Get the full model name in PydanticAI format (provider:model).
+        """Get the model name in PydanticAI format (provider:model).
 
-        Returns a model name string that can be used directly with PydanticAI Agent:
-
-            from pydantic_ai import Agent
-            config = load_model_config()
-            agent = Agent(config.get_model_name(), model_settings=config.settings)
+        Returns a string like 'openai:gpt-4o' that can be used directly with
+        pydantic_ai.Agent or to construct model instances.
         """
         # Map our provider enum to PydanticAI model name prefixes
         provider_map = {

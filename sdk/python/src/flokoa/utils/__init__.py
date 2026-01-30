@@ -113,28 +113,16 @@ def load_model_config() -> ModelConfig | None:
     Returns:
         ModelConfig if the file exists, None otherwise.
 
-    The JSON format matches the Kubernetes operator's ModelProviderConfig structure:
-    {
-        "provider": "openai",
-        "model": "gpt-4o",
-        "config": {
-            "baseURL": "https://api.openai.com/v1",
-            "organizationID": "org-...",
-            "timeoutSeconds": 60,
-            "defaultHeaders": {...}
-        },
-        "parameters": {
-            "temperature": "0.7",
-            "maxTokens": 4096,
-            "openai": {
-                "frequencyPenalty": "0.5"
-            }
-        }
-    }
+    The configuration maps to PydanticAI's provider/model architecture.
+    See ModelConfig docstring for detailed usage examples.
 
-    Note: API keys and other secrets are injected as environment variables
-    by the operator (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) and are not
-    included in this configuration file.
+    Example:
+        from pydantic_ai import Agent
+        from flokoa.utils import load_model_config
+
+        config = load_model_config()
+        if config:
+            agent = Agent(config.get_model_name(), model_settings=config.settings)
 
     For local development without the operator, this function returns None,
     allowing the agent to use its default model configuration.
