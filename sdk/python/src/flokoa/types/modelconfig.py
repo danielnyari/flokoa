@@ -1,4 +1,4 @@
-"""Model configuration types matching the Kubernetes operator's ModelProviderConfig.
+"""Model configuration types leveraging PydanticAI's ModelSettings.
 
 These types represent the model configuration that is mounted at /etc/flokoa/model.json
 by the Flokoa operator when an Agent references a Model or ModelConfig resource.
@@ -10,6 +10,12 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+# Type alias for settings - compatible with PydanticAI's ModelSettings TypedDict
+# We use dict[str, Any] because ModelSettings contains httpx.Timeout which
+# Pydantic can't directly serialize. At runtime, the dict is compatible with
+# ModelSettings and can be passed directly to PydanticAI agents.
+ModelSettings = dict[str, Any]
 
 
 class ModelProvider(str, Enum):
@@ -23,56 +29,6 @@ class ModelProvider(str, Enum):
     GEMINI_VERTEX = "gemini-vertex"
     ANTHROPIC_VERTEX = "anthropic-vertex"
     BEDROCK = "bedrock"
-
-
-class ModelParameters(BaseModel):
-    """Common model parameters from ModelConfig.
-
-    These are provider-agnostic parameters that can be applied to most LLM providers.
-    """
-
-    temperature: str | None = Field(
-        default=None,
-        description="Temperature controls randomness (0.0 to 2.0). Specified as string to avoid floating point issues.",
-    )
-    maxTokens: int | None = Field(
-        default=None,
-        description="Maximum number of tokens to generate.",
-        alias="maxTokens",
-    )
-    topP: str | None = Field(
-        default=None,
-        description="Top-p (nucleus) sampling parameter (0.0 to 1.0). Specified as string.",
-        alias="topP",
-    )
-    topK: int | None = Field(
-        default=None,
-        description="Limits the number of tokens to consider for each step.",
-        alias="topK",
-    )
-    stopSequences: list[str] | None = Field(
-        default=None,
-        description="Sequences where the model will stop generating.",
-        alias="stopSequences",
-    )
-    seed: int | None = Field(
-        default=None,
-        description="Seed for deterministic generation (where supported).",
-    )
-
-    # Provider-specific parameters
-    openai: dict[str, Any] | None = Field(
-        default=None,
-        description="OpenAI-specific parameters (frequencyPenalty, presencePenalty, reasoningEffort, etc.)",
-    )
-    anthropic: dict[str, Any] | None = Field(
-        default=None,
-        description="Anthropic-specific parameters (thinking configuration).",
-    )
-    gemini: dict[str, Any] | None = Field(
-        default=None,
-        description="Gemini-specific parameters (candidateCount, safetySettings, etc.)",
-    )
 
 
 class ModelConfig(BaseModel):
@@ -92,17 +48,25 @@ class ModelConfig(BaseModel):
             "timeoutSeconds": 60,
             "defaultHeaders": {...}
         },
-        "parameters": {
-            "temperature": "0.7",
-            "maxTokens": 4096,
-            "openai": {
-                "frequencyPenalty": "0.5"
-            }
+        "settings": {
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "frequency_penalty": 0.5
         }
     }
 
-    Note: Secrets like API keys are injected as environment variables,
-    not included in this configuration file.
+    The `settings` field uses PydanticAI's ModelSettings TypedDict, allowing
+    direct usage with PydanticAI models:
+
+        from pydantic_ai import Agent
+        from flokoa.utils import load_model_config
+
+        config = load_model_config()
+        agent = Agent('openai:gpt-4o', model_settings=config.settings)
+
+    Note: API keys and other secrets are injected as environment variables
+    by the operator (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) and are not
+    included in this configuration file.
     """
 
     provider: ModelProvider = Field(
@@ -115,11 +79,11 @@ class ModelConfig(BaseModel):
     )
     config: dict[str, Any] | None = Field(
         default=None,
-        description="Provider-specific non-sensitive configuration (baseURL, timeout, headers, etc.).",
+        description="Provider-specific connection configuration (baseURL, timeout, headers, etc.).",
     )
-    parameters: ModelParameters | None = Field(
+    settings: ModelSettings | None = Field(
         default=None,
-        description="Model parameters from ModelConfig (temperature, maxTokens, etc.).",
+        description="Model settings compatible with PydanticAI's ModelSettings.",
     )
 
     @property
@@ -142,3 +106,26 @@ class ModelConfig(BaseModel):
         if self.config is None:
             return None
         return self.config.get("defaultHeaders")
+
+    def get_model_name(self) -> str:
+        """Get the full model name in PydanticAI format (provider:model).
+
+        Returns a model name string that can be used directly with PydanticAI Agent:
+
+            from pydantic_ai import Agent
+            config = load_model_config()
+            agent = Agent(config.get_model_name(), model_settings=config.settings)
+        """
+        # Map our provider enum to PydanticAI model name prefixes
+        provider_map = {
+            ModelProvider.OPENAI: "openai",
+            ModelProvider.ANTHROPIC: "anthropic",
+            ModelProvider.AZURE_OPENAI: "azure",
+            ModelProvider.OLLAMA: "ollama",
+            ModelProvider.GEMINI: "gemini",
+            ModelProvider.GEMINI_VERTEX: "vertexai",
+            ModelProvider.ANTHROPIC_VERTEX: "vertexai",
+            ModelProvider.BEDROCK: "bedrock",
+        }
+        prefix = provider_map.get(self.provider, self.provider.value)
+        return f"{prefix}:{self.model}"

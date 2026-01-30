@@ -90,6 +90,7 @@ def agent_card_with_none_capabilities():
 
 
 # Model config fixtures
+# These use PydanticAI's ModelSettings field names (snake_case, flat structure)
 
 
 @pytest.fixture
@@ -115,21 +116,19 @@ def openai_model_config_data():
                 "X-Custom-Header": "custom-value",
             },
         },
-        "parameters": {
-            "temperature": "0.7",
-            "maxTokens": 4096,
-            "topP": "0.9",
-            "openai": {
-                "frequencyPenalty": "0.5",
-                "presencePenalty": "0.3",
-            },
+        "settings": {
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "top_p": 0.9,
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.3,
         },
     }
 
 
 @pytest.fixture
 def anthropic_model_config_data():
-    """Anthropic model config with thinking parameters."""
+    """Anthropic model config."""
     return {
         "provider": "anthropic",
         "model": "claude-sonnet-4-20250514",
@@ -137,15 +136,9 @@ def anthropic_model_config_data():
             "baseURL": "https://api.anthropic.com",
             "timeoutSeconds": 90,
         },
-        "parameters": {
-            "temperature": "0.5",
-            "maxTokens": 8192,
-            "anthropic": {
-                "thinking": {
-                    "type": "enabled",
-                    "budgetTokens": 2048,
-                },
-            },
+        "settings": {
+            "temperature": 0.5,
+            "max_tokens": 8192,
         },
     }
 
@@ -159,8 +152,8 @@ def ollama_model_config_data():
         "config": {
             "host": "http://localhost:11434",
         },
-        "parameters": {
-            "temperature": "0.8",
+        "settings": {
+            "temperature": 0.8,
         },
     }
 
@@ -176,9 +169,9 @@ def azure_openai_model_config_data():
             "deploymentName": "my-gpt4o-deployment",
             "apiVersion": "2024-02-15-preview",
         },
-        "parameters": {
-            "temperature": "0.7",
-            "maxTokens": 4096,
+        "settings": {
+            "temperature": 0.7,
+            "max_tokens": 4096,
         },
     }
 
@@ -192,26 +185,23 @@ def gemini_model_config_data():
         "config": {
             "timeoutSeconds": 60,
         },
-        "parameters": {
-            "temperature": "0.9",
-            "topK": 40,
-            "gemini": {
-                "candidateCount": 1,
-            },
+        "settings": {
+            "temperature": 0.9,
+            "seed": 42,
         },
     }
 
 
 @pytest.fixture
-def model_config_with_only_parameters():
-    """Model config with parameters but no provider-specific config."""
+def model_config_with_settings():
+    """Model config with settings but no provider-specific config."""
     return {
         "provider": "openai",
         "model": "gpt-4o-mini",
-        "parameters": {
-            "temperature": "1.0",
-            "maxTokens": 2048,
-            "stopSequences": ["END", "STOP"],
+        "settings": {
+            "temperature": 1.0,
+            "max_tokens": 2048,
+            "stop_sequences": ["END", "STOP"],
             "seed": 42,
         },
     }
