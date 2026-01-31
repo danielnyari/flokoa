@@ -22,13 +22,16 @@ import (
 )
 
 // ReasoningEffort represents the reasoning effort level for OpenAI models
-// +kubebuilder:validation:Enum=low;medium;high
+// +kubebuilder:validation:Enum=none;minimal;low;medium;high;xhigh
 type ReasoningEffort string
 
 const (
-	ReasoningEffortLow    ReasoningEffort = "low"
-	ReasoningEffortMedium ReasoningEffort = "medium"
-	ReasoningEffortHigh   ReasoningEffort = "high"
+	ReasoningEffortNone    ReasoningEffort = "none"
+	ReasoningEffortMinimal ReasoningEffort = "minimal"
+	ReasoningEffortLow     ReasoningEffort = "low"
+	ReasoningEffortMedium  ReasoningEffort = "medium"
+	ReasoningEffortHigh    ReasoningEffort = "high"
+	ReasoningEffortXHigh   ReasoningEffort = "xhigh"
 )
 
 // ThinkingType represents the type of thinking configuration for Anthropic models
@@ -51,15 +54,19 @@ type ModelConfigSpec struct {
 
 	// OpenAI-specific parameters
 	// +optional
-	OpenAI *OpenAIParameters `json:"openai,omitempty"`
+	OpenAI *OpenAIChatModelParameters `json:"openai,omitempty"`
 
 	// Anthropic-specific parameters
 	// +optional
-	Anthropic *AnthropicParameters `json:"anthropic,omitempty"`
+	Anthropic *AnthropicModelParameters `json:"anthropic,omitempty"`
 
-	// Gemini-specific parameters
+	// Google/Gemini-specific parameters
 	// +optional
-	Gemini *GeminiParameters `json:"gemini,omitempty"`
+	Google *GoogleModelParameters `json:"google,omitempty"`
+
+	// Bedrock-specific parameters
+	// +optional
+	Bedrock *BedrockModelParameters `json:"bedrock,omitempty"`
 }
 
 // ModelRef references a Model resource
@@ -76,6 +83,7 @@ type ModelRef struct {
 type ModelParameters struct {
 	// Temperature controls randomness in the output (0.0 to 2.0)
 	// Specified as a string to avoid floating point issues (e.g., "0.7", "1.0")
+	// +kubebuilder:validation:Pattern=`^(0(\.\d+)?|1(\.0+)?|2(\.0+)?)$`
 	// +optional
 	Temperature string `json:"temperature,omitempty"`
 
@@ -86,17 +94,52 @@ type ModelParameters struct {
 
 	// TopP controls nucleus sampling (0.0 to 1.0)
 	// Specified as a string to avoid floating point issues (e.g., "0.9", "0.95")
+	// +kubebuilder:validation:Pattern=`^(0(\.\d+)?|1(\.0+)?)$`
 	// +optional
 	TopP string `json:"topP,omitempty"`
+
+	// TimeOut in seconds for the model response
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	TimeOut *int32 `json:"timeOut,omitempty"`
+
+	// ParallelToolCalls
+	// +optional
+	ParallelToolCalls *bool `json:"parallelToolCalls,omitempty"`
 
 	// TopK limits the number of tokens to consider for each step
 	// +kubebuilder:validation:Minimum=1
 	// +optional
 	TopK *int32 `json:"topK,omitempty"`
 
+	// PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
+	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
+	// +kubebuilder:validation:Pattern=`^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$`
+	// +optional
+	PresencePenalty string `json:"presencePenalty,omitempty"`
+
+	// FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
+	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
+	// +kubebuilder:validation:Pattern=`^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$`
+	// +optional
+	FrequencyPenalty string `json:"frequencyPenalty,omitempty"`
+
+	// Logit Bias
+	// +optional
+	LogitBias map[string]int32 `json:"logitBias,omitempty"`
+
 	// StopSequences are sequences where the model will stop generating
 	// +optional
 	StopSequences []string `json:"stopSequences,omitempty"`
+
+	// ExtraHeaders to include in all requests
+	// +optional
+	ExtraHeaders map[string]string `json:"extraHeaders,omitempty"`
+
+	// ExtraBody to include in all requests
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraBody *runtime.RawExtension `json:"extraBody,omitempty"`
 
 	// Seed for deterministic generation (where supported)
 	// +optional
@@ -104,35 +147,97 @@ type ModelParameters struct {
 }
 
 // OpenAIParameters defines OpenAI-specific model parameters
-type OpenAIParameters struct {
-	// FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
-	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-	// +optional
-	FrequencyPenalty string `json:"frequencyPenalty,omitempty"`
-
-	// PresencePenalty penalizes tokens already in the context (-2.0 to 2.0)
-	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-	// +optional
-	PresencePenalty string `json:"presencePenalty,omitempty"`
+type OpenAIChatModelParameters struct {
 
 	// ReasoningEffort controls the reasoning effort for reasoning models (o1, o3, etc.)
 	// +optional
-	ReasoningEffort *ReasoningEffort `json:"reasoningEffort,omitempty"`
+	OpenAIReasoningEffort *ReasoningEffort `json:"reasoningEffort,omitempty"`
+
+	// LogProbs
+	// +optional
+	OpenAILogProbs *bool `json:"logProbs,omitempty"`
+
+	// TopLogProbs
+	// +optional
+	OpenAITopLogProbs *int32 `json:"topLogProbs,omitempty"`
+
+	// OpenAIUser associated with the requests
+	// +optional
+	OpenAIUser string `json:"openAIUser,omitempty"`
+
+	// OpenAIServiceTier
+	// +kubebuilder:validation:Enum=auto;default;flex;priority
+	// +optional
+	OpenAIServiceTier string `json:"openAIServiceTier,omitempty"`
+
+	// +optional
+	OpenAIPromptCacheKey string `json:"openAIPromptCacheKey,omitempty"`
+
+
+	// +kubebuilder:validation:Enum=in_memory;24h
+	// +optional
+	OpenAIPromptRetention bool `json:"openAIPromptRetention,omitempty"`
 
 	// ResponseFormat specifies the output format
 	// +optional
 	ResponseFormat *OpenAIResponseFormat `json:"responseFormat,omitempty"`
 
-	// LogProbs enables returning log probabilities
-	// +optional
-	LogProbs *bool `json:"logProbs,omitempty"`
-
-	// TopLogProbs specifies how many log probabilities to return (0-20)
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=20
-	// +optional
-	TopLogProbs *int32 `json:"topLogProbs,omitempty"`
 }
+
+type OpenAIResponsesModelParameters struct {
+
+	// OpenAIReasoningGenerateSummary
+	// +kubebuilder:validation:Enum=detailed;concise
+	// +optional
+	OpenAIReasoningGenerateSummary *string `json:"openAIReasoningGenerateSummary,omitempty"`
+
+	// OpenAIReasoningSummary
+	// +kubebuilder:validation:Enum=detailed;concise;auto
+	// +optional
+	OpenAIReasoningSummary *string `json:"openAIReasoningSummary,omitempty"`
+
+	// OpenAISendReasoningIDs
+	// +optional
+	OpenAISendReasoningIDs *bool `json:"openAISendReasoningIDs,omitempty"`
+
+	// OpenAITruncation
+	// +kubebuilder:validation:Enum=disabled;auto
+	// +optional
+	OpenAITruncation *string `json:"openAITruncation,omitempty"`
+
+	// OpenAITextVerbosity
+	// +kubebuilder:validation:Enum=low;medium;high
+	// +optional
+	OpenAITextVerbosity *string `json:"openAITextVerbosity,omitempty"`
+
+	// OpenAIPreviousResponseID is the ID of a previous response to continue from.
+	// When set to "auto", automatically uses the most recent provider_response_id
+	// from message history and omits earlier messages. Enables server-side
+	// conversation state and faithful reference to previous reasoning.
+	// +optional
+	OpenAIPreviousResponseID string `json:"openAIPreviousResponseID,omitempty"`
+
+	// OpenAIIncludeCodeExecutionOutputs includes code execution results in the response.
+	// Corresponds to the code_interpreter_call.outputs value of the include parameter.
+	// +optional
+	OpenAIIncludeCodeExecutionOutputs *bool `json:"openAIIncludeCodeExecutionOutputs,omitempty"`
+
+	// OpenAIIncludeWebSearchSources includes web search results in the response.
+	// Corresponds to the web_search_call.action.sources value of the include parameter.
+	// +optional
+	OpenAIIncludeWebSearchSources *bool `json:"openAIIncludeWebSearchSources,omitempty"`
+
+	// OpenAIIncludeFileSearchResults includes file search results in the response.
+	// Corresponds to the file_search_call.results value of the include parameter.
+	// +optional
+	OpenAIIncludeFileSearchResults *bool `json:"openAIIncludeFileSearchResults,omitempty"`
+
+	// OpenAIIncludeRawAnnotations includes raw annotations (e.g., citations from web search)
+	// in TextPart.provider_details['annotations'].
+	// +optional
+	OpenAIIncludeRawAnnotations *bool `json:"openAIIncludeRawAnnotations,omitempty"`
+}
+
 
 // OpenAIResponseFormat specifies the response format for OpenAI models
 type OpenAIResponseFormat struct {
@@ -164,52 +269,250 @@ type OpenAIJSONSchema struct {
 	Strict *bool `json:"strict,omitempty"`
 }
 
-// AnthropicParameters defines Anthropic-specific model parameters
-type AnthropicParameters struct {
-	// Thinking configuration for extended thinking models
+// GoogleThinkingLevel represents the thinking level for Google/Gemini models
+// +kubebuilder:validation:Enum=unspecified;minimal;low;medium;high
+type GoogleThinkingLevel string
+
+const (
+	GoogleThinkingLevelUnspecified GoogleThinkingLevel = "unspecified"
+	GoogleThinkingLevelMinimal     GoogleThinkingLevel = "minimal"
+	GoogleThinkingLevelLow         GoogleThinkingLevel = "low"
+	GoogleThinkingLevelMedium      GoogleThinkingLevel = "medium"
+	GoogleThinkingLevelHigh        GoogleThinkingLevel = "high"
+)
+
+// GoogleMediaResolution represents the media resolution for Google/Gemini models
+// +kubebuilder:validation:Enum=unspecified;low;medium;high
+type GoogleMediaResolution string
+
+const (
+	GoogleMediaResolutionUnspecified GoogleMediaResolution = "unspecified"
+	GoogleMediaResolutionLow         GoogleMediaResolution = "low"
+	GoogleMediaResolutionMedium      GoogleMediaResolution = "medium"
+	GoogleMediaResolutionHigh        GoogleMediaResolution = "high"
+)
+
+// GoogleThinkingConfig defines the thinking configuration for Google/Gemini models
+type GoogleThinkingConfig struct {
+	// IncludeThoughts indicates whether to include thoughts in the response.
+	// If true, thoughts are returned only if the model supports thought and thoughts are available.
 	// +optional
-	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+	IncludeThoughts *bool `json:"includeThoughts,omitempty"`
+
+	// ThinkingBudget is the thinking budget in tokens.
+	// 0 means DISABLED, -1 means AUTOMATIC.
+	// The default values and allowed ranges are model dependent.
+	// +optional
+	ThinkingBudget *int32 `json:"thinkingBudget,omitempty"`
+
+	// ThinkingLevel controls the amount of thinking tokens the model should generate.
+	// +optional
+	ThinkingLevel *GoogleThinkingLevel `json:"thinkingLevel,omitempty"`
 }
 
-// ThinkingConfig defines the thinking configuration for Anthropic models
-type ThinkingConfig struct {
+// GoogleModelParameters defines Google/Gemini-specific model parameters
+type GoogleModelParameters struct {
+	// GoogleSafetySettings configures content safety filters.
+	// See https://ai.google.dev/gemini-api/docs/safety-settings for more information.
+	// +optional
+	GoogleSafetySettings []GoogleSafetySetting `json:"googleSafetySettings,omitempty"`
+
+	// GoogleThinkingConfig configures the thinking behavior for the model.
+	// See https://ai.google.dev/gemini-api/docs/thinking for more information.
+	// +optional
+	GoogleThinkingConfig *GoogleThinkingConfig `json:"googleThinkingConfig,omitempty"`
+
+	// GoogleLabels are user-defined metadata to break down billed charges.
+	// Only supported by the Vertex AI API.
+	// See https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls
+	// +optional
+	GoogleLabels map[string]string `json:"googleLabels,omitempty"`
+
+	// GoogleVideoResolution specifies the video resolution to use for the model.
+	// See https://ai.google.dev/api/generate-content#MediaResolution for more information.
+	// +optional
+	GoogleVideoResolution *GoogleMediaResolution `json:"googleVideoResolution,omitempty"`
+
+	// GoogleCachedContent is the name of the cached content to use for the model.
+	// See https://ai.google.dev/gemini-api/docs/caching for more information.
+	// +optional
+	GoogleCachedContent string `json:"googleCachedContent,omitempty"`
+}
+
+// GoogleSafetySetting defines a safety setting for Google/Gemini models
+type GoogleSafetySetting struct {
+	// Category is the harm category
+	// +kubebuilder:validation:Enum=HARM_CATEGORY_HARASSMENT;HARM_CATEGORY_HATE_SPEECH;HARM_CATEGORY_SEXUALLY_EXPLICIT;HARM_CATEGORY_DANGEROUS_CONTENT;HARM_CATEGORY_CIVIC_INTEGRITY
+	Category string `json:"category"`
+
+	// Threshold is the blocking threshold
+	// +kubebuilder:validation:Enum=BLOCK_NONE;BLOCK_LOW_AND_ABOVE;BLOCK_MEDIUM_AND_ABOVE;BLOCK_ONLY_HIGH;OFF
+	Threshold string `json:"threshold"`
+
+	// Method specifies if the threshold is used for probability or severity score.
+	// If not specified, the threshold is used for probability score.
+	// +kubebuilder:validation:Enum=SEVERITY;PROBABILITY
+	// +optional
+	Method string `json:"method,omitempty"`
+}
+
+// BedrockGuardrailConfig defines content moderation and safety settings for Bedrock
+// See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_GuardrailConfiguration.html
+type BedrockGuardrailConfig struct {
+	// GuardrailIdentifier is the unique identifier of the guardrail
+	// +optional
+	GuardrailIdentifier string `json:"guardrailIdentifier,omitempty"`
+
+	// GuardrailVersion is the version of the guardrail
+	// +optional
+	GuardrailVersion string `json:"guardrailVersion,omitempty"`
+
+	// Trace controls guardrail tracing level
+	// +kubebuilder:validation:Enum=disabled;enabled;enabled_full
+	// +optional
+	Trace string `json:"trace,omitempty"`
+}
+
+// BedrockPerformanceConfig defines performance optimization settings for Bedrock
+// See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_PerformanceConfiguration.html
+type BedrockPerformanceConfig struct {
+	// Latency controls performance/cost tradeoff
+	// +kubebuilder:validation:Enum=optimized;standard
+	// +optional
+	Latency string `json:"latency,omitempty"`
+}
+
+// BedrockServiceTier defines the service tier for Bedrock requests
+// See https://docs.aws.amazon.com/bedrock/latest/userguide/service-tiers-inference.html
+type BedrockServiceTier struct {
+	// Type specifies the service tier type
+	// +kubebuilder:validation:Enum=default;flex;priority;reserved
+	// +optional
+	Type string `json:"type,omitempty"`
+}
+
+// BedrockModelParameters defines AWS Bedrock-specific model parameters
+// See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html
+type BedrockModelParameters struct {
+	// BedrockGuardrailConfig defines content moderation and safety settings.
+	// See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_GuardrailConfiguration.html
+	// +optional
+	BedrockGuardrailConfig *BedrockGuardrailConfig `json:"bedrockGuardrailConfig,omitempty"`
+
+	// BedrockPerformanceConfiguration defines performance optimization settings.
+	// See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_PerformanceConfiguration.html
+	// +optional
+	BedrockPerformanceConfiguration *BedrockPerformanceConfig `json:"bedrockPerformanceConfiguration,omitempty"`
+
+	// BedrockRequestMetadata is additional metadata to attach to Bedrock API requests.
+	// +optional
+	BedrockRequestMetadata map[string]string `json:"bedrockRequestMetadata,omitempty"`
+
+	// BedrockAdditionalModelResponseFieldsPaths are JSON paths to extract additional fields from model responses.
+	// See https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters.html
+	// +optional
+	BedrockAdditionalModelResponseFieldsPaths []string `json:"bedrockAdditionalModelResponseFieldsPaths,omitempty"`
+
+	// BedrockPromptVariables are variables for substitution into prompt templates.
+	// Each key maps to a text value.
+	// See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_PromptVariableValues.html
+	// +optional
+	BedrockPromptVariables map[string]string `json:"bedrockPromptVariables,omitempty"`
+
+	// BedrockAdditionalModelRequestFields are additional model-specific parameters to include in requests.
+	// See https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters.html
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	BedrockAdditionalModelRequestFields *runtime.RawExtension `json:"bedrockAdditionalModelRequestFields,omitempty"`
+
+	// BedrockCacheToolDefinitions adds a cache point after the last tool definition.
+	// See https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+	// +optional
+	BedrockCacheToolDefinitions *bool `json:"bedrockCacheToolDefinitions,omitempty"`
+
+	// BedrockCacheInstructions adds a cache point after the system prompt blocks.
+	// See https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+	// +optional
+	BedrockCacheInstructions *bool `json:"bedrockCacheInstructions,omitempty"`
+
+	// BedrockCacheMessages adds a cache point to the last content block in the final user message.
+	// Useful for caching conversation history in multi-turn conversations.
+	// Note: Uses 1 of Bedrock's 4 available cache points per request.
+	// See https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+	// +optional
+	BedrockCacheMessages *bool `json:"bedrockCacheMessages,omitempty"`
+
+	// BedrockServiceTier controls performance and cost optimization.
+	// See https://docs.aws.amazon.com/bedrock/latest/userguide/service-tiers-inference.html
+	// +optional
+	BedrockServiceTier *BedrockServiceTier `json:"bedrockServiceTier,omitempty"`
+}
+
+// AnthropicThinkingConfig defines the thinking configuration for Anthropic models
+type AnthropicThinkingConfig struct {
 	// Type enables or disables extended thinking
+	// +kubebuilder:validation:Enum=enabled;disabled
 	// +kubebuilder:default=disabled
 	Type ThinkingType `json:"type"`
 
 	// BudgetTokens is the maximum number of tokens for thinking (required when enabled)
 	// Must be >= 1024 and less than maxTokens
+	// See https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
 	// +kubebuilder:validation:Minimum=1024
 	// +optional
 	BudgetTokens *int32 `json:"budgetTokens,omitempty"`
 }
 
-// GeminiParameters defines Gemini-specific model parameters
-type GeminiParameters struct {
-	// CandidateCount specifies how many response candidates to generate
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=8
+// AnthropicContainerConfig defines container configuration for multi-turn conversations
+type AnthropicContainerConfig struct {
+	// ID is the container ID to use (e.g., "container_xxx")
 	// +optional
-	CandidateCount *int32 `json:"candidateCount,omitempty"`
+	ID string `json:"id,omitempty"`
 
-	// ResponseMimeType specifies the output MIME type
+	// Disabled forces a fresh container (ignores any container_id from history)
 	// +optional
-	ResponseMimeType string `json:"responseMimeType,omitempty"`
-
-	// SafetySettings configures content safety filters
-	// +optional
-	SafetySettings []GeminiSafetySetting `json:"safetySettings,omitempty"`
+	Disabled *bool `json:"disabled,omitempty"`
 }
 
-// GeminiSafetySetting defines a safety setting for Gemini
-type GeminiSafetySetting struct {
-	// Category is the harm category
-	// +kubebuilder:validation:Enum=HARM_CATEGORY_HARASSMENT;HARM_CATEGORY_HATE_SPEECH;HARM_CATEGORY_SEXUALLY_EXPLICIT;HARM_CATEGORY_DANGEROUS_CONTENT
-	Category string `json:"category"`
+// AnthropicModelParameters defines Anthropic-specific model parameters
+// See https://docs.anthropic.com/en/api/messages
+type AnthropicModelParameters struct {
+	// AnthropicMetadataUserID is an external identifier for the user associated with the request.
+	// +optional
+	AnthropicMetadataUserID string `json:"anthropicMetadataUserID,omitempty"`
 
-	// Threshold is the blocking threshold
-	// +kubebuilder:validation:Enum=BLOCK_NONE;BLOCK_LOW_AND_ABOVE;BLOCK_MEDIUM_AND_ABOVE;BLOCK_ONLY_HIGH
-	Threshold string `json:"threshold"`
+	// AnthropicThinking determines whether the model should generate a thinking block.
+	// See https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
+	// +optional
+	AnthropicThinking *AnthropicThinkingConfig `json:"anthropicThinking,omitempty"`
+
+	// AnthropicCacheToolDefinitions adds cache_control to the last tool definition.
+	// When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
+	// See https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+	// +kubebuilder:validation:Enum=true;false;5m;1h
+	// +optional
+	AnthropicCacheToolDefinitions string `json:"anthropicCacheToolDefinitions,omitempty"`
+
+	// AnthropicCacheInstructions adds cache_control to the last system prompt block.
+	// When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
+	// See https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+	// +kubebuilder:validation:Enum=true;false;5m;1h
+	// +optional
+	AnthropicCacheInstructions string `json:"anthropicCacheInstructions,omitempty"`
+
+	// AnthropicCacheMessages adds a cache point to the last content block in the final user message.
+	// Useful for caching conversation history in multi-turn conversations.
+	// When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
+	// Note: Uses 1 of Anthropic's 4 available cache points per request.
+	// See https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+	// +kubebuilder:validation:Enum=true;false;5m;1h
+	// +optional
+	AnthropicCacheMessages string `json:"anthropicCacheMessages,omitempty"`
+
+	// AnthropicContainer configures container for multi-turn conversations.
+	// By default, if previous messages contain a container_id, it will be reused automatically.
+	// +optional
+	AnthropicContainer *AnthropicContainerConfig `json:"anthropicContainer,omitempty"`
 }
 
 // ModelConfigStatus defines the observed state of ModelConfig

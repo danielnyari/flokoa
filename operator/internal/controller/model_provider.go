@@ -44,7 +44,8 @@ type ModelParametersConfig struct {
 	// Provider-specific parameters
 	OpenAI    map[string]any `json:"openai,omitempty"`
 	Anthropic map[string]any `json:"anthropic,omitempty"`
-	Gemini    map[string]any `json:"gemini,omitempty"`
+	Google    map[string]any `json:"google,omitempty"`
+	Bedrock   map[string]any `json:"bedrock,omitempty"`
 }
 
 // ModelProviderHandler defines the interface for provider-specific model configuration.
@@ -57,14 +58,10 @@ type ModelProviderHandler interface {
 
 // modelProviderRegistry maps providers to their handlers
 var modelProviderRegistry = map[agentv1alpha1.ModelProvider]ModelProviderHandler{
-	agentv1alpha1.ModelProviderOpenAI:          &OpenAIProviderHandler{},
-	agentv1alpha1.ModelProviderAnthropic:       &AnthropicProviderHandler{},
-	agentv1alpha1.ModelProviderAzureOpenAI:     &AzureOpenAIProviderHandler{},
-	agentv1alpha1.ModelProviderOllama:          &OllamaProviderHandler{},
-	agentv1alpha1.ModelProviderGemini:          &GeminiProviderHandler{},
-	agentv1alpha1.ModelProviderGeminiVertex:    &VertexAIProviderHandler{},
-	agentv1alpha1.ModelProviderAnthropicVertex: &AnthropicVertexProviderHandler{},
-	agentv1alpha1.ModelProviderBedrock:         &BedrockProviderHandler{},
+	agentv1alpha1.ModelProviderOpenAI:    &OpenAIProviderHandler{},
+	agentv1alpha1.ModelProviderAnthropic: &AnthropicProviderHandler{},
+	agentv1alpha1.ModelProviderGoogle:    &GoogleProviderHandler{},
+	agentv1alpha1.ModelProviderBedrock:   &BedrockProviderHandler{},
 }
 
 // GetProviderHandler returns the handler for the given provider.

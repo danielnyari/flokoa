@@ -37,75 +37,41 @@ func (h *AnthropicProviderHandler) BuildConfig(model *agentv1alpha1.Model, model
 		anthropicParams := modelConfig.Spec.Anthropic
 		params := make(map[string]any)
 
-		if anthropicParams.Thinking != nil {
+		if anthropicParams.AnthropicMetadataUserID != "" {
+			params["metadataUserID"] = anthropicParams.AnthropicMetadataUserID
+		}
+
+		if anthropicParams.AnthropicThinking != nil {
 			thinking := map[string]any{
-				"type": string(anthropicParams.Thinking.Type),
+				"type": string(anthropicParams.AnthropicThinking.Type),
 			}
-			if anthropicParams.Thinking.BudgetTokens != nil {
-				thinking["budgetTokens"] = *anthropicParams.Thinking.BudgetTokens
+			if anthropicParams.AnthropicThinking.BudgetTokens != nil {
+				thinking["budgetTokens"] = *anthropicParams.AnthropicThinking.BudgetTokens
 			}
 			params["thinking"] = thinking
 		}
 
-		if len(params) > 0 {
-			if config.Parameters == nil {
-				config.Parameters = &ModelParametersConfig{}
-			}
-			config.Parameters.Anthropic = params
+		if anthropicParams.AnthropicCacheToolDefinitions != "" {
+			params["cacheToolDefinitions"] = anthropicParams.AnthropicCacheToolDefinitions
 		}
-	}
 
-	return config, nil
-}
-
-// AnthropicVertexProviderHandler handles Anthropic on Vertex AI model configuration.
-type AnthropicVertexProviderHandler struct{}
-
-func (h *AnthropicVertexProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.ModelConfig) (*ModelProviderConfig, error) {
-	config := buildBaseConfig(model, modelConfig)
-
-	// Vertex AI configuration
-	if model.Spec.VertexAI != nil {
-		vertexSpec := model.Spec.VertexAI
-
-		config.Config["project"] = vertexSpec.Project
-		config.Config["location"] = vertexSpec.Location
-
-		config.EnvVars = append(config.EnvVars,
-			corev1.EnvVar{
-				Name:  "GOOGLE_CLOUD_PROJECT",
-				Value: vertexSpec.Project,
-			},
-			corev1.EnvVar{
-				Name:  "GOOGLE_CLOUD_REGION",
-				Value: vertexSpec.Location,
-			},
-		)
-
-		// Add service account key as secret env var
-		if vertexSpec.ServiceAccountKeySecretRef != nil {
-			config.SecretEnvVars = append(config.SecretEnvVars, corev1.EnvVar{
-				Name: "GOOGLE_APPLICATION_CREDENTIALS_JSON",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: vertexSpec.ServiceAccountKeySecretRef,
-				},
-			})
+		if anthropicParams.AnthropicCacheInstructions != "" {
+			params["cacheInstructions"] = anthropicParams.AnthropicCacheInstructions
 		}
-	}
 
-	// Add Anthropic-specific parameters from ModelConfig (same as regular Anthropic)
-	if modelConfig != nil && modelConfig.Spec.Anthropic != nil {
-		anthropicParams := modelConfig.Spec.Anthropic
-		params := make(map[string]any)
+		if anthropicParams.AnthropicCacheMessages != "" {
+			params["cacheMessages"] = anthropicParams.AnthropicCacheMessages
+		}
 
-		if anthropicParams.Thinking != nil {
-			thinking := map[string]any{
-				"type": string(anthropicParams.Thinking.Type),
+		if anthropicParams.AnthropicContainer != nil {
+			container := make(map[string]any)
+			if anthropicParams.AnthropicContainer.ID != "" {
+				container["id"] = anthropicParams.AnthropicContainer.ID
 			}
-			if anthropicParams.Thinking.BudgetTokens != nil {
-				thinking["budgetTokens"] = *anthropicParams.Thinking.BudgetTokens
+			if anthropicParams.AnthropicContainer.Disabled != nil {
+				container["disabled"] = *anthropicParams.AnthropicContainer.Disabled
 			}
-			params["thinking"] = thinking
+			params["container"] = container
 		}
 
 		if len(params) > 0 {

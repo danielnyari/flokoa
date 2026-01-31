@@ -35,6 +35,7 @@ pydantic-ai = [
     "flokoa[pydantic-ai]",
 ]
 dev = [
+    "mypy-boto3-bedrock-runtime>=1.42.31",
     "pre-commit>=4.0.0",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",

@@ -46,20 +46,26 @@ func (h *OpenAIProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelCon
 		openaiParams := modelConfig.Spec.OpenAI
 		params := make(map[string]any)
 
-		if openaiParams.FrequencyPenalty != "" {
-			params["frequencyPenalty"] = openaiParams.FrequencyPenalty
+		if openaiParams.OpenAIReasoningEffort != nil {
+			params["reasoningEffort"] = string(*openaiParams.OpenAIReasoningEffort)
 		}
-		if openaiParams.PresencePenalty != "" {
-			params["presencePenalty"] = openaiParams.PresencePenalty
+		if openaiParams.OpenAILogProbs != nil {
+			params["logProbs"] = *openaiParams.OpenAILogProbs
 		}
-		if openaiParams.ReasoningEffort != nil {
-			params["reasoningEffort"] = string(*openaiParams.ReasoningEffort)
+		if openaiParams.OpenAITopLogProbs != nil {
+			params["topLogProbs"] = *openaiParams.OpenAITopLogProbs
 		}
-		if openaiParams.LogProbs != nil {
-			params["logProbs"] = *openaiParams.LogProbs
+		if openaiParams.OpenAIUser != "" {
+			params["user"] = openaiParams.OpenAIUser
 		}
-		if openaiParams.TopLogProbs != nil {
-			params["topLogProbs"] = *openaiParams.TopLogProbs
+		if openaiParams.OpenAIServiceTier != "" {
+			params["serviceTier"] = openaiParams.OpenAIServiceTier
+		}
+		if openaiParams.OpenAIPromptCacheKey != "" {
+			params["promptCacheKey"] = openaiParams.OpenAIPromptCacheKey
+		}
+		if openaiParams.OpenAIPromptRetention {
+			params["promptRetention"] = openaiParams.OpenAIPromptRetention
 		}
 		if openaiParams.ResponseFormat != nil {
 			params["responseFormat"] = map[string]any{

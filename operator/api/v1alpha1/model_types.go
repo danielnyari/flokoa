@@ -22,18 +22,14 @@ import (
 )
 
 // ModelProvider represents the LLM provider
-// +kubebuilder:validation:Enum=openai;anthropic;azure-openai;ollama;gemini;gemini-vertex;anthropic-vertex;bedrock
+// +kubebuilder:validation:Enum=openai;anthropic;google;bedrock
 type ModelProvider string
 
 const (
-	ModelProviderOpenAI          ModelProvider = "openai"
-	ModelProviderAnthropic       ModelProvider = "anthropic"
-	ModelProviderAzureOpenAI     ModelProvider = "azure-openai"
-	ModelProviderOllama          ModelProvider = "ollama"
-	ModelProviderGemini          ModelProvider = "gemini"
-	ModelProviderGeminiVertex    ModelProvider = "gemini-vertex"
-	ModelProviderAnthropicVertex ModelProvider = "anthropic-vertex"
-	ModelProviderBedrock         ModelProvider = "bedrock"
+	ModelProviderOpenAI    ModelProvider = "openai"
+	ModelProviderAnthropic ModelProvider = "anthropic"
+	ModelProviderGoogle    ModelProvider = "google"
+	ModelProviderBedrock   ModelProvider = "bedrock"
 )
 
 // ModelSpec defines the desired state of Model
@@ -57,21 +53,9 @@ type ModelSpec struct {
 	// +optional
 	Anthropic *AnthropicModelSpec `json:"anthropic,omitempty"`
 
-	// Azure OpenAI-specific configuration
+	// Google-specific configuration
 	// +optional
-	AzureOpenAI *AzureOpenAIModelSpec `json:"azureOpenAI,omitempty"`
-
-	// Ollama-specific configuration
-	// +optional
-	Ollama *OllamaModelSpec `json:"ollama,omitempty"`
-
-	// Gemini-specific configuration
-	// +optional
-	Gemini *GeminiModelSpec `json:"gemini,omitempty"`
-
-	// Vertex AI-specific configuration (for gemini-vertex and anthropic-vertex)
-	// +optional
-	VertexAI *VertexAIModelSpec `json:"vertexAI,omitempty"`
+	Google *GoogleModelSpec `json:"google,omitempty"`
 
 	// Bedrock-specific configuration
 	// +optional
@@ -114,53 +98,20 @@ type AnthropicModelSpec struct {
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
-// AzureOpenAIModelSpec defines Azure OpenAI-specific configuration
-type AzureOpenAIModelSpec struct {
-	// Endpoint is the Azure OpenAI resource endpoint
-	// e.g., "https://<resource-name>.openai.azure.com"
-	Endpoint string `json:"endpoint"`
-
-	// DeploymentName is the name of the model deployment
-	DeploymentName string `json:"deploymentName"`
-
-	// APIVersion is the Azure OpenAI API version
-	// +kubebuilder:default="2024-02-01"
-	// +optional
-	APIVersion string `json:"apiVersion,omitempty"`
-
+// GoogleModelSpec defines Google/Gemini-specific configuration
+type GoogleModelSpec struct {
 	// Timeout in seconds for API requests
 	// +kubebuilder:default=60
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
-}
 
-// OllamaModelSpec defines Ollama-specific configuration
-type OllamaModelSpec struct {
-	// Host is the Ollama server address
-	// +kubebuilder:default="http://localhost:11434"
+	// Project is the Google Cloud project ID (for Vertex AI)
 	// +optional
-	Host string `json:"host,omitempty"`
+	Project string `json:"project,omitempty"`
 
-	// Options are additional Ollama-specific options
+	// Location is the Google Cloud region (e.g., "us-central1", for Vertex AI)
 	// +optional
-	Options map[string]string `json:"options,omitempty"`
-}
-
-// GeminiModelSpec defines Google Gemini-specific configuration
-type GeminiModelSpec struct {
-	// Timeout in seconds for API requests
-	// +kubebuilder:default=60
-	// +optional
-	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
-}
-
-// VertexAIModelSpec defines Vertex AI-specific configuration
-type VertexAIModelSpec struct {
-	// Project is the Google Cloud project ID
-	Project string `json:"project"`
-
-	// Location is the Google Cloud region (e.g., "us-central1")
-	Location string `json:"location"`
+	Location string `json:"location,omitempty"`
 
 	// ServiceAccountKeySecretRef references a secret containing the service account JSON key
 	// +optional

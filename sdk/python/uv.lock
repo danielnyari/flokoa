@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [[package]]
@@ -740,6 +740,7 @@ pydantic-ai = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "mypy-boto3-bedrock-runtime" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -762,6 +763,7 @@ provides-extras = ["pydantic-ai"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "mypy-boto3-bedrock-runtime", specifier = ">=1.42.31" },
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
@@ -1493,6 +1495,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/8f/0a60e501584145588be1af5cc829265701ba3c35a64aec8e07cbb71d39bb/multidict-6.7.0-cp314-cp314t-win_amd64.whl", hash = "sha256:09929cab6fcb68122776d575e03c6cc64ee0b8fca48d17e135474b042ce515cd", size = 53507, upload-time = "2025-10-06T14:51:53.672Z" },
     { url = "https://files.pythonhosted.org/packages/7f/ae/3148b988a9c6239903e786eac19c889fab607c31d6efa7fb2147e5680f23/multidict-6.7.0-cp314-cp314t-win_arm64.whl", hash = "sha256:cc41db090ed742f32bd2d2c721861725e6109681eddf835d0a82bd3a5c382827", size = 44804, upload-time = "2025-10-06T14:51:55.415Z" },
     { url = "https://files.pythonhosted.org/packages/b7/da/7d22601b625e241d4f23ef1ebff8acfc60da633c9e7e7922e24d10f592b3/multidict-6.7.0-py3-none-any.whl", hash = "sha256:394fc5c42a333c9ffc3e421a4c85e08580d990e08b99f6bf35b4132114c5dcb3", size = 12317, upload-time = "2025-10-06T14:52:29.272Z" },
+]
+
+[[package]]
+name = "mypy-boto3-bedrock-runtime"
+version = "1.42.31"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/c9/394b33a2797b78a82af4944dcde156b2f5242b5081996e6cabe809a83089/mypy_boto3_bedrock_runtime-1.42.31.tar.gz", hash = "sha256:a661d1aaadd49660dcf0bcf92beba3546047d06b4744fe5fc5b658ecd165b157", size = 29605, upload-time = "2026-01-20T21:18:32.159Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/00/fd3e043e2b9e44229ebf6d4087c7bc8f9fdb87687a999dd1fa06c1a22e4f/mypy_boto3_bedrock_runtime-1.42.31-py3-none-any.whl", hash = "sha256:420961c6c22a9dfdb69bbcc725bff01ae59c6cc347a144e8092aaf9bec1dcdd2", size = 35781, upload-time = "2026-01-20T21:18:29.62Z" },
 ]
 
 [[package]]
