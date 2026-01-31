@@ -48,23 +48,19 @@ type ModelConfigSpec struct {
 	// ModelRef references the Model resource to use
 	ModelRef ModelRef `json:"modelRef"`
 
-	// Common model parameters applicable to most providers
+	// OpenAI-specific parameters (includes base ModelParameters via embedding)
 	// +optional
-	Parameters *ModelParameters `json:"parameters,omitempty"`
+	OpenAI *OpenAIResponsesModelParameters `json:"openai,omitempty"`
 
-	// OpenAI-specific parameters
-	// +optional
-	OpenAI *OpenAIChatModelParameters `json:"openai,omitempty"`
-
-	// Anthropic-specific parameters
+	// Anthropic-specific parameters (includes base ModelParameters via embedding)
 	// +optional
 	Anthropic *AnthropicModelParameters `json:"anthropic,omitempty"`
 
-	// Google/Gemini-specific parameters
+	// Google/Gemini-specific parameters (includes base ModelParameters via embedding)
 	// +optional
 	Google *GoogleModelParameters `json:"google,omitempty"`
 
-	// Bedrock-specific parameters
+	// Bedrock-specific parameters (includes base ModelParameters via embedding)
 	// +optional
 	Bedrock *BedrockModelParameters `json:"bedrock,omitempty"`
 }
@@ -146,8 +142,10 @@ type ModelParameters struct {
 	Seed *int64 `json:"seed,omitempty"`
 }
 
-// OpenAIParameters defines OpenAI-specific model parameters
+// OpenAIChatModelParameters extends ModelParameters for OpenAI Chat Completions API
 type OpenAIChatModelParameters struct {
+	// Embed base parameters
+	ModelParameters `json:",inline"`
 
 	// ReasoningEffort controls the reasoning effort for reasoning models (o1, o3, etc.)
 	// +optional
@@ -184,7 +182,10 @@ type OpenAIChatModelParameters struct {
 
 }
 
+// OpenAIResponsesModelParameters extends OpenAIChatModelParameters for OpenAI Responses API
 type OpenAIResponsesModelParameters struct {
+	// Embed chat parameters (which includes base)
+	OpenAIChatModelParameters `json:",inline"`
 
 	// OpenAIReasoningGenerateSummary
 	// +kubebuilder:validation:Enum=detailed;concise
@@ -310,8 +311,11 @@ type GoogleThinkingConfig struct {
 	ThinkingLevel *GoogleThinkingLevel `json:"thinkingLevel,omitempty"`
 }
 
-// GoogleModelParameters defines Google/Gemini-specific model parameters
+// GoogleModelParameters extends ModelParameters for Google/Gemini
 type GoogleModelParameters struct {
+	// Embed base parameters
+	ModelParameters `json:",inline"`
+
 	// GoogleSafetySettings configures content safety filters.
 	// See https://ai.google.dev/gemini-api/docs/safety-settings for more information.
 	// +optional
@@ -391,9 +395,12 @@ type BedrockServiceTier struct {
 	Type string `json:"type,omitempty"`
 }
 
-// BedrockModelParameters defines AWS Bedrock-specific model parameters
+// BedrockModelParameters extends ModelParameters for AWS Bedrock
 // See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html
 type BedrockModelParameters struct {
+	// Embed base parameters
+	ModelParameters `json:",inline"`
+
 	// BedrockGuardrailConfig defines content moderation and safety settings.
 	// See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_GuardrailConfiguration.html
 	// +optional
@@ -474,9 +481,12 @@ type AnthropicContainerConfig struct {
 	Disabled *bool `json:"disabled,omitempty"`
 }
 
-// AnthropicModelParameters defines Anthropic-specific model parameters
+// AnthropicModelParameters extends ModelParameters for Anthropic
 // See https://docs.anthropic.com/en/api/messages
 type AnthropicModelParameters struct {
+	// Embed base parameters
+	ModelParameters `json:",inline"`
+
 	// AnthropicMetadataUserID is an external identifier for the user associated with the request.
 	// +optional
 	AnthropicMetadataUserID string `json:"anthropicMetadataUserID,omitempty"`

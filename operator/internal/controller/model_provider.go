@@ -78,16 +78,31 @@ func buildBaseConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.Mode
 		Config:   make(map[string]any),
 	}
 
-	// Add model parameters if ModelConfig is provided
-	if modelConfig != nil && modelConfig.Spec.Parameters != nil {
-		params := modelConfig.Spec.Parameters
-		config.Parameters = &ModelParametersConfig{
-			Temperature:   params.Temperature,
-			MaxTokens:     params.MaxTokens,
-			TopP:          params.TopP,
-			TopK:          params.TopK,
-			StopSequences: params.StopSequences,
-			Seed:          params.Seed,
+	// Extract base model parameters from the provider-specific structs (which embed ModelParameters)
+	if modelConfig != nil {
+		var baseParams *agentv1alpha1.ModelParameters
+
+		// Each provider-specific struct embeds ModelParameters, extract it based on which one is set
+		switch {
+		case modelConfig.Spec.OpenAI != nil:
+			baseParams = &modelConfig.Spec.OpenAI.ModelParameters
+		case modelConfig.Spec.Anthropic != nil:
+			baseParams = &modelConfig.Spec.Anthropic.ModelParameters
+		case modelConfig.Spec.Google != nil:
+			baseParams = &modelConfig.Spec.Google.ModelParameters
+		case modelConfig.Spec.Bedrock != nil:
+			baseParams = &modelConfig.Spec.Bedrock.ModelParameters
+		}
+
+		if baseParams != nil {
+			config.Parameters = &ModelParametersConfig{
+				Temperature:   baseParams.Temperature,
+				MaxTokens:     baseParams.MaxTokens,
+				TopP:          baseParams.TopP,
+				TopK:          baseParams.TopK,
+				StopSequences: baseParams.StopSequences,
+				Seed:          baseParams.Seed,
+			}
 		}
 	}
 

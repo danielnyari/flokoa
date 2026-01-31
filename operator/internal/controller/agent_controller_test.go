@@ -2977,10 +2977,14 @@ var _ = Describe("Agent Controller", func() {
 							ModelRef: agentv1alpha1.ModelRef{
 								Name: modelName,
 							},
-							Parameters: &agentv1alpha1.ModelParameters{
-								Temperature: "0.7",
-								MaxTokens:   &maxTokens,
-								TopP:        "0.9",
+							OpenAI: &agentv1alpha1.OpenAIResponsesModelParameters{
+								OpenAIChatModelParameters: agentv1alpha1.OpenAIChatModelParameters{
+									ModelParameters: agentv1alpha1.ModelParameters{
+										Temperature: "0.7",
+										MaxTokens:   &maxTokens,
+										TopP:        "0.9",
+									},
+								},
 							},
 						},
 					}
@@ -3079,9 +3083,13 @@ var _ = Describe("Agent Controller", func() {
 							ModelRef: agentv1alpha1.ModelRef{
 								Name: modelName,
 							},
-							OpenAI: &agentv1alpha1.OpenAIParameters{
-								FrequencyPenalty: "0.5",
-								PresencePenalty:  "0.3",
+							OpenAI: &agentv1alpha1.OpenAIResponsesModelParameters{
+								OpenAIChatModelParameters: agentv1alpha1.OpenAIChatModelParameters{
+									ModelParameters: agentv1alpha1.ModelParameters{
+										FrequencyPenalty: "0.5",
+										PresencePenalty:  "0.3",
+									},
+								},
 							},
 						},
 					}
@@ -3171,8 +3179,8 @@ var _ = Describe("Agent Controller", func() {
 							ModelRef: agentv1alpha1.ModelRef{
 								Name: modelName,
 							},
-							Anthropic: &agentv1alpha1.AnthropicParameters{
-								Thinking: &agentv1alpha1.ThinkingConfig{
+							Anthropic: &agentv1alpha1.AnthropicModelParameters{
+								AnthropicThinking: &agentv1alpha1.AnthropicThinkingConfig{
 									Type:         agentv1alpha1.ThinkingTypeEnabled,
 									BudgetTokens: &budgetTokens,
 								},
@@ -3533,81 +3541,6 @@ var _ = Describe("Agent Controller", func() {
 					}
 					Expect(baseURLEnv).NotTo(BeNil())
 					Expect(baseURLEnv.Value).To(Equal("https://custom.anthropic.api.com"))
-				})
-
-				It("should handle Ollama provider with custom host", func() {
-					By("Creating an Ollama Model")
-					model := &agentv1alpha1.Model{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      modelName,
-							Namespace: agentNamespace,
-						},
-						Spec: agentv1alpha1.ModelSpec{
-							Provider: agentv1alpha1.ModelProviderOllama,
-							Model:    "llama3.2",
-							Ollama: &agentv1alpha1.OllamaModelSpec{
-								Host: "http://ollama.local:11434",
-							},
-						},
-					}
-					Expect(k8sClient.Create(ctx, model)).To(Succeed())
-
-					By("Creating an Agent with Model reference")
-					agent := &agentv1alpha1.Agent{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      agentName,
-							Namespace: agentNamespace,
-						},
-						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
-							Runtime: agentv1alpha1.RuntimeSpec{
-								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
-									Container: corev1.Container{
-										Name:  "agent",
-										Image: "nginx:latest",
-									},
-								},
-							},
-							Model: &agentv1alpha1.AgentModelRef{
-								ModelRef: &agentv1alpha1.NamespacedRef{
-									Name: modelName,
-								},
-							},
-						},
-					}
-					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
-
-					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
-
-					By("Verifying ConfigMap has Ollama config")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
-
-					var providerConfig ModelProviderConfig
-					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
-					Expect(err).NotTo(HaveOccurred())
-					Expect(providerConfig.Provider).To(Equal(agentv1alpha1.ModelProviderOllama))
-					Expect(providerConfig.Model).To(Equal("llama3.2"))
-					Expect(providerConfig.Config["host"]).To(Equal("http://ollama.local:11434"))
 				})
 
 				It("should include default headers in config", func() {
@@ -4157,11 +4090,7 @@ var _ = Describe("Agent Controller", func() {
 					providers := []agentv1alpha1.ModelProvider{
 						agentv1alpha1.ModelProviderOpenAI,
 						agentv1alpha1.ModelProviderAnthropic,
-						agentv1alpha1.ModelProviderAzureOpenAI,
-						agentv1alpha1.ModelProviderOllama,
-						agentv1alpha1.ModelProviderGemini,
-						agentv1alpha1.ModelProviderGeminiVertex,
-						agentv1alpha1.ModelProviderAnthropicVertex,
+						agentv1alpha1.ModelProviderGoogle,
 						agentv1alpha1.ModelProviderBedrock,
 					}
 
