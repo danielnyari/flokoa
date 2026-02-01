@@ -110,13 +110,13 @@ type ModelParameters struct {
 
 	// PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
 	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-	// +kubebuilder:validation:Pattern=`^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$`
+	// +kubebuilder:validation:Pattern=`^-?[0-2](\.\d+)?$`
 	// +optional
 	PresencePenalty string `json:"presencePenalty,omitempty"`
 
 	// FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
 	// Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-	// +kubebuilder:validation:Pattern=`^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$`
+	// +kubebuilder:validation:Pattern=`^-?[0-2](\.\d+)?$`
 	// +optional
 	FrequencyPenalty string `json:"frequencyPenalty,omitempty"`
 

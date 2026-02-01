@@ -135,7 +135,7 @@ spec:
                     description: |-
                       FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   logitBias:
                     additionalProperties:
@@ -155,7 +155,7 @@ spec:
                     description: |-
                       PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   seed:
                     description: Seed for deterministic generation (where supported)
@@ -298,7 +298,7 @@ spec:
                     description: |-
                       FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   logitBias:
                     additionalProperties:
@@ -318,7 +318,7 @@ spec:
                     description: |-
                       PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   seed:
                     description: Seed for deterministic generation (where supported)
@@ -371,7 +371,7 @@ spec:
                     description: |-
                       FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   googleCachedContent:
                     description: |-
@@ -481,7 +481,7 @@ spec:
                     description: |-
                       PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   seed:
                     description: Seed for deterministic generation (where supported)
@@ -547,7 +547,7 @@ spec:
                     description: |-
                       FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   logProbs:
                     description: LogProbs
@@ -642,7 +642,7 @@ spec:
                     description: |-
                       PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
                       Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^(-2(\.0+)?|-1(\.\d+)?|0(\.0+)?|1(\.\d+)?|2(\.0+)?)$
+                    pattern: ^-?[0-2](\.\d+)?$
                     type: string
                   reasoningEffort:
                     description: ReasoningEffort controls the reasoning effort for
