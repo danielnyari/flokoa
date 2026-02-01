@@ -34,12 +34,14 @@ type ModelProviderConfig struct {
 
 // ModelParametersConfig contains the model parameters (from ModelConfig).
 type ModelParametersConfig struct {
-	Temperature   string   `json:"temperature,omitempty"`
-	MaxTokens     *int32   `json:"maxTokens,omitempty"`
-	TopP          string   `json:"topP,omitempty"`
-	TopK          *int32   `json:"topK,omitempty"`
-	StopSequences []string `json:"stopSequences,omitempty"`
-	Seed          *int64   `json:"seed,omitempty"`
+	Temperature      string   `json:"temperature,omitempty"`
+	MaxTokens        *int32   `json:"maxTokens,omitempty"`
+	TopP             string   `json:"topP,omitempty"`
+	TopK             *int32   `json:"topK,omitempty"`
+	PresencePenalty  string   `json:"presencePenalty,omitempty"`
+	FrequencyPenalty string   `json:"frequencyPenalty,omitempty"`
+	StopSequences    []string `json:"stopSequences,omitempty"`
+	Seed             *int64   `json:"seed,omitempty"`
 
 	// Provider-specific parameters
 	OpenAI    map[string]any `json:"openai,omitempty"`
@@ -96,12 +98,14 @@ func buildBaseConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.Mode
 
 		if baseParams != nil {
 			config.Parameters = &ModelParametersConfig{
-				Temperature:   baseParams.Temperature,
-				MaxTokens:     baseParams.MaxTokens,
-				TopP:          baseParams.TopP,
-				TopK:          baseParams.TopK,
-				StopSequences: baseParams.StopSequences,
-				Seed:          baseParams.Seed,
+				Temperature:      baseParams.Temperature,
+				MaxTokens:        baseParams.MaxTokens,
+				TopP:             baseParams.TopP,
+				TopK:             baseParams.TopK,
+				PresencePenalty:  baseParams.PresencePenalty,
+				FrequencyPenalty: baseParams.FrequencyPenalty,
+				StopSequences:    baseParams.StopSequences,
+				Seed:             baseParams.Seed,
 			}
 		}
 	}

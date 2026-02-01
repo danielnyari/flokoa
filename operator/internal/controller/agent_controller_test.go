@@ -3149,9 +3149,8 @@ var _ = Describe("Agent Controller", func() {
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(providerConfig.Parameters).NotTo(BeNil())
-					Expect(providerConfig.Parameters.OpenAI).NotTo(BeNil())
-					Expect(providerConfig.Parameters.OpenAI["frequencyPenalty"]).To(Equal("0.5"))
-					Expect(providerConfig.Parameters.OpenAI["presencePenalty"]).To(Equal("0.3"))
+					Expect(providerConfig.Parameters.FrequencyPenalty).To(Equal("0.5"))
+					Expect(providerConfig.Parameters.PresencePenalty).To(Equal("0.3"))
 				})
 
 				It("should include Anthropic thinking parameters from ModelConfig", func() {
