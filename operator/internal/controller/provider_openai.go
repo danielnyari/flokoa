@@ -64,7 +64,7 @@ func (h *OpenAIProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelCon
 		if openaiParams.OpenAIPromptCacheKey != "" {
 			params["promptCacheKey"] = openaiParams.OpenAIPromptCacheKey
 		}
-		if openaiParams.OpenAIPromptRetention {
+		if openaiParams.OpenAIPromptRetention != "" {
 			params["promptRetention"] = openaiParams.OpenAIPromptRetention
 		}
 		if openaiParams.ResponseFormat != nil {

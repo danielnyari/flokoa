@@ -91,30 +91,6 @@ spec:
                 - key
                 type: object
                 x-kubernetes-map-type: atomic
-              azureOpenAI:
-                description: Azure OpenAI-specific configuration
-                properties:
-                  apiVersion:
-                    default: "2024-02-01"
-                    description: APIVersion is the Azure OpenAI API version
-                    type: string
-                  deploymentName:
-                    description: DeploymentName is the name of the model deployment
-                    type: string
-                  endpoint:
-                    description: |-
-                      Endpoint is the Azure OpenAI resource endpoint
-                      e.g., "https://<resource-name>.openai.azure.com"
-                    type: string
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
-                required:
-                - deploymentName
-                - endpoint
-                type: object
               bedrock:
                 description: Bedrock-specific configuration
                 properties:
@@ -133,9 +109,42 @@ spec:
                   type: string
                 description: DefaultHeaders to include in all requests
                 type: object
-              gemini:
-                description: Gemini-specific configuration
+              google:
+                description: Google-specific configuration
                 properties:
+                  location:
+                    description: Location is the Google Cloud region (e.g., "us-central1",
+                      for Vertex AI)
+                    type: string
+                  project:
+                    description: Project is the Google Cloud project ID (for Vertex
+                      AI)
+                    type: string
+                  serviceAccountKeySecretRef:
+                    description: ServiceAccountKeySecretRef references a secret containing
+                      the service account JSON key
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                   timeoutSeconds:
                     default: 60
                     description: Timeout in seconds for API requests
@@ -146,19 +155,6 @@ spec:
                 description: Model is the name/identifier of the model (e.g., "gpt-4o",
                   "claude-sonnet-4-20250514")
                 type: string
-              ollama:
-                description: Ollama-specific configuration
-                properties:
-                  host:
-                    default: http://localhost:11434
-                    description: Host is the Ollama server address
-                    type: string
-                  options:
-                    additionalProperties:
-                      type: string
-                    description: Options are additional Ollama-specific options
-                    type: object
-                type: object
               openai:
                 description: OpenAI-specific configuration
                 properties:
@@ -179,11 +175,7 @@ spec:
                 enum:
                 - openai
                 - anthropic
-                - azure-openai
-                - ollama
-                - gemini
-                - gemini-vertex
-                - anthropic-vertex
+                - google
                 - bedrock
                 type: string
               tls:
@@ -223,45 +215,6 @@ spec:
                     description: UseSystemCAs includes system CA certificates in addition
                       to any custom CA
                     type: boolean
-                type: object
-              vertexAI:
-                description: Vertex AI-specific configuration (for gemini-vertex and
-                  anthropic-vertex)
-                properties:
-                  location:
-                    description: Location is the Google Cloud region (e.g., "us-central1")
-                    type: string
-                  project:
-                    description: Project is the Google Cloud project ID
-                    type: string
-                  serviceAccountKeySecretRef:
-                    description: ServiceAccountKeySecretRef references a secret containing
-                      the service account JSON key
-                    properties:
-                      key:
-                        description: The key of the secret to select from.  Must be
-                          a valid secret key.
-                        type: string
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                      optional:
-                        description: Specify whether the Secret or its key must be
-                          defined
-                        type: boolean
-                    required:
-                    - key
-                    type: object
-                    x-kubernetes-map-type: atomic
-                required:
-                - location
-                - project
                 type: object
             required:
             - model

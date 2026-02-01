@@ -171,15 +171,13 @@ type OpenAIChatModelParameters struct {
 	// +optional
 	OpenAIPromptCacheKey string `json:"openAIPromptCacheKey,omitempty"`
 
-
-	// +kubebuilder:validation:Enum=in_memory;24h
+	// OpenAIPromptRetention controls prompt caching retention
 	// +optional
-	OpenAIPromptRetention bool `json:"openAIPromptRetention,omitempty"`
+	OpenAIPromptRetention string `json:"openAIPromptRetention,omitempty"`
 
 	// ResponseFormat specifies the output format
 	// +optional
 	ResponseFormat *OpenAIResponseFormat `json:"responseFormat,omitempty"`
-
 }
 
 // OpenAIResponsesModelParameters extends OpenAIChatModelParameters for OpenAI Responses API
@@ -238,7 +236,6 @@ type OpenAIResponsesModelParameters struct {
 	// +optional
 	OpenAIIncludeRawAnnotations *bool `json:"openAIIncludeRawAnnotations,omitempty"`
 }
-
 
 // OpenAIResponseFormat specifies the response format for OpenAI models
 type OpenAIResponseFormat struct {
@@ -499,14 +496,12 @@ type AnthropicModelParameters struct {
 	// AnthropicCacheToolDefinitions adds cache_control to the last tool definition.
 	// When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
 	// See https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
-	// +kubebuilder:validation:Enum=true;false;5m;1h
 	// +optional
 	AnthropicCacheToolDefinitions string `json:"anthropicCacheToolDefinitions,omitempty"`
 
 	// AnthropicCacheInstructions adds cache_control to the last system prompt block.
 	// When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
 	// See https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
-	// +kubebuilder:validation:Enum=true;false;5m;1h
 	// +optional
 	AnthropicCacheInstructions string `json:"anthropicCacheInstructions,omitempty"`
 
@@ -515,7 +510,6 @@ type AnthropicModelParameters struct {
 	// When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
 	// Note: Uses 1 of Anthropic's 4 available cache points per request.
 	// See https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
-	// +kubebuilder:validation:Enum=true;false;5m;1h
 	// +optional
 	AnthropicCacheMessages string `json:"anthropicCacheMessages,omitempty"`
 
