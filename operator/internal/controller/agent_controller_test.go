@@ -2724,7 +2724,7 @@ var _ = Describe("Agent Controller", func() {
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(providerConfig.Provider).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
+					Expect(providerConfig.Provider.Type).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
 					Expect(providerConfig.Model).To(Equal("gpt-4o"))
 
 					By("Verifying ModelReady condition")
@@ -3192,7 +3192,7 @@ var _ = Describe("Agent Controller", func() {
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(providerConfig.Provider).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
+					Expect(providerConfig.Provider.Type).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
 					Expect(providerConfig.Model).To(Equal("gpt-4o"))
 					Expect(providerConfig.Parameters).NotTo(BeNil())
 					Expect(providerConfig.Parameters.Temperature).To(Equal("0.7"))
@@ -3428,11 +3428,10 @@ var _ = Describe("Agent Controller", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(providerConfig.Parameters).NotTo(BeNil())
 					Expect(providerConfig.Parameters.Anthropic).NotTo(BeNil())
-					Expect(providerConfig.Parameters.Anthropic["thinking"]).NotTo(BeNil())
-					thinkingConfig := providerConfig.Parameters.Anthropic["thinking"].(map[string]any)
-					Expect(thinkingConfig["type"]).To(Equal("enabled"))
-					// JSON unmarshals int32 as float64
-					Expect(thinkingConfig["budgetTokens"]).To(BeNumerically("==", 2048))
+					Expect(providerConfig.Parameters.Anthropic.Thinking).NotTo(BeNil())
+					Expect(providerConfig.Parameters.Anthropic.Thinking.Type).To(Equal(agentv1alpha1.ThinkingTypeEnabled))
+					Expect(providerConfig.Parameters.Anthropic.Thinking.BudgetTokens).NotTo(BeNil())
+					Expect(*providerConfig.Parameters.Anthropic.Thinking.BudgetTokens).To(Equal(int32(2048)))
 				})
 
 				It("should resolve Model from different namespace", func() {
@@ -3554,7 +3553,7 @@ var _ = Describe("Agent Controller", func() {
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(providerConfig.Provider).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
+					Expect(providerConfig.Provider.Type).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
 				})
 			})
 
@@ -3661,9 +3660,11 @@ var _ = Describe("Agent Controller", func() {
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(providerConfig.Config["baseURL"]).To(Equal("https://custom.openai.api.com/v1"))
-					Expect(providerConfig.Config["organizationID"]).To(Equal("org-12345"))
-					Expect(providerConfig.Config["timeoutSeconds"]).To(BeNumerically("==", 120))
+					Expect(providerConfig.Provider.OpenAI).NotTo(BeNil())
+					Expect(providerConfig.Provider.OpenAI.BaseURL).To(Equal("https://custom.openai.api.com/v1"))
+					Expect(providerConfig.Provider.OpenAI.OrganizationID).To(Equal("org-12345"))
+					Expect(providerConfig.Provider.OpenAI.TimeoutSeconds).NotTo(BeNil())
+					Expect(*providerConfig.Provider.OpenAI.TimeoutSeconds).To(Equal(int32(120)))
 
 					By("Verifying Deployment has env vars for OpenAI config")
 					deployment := &appsv1.Deployment{}
@@ -3783,8 +3784,10 @@ var _ = Describe("Agent Controller", func() {
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(providerConfig.Config["baseURL"]).To(Equal("https://custom.anthropic.api.com"))
-					Expect(providerConfig.Config["timeoutSeconds"]).To(BeNumerically("==", 90))
+					Expect(providerConfig.Provider.Anthropic).NotTo(BeNil())
+					Expect(providerConfig.Provider.Anthropic.BaseURL).To(Equal("https://custom.anthropic.api.com"))
+					Expect(providerConfig.Provider.Anthropic.TimeoutSeconds).NotTo(BeNil())
+					Expect(*providerConfig.Provider.Anthropic.TimeoutSeconds).To(Equal(int32(90)))
 
 					By("Verifying Deployment has ANTHROPIC_BASE_URL env var")
 					deployment := &appsv1.Deployment{}
@@ -3908,9 +3911,9 @@ var _ = Describe("Agent Controller", func() {
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
-					headers := providerConfig.Config["defaultHeaders"].(map[string]any)
-					Expect(headers["X-Custom-Header"]).To(Equal("custom-value"))
-					Expect(headers["X-Request-Source"]).To(Equal("flokoa"))
+					Expect(providerConfig.Provider.DefaultHeaders).NotTo(BeNil())
+					Expect(providerConfig.Provider.DefaultHeaders["X-Custom-Header"]).To(Equal("custom-value"))
+					Expect(providerConfig.Provider.DefaultHeaders["X-Request-Source"]).To(Equal("flokoa"))
 				})
 			})
 

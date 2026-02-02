@@ -487,7 +487,7 @@ func (r *AgentReconciler) reconcileModel(ctx context.Context, agent *agentv1alph
 	}
 
 	return &resolvedModelInfo{
-		provider:      resolvedConfig.Provider,
+		provider:      resolvedConfig.Provider.Type,
 		model:         resolvedConfig.Model,
 		configMapName: configMapName,
 		envVars:       resolvedConfig.EnvVars,

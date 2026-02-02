@@ -7,16 +7,20 @@ import (
 )
 
 // ResolvedModelConfig contains the resolved configuration for a model.
-// This is used to configure the agent deployment with the appropriate
-// environment variables, secrets, and non-sensitive config.
+// This is serialized to JSON and stored in a ConfigMap for the agent to consume.
 type ResolvedModelConfig struct {
-	// Provider is the model provider type
-	Provider agentv1alpha1.ProviderType `json:"provider"`
+	// Provider contains provider type and connection configuration
+	Provider ProviderConfig `json:"provider"`
 
 	// Model is the model identifier (e.g., "gpt-4o", "claude-sonnet-4-20250514")
 	Model string `json:"model"`
 
-	// ConfigMapName is the name of the ConfigMap containing non-sensitive model config
+	// Parameters contains all model parameters
+	Parameters *agentv1alpha1.ModelParameters `json:"parameters,omitempty"`
+
+	// Internal fields (not serialized to JSON)
+
+	// ConfigMapName is the name of the ConfigMap containing the model config
 	ConfigMapName string `json:"-"`
 
 	// EnvVars are non-secret environment variables to set on the container
@@ -24,30 +28,27 @@ type ResolvedModelConfig struct {
 
 	// SecretEnvVars are environment variables sourced from secrets
 	SecretEnvVars []corev1.EnvVar `json:"-"`
-
-	// Config contains provider-specific non-sensitive configuration (serialized to JSON)
-	Config map[string]any `json:"config,omitempty"`
-
-	// Parameters contains model parameters from Model
-	Parameters *ModelParametersConfig `json:"parameters,omitempty"`
 }
 
-// ModelParametersConfig contains the model parameters (from Model).
-type ModelParametersConfig struct {
-	Temperature      string   `json:"temperature,omitempty"`
-	MaxTokens        *int32   `json:"maxTokens,omitempty"`
-	TopP             string   `json:"topP,omitempty"`
-	TopK             *int32   `json:"topK,omitempty"`
-	PresencePenalty  string   `json:"presencePenalty,omitempty"`
-	FrequencyPenalty string   `json:"frequencyPenalty,omitempty"`
-	StopSequences    []string `json:"stopSequences,omitempty"`
-	Seed             *int64   `json:"seed,omitempty"`
+// ProviderConfig contains the provider type and connection configuration.
+// Only one of OpenAI, Anthropic, Google, or Bedrock will be set based on the Type.
+type ProviderConfig struct {
+	Type agentv1alpha1.ProviderType `json:"type"`
 
-	// Provider-specific parameters
-	OpenAI    map[string]any `json:"openai,omitempty"`
-	Anthropic map[string]any `json:"anthropic,omitempty"`
-	Google    map[string]any `json:"google,omitempty"`
-	Bedrock   map[string]any `json:"bedrock,omitempty"`
+	// OpenAI provider configuration (only set for OpenAI providers)
+	OpenAI *agentv1alpha1.OpenAIProviderSpec `json:"openai,omitempty"`
+
+	// Anthropic provider configuration (only set for Anthropic providers)
+	Anthropic *agentv1alpha1.AnthropicProviderSpec `json:"anthropic,omitempty"`
+
+	// Google provider configuration (only set for Google providers)
+	Google *agentv1alpha1.GoogleProviderSpec `json:"google,omitempty"`
+
+	// Bedrock provider configuration (only set for Bedrock providers)
+	Bedrock *agentv1alpha1.BedrockProviderSpec `json:"bedrock,omitempty"`
+
+	// DefaultHeaders from ModelProvider
+	DefaultHeaders map[string]string `json:"defaultHeaders,omitempty"`
 }
 
 // ProviderHandler defines the interface for provider-specific model configuration.
@@ -75,30 +76,27 @@ func GetProviderHandler(providerType agentv1alpha1.ProviderType) (ProviderHandle
 
 // buildBaseConfig creates the base ResolvedModelConfig with common fields.
 func buildBaseConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) *ResolvedModelConfig {
+	providerType := provider.GetProviderType()
+
 	config := &ResolvedModelConfig{
-		Provider: provider.GetProviderType(),
-		Model:    model.Spec.Model,
-		Config:   make(map[string]any),
+		Provider: ProviderConfig{
+			Type:           providerType,
+			DefaultHeaders: provider.Spec.DefaultHeaders,
+		},
+		Model:      model.Spec.Model,
+		Parameters: model.Spec.Parameters,
 	}
 
-	// Extract base model parameters from Model.Spec.Parameters
-	if model.Spec.Parameters != nil {
-		params := model.Spec.Parameters
-		config.Parameters = &ModelParametersConfig{
-			Temperature:      params.Temperature,
-			MaxTokens:        params.MaxTokens,
-			TopP:             params.TopP,
-			TopK:             params.TopK,
-			PresencePenalty:  params.PresencePenalty,
-			FrequencyPenalty: params.FrequencyPenalty,
-			StopSequences:    params.StopSequences,
-			Seed:             params.Seed,
-		}
-	}
-
-	// Add default headers if present in ModelProvider
-	if len(provider.Spec.DefaultHeaders) > 0 {
-		config.Config["defaultHeaders"] = provider.Spec.DefaultHeaders
+	// Set the appropriate provider spec based on type
+	switch providerType {
+	case agentv1alpha1.ProviderTypeOpenAI:
+		config.Provider.OpenAI = provider.Spec.OpenAI
+	case agentv1alpha1.ProviderTypeAnthropic:
+		config.Provider.Anthropic = provider.Spec.Anthropic
+	case agentv1alpha1.ProviderTypeGoogle:
+		config.Provider.Google = provider.Spec.Google
+	case agentv1alpha1.ProviderTypeBedrock:
+		config.Provider.Bedrock = provider.Spec.Bedrock
 	}
 
 	return config
