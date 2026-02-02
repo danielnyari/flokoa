@@ -171,17 +171,15 @@ type ToolRef struct {
 }
 
 // AgentModelRef specifies the model to use for the agent.
-// Exactly one of ModelRef or ConfigRef must be specified.
+// References a Model resource which defines the model name and parameters.
 type AgentModelRef struct {
-	// ModelRef references a Model resource directly.
-	// Uses default parameters for the model.
-	// +optional
-	ModelRef *NamespacedRef `json:"modelRef,omitempty"`
+	// Name of the Model resource.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 
-	// ConfigRef references a ModelConfig resource.
-	// Provides full control over model parameters (temperature, maxTokens, etc.).
+	// Namespace of the Model resource. Defaults to the Agent's namespace if not specified.
 	// +optional
-	ConfigRef *NamespacedRef `json:"configRef,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // NamespacedRef references a resource by name and optional namespace.

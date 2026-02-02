@@ -71,7 +71,7 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/finalizers,verbs=update
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttools,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models,verbs=get;list;watch
-// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=modelconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=modelproviders,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -413,7 +413,7 @@ func (r *AgentReconciler) reconcileAgentCardConfigMap(ctx context.Context, agent
 // resolvedModelInfo holds the resolved model configuration for use in deployment
 type resolvedModelInfo struct {
 	// provider is the model provider type
-	provider agentv1alpha1.ModelProvider
+	provider agentv1alpha1.ProviderType
 	// model is the model identifier
 	model string
 	// configMapName is the name of the ConfigMap containing the model config
@@ -425,7 +425,7 @@ type resolvedModelInfo struct {
 }
 
 // reconcileModel resolves the model reference and creates the model ConfigMap.
-// It handles both direct Model references and ModelConfig references.
+// It fetches the Model, then the ModelProvider, and builds the configuration.
 func (r *AgentReconciler) reconcileModel(ctx context.Context, agent *agentv1alpha1.Agent) (*resolvedModelInfo, error) {
 	logger := log.FromContext(ctx)
 
@@ -433,82 +433,70 @@ func (r *AgentReconciler) reconcileModel(ctx context.Context, agent *agentv1alph
 		return nil, nil
 	}
 
-	var model *agentv1alpha1.Model
-	var modelConfig *agentv1alpha1.ModelConfig
-
-	// Resolve the model reference
-	if agent.Spec.Model.ModelRef != nil {
-		// Direct Model reference
-		modelRef := agent.Spec.Model.ModelRef
-		namespace := modelRef.Namespace
-		if namespace == "" {
-			namespace = agent.Namespace
-		}
-
-		model = &agentv1alpha1.Model{}
-		if err := r.Get(ctx, types.NamespacedName{Name: modelRef.Name, Namespace: namespace}, model); err != nil {
-			return nil, fmt.Errorf("failed to get Model %s/%s: %w", namespace, modelRef.Name, err)
-		}
-		logger.Info("Resolved Model reference", "model", model.Name, "provider", model.Spec.Provider)
-
-	} else if agent.Spec.Model.ConfigRef != nil {
-		// ModelConfig reference - need to resolve the Model from it
-		configRef := agent.Spec.Model.ConfigRef
-		namespace := configRef.Namespace
-		if namespace == "" {
-			namespace = agent.Namespace
-		}
-
-		modelConfig = &agentv1alpha1.ModelConfig{}
-		if err := r.Get(ctx, types.NamespacedName{Name: configRef.Name, Namespace: namespace}, modelConfig); err != nil {
-			return nil, fmt.Errorf("failed to get ModelConfig %s/%s: %w", namespace, configRef.Name, err)
-		}
-
-		// Resolve the Model from ModelConfig
-		modelNamespace := modelConfig.Spec.ModelRef.Namespace
-		if modelNamespace == "" {
-			modelNamespace = modelConfig.Namespace
-		}
-
-		model = &agentv1alpha1.Model{}
-		if err := r.Get(ctx, types.NamespacedName{Name: modelConfig.Spec.ModelRef.Name, Namespace: modelNamespace}, model); err != nil {
-			return nil, fmt.Errorf("failed to get Model %s/%s from ModelConfig: %w", modelNamespace, modelConfig.Spec.ModelRef.Name, err)
-		}
-		logger.Info("Resolved ModelConfig reference", "modelConfig", modelConfig.Name, "model", model.Name, "provider", model.Spec.Provider)
-
-	} else {
-		return nil, fmt.Errorf("either modelRef or configRef must be specified")
+	// Resolve the Model reference
+	modelNamespace := agent.Spec.Model.Namespace
+	if modelNamespace == "" {
+		modelNamespace = agent.Namespace
 	}
 
+	model := &agentv1alpha1.Model{}
+	if err := r.Get(ctx, types.NamespacedName{Name: agent.Spec.Model.Name, Namespace: modelNamespace}, model); err != nil {
+		return nil, fmt.Errorf("failed to get Model %s/%s: %w", modelNamespace, agent.Spec.Model.Name, err)
+	}
+
+	// Check if Model is ready
+	if !model.Status.Ready {
+		return nil, fmt.Errorf("Model %s/%s is not ready", modelNamespace, model.Name)
+	}
+
+	// Resolve the ModelProvider from Model
+	providerNamespace := model.Spec.ProviderRef.Namespace
+	if providerNamespace == "" {
+		providerNamespace = model.Namespace
+	}
+
+	modelProvider := &agentv1alpha1.ModelProvider{}
+	if err := r.Get(ctx, types.NamespacedName{Name: model.Spec.ProviderRef.Name, Namespace: providerNamespace}, modelProvider); err != nil {
+		return nil, fmt.Errorf("failed to get ModelProvider %s/%s: %w", providerNamespace, model.Spec.ProviderRef.Name, err)
+	}
+
+	// Check if ModelProvider is ready
+	if !modelProvider.Status.Ready {
+		return nil, fmt.Errorf("ModelProvider %s/%s is not ready", providerNamespace, modelProvider.Name)
+	}
+
+	providerType := modelProvider.GetProviderType()
+	logger.Info("Resolved Model and ModelProvider", "model", model.Name, "modelName", model.Spec.Model, "provider", providerType, "modelProvider", modelProvider.Name)
+
 	// Get the provider handler
-	modelProviderHandler, ok := GetProviderHandler(model.Spec.Provider)
+	providerHandler, ok := GetProviderHandler(providerType)
 	if !ok {
-		return nil, fmt.Errorf("unsupported model provider: %s", model.Spec.Provider)
+		return nil, fmt.Errorf("unsupported model provider: %s", providerType)
 	}
 
 	// Build provider-specific configuration
-	modelProviderConfig, err := modelProviderHandler.BuildConfig(model, modelConfig)
+	resolvedConfig, err := providerHandler.BuildConfig(modelProvider, model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build provider config: %w", err)
 	}
 
 	// Create the model ConfigMap
-	configMapName, err := r.reconcileModelConfigMap(ctx, agent, modelProviderConfig)
+	configMapName, err := r.reconcileModelConfigMap(ctx, agent, resolvedConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile model ConfigMap: %w", err)
 	}
 
 	return &resolvedModelInfo{
-		provider:      modelProviderConfig.Provider,
-		model:         modelProviderConfig.Model,
+		provider:      resolvedConfig.Provider,
+		model:         resolvedConfig.Model,
 		configMapName: configMapName,
-		envVars:       modelProviderConfig.EnvVars,
-		secretEnvVars: modelProviderConfig.SecretEnvVars,
+		envVars:       resolvedConfig.EnvVars,
+		secretEnvVars: resolvedConfig.SecretEnvVars,
 	}, nil
 }
 
 // reconcileModelConfigMap creates or updates the ConfigMap containing the model configuration.
-func (r *AgentReconciler) reconcileModelConfigMap(ctx context.Context, agent *agentv1alpha1.Agent, config *ModelProviderConfig) (string, error) {
+func (r *AgentReconciler) reconcileModelConfigMap(ctx context.Context, agent *agentv1alpha1.Agent, config *ResolvedModelConfig) (string, error) {
 	configMapName := fmt.Sprintf("%s-model", agent.Name)
 
 	// Serialize the config to JSON

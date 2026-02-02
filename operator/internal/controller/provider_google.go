@@ -9,15 +9,15 @@ import (
 // GoogleProviderHandler handles Google/Gemini model configuration.
 type GoogleProviderHandler struct{}
 
-func (h *GoogleProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.ModelConfig) (*ModelProviderConfig, error) {
-	config := buildBaseConfig(model, modelConfig)
+func (h *GoogleProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error) {
+	config := buildBaseConfig(provider, model)
 
 	// Add API key as secret env var
-	addAPIKeyEnvVar(config, model.Spec.APIKeySecretRef, "GOOGLE_API_KEY")
+	addAPIKeyEnvVar(config, provider.Spec.APIKeySecretRef, "GOOGLE_API_KEY")
 
-	// Add Google-specific configuration
-	if model.Spec.Google != nil {
-		googleSpec := model.Spec.Google
+	// Add Google-specific provider configuration
+	if provider.Spec.Google != nil {
+		googleSpec := provider.Spec.Google
 
 		if googleSpec.TimeoutSeconds != nil {
 			config.Config["timeoutSeconds"] = *googleSpec.TimeoutSeconds
@@ -51,14 +51,14 @@ func (h *GoogleProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelCon
 		}
 	}
 
-	// Add Google-specific parameters from ModelConfig
-	if modelConfig != nil && modelConfig.Spec.Google != nil {
-		googleParams := modelConfig.Spec.Google
+	// Add Google-specific parameters from Model
+	if model.Spec.Parameters != nil && model.Spec.Parameters.Google != nil {
+		googleParams := model.Spec.Parameters.Google
 		params := make(map[string]any)
 
-		if len(googleParams.GoogleSafetySettings) > 0 {
-			safetySettings := make([]map[string]string, 0, len(googleParams.GoogleSafetySettings))
-			for _, s := range googleParams.GoogleSafetySettings {
+		if len(googleParams.SafetySettings) > 0 {
+			safetySettings := make([]map[string]string, 0, len(googleParams.SafetySettings))
+			for _, s := range googleParams.SafetySettings {
 				setting := map[string]string{
 					"category":  s.Category,
 					"threshold": s.Threshold,
@@ -71,30 +71,30 @@ func (h *GoogleProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelCon
 			params["safetySettings"] = safetySettings
 		}
 
-		if googleParams.GoogleThinkingConfig != nil {
+		if googleParams.ThinkingConfig != nil {
 			thinking := make(map[string]any)
-			if googleParams.GoogleThinkingConfig.IncludeThoughts != nil {
-				thinking["includeThoughts"] = *googleParams.GoogleThinkingConfig.IncludeThoughts
+			if googleParams.ThinkingConfig.IncludeThoughts != nil {
+				thinking["includeThoughts"] = *googleParams.ThinkingConfig.IncludeThoughts
 			}
-			if googleParams.GoogleThinkingConfig.ThinkingBudget != nil {
-				thinking["thinkingBudget"] = *googleParams.GoogleThinkingConfig.ThinkingBudget
+			if googleParams.ThinkingConfig.ThinkingBudget != nil {
+				thinking["thinkingBudget"] = *googleParams.ThinkingConfig.ThinkingBudget
 			}
-			if googleParams.GoogleThinkingConfig.ThinkingLevel != nil {
-				thinking["thinkingLevel"] = string(*googleParams.GoogleThinkingConfig.ThinkingLevel)
+			if googleParams.ThinkingConfig.ThinkingLevel != nil {
+				thinking["thinkingLevel"] = string(*googleParams.ThinkingConfig.ThinkingLevel)
 			}
 			params["thinkingConfig"] = thinking
 		}
 
-		if len(googleParams.GoogleLabels) > 0 {
-			params["labels"] = googleParams.GoogleLabels
+		if len(googleParams.Labels) > 0 {
+			params["labels"] = googleParams.Labels
 		}
 
-		if googleParams.GoogleVideoResolution != nil {
-			params["videoResolution"] = string(*googleParams.GoogleVideoResolution)
+		if googleParams.VideoResolution != nil {
+			params["videoResolution"] = string(*googleParams.VideoResolution)
 		}
 
-		if googleParams.GoogleCachedContent != "" {
-			params["cachedContent"] = googleParams.GoogleCachedContent
+		if googleParams.CachedContent != "" {
+			params["cachedContent"] = googleParams.CachedContent
 		}
 
 		if len(params) > 0 {

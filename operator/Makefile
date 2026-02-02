@@ -181,6 +181,9 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--input /tmp/agenttool_spec_schema.json \
 		--input-file-type jsonschema \
 		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+  		--allow-population-by-field-name \
 		--class-name AgentToolSpec \
 		--output $(PYTHON_MODELS_DIR)/agenttool.py
 	@rm /tmp/agenttool_spec_schema.json
@@ -193,10 +196,27 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--input /tmp/agentcard_schema.json \
 		--input-file-type jsonschema \
 		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+  		--allow-population-by-field-name \
 		--class-name AgentCard \
 		--output $(PYTHON_MODELS_DIR)/agentcard.py
 	@rm /tmp/agentcard_schema.json
-	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentcard.py"
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/model.py"
+		@yq eval '.spec.versions[0].schema.openAPIV3Schema.properties.spec' \
+		config/crd/bases/agent.flokoa.ai_models.yaml > /tmp/model_schema.json
+	@# Generate AgentCard Pydantic v2 models
+	@$(DATAMODEL_CODEGEN) \
+		--input /tmp/model_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+  		--allow-population-by-field-name \
+		--class-name Model \
+		--output $(PYTHON_MODELS_DIR)/model.py
+	@rm /tmp/model_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/model.py"
 
 ##@ Build
 

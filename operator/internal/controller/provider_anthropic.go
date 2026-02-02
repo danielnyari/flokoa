@@ -9,15 +9,15 @@ import (
 // AnthropicProviderHandler handles Anthropic model configuration.
 type AnthropicProviderHandler struct{}
 
-func (h *AnthropicProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.ModelConfig) (*ModelProviderConfig, error) {
-	config := buildBaseConfig(model, modelConfig)
+func (h *AnthropicProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error) {
+	config := buildBaseConfig(provider, model)
 
 	// Add API key as secret env var
-	addAPIKeyEnvVar(config, model.Spec.APIKeySecretRef, "ANTHROPIC_API_KEY")
+	addAPIKeyEnvVar(config, provider.Spec.APIKeySecretRef, "ANTHROPIC_API_KEY")
 
-	// Add Anthropic-specific configuration
-	if model.Spec.Anthropic != nil {
-		anthropicSpec := model.Spec.Anthropic
+	// Add Anthropic-specific provider configuration
+	if provider.Spec.Anthropic != nil {
+		anthropicSpec := provider.Spec.Anthropic
 
 		if anthropicSpec.BaseURL != "" {
 			config.Config["baseURL"] = anthropicSpec.BaseURL
@@ -32,44 +32,44 @@ func (h *AnthropicProviderHandler) BuildConfig(model *agentv1alpha1.Model, model
 		}
 	}
 
-	// Add Anthropic-specific parameters from ModelConfig
-	if modelConfig != nil && modelConfig.Spec.Anthropic != nil {
-		anthropicParams := modelConfig.Spec.Anthropic
+	// Add Anthropic-specific parameters from Model
+	if model.Spec.Parameters != nil && model.Spec.Parameters.Anthropic != nil {
+		anthropicParams := model.Spec.Parameters.Anthropic
 		params := make(map[string]any)
 
-		if anthropicParams.AnthropicMetadataUserID != "" {
-			params["metadataUserID"] = anthropicParams.AnthropicMetadataUserID
+		if anthropicParams.MetadataUserID != "" {
+			params["metadataUserID"] = anthropicParams.MetadataUserID
 		}
 
-		if anthropicParams.AnthropicThinking != nil {
+		if anthropicParams.Thinking != nil {
 			thinking := map[string]any{
-				"type": string(anthropicParams.AnthropicThinking.Type),
+				"type": string(anthropicParams.Thinking.Type),
 			}
-			if anthropicParams.AnthropicThinking.BudgetTokens != nil {
-				thinking["budgetTokens"] = *anthropicParams.AnthropicThinking.BudgetTokens
+			if anthropicParams.Thinking.BudgetTokens != nil {
+				thinking["budgetTokens"] = *anthropicParams.Thinking.BudgetTokens
 			}
 			params["thinking"] = thinking
 		}
 
-		if anthropicParams.AnthropicCacheToolDefinitions != "" {
-			params["cacheToolDefinitions"] = anthropicParams.AnthropicCacheToolDefinitions
+		if anthropicParams.CacheToolDefinitions != "" {
+			params["cacheToolDefinitions"] = anthropicParams.CacheToolDefinitions
 		}
 
-		if anthropicParams.AnthropicCacheInstructions != "" {
-			params["cacheInstructions"] = anthropicParams.AnthropicCacheInstructions
+		if anthropicParams.CacheInstructions != "" {
+			params["cacheInstructions"] = anthropicParams.CacheInstructions
 		}
 
-		if anthropicParams.AnthropicCacheMessages != "" {
-			params["cacheMessages"] = anthropicParams.AnthropicCacheMessages
+		if anthropicParams.CacheMessages != "" {
+			params["cacheMessages"] = anthropicParams.CacheMessages
 		}
 
-		if anthropicParams.AnthropicContainer != nil {
+		if anthropicParams.Container != nil {
 			container := make(map[string]any)
-			if anthropicParams.AnthropicContainer.ID != "" {
-				container["id"] = anthropicParams.AnthropicContainer.ID
+			if anthropicParams.Container.ID != "" {
+				container["id"] = anthropicParams.Container.ID
 			}
-			if anthropicParams.AnthropicContainer.Disabled != nil {
-				container["disabled"] = *anthropicParams.AnthropicContainer.Disabled
+			if anthropicParams.Container.Disabled != nil {
+				container["disabled"] = *anthropicParams.Container.Disabled
 			}
 			params["container"] = container
 		}

@@ -1,0 +1,13 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: openai-provider
+spec:
+  apiKeySecretRef:
+    name: openai-credentials
+    key: api-key
+  openai:
+    timeoutSeconds: 120

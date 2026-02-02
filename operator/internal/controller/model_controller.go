@@ -18,13 +18,35 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+)
+
+// Condition types for Model
+const (
+	ModelConditionTypeReady            = "Ready"
+	ModelConditionTypeProviderResolved = "ProviderResolved"
+	ModelConditionTypeValidated        = "Validated"
+)
+
+// Condition reasons for Model
+const (
+	ModelReasonResolved               = "Resolved"
+	ModelReasonProviderNotFound       = "ProviderNotFound"
+	ModelReasonProviderNotReady       = "ProviderNotReady"
+	ModelReasonValidated              = "Validated"
+	ModelReasonProviderParamsMismatch = "ProviderParametersMismatch"
+	ModelReasonMultipleProviderParams = "MultipleProviderParameters"
 )
 
 // ModelReconciler reconciles a Model object
@@ -36,22 +58,157 @@ type ModelReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models/finalizers,verbs=update
+// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=modelproviders,verbs=get;list;watch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Model object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
+// Reconcile validates the Model and resolves its referenced ModelProvider
 func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Fetch the Model
+	var model agentv1alpha1.Model
+	if err := r.Get(ctx, req.NamespacedName, &model); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
 
+	logger.Info("Reconciling Model", "name", model.Name, "model", model.Spec.Model)
+
+	// Resolve the ModelProvider
+	providerNamespace := model.Spec.ProviderRef.Namespace
+	if providerNamespace == "" {
+		providerNamespace = model.Namespace
+	}
+
+	var modelProvider agentv1alpha1.ModelProvider
+	providerKey := types.NamespacedName{
+		Name:      model.Spec.ProviderRef.Name,
+		Namespace: providerNamespace,
+	}
+
+	if err := r.Get(ctx, providerKey, &modelProvider); err != nil {
+		if errors.IsNotFound(err) {
+			r.setNotReady(&model, ModelReasonProviderNotFound,
+				fmt.Sprintf("ModelProvider %s/%s not found", providerNamespace, model.Spec.ProviderRef.Name))
+			if err := r.Status().Update(ctx, &model); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Check if ModelProvider is ready
+	if !modelProvider.Status.Ready {
+		r.setNotReady(&model, ModelReasonProviderNotReady,
+			fmt.Sprintf("ModelProvider %s/%s is not ready", providerNamespace, model.Spec.ProviderRef.Name))
+		if err := r.Status().Update(ctx, &model); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Validate that provider-specific parameters match the provider type
+	if err := r.validateProviderParams(&model, modelProvider.Status.Provider); err != nil {
+		r.setNotReady(&model, ModelReasonProviderParamsMismatch, err.Error())
+		if err := r.Status().Update(ctx, &model); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Update status with resolved provider info
+	model.Status.ResolvedProvider = &agentv1alpha1.ResolvedProviderInfo{
+		Provider:  modelProvider.Status.Provider,
+		Namespace: modelProvider.Namespace,
+		Name:      modelProvider.Name,
+	}
+	model.Status.Ready = true
+	model.Status.ObservedGeneration = model.Generation
+
+	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
+		Type:               ModelConditionTypeProviderResolved,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: model.Generation,
+		Reason:             ModelReasonResolved,
+		Message:            fmt.Sprintf("Provider resolved: %s (%s/%s)", modelProvider.Status.Provider, modelProvider.Namespace, modelProvider.Name),
+	})
+	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
+		Type:               ModelConditionTypeValidated,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: model.Generation,
+		Reason:             ModelReasonValidated,
+		Message:            "Model parameters validated",
+	})
+	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
+		Type:               ModelConditionTypeReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: model.Generation,
+		Reason:             ModelReasonResolved,
+		Message:            "Model is ready",
+	})
+
+	if err := r.Status().Update(ctx, &model); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Model reconciled successfully", "name", model.Name, "model", model.Spec.Model, "provider", modelProvider.Status.Provider)
 	return ctrl.Result{}, nil
+}
+
+// setNotReady sets the Model status to not ready with the given reason and message
+func (r *ModelReconciler) setNotReady(model *agentv1alpha1.Model, reason, message string) {
+	model.Status.Ready = false
+	model.Status.ObservedGeneration = model.Generation
+
+	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
+		Type:               ModelConditionTypeReady,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: model.Generation,
+		Reason:             reason,
+		Message:            message,
+	})
+}
+
+// validateProviderParams validates that provider-specific parameters match the provider type
+func (r *ModelReconciler) validateProviderParams(model *agentv1alpha1.Model, providerType agentv1alpha1.ProviderType) error {
+	if model.Spec.Parameters == nil {
+		return nil // No parameters to validate
+	}
+
+	params := model.Spec.Parameters
+
+	// Count how many provider-specific param blocks are set
+	count := 0
+	var setProvider agentv1alpha1.ProviderType
+
+	if params.OpenAI != nil {
+		count++
+		setProvider = agentv1alpha1.ProviderTypeOpenAI
+	}
+	if params.Anthropic != nil {
+		count++
+		setProvider = agentv1alpha1.ProviderTypeAnthropic
+	}
+	if params.Google != nil {
+		count++
+		setProvider = agentv1alpha1.ProviderTypeGoogle
+	}
+	if params.Bedrock != nil {
+		count++
+		setProvider = agentv1alpha1.ProviderTypeBedrock
+	}
+
+	if count > 1 {
+		return fmt.Errorf("only one provider-specific parameters block can be set, found %d", count)
+	}
+
+	if count == 1 && setProvider != providerType {
+		return fmt.Errorf("provider-specific parameters (%s) do not match the ModelProvider type (%s)", setProvider, providerType)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

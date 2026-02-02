@@ -30,45 +30,50 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-var _ = Describe("ModelConfig Controller", func() {
+var _ = Describe("ModelProvider Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "test-modelprovider"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
-		modelconfig := &agentv1alpha1.ModelConfig{}
+		modelprovider := &agentv1alpha1.ModelProvider{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind ModelConfig")
-			err := k8sClient.Get(ctx, typeNamespacedName, modelconfig)
+			By("creating the custom resource for the Kind ModelProvider")
+			err := k8sClient.Get(ctx, typeNamespacedName, modelprovider)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &agentv1alpha1.ModelConfig{
+				timeoutSeconds := int32(120)
+				resource := &agentv1alpha1.ModelProvider{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: agentv1alpha1.ModelProviderSpec{
+						OpenAI: &agentv1alpha1.OpenAIProviderSpec{
+							TimeoutSeconds: &timeoutSeconds,
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &agentv1alpha1.ModelConfig{}
+			resource := &agentv1alpha1.ModelProvider{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance ModelConfig")
+			By("Cleanup the specific resource instance ModelProvider")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &ModelConfigReconciler{
+			controllerReconciler := &ModelProviderReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
@@ -77,8 +82,12 @@ var _ = Describe("ModelConfig Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			// Verify status is updated
+			var updated agentv1alpha1.ModelProvider
+			Expect(k8sClient.Get(ctx, typeNamespacedName, &updated)).To(Succeed())
+			Expect(updated.Status.Provider).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
+			Expect(updated.Status.Ready).To(BeTrue())
 		})
 	})
 })

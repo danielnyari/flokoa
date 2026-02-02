@@ -4,12 +4,15 @@ metadata:
   labels:
     app.kubernetes.io/name: operator
     app.kubernetes.io/managed-by: kustomize
-  name: openai-gpt4o
+  name: gpt4o-creative
 spec:
-  provider: openai
   model: gpt-4o
-  apiKeySecretRef:
-    name: openai-credentials
-    key: api-key
-  openai:
-    timeoutSeconds: 120
+  providerRef:
+    name: openai-provider
+  parameters:
+    temperature: "0.9"
+    maxTokens: 4096
+    topP: "0.95"
+    openai:
+      frequencyPenalty: "0.5"
+      presencePenalty: "0.5"

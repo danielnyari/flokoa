@@ -9,15 +9,15 @@ import (
 // OpenAIProviderHandler handles OpenAI model configuration.
 type OpenAIProviderHandler struct{}
 
-func (h *OpenAIProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.ModelConfig) (*ModelProviderConfig, error) {
-	config := buildBaseConfig(model, modelConfig)
+func (h *OpenAIProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error) {
+	config := buildBaseConfig(provider, model)
 
 	// Add API key as secret env var
-	addAPIKeyEnvVar(config, model.Spec.APIKeySecretRef, "OPENAI_API_KEY")
+	addAPIKeyEnvVar(config, provider.Spec.APIKeySecretRef, "OPENAI_API_KEY")
 
-	// Add OpenAI-specific configuration
-	if model.Spec.OpenAI != nil {
-		openaiSpec := model.Spec.OpenAI
+	// Add OpenAI-specific provider configuration
+	if provider.Spec.OpenAI != nil {
+		openaiSpec := provider.Spec.OpenAI
 
 		if openaiSpec.BaseURL != "" {
 			config.Config["baseURL"] = openaiSpec.BaseURL
@@ -41,43 +41,61 @@ func (h *OpenAIProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelCon
 		}
 	}
 
-	// Add OpenAI-specific parameters from ModelConfig
-	if modelConfig != nil && modelConfig.Spec.OpenAI != nil {
-		openaiParams := modelConfig.Spec.OpenAI
+	// Add OpenAI-specific parameters from Model
+	if model.Spec.Parameters != nil && model.Spec.Parameters.OpenAI != nil {
+		openaiParams := model.Spec.Parameters.OpenAI
 		params := make(map[string]any)
 
-		if openaiParams.OpenAIReasoningEffort != nil {
-			params["reasoningEffort"] = string(*openaiParams.OpenAIReasoningEffort)
+		if openaiParams.ReasoningEffort != nil {
+			params["reasoningEffort"] = string(*openaiParams.ReasoningEffort)
 		}
-		if openaiParams.OpenAILogProbs != nil {
-			params["logProbs"] = *openaiParams.OpenAILogProbs
+		if openaiParams.LogProbs != nil {
+			params["logProbs"] = *openaiParams.LogProbs
 		}
-		if openaiParams.OpenAITopLogProbs != nil {
-			params["topLogProbs"] = *openaiParams.OpenAITopLogProbs
+		if openaiParams.TopLogProbs != nil {
+			params["topLogProbs"] = *openaiParams.TopLogProbs
 		}
-		if openaiParams.OpenAIUser != "" {
-			params["user"] = openaiParams.OpenAIUser
+		if openaiParams.User != "" {
+			params["user"] = openaiParams.User
 		}
-		if openaiParams.OpenAIServiceTier != "" {
-			params["serviceTier"] = openaiParams.OpenAIServiceTier
+		if openaiParams.ServiceTier != "" {
+			params["serviceTier"] = openaiParams.ServiceTier
 		}
-		if openaiParams.OpenAIPromptCacheKey != "" {
-			params["promptCacheKey"] = openaiParams.OpenAIPromptCacheKey
+		if openaiParams.PromptCacheKey != "" {
+			params["promptCacheKey"] = openaiParams.PromptCacheKey
 		}
-		if openaiParams.OpenAIPromptRetention != "" {
-			params["promptRetention"] = openaiParams.OpenAIPromptRetention
+		if openaiParams.PromptRetention != "" {
+			params["promptRetention"] = openaiParams.PromptRetention
 		}
-		if openaiParams.ResponseFormat != nil {
-			params["responseFormat"] = map[string]any{
-				"type": openaiParams.ResponseFormat.Type,
-			}
-			if openaiParams.ResponseFormat.JSONSchema != nil {
-				params["responseFormat"].(map[string]any)["jsonSchema"] = map[string]any{
-					"name":        openaiParams.ResponseFormat.JSONSchema.Name,
-					"description": openaiParams.ResponseFormat.JSONSchema.Description,
-					"strict":      openaiParams.ResponseFormat.JSONSchema.Strict,
-				}
-			}
+		if openaiParams.ReasoningGenerateSummary != nil {
+			params["reasoningGenerateSummary"] = *openaiParams.ReasoningGenerateSummary
+		}
+		if openaiParams.ReasoningSummary != nil {
+			params["reasoningSummary"] = *openaiParams.ReasoningSummary
+		}
+		if openaiParams.SendReasoningIDs != nil {
+			params["sendReasoningIDs"] = *openaiParams.SendReasoningIDs
+		}
+		if openaiParams.Truncation != nil {
+			params["truncation"] = *openaiParams.Truncation
+		}
+		if openaiParams.TextVerbosity != nil {
+			params["textVerbosity"] = *openaiParams.TextVerbosity
+		}
+		if openaiParams.PreviousResponseID != "" {
+			params["previousResponseID"] = openaiParams.PreviousResponseID
+		}
+		if openaiParams.IncludeCodeExecutionOutputs != nil {
+			params["includeCodeExecutionOutputs"] = *openaiParams.IncludeCodeExecutionOutputs
+		}
+		if openaiParams.IncludeWebSearchSources != nil {
+			params["includeWebSearchSources"] = *openaiParams.IncludeWebSearchSources
+		}
+		if openaiParams.IncludeFileSearchResults != nil {
+			params["includeFileSearchResults"] = *openaiParams.IncludeFileSearchResults
+		}
+		if openaiParams.IncludeRawAnnotations != nil {
+			params["includeRawAnnotations"] = *openaiParams.IncludeRawAnnotations
 		}
 
 		if len(params) > 0 {
