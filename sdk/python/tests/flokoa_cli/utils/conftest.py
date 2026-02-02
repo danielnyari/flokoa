@@ -87,3 +87,136 @@ def agent_card_with_none_capabilities():
             }
         ],
     }
+
+
+# Model config fixtures
+# These use PydanticAI's ModelSettings field names (snake_case, flat structure)
+
+
+@pytest.fixture
+def minimal_model_config_data():
+    """Minimal valid model config data with required fields only."""
+    return {
+        "provider": "openai",
+        "model": "gpt-4o",
+    }
+
+
+@pytest.fixture
+def openai_model_config_data():
+    """OpenAI model config with all fields populated."""
+    return {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "config": {
+            "baseURL": "https://api.openai.com/v1",
+            "organizationID": "org-12345",
+            "timeoutSeconds": 120,
+            "defaultHeaders": {
+                "X-Custom-Header": "custom-value",
+            },
+        },
+        "settings": {
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "top_p": 0.9,
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.3,
+        },
+    }
+
+
+@pytest.fixture
+def anthropic_model_config_data():
+    """Anthropic model config."""
+    return {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-20250514",
+        "config": {
+            "baseURL": "https://api.anthropic.com",
+            "timeoutSeconds": 90,
+        },
+        "settings": {
+            "temperature": 0.5,
+            "max_tokens": 8192,
+        },
+    }
+
+
+@pytest.fixture
+def ollama_model_config_data():
+    """Ollama model config for local models."""
+    return {
+        "provider": "ollama",
+        "model": "llama3.2",
+        "config": {
+            "host": "http://localhost:11434",
+        },
+        "settings": {
+            "temperature": 0.8,
+        },
+    }
+
+
+@pytest.fixture
+def azure_openai_model_config_data():
+    """Azure OpenAI model config."""
+    return {
+        "provider": "azure-openai",
+        "model": "gpt-4o",
+        "config": {
+            "endpoint": "https://myresource.openai.azure.com",
+            "deploymentName": "my-gpt4o-deployment",
+            "apiVersion": "2024-02-15-preview",
+        },
+        "settings": {
+            "temperature": 0.7,
+            "max_tokens": 4096,
+        },
+    }
+
+
+@pytest.fixture
+def gemini_model_config_data():
+    """Gemini model config."""
+    return {
+        "provider": "gemini",
+        "model": "gemini-1.5-pro",
+        "config": {
+            "timeoutSeconds": 60,
+        },
+        "settings": {
+            "temperature": 0.9,
+            "seed": 42,
+        },
+    }
+
+
+@pytest.fixture
+def model_config_with_settings():
+    """Model config with settings but no provider-specific config."""
+    return {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "settings": {
+            "temperature": 1.0,
+            "max_tokens": 2048,
+            "stop_sequences": ["END", "STOP"],
+            "seed": 42,
+        },
+    }
+
+
+@pytest.fixture
+def model_config_with_default_headers():
+    """Model config with default headers."""
+    return {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "config": {
+            "defaultHeaders": {
+                "X-Request-Source": "flokoa",
+                "X-Tenant-ID": "tenant-123",
+            },
+        },
+    }

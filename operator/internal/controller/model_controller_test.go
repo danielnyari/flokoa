@@ -32,43 +32,93 @@ import (
 
 var _ = Describe("Model Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const (
+			providerName = "test-provider"
+			modelName    = "test-model"
+		)
 
 		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+		providerNamespacedName := types.NamespacedName{
+			Name:      providerName,
+			Namespace: "default",
 		}
-		model := &agentv1alpha1.Model{}
+		modelNamespacedName := types.NamespacedName{
+			Name:      modelName,
+			Namespace: "default",
+		}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind Model")
-			err := k8sClient.Get(ctx, typeNamespacedName, model)
+			// Create ModelProvider first
+			var provider agentv1alpha1.ModelProvider
+			err := k8sClient.Get(ctx, providerNamespacedName, &provider)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &agentv1alpha1.Model{
+				timeoutSeconds := int32(120)
+				providerResource := &agentv1alpha1.ModelProvider{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
+						Name:      providerName,
+						Namespace: "default",
+					},
+					Spec: agentv1alpha1.ModelProviderSpec{
+						OpenAI: &agentv1alpha1.OpenAIProviderSpec{
+							TimeoutSeconds: &timeoutSeconds,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, providerResource)).To(Succeed())
+
+				// Reconcile the provider to set its status
+				providerReconciler := &ModelProviderReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+				_, err = providerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: providerNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			// Create Model
+			var model agentv1alpha1.Model
+			err = k8sClient.Get(ctx, modelNamespacedName, &model)
+			if err != nil && errors.IsNotFound(err) {
+				maxTokens := int32(4096)
+				modelResource := &agentv1alpha1.Model{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      modelName,
 						Namespace: "default",
 					},
 					Spec: agentv1alpha1.ModelSpec{
-						Provider: agentv1alpha1.ModelProviderOpenAI,
-						Model:    "gpt-4o",
+						Model: "gpt-4o",
+						ProviderRef: agentv1alpha1.ProviderRef{
+							Name: providerName,
+						},
+						Parameters: &agentv1alpha1.ModelParameters{
+							Temperature: "0.7",
+							MaxTokens:   &maxTokens,
+						},
 					},
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				Expect(k8sClient.Create(ctx, modelResource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &agentv1alpha1.Model{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+			// Cleanup Model
+			model := &agentv1alpha1.Model{}
+			err := k8sClient.Get(ctx, modelNamespacedName, model)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, model)).To(Succeed())
+			}
 
-			By("Cleanup the specific resource instance Model")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			// Cleanup ModelProvider
+			provider := &agentv1alpha1.ModelProvider{}
+			err = k8sClient.Get(ctx, providerNamespacedName, provider)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, provider)).To(Succeed())
+			}
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ModelReconciler{
@@ -77,11 +127,16 @@ var _ = Describe("Model Controller", func() {
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+				NamespacedName: modelNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			// Verify status is updated
+			var updated agentv1alpha1.Model
+			Expect(k8sClient.Get(ctx, modelNamespacedName, &updated)).To(Succeed())
+			Expect(updated.Status.Ready).To(BeTrue())
+			Expect(updated.Status.ResolvedProvider).NotTo(BeNil())
+			Expect(updated.Status.ResolvedProvider.Provider).To(Equal(agentv1alpha1.ProviderTypeOpenAI))
 		})
 	})
 })

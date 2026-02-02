@@ -15,11 +15,11 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.provider
-      name: Provider
-      type: string
     - jsonPath: .spec.model
       name: Model
+      type: string
+    - jsonPath: .status.resolvedProvider.provider
+      name: Provider
       type: string
     - jsonPath: .status.ready
       name: Ready
@@ -32,7 +32,7 @@ spec:
       openAPIV3Schema:
         description: |-
           Model is the Schema for the models API.
-          It defines an LLM model from a specific provider and how to connect to it.
+          It defines a specific LLM model with its parameters, referencing a ModelProvider for connection configuration.
         properties:
           apiVersion:
             description: |-
@@ -52,220 +52,429 @@ spec:
           metadata:
             type: object
           spec:
-            description: ModelSpec defines the desired state of Model
+            description: |-
+              ModelSpec defines the desired state of Model.
+              A Model represents a specific LLM model (e.g., gpt-4o, claude-sonnet-4-20250514) with its parameters.
             properties:
-              anthropic:
-                description: Anthropic-specific configuration
-                properties:
-                  baseURL:
-                    description: BaseURL overrides the default Anthropic API endpoint
-                    type: string
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
-                type: object
-              apiKeySecretRef:
-                description: |-
-                  APIKeySecretRef references a secret containing the API key
-                  The secret should have a key named "api-key" unless specified otherwise
-                properties:
-                  key:
-                    description: The key of the secret to select from.  Must be a
-                      valid secret key.
-                    type: string
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  optional:
-                    description: Specify whether the Secret or its key must be defined
-                    type: boolean
-                required:
-                - key
-                type: object
-                x-kubernetes-map-type: atomic
-              azureOpenAI:
-                description: Azure OpenAI-specific configuration
-                properties:
-                  apiVersion:
-                    default: "2024-02-01"
-                    description: APIVersion is the Azure OpenAI API version
-                    type: string
-                  deploymentName:
-                    description: DeploymentName is the name of the model deployment
-                    type: string
-                  endpoint:
-                    description: |-
-                      Endpoint is the Azure OpenAI resource endpoint
-                      e.g., "https://<resource-name>.openai.azure.com"
-                    type: string
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
-                required:
-                - deploymentName
-                - endpoint
-                type: object
-              bedrock:
-                description: Bedrock-specific configuration
-                properties:
-                  inferenceProfileARN:
-                    description: InferenceProfileARN is the ARN of the Bedrock inference
-                      profile to use
-                    type: string
-                  region:
-                    description: Region is the AWS region
-                    type: string
-                required:
-                - region
-                type: object
-              defaultHeaders:
-                additionalProperties:
-                  type: string
-                description: DefaultHeaders to include in all requests
-                type: object
-              gemini:
-                description: Gemini-specific configuration
-                properties:
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
-                type: object
               model:
                 description: Model is the name/identifier of the model (e.g., "gpt-4o",
                   "claude-sonnet-4-20250514")
+                minLength: 1
                 type: string
-              ollama:
-                description: Ollama-specific configuration
+              parameters:
+                description: Parameters contains base model parameters and optional
+                  provider-specific parameters
                 properties:
-                  host:
-                    default: http://localhost:11434
-                    description: Host is the Ollama server address
-                    type: string
-                  options:
+                  anthropic:
+                    description: Anthropic contains Anthropic-specific parameters
+                      (only set for Anthropic providers)
+                    properties:
+                      cacheInstructions:
+                        description: |-
+                          CacheInstructions adds cache_control to the last system prompt block
+                          When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
+                        type: string
+                      cacheMessages:
+                        description: |-
+                          CacheMessages adds a cache point to the last content block in the final user message
+                          When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
+                        type: string
+                      cacheToolDefinitions:
+                        description: |-
+                          CacheToolDefinitions adds cache_control to the last tool definition
+                          When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
+                        type: string
+                      container:
+                        description: Container configures container for multi-turn
+                          conversations
+                        properties:
+                          disabled:
+                            description: Disabled forces a fresh container (ignores
+                              any container_id from history)
+                            type: boolean
+                          id:
+                            description: ID is the container ID to use (e.g., "container_xxx")
+                            type: string
+                        type: object
+                      metadataUserID:
+                        description: MetadataUserID is an external identifier for
+                          the user associated with the request
+                        type: string
+                      thinking:
+                        description: |-
+                          Thinking determines whether the model should generate a thinking block
+                          See https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
+                        properties:
+                          budgetTokens:
+                            description: |-
+                              BudgetTokens is the maximum number of tokens for thinking (required when enabled)
+                              Must be >= 1024 and less than maxTokens
+                            format: int32
+                            minimum: 1024
+                            type: integer
+                          type:
+                            allOf:
+                            - enum:
+                              - enabled
+                              - disabled
+                            - enum:
+                              - enabled
+                              - disabled
+                            default: disabled
+                            description: Type enables or disables extended thinking
+                            type: string
+                        required:
+                        - type
+                        type: object
+                    type: object
+                  bedrock:
+                    description: Bedrock contains AWS Bedrock-specific parameters
+                      (only set for Bedrock providers)
+                    properties:
+                      additionalModelRequestFields:
+                        description: AdditionalModelRequestFields are additional model-specific
+                          parameters to include in requests
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      additionalModelResponseFieldsPaths:
+                        description: AdditionalModelResponseFieldsPaths are JSON paths
+                          to extract additional fields from model responses
+                        items:
+                          type: string
+                        type: array
+                      cacheInstructions:
+                        description: CacheInstructions adds a cache point after the
+                          system prompt blocks
+                        type: boolean
+                      cacheMessages:
+                        description: CacheMessages adds a cache point to the last
+                          content block in the final user message
+                        type: boolean
+                      cacheToolDefinitions:
+                        description: CacheToolDefinitions adds a cache point after
+                          the last tool definition
+                        type: boolean
+                      guardrailConfig:
+                        description: GuardrailConfig defines content moderation and
+                          safety settings
+                        properties:
+                          guardrailIdentifier:
+                            description: GuardrailIdentifier is the unique identifier
+                              of the guardrail
+                            type: string
+                          guardrailVersion:
+                            description: GuardrailVersion is the version of the guardrail
+                            type: string
+                          trace:
+                            description: Trace controls guardrail tracing level
+                            enum:
+                            - disabled
+                            - enabled
+                            - enabled_full
+                            type: string
+                        type: object
+                      performanceConfiguration:
+                        description: PerformanceConfiguration defines performance
+                          optimization settings
+                        properties:
+                          latency:
+                            description: Latency controls performance/cost tradeoff
+                            enum:
+                            - optimized
+                            - standard
+                            type: string
+                        type: object
+                      promptVariables:
+                        additionalProperties:
+                          type: string
+                        description: PromptVariables are variables for substitution
+                          into prompt templates
+                        type: object
+                      requestMetadata:
+                        additionalProperties:
+                          type: string
+                        description: RequestMetadata is additional metadata to attach
+                          to Bedrock API requests
+                        type: object
+                      serviceTier:
+                        description: ServiceTier controls performance and cost optimization
+                        properties:
+                          type:
+                            description: Type specifies the service tier type
+                            enum:
+                            - default
+                            - flex
+                            - priority
+                            - reserved
+                            type: string
+                        type: object
+                    type: object
+                  extraBody:
+                    description: ExtraBody to include in all requests
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  extraHeaders:
                     additionalProperties:
                       type: string
-                    description: Options are additional Ollama-specific options
+                    description: ExtraHeaders to include in all requests
                     type: object
-                type: object
-              openai:
-                description: OpenAI-specific configuration
-                properties:
-                  baseURL:
-                    description: BaseURL overrides the default OpenAI API endpoint
-                    type: string
-                  organizationID:
-                    description: Organization ID for OpenAI API requests
-                    type: string
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
-                type: object
-              provider:
-                description: Provider specifies the LLM provider
-                enum:
-                - openai
-                - anthropic
-                - azure-openai
-                - ollama
-                - gemini
-                - gemini-vertex
-                - anthropic-vertex
-                - bedrock
-                type: string
-              tls:
-                description: TLS configuration for custom endpoints
-                properties:
-                  caSecretRef:
+                  frequencyPenalty:
                     description: |-
-                      CASecretRef references a secret containing a custom CA certificate
-                      The secret should have a key named "ca.crt"
+                      FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
+                    pattern: ^-?[0-2](\.\d+)?$
+                    type: string
+                  google:
+                    description: Google contains Google/Gemini-specific parameters
+                      (only set for Google providers)
                     properties:
-                      key:
-                        description: The key of the secret to select from.  Must be
-                          a valid secret key.
+                      cachedContent:
+                        description: CachedContent is the name of the cached content
+                          to use for the model
                         type: string
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: Labels are user-defined metadata to break down
+                          billed charges (Vertex AI only)
+                        type: object
+                      safetySettings:
+                        description: SafetySettings configures content safety filters
+                        items:
+                          description: GoogleSafetySetting defines a safety setting
+                            for Google/Gemini models
+                          properties:
+                            category:
+                              description: Category is the harm category
+                              enum:
+                              - HARM_CATEGORY_HARASSMENT
+                              - HARM_CATEGORY_HATE_SPEECH
+                              - HARM_CATEGORY_SEXUALLY_EXPLICIT
+                              - HARM_CATEGORY_DANGEROUS_CONTENT
+                              - HARM_CATEGORY_CIVIC_INTEGRITY
+                              type: string
+                            method:
+                              description: Method specifies if the threshold is used
+                                for probability or severity score
+                              enum:
+                              - SEVERITY
+                              - PROBABILITY
+                              type: string
+                            threshold:
+                              description: Threshold is the blocking threshold
+                              enum:
+                              - BLOCK_NONE
+                              - BLOCK_LOW_AND_ABOVE
+                              - BLOCK_MEDIUM_AND_ABOVE
+                              - BLOCK_ONLY_HIGH
+                              - "OFF"
+                              type: string
+                          required:
+                          - category
+                          - threshold
+                          type: object
+                        type: array
+                      thinkingConfig:
+                        description: ThinkingConfig configures the thinking behavior
+                          for the model
+                        properties:
+                          includeThoughts:
+                            description: IncludeThoughts indicates whether to include
+                              thoughts in the response
+                            type: boolean
+                          thinkingBudget:
+                            description: ThinkingBudget is the thinking budget in
+                              tokens (0=DISABLED, -1=AUTOMATIC)
+                            format: int32
+                            type: integer
+                          thinkingLevel:
+                            description: ThinkingLevel controls the amount of thinking
+                              tokens the model should generate
+                            enum:
+                            - unspecified
+                            - minimal
+                            - low
+                            - medium
+                            - high
+                            type: string
+                        type: object
+                      videoResolution:
+                        description: VideoResolution specifies the video resolution
+                          to use for the model
+                        enum:
+                        - unspecified
+                        - low
+                        - medium
+                        - high
                         type: string
-                      optional:
-                        description: Specify whether the Secret or its key must be
-                          defined
-                        type: boolean
-                    required:
-                    - key
                     type: object
-                    x-kubernetes-map-type: atomic
-                  insecureSkipVerify:
-                    description: InsecureSkipVerify disables TLS certificate verification
+                  logitBias:
+                    additionalProperties:
+                      format: int32
+                      type: integer
+                    description: LogitBias modifies the likelihood of specified tokens
+                      appearing
+                    type: object
+                  maxTokens:
+                    description: MaxTokens is the maximum number of tokens to generate
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  openai:
+                    description: OpenAI contains OpenAI-specific parameters (only
+                      set for OpenAI providers)
+                    properties:
+                      includeCodeExecutionOutputs:
+                        description: IncludeCodeExecutionOutputs includes code execution
+                          results in the response
+                        type: boolean
+                      includeFileSearchResults:
+                        description: IncludeFileSearchResults includes file search
+                          results in the response
+                        type: boolean
+                      includeRawAnnotations:
+                        description: IncludeRawAnnotations includes raw annotations
+                          in the response
+                        type: boolean
+                      includeWebSearchSources:
+                        description: IncludeWebSearchSources includes web search results
+                          in the response
+                        type: boolean
+                      logProbs:
+                        description: LogProbs enables returning log probabilities
+                        type: boolean
+                      previousResponseID:
+                        description: |-
+                          PreviousResponseID is the ID of a previous response to continue from
+                          When set to "auto", automatically uses the most recent provider_response_id
+                        type: string
+                      promptCacheKey:
+                        description: PromptCacheKey is the key for prompt caching
+                        type: string
+                      promptRetention:
+                        description: PromptRetention controls prompt caching retention
+                        type: string
+                      reasoningEffort:
+                        description: ReasoningEffort controls the reasoning effort
+                          for reasoning models (o1, o3, etc.)
+                        enum:
+                        - none
+                        - minimal
+                        - low
+                        - medium
+                        - high
+                        - xhigh
+                        type: string
+                      reasoningGenerateSummary:
+                        description: ReasoningGenerateSummary controls reasoning summary
+                          generation
+                        enum:
+                        - detailed
+                        - concise
+                        type: string
+                      reasoningSummary:
+                        description: ReasoningSummary controls reasoning summary format
+                        enum:
+                        - detailed
+                        - concise
+                        - auto
+                        type: string
+                      sendReasoningIDs:
+                        description: SendReasoningIDs enables sending reasoning IDs
+                        type: boolean
+                      serviceTier:
+                        description: ServiceTier specifies the service tier for requests
+                        enum:
+                        - auto
+                        - default
+                        - flex
+                        - priority
+                        type: string
+                      textVerbosity:
+                        description: TextVerbosity controls text verbosity level
+                        enum:
+                        - low
+                        - medium
+                        - high
+                        type: string
+                      topLogProbs:
+                        description: TopLogProbs specifies the number of top log probabilities
+                          to return
+                        format: int32
+                        type: integer
+                      truncation:
+                        description: Truncation controls response truncation
+                        enum:
+                        - disabled
+                        - auto
+                        type: string
+                      user:
+                        description: User is the user identifier associated with the
+                          requests
+                        type: string
+                    type: object
+                  parallelToolCalls:
+                    description: ParallelToolCalls enables parallel tool calling where
+                      supported
                     type: boolean
-                  useSystemCAs:
-                    default: true
-                    description: UseSystemCAs includes system CA certificates in addition
-                      to any custom CA
-                    type: boolean
+                  presencePenalty:
+                    description: |-
+                      PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
+                    pattern: ^-?[0-2](\.\d+)?$
+                    type: string
+                  seed:
+                    description: Seed for deterministic generation (where supported)
+                    format: int64
+                    type: integer
+                  stopSequences:
+                    description: StopSequences are sequences where the model will
+                      stop generating
+                    items:
+                      type: string
+                    type: array
+                  temperature:
+                    description: |-
+                      Temperature controls randomness in the output (0.0 to 2.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.7", "1.0")
+                    pattern: ^(0(\.\d+)?|1(\.0+)?|2(\.0+)?)$
+                    type: string
+                  timeOut:
+                    description: TimeOut in seconds for the model response
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  topK:
+                    description: TopK limits the number of tokens to consider for
+                      each step
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  topP:
+                    description: |-
+                      TopP controls nucleus sampling (0.0 to 1.0)
+                      Specified as a string to avoid floating point issues (e.g., "0.9", "0.95")
+                    pattern: ^(0(\.\d+)?|1(\.0+)?)$
+                    type: string
                 type: object
-              vertexAI:
-                description: Vertex AI-specific configuration (for gemini-vertex and
-                  anthropic-vertex)
+              providerRef:
+                description: ProviderRef references the ModelProvider resource that
+                  defines the provider configuration
                 properties:
-                  location:
-                    description: Location is the Google Cloud region (e.g., "us-central1")
+                  name:
+                    description: Name of the ModelProvider resource
+                    minLength: 1
                     type: string
-                  project:
-                    description: Project is the Google Cloud project ID
+                  namespace:
+                    description: Namespace of the ModelProvider (defaults to Model's
+                      namespace)
                     type: string
-                  serviceAccountKeySecretRef:
-                    description: ServiceAccountKeySecretRef references a secret containing
-                      the service account JSON key
-                    properties:
-                      key:
-                        description: The key of the secret to select from.  Must be
-                          a valid secret key.
-                        type: string
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                      optional:
-                        description: Specify whether the Secret or its key must be
-                          defined
-                        type: boolean
-                    required:
-                    - key
-                    type: object
-                    x-kubernetes-map-type: atomic
                 required:
-                - location
-                - project
+                - name
                 type: object
             required:
             - model
-            - provider
+            - providerRef
             type: object
           status:
             description: ModelStatus defines the observed state of Model
@@ -334,10 +543,24 @@ spec:
               ready:
                 description: Ready indicates if the model is ready to be used
                 type: boolean
-              secretHash:
-                description: SecretHash is a hash of the referenced secrets for change
-                  detection
-                type: string
+              resolvedProvider:
+                description: ResolvedProvider contains the resolved provider information
+                properties:
+                  name:
+                    description: Name of the referenced ModelProvider
+                    type: string
+                  namespace:
+                    description: Namespace of the referenced ModelProvider
+                    type: string
+                  provider:
+                    description: Provider is the resolved provider type
+                    enum:
+                    - openai
+                    - anthropic
+                    - google
+                    - bedrock
+                    type: string
+                type: object
             type: object
         type: object
     served: true

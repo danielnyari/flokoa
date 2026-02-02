@@ -22,7 +22,7 @@ rules:
   resources:
   - agents
   - agenttools
-  - modelconfigs
+  - modelproviders
   - models
   verbs:
   - create
@@ -37,7 +37,7 @@ rules:
   resources:
   - agents/finalizers
   - agenttools/finalizers
-  - modelconfigs/finalizers
+  - modelproviders/finalizers
   - models/finalizers
   verbs:
   - update
@@ -46,7 +46,7 @@ rules:
   resources:
   - agents/status
   - agenttools/status
-  - modelconfigs/status
+  - modelproviders/status
   - models/status
   verbs:
   - get

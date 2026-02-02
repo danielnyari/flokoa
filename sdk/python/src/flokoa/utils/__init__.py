@@ -4,12 +4,13 @@ from glob import glob
 
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
-from flokoa.types import ToolDefinition
+from flokoa.types import ModelConfig, ToolDefinition
 from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
 from flokoa.types.agenttool import AgentToolSpec
 
 TOOLS_PATH = "/etc/flokoa/tools/"
 AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
+MODEL_CONFIG_PATH = "/etc/flokoa/model.json"
 
 
 def load_agent_card(url: str | None = None) -> AgentCard | None:
@@ -104,3 +105,32 @@ def load_tools() -> list[ToolDefinition]:
             definitions.append(tool_definition)
 
     return definitions
+
+
+def load_model_config() -> ModelConfig | None:
+    """Load model configuration from /etc/flokoa/model.json.
+
+    Returns:
+        ModelConfig if the file exists, None otherwise.
+
+    The configuration maps to PydanticAI's provider/model architecture.
+    See ModelConfig docstring for detailed usage examples.
+
+    Example:
+        from pydantic_ai import Agent
+        from flokoa.utils import load_model_config
+
+        config = load_model_config()
+        if config:
+            agent = Agent(config.get_model_name(), model_settings=config.settings)
+
+    For local development without the operator, this function returns None,
+    allowing the agent to use its default model configuration.
+    """
+    if not os.path.exists(MODEL_CONFIG_PATH):
+        return None
+
+    with open(MODEL_CONFIG_PATH) as f:
+        config_data = json.load(f)
+
+    return ModelConfig.model_validate(config_data)

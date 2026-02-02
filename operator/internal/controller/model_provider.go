@@ -6,17 +6,21 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// ModelProviderConfig contains the resolved configuration for a model provider.
-// This is used to configure the agent deployment with the appropriate
-// environment variables, secrets, and non-sensitive config.
-type ModelProviderConfig struct {
-	// Provider is the model provider type
-	Provider agentv1alpha1.ModelProvider `json:"provider"`
+// ResolvedModelConfig contains the resolved configuration for a model.
+// This is serialized to JSON and stored in a ConfigMap for the agent to consume.
+type ResolvedModelConfig struct {
+	// Provider contains provider type and connection configuration
+	Provider ProviderConfig `json:"provider"`
 
 	// Model is the model identifier (e.g., "gpt-4o", "claude-sonnet-4-20250514")
 	Model string `json:"model"`
 
-	// ConfigMapName is the name of the ConfigMap containing non-sensitive model config
+	// Parameters contains all model parameters
+	Parameters *agentv1alpha1.ModelParameters `json:"parameters,omitempty"`
+
+	// Internal fields (not serialized to JSON)
+
+	// ConfigMapName is the name of the ConfigMap containing the model config
 	ConfigMapName string `json:"-"`
 
 	// EnvVars are non-secret environment variables to set on the container
@@ -24,86 +28,82 @@ type ModelProviderConfig struct {
 
 	// SecretEnvVars are environment variables sourced from secrets
 	SecretEnvVars []corev1.EnvVar `json:"-"`
-
-	// Config contains provider-specific non-sensitive configuration (serialized to JSON)
-	Config map[string]any `json:"config,omitempty"`
-
-	// Parameters contains model parameters from ModelConfig (if used)
-	Parameters *ModelParametersConfig `json:"parameters,omitempty"`
 }
 
-// ModelParametersConfig contains the model parameters (from ModelConfig).
-type ModelParametersConfig struct {
-	Temperature   string   `json:"temperature,omitempty"`
-	MaxTokens     *int32   `json:"maxTokens,omitempty"`
-	TopP          string   `json:"topP,omitempty"`
-	TopK          *int32   `json:"topK,omitempty"`
-	StopSequences []string `json:"stopSequences,omitempty"`
-	Seed          *int64   `json:"seed,omitempty"`
+// ProviderConfig contains the provider type and connection configuration.
+// Only one of OpenAI, Anthropic, Google, or Bedrock will be set based on the Type.
+type ProviderConfig struct {
+	Type agentv1alpha1.ProviderType `json:"type"`
 
-	// Provider-specific parameters
-	OpenAI    map[string]any `json:"openai,omitempty"`
-	Anthropic map[string]any `json:"anthropic,omitempty"`
-	Gemini    map[string]any `json:"gemini,omitempty"`
+	// OpenAI provider configuration (only set for OpenAI providers)
+	OpenAI *agentv1alpha1.OpenAIProviderSpec `json:"openai,omitempty"`
+
+	// Anthropic provider configuration (only set for Anthropic providers)
+	Anthropic *agentv1alpha1.AnthropicProviderSpec `json:"anthropic,omitempty"`
+
+	// Google provider configuration (only set for Google providers)
+	Google *agentv1alpha1.GoogleProviderSpec `json:"google,omitempty"`
+
+	// Bedrock provider configuration (only set for Bedrock providers)
+	Bedrock *agentv1alpha1.BedrockProviderSpec `json:"bedrock,omitempty"`
+
+	// DefaultHeaders from ModelProvider
+	DefaultHeaders map[string]string `json:"defaultHeaders,omitempty"`
 }
 
-// ModelProviderHandler defines the interface for provider-specific model configuration.
+// ProviderHandler defines the interface for provider-specific model configuration.
 // Each provider implements this interface to handle its specific requirements.
-type ModelProviderHandler interface {
+type ProviderHandler interface {
 	// BuildConfig builds the provider-specific configuration.
-	// Returns the non-sensitive config map and any environment variables needed.
-	BuildConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.ModelConfig) (*ModelProviderConfig, error)
+	// Takes the ModelProvider (connection config) and Model (model + parameters).
+	// Returns the resolved config map and any environment variables needed.
+	BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error)
 }
 
-// modelProviderRegistry maps providers to their handlers
-var modelProviderRegistry = map[agentv1alpha1.ModelProvider]ModelProviderHandler{
-	agentv1alpha1.ModelProviderOpenAI:          &OpenAIProviderHandler{},
-	agentv1alpha1.ModelProviderAnthropic:       &AnthropicProviderHandler{},
-	agentv1alpha1.ModelProviderAzureOpenAI:     &AzureOpenAIProviderHandler{},
-	agentv1alpha1.ModelProviderOllama:          &OllamaProviderHandler{},
-	agentv1alpha1.ModelProviderGemini:          &GeminiProviderHandler{},
-	agentv1alpha1.ModelProviderGeminiVertex:    &VertexAIProviderHandler{},
-	agentv1alpha1.ModelProviderAnthropicVertex: &AnthropicVertexProviderHandler{},
-	agentv1alpha1.ModelProviderBedrock:         &BedrockProviderHandler{},
+// providerRegistry maps providers to their handlers
+var providerRegistry = map[agentv1alpha1.ProviderType]ProviderHandler{
+	agentv1alpha1.ProviderTypeOpenAI:    &OpenAIProviderHandler{},
+	agentv1alpha1.ProviderTypeAnthropic: &AnthropicProviderHandler{},
+	agentv1alpha1.ProviderTypeGoogle:    &GoogleProviderHandler{},
+	agentv1alpha1.ProviderTypeBedrock:   &BedrockProviderHandler{},
 }
 
-// GetProviderHandler returns the handler for the given provider.
-func GetProviderHandler(provider agentv1alpha1.ModelProvider) (ModelProviderHandler, bool) {
-	handler, ok := modelProviderRegistry[provider]
+// GetProviderHandler returns the handler for the given provider type.
+func GetProviderHandler(providerType agentv1alpha1.ProviderType) (ProviderHandler, bool) {
+	handler, ok := providerRegistry[providerType]
 	return handler, ok
 }
 
-// buildBaseConfig creates the base ModelProviderConfig with common fields.
-func buildBaseConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.ModelConfig) *ModelProviderConfig {
-	config := &ModelProviderConfig{
-		Provider: model.Spec.Provider,
-		Model:    model.Spec.Model,
-		Config:   make(map[string]any),
+// buildBaseConfig creates the base ResolvedModelConfig with common fields.
+func buildBaseConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) *ResolvedModelConfig {
+	providerType := provider.GetProviderType()
+
+	config := &ResolvedModelConfig{
+		Provider: ProviderConfig{
+			Type:           providerType,
+			DefaultHeaders: provider.Spec.DefaultHeaders,
+		},
+		Model:      model.Spec.Model,
+		Parameters: model.Spec.Parameters,
 	}
 
-	// Add model parameters if ModelConfig is provided
-	if modelConfig != nil && modelConfig.Spec.Parameters != nil {
-		params := modelConfig.Spec.Parameters
-		config.Parameters = &ModelParametersConfig{
-			Temperature:   params.Temperature,
-			MaxTokens:     params.MaxTokens,
-			TopP:          params.TopP,
-			TopK:          params.TopK,
-			StopSequences: params.StopSequences,
-			Seed:          params.Seed,
-		}
-	}
-
-	// Add default headers if present
-	if len(model.Spec.DefaultHeaders) > 0 {
-		config.Config["defaultHeaders"] = model.Spec.DefaultHeaders
+	// Set the appropriate provider spec based on type
+	switch providerType {
+	case agentv1alpha1.ProviderTypeOpenAI:
+		config.Provider.OpenAI = provider.Spec.OpenAI
+	case agentv1alpha1.ProviderTypeAnthropic:
+		config.Provider.Anthropic = provider.Spec.Anthropic
+	case agentv1alpha1.ProviderTypeGoogle:
+		config.Provider.Google = provider.Spec.Google
+	case agentv1alpha1.ProviderTypeBedrock:
+		config.Provider.Bedrock = provider.Spec.Bedrock
 	}
 
 	return config
 }
 
 // addAPIKeyEnvVar adds the API key secret reference as an environment variable.
-func addAPIKeyEnvVar(config *ModelProviderConfig, secretRef *corev1.SecretKeySelector, envVarName string) {
+func addAPIKeyEnvVar(config *ResolvedModelConfig, secretRef *corev1.SecretKeySelector, envVarName string) {
 	if secretRef == nil {
 		return
 	}

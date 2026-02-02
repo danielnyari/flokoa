@@ -9,21 +9,18 @@ import (
 // BedrockProviderHandler handles AWS Bedrock model configuration.
 type BedrockProviderHandler struct{}
 
-func (h *BedrockProviderHandler) BuildConfig(model *agentv1alpha1.Model, modelConfig *agentv1alpha1.ModelConfig) (*ModelProviderConfig, error) {
-	config := buildBaseConfig(model, modelConfig)
+func (h *BedrockProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error) {
+	config := buildBaseConfig(provider, model)
 
-	// Add Bedrock-specific configuration
-	if model.Spec.Bedrock != nil {
-		bedrockSpec := model.Spec.Bedrock
+	// Add Bedrock-specific environment variables for SDK compatibility
+	if provider.Spec.Bedrock != nil {
+		bedrockSpec := provider.Spec.Bedrock
 
-		config.Config["region"] = bedrockSpec.Region
-		config.EnvVars = append(config.EnvVars, corev1.EnvVar{
-			Name:  "AWS_REGION",
-			Value: bedrockSpec.Region,
-		})
-
-		if bedrockSpec.InferenceProfileARN != "" {
-			config.Config["inferenceProfileARN"] = bedrockSpec.InferenceProfileARN
+		if bedrockSpec.Region != "" {
+			config.EnvVars = append(config.EnvVars, corev1.EnvVar{
+				Name:  "AWS_REGION",
+				Value: bedrockSpec.Region,
+			})
 		}
 	}
 

@@ -181,6 +181,9 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--input /tmp/agenttool_spec_schema.json \
 		--input-file-type jsonschema \
 		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+  		--allow-population-by-field-name \
 		--class-name AgentToolSpec \
 		--output $(PYTHON_MODELS_DIR)/agenttool.py
 	@rm /tmp/agenttool_spec_schema.json
@@ -193,10 +196,50 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--input /tmp/agentcard_schema.json \
 		--input-file-type jsonschema \
 		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+  		--allow-population-by-field-name \
 		--class-name AgentCard \
 		--output $(PYTHON_MODELS_DIR)/agentcard.py
 	@rm /tmp/agentcard_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentcard.py"
+	@# Build ModelConfig schema (combines provider and model info from CRDs)
+	@echo "Building ModelConfig schema..."
+	@# Extract provider specs from ModelProvider CRD
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.openai' \
+		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/openai_provider.json
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.anthropic' \
+		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/anthropic_provider.json
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.google' \
+		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/google_provider.json
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.bedrock' \
+		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/bedrock_provider.json
+	@# Extract parameters from Model CRD
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.parameters' \
+		config/crd/bases/agent.flokoa.ai_models.yaml > /tmp/model_parameters.json
+	@# Build the combined ModelConfig schema using yq (work in YAML, convert at end)
+	@yq -n '{"type": "object", "description": "ModelConfig contains the resolved model configuration from the ConfigMap", "properties": {"provider": {"type": "object", "description": "Provider contains provider type and connection configuration", "properties": {"type": {"type": "string", "enum": ["openai", "anthropic", "google", "bedrock"], "description": "The provider type"}, "defaultHeaders": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Default headers to include in all requests"}}, "required": ["type"]}, "model": {"type": "string", "description": "The model identifier (e.g., gpt-4o, claude-sonnet-4-20250514)"}}, "required": ["provider", "model"]}' > /tmp/modelconfig_schema.yaml
+	@# Inject provider specs into the schema
+	@yq eval -i '.properties.provider.properties.openai = load("/tmp/openai_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.provider.properties.anthropic = load("/tmp/anthropic_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.provider.properties.google = load("/tmp/google_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.provider.properties.bedrock = load("/tmp/bedrock_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters = load("/tmp/model_parameters.json")' /tmp/modelconfig_schema.yaml
+	@# Convert final schema to JSON
+	@yq eval -o json '.' /tmp/modelconfig_schema.yaml > /tmp/modelconfig_schema.json
+	@# Generate ModelConfig Pydantic v2 models
+	@$(DATAMODEL_CODEGEN) \
+		--input /tmp/modelconfig_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+  		--allow-population-by-field-name \
+		--class-name ModelConfig \
+		--output $(PYTHON_MODELS_DIR)/modelconfig.py
+	@rm /tmp/openai_provider.json /tmp/anthropic_provider.json /tmp/google_provider.json \
+		/tmp/bedrock_provider.json /tmp/model_parameters.json /tmp/modelconfig_schema.yaml /tmp/modelconfig_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/modelconfig.py"
 
 ##@ Build
 
