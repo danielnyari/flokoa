@@ -195,6 +195,30 @@ spec:
                 required:
                 - name
                 type: object
+              promptRefs:
+                description: PromptRefs references Prompt resources to be used by
+                  this agent.
+                items:
+                  description: PromptRef references a Prompt resource to be used by
+                    the agent.
+                  properties:
+                    as:
+                      description: |-
+                        As is an optional alias for this prompt in the agent context.
+                        For example, "system" to use this as the system prompt.
+                      type: string
+                    name:
+                      description: Name of the Prompt resource.
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the Prompt resource. Defaults to the
+                        Agent's namespace if not specified.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
               runtime:
                 description: Runtime configuration - specifies the backend and configuration
                 properties:

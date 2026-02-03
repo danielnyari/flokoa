@@ -138,6 +138,10 @@ type AgentSpec struct {
 	// Tools available to this agent. Can be inline definitions or references to AgentTool resources.
 	// +optional
 	Tools []ToolEntry `json:"tools,omitempty"`
+
+	// PromptRefs references Prompt resources to be used by this agent.
+	// +optional
+	PromptRefs []PromptRef `json:"promptRefs,omitempty"`
 }
 
 // ToolEntry represents either an inline tool definition or a reference to an AgentTool resource.
@@ -178,6 +182,23 @@ type AgentModelRef struct {
 	Name string `json:"name"`
 
 	// Namespace of the Model resource. Defaults to the Agent's namespace if not specified.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// PromptRef references a Prompt resource to be used by the agent.
+type PromptRef struct {
+	// Name of the Prompt resource.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// As is an optional alias for this prompt in the agent context.
+	// For example, "system" to use this as the system prompt.
+	// +optional
+	As string `json:"as,omitempty"`
+
+	// Namespace of the Prompt resource. Defaults to the Agent's namespace if not specified.
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }

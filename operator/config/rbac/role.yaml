@@ -18,12 +18,21 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - agent.flokoa.ai
   resources:
   - agents
   - agenttools
   - modelproviders
   - models
+  - prompts
   verbs:
   - create
   - delete
@@ -39,6 +48,7 @@ rules:
   - agenttools/finalizers
   - modelproviders/finalizers
   - models/finalizers
+  - prompts/finalizers
   verbs:
   - update
 - apiGroups:
@@ -48,6 +58,7 @@ rules:
   - agenttools/status
   - modelproviders/status
   - models/status
+  - prompts/status
   verbs:
   - get
   - patch
