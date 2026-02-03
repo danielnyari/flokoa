@@ -189,7 +189,7 @@ func (r *PromptReconciler) fetchFromLangfuse(ctx context.Context, prompt *agentv
 		return "", "", fmt.Errorf("failed to get Langfuse credentials secret: %w", err)
 	}
 
-	publicKey, ok := secret.Data["publicKey"]
+	_, ok := secret.Data["publicKey"]
 	if !ok {
 		return "", "", fmt.Errorf("publicKey not found in secret %s", source.CredentialsSecretRef.Name)
 	}
@@ -207,8 +207,7 @@ func (r *PromptReconciler) fetchFromLangfuse(ctx context.Context, prompt *agentv
 	logger.Info("Fetching prompt from Langfuse",
 		"endpoint", endpoint,
 		"promptName", source.PromptName,
-		"version", source.Version,
-		"publicKey", string(publicKey))
+		"version", source.Version)
 
 	// TODO: Implement actual Langfuse API call
 	// For now, return a placeholder
@@ -229,15 +228,14 @@ func (r *PromptReconciler) fetchFromLangsmith(ctx context.Context, prompt *agent
 		return "", "", fmt.Errorf("failed to get Langsmith credentials secret: %w", err)
 	}
 
-	apiKey, ok := secret.Data["apiKey"]
+	_, ok := secret.Data["apiKey"]
 	if !ok {
 		return "", "", fmt.Errorf("apiKey not found in secret %s", source.CredentialsSecretRef.Name)
 	}
 
 	logger.Info("Fetching prompt from Langsmith",
 		"promptName", source.PromptName,
-		"commitHash", source.CommitHash,
-		"apiKey", string(apiKey)[:10]+"...")
+		"commitHash", source.CommitHash)
 
 	// TODO: Implement actual Langsmith API call
 	// For now, return a placeholder

@@ -47,7 +47,7 @@ spec:
     capabilities:
       streaming: true
       pushNotifications: false
-      stateTransitionHistroy: false
+      stateTransitionHistory: false
     skills:
       - id: "answer-questions"
         name: "Answer Customer Questions"
