@@ -1,0 +1,73 @@
+---
+# Example: Agent with Prompt References
+# This shows how to use prompts with an agent
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Prompt
+metadata:
+  name: system-prompt
+  namespace: default
+spec:
+  source:
+    inline:
+      content: |
+        You are a customer support specialist for a SaaS product.
+        Always be professional, empathetic, and solution-oriented.
+
+---
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Prompt
+metadata:
+  name: safety-guidelines
+  namespace: default
+spec:
+  source:
+    inline:
+      content: |
+        Safety Guidelines:
+        - Never share sensitive customer data
+        - Always verify identity before discussing account details
+        - Escalate security concerns immediately
+
+---
+# Agent that uses the prompts
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: support-agent
+  namespace: default
+spec:
+  card:
+    name: "Customer Support Agent"
+    description: "AI agent for customer support"
+    version: "1.0.0"
+    defaultInputModes:
+      - "application/json"
+    defaultOutputModes:
+      - "application/json"
+    capabilities:
+      streaming: true
+      pushNotifications: false
+      stateTransitionHistroy: false
+    skills:
+      - id: "answer-questions"
+        name: "Answer Customer Questions"
+        description: "Answers questions about products and services"
+        tags: ["support", "qa"]
+  
+  # Reference prompts by name
+  promptRefs:
+    - name: system-prompt
+      as: system  # Use this as the system prompt
+    - name: safety-guidelines
+      as: guidelines  # Additional guidelines
+  
+  runtime:
+    type: standard
+    spec:
+      replicas: 1
+      container:
+        name: agent
+        image: your-agent-image:latest
+        ports:
+          - containerPort: 8080
+            name: http

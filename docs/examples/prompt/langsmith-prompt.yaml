@@ -1,0 +1,41 @@
+---
+# Example: Langsmith Prompt
+# This fetches a prompt from Langsmith
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Prompt
+metadata:
+  name: customer-support-langsmith
+  namespace: default
+spec:
+  # Langsmith source
+  source:
+    langsmith:
+      # Secret containing Langsmith credentials
+      # Secret should have key: apiKey
+      credentialsSecretRef:
+        name: langsmith-credentials
+      
+      # Name of the prompt in Langsmith
+      promptName: customer-support
+      
+      # Commit hash to fetch - can be a specific commit or "latest"
+      commitHash: "abc123def456"
+  
+  # Optional: Sync configuration for periodic updates
+  sync:
+    # Check for updates every hour
+    interval: 1h
+
+---
+# Secret for Langsmith credentials
+# Create this secret with your actual credentials:
+# kubectl create secret generic langsmith-credentials \
+#   --from-literal=apiKey=lsv2_pt_xxx
+apiVersion: v1
+kind: Secret
+metadata:
+  name: langsmith-credentials
+  namespace: default
+type: Opaque
+stringData:
+  apiKey: "lsv2_pt_your-api-key"

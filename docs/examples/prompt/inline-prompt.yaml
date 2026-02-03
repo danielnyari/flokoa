@@ -1,0 +1,22 @@
+---
+# Example: Inline Prompt
+# This is the simplest way to define a prompt, with content directly in the manifest
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Prompt
+metadata:
+  name: customer-support-system
+  namespace: default
+spec:
+  # Inline source - content is directly specified
+  source:
+    inline:
+      content: |
+        You are a helpful customer support assistant.
+        
+        Your responsibilities:
+        - Answer customer questions accurately and professionally
+        - Be empathetic and understanding
+        - Escalate complex issues when necessary
+        - Always maintain a friendly and helpful tone
+        
+        When you don't know the answer, admit it and offer to help find the information.

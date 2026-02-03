@@ -1,0 +1,46 @@
+---
+# Example: Langfuse Prompt with Sync
+# This fetches a prompt from Langfuse and syncs it periodically
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Prompt
+metadata:
+  name: customer-support-langfuse
+  namespace: default
+spec:
+  # Langfuse source
+  source:
+    langfuse:
+      # Optional: defaults to https://cloud.langfuse.com
+      endpoint: https://cloud.langfuse.com
+      
+      # Secret containing Langfuse credentials
+      # Secret should have keys: publicKey and secretKey
+      credentialsSecretRef:
+        name: langfuse-project-credentials
+      
+      # Name of the prompt in Langfuse
+      promptName: customer-support
+      
+      # Version to fetch - can be a specific version number or "latest"
+      version: "3"
+  
+  # Optional: Sync configuration for periodic updates
+  sync:
+    # Fetch the latest version every 5 minutes
+    interval: 5m
+
+---
+# Secret for Langfuse credentials
+# Create this secret with your actual credentials:
+# kubectl create secret generic langfuse-project-credentials \
+#   --from-literal=publicKey=pk-lf-xxx \
+#   --from-literal=secretKey=sk-lf-xxx
+apiVersion: v1
+kind: Secret
+metadata:
+  name: langfuse-project-credentials
+  namespace: default
+type: Opaque
+stringData:
+  publicKey: "pk-lf-your-public-key"
+  secretKey: "sk-lf-your-secret-key"
