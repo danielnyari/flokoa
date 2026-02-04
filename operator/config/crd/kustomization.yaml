@@ -5,7 +5,7 @@ resources:
 - bases/agent.flokoa.ai_agents.yaml
 - bases/agent.flokoa.ai_agenttools.yaml
 - bases/agent.flokoa.ai_models.yaml
-- bases/agent.flokoa.ai_modelconfigs.yaml
+- bases/agent.flokoa.ai_modelproviders.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
