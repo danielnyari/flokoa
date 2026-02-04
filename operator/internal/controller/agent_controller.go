@@ -446,7 +446,7 @@ func (r *AgentReconciler) reconcileModel(ctx context.Context, agent *agentv1alph
 
 	// Check if Model is ready
 	if !model.Status.Ready {
-		return nil, fmt.Errorf("Model %s/%s is not ready", modelNamespace, model.Name)
+		return nil, fmt.Errorf("model %s/%s is not ready", modelNamespace, model.Name)
 	}
 
 	// Resolve the ModelProvider from Model
