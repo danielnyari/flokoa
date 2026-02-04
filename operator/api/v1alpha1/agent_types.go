@@ -95,7 +95,7 @@ type AgentExtension struct {
 type AgentCapabilities struct {
 	Extensions             []AgentExtension `json:"extensions,omitempty"`
 	PushNotifications      bool             `json:"pushNotifications,omitempty"`
-	StateTransitionHistroy bool             `json:"stateTransitionHistroy,omitempty"`
+	StateTransitionHistory bool             `json:"stateTransitionHistory,omitempty"`
 	Streaming              bool             `json:"streaming,omitempty"`
 }
 

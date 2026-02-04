@@ -78,7 +78,7 @@ spec:
                         type: array
                       pushNotifications:
                         type: boolean
-                      stateTransitionHistroy:
+                      stateTransitionHistory:
                         type: boolean
                       streaming:
                         type: boolean

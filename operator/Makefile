@@ -218,24 +218,57 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.parameters' \
 		config/crd/bases/agent.flokoa.ai_models.yaml > /tmp/model_parameters.json
 	@# Build the combined ModelConfig schema using yq (work in YAML, convert at end)
-	@yq -n '{"type": "object", "description": "ModelConfig contains the resolved model configuration from the ConfigMap", "properties": {"provider": {"type": "object", "description": "Provider contains provider type and connection configuration", "properties": {"type": {"type": "string", "enum": ["openai", "anthropic", "google", "bedrock"], "description": "The provider type"}, "defaultHeaders": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Default headers to include in all requests"}}, "required": ["type"]}, "model": {"type": "string", "description": "The model identifier (e.g., gpt-4o, claude-sonnet-4-20250514)"}}, "required": ["provider", "model"]}' > /tmp/modelconfig_schema.yaml
-	@# Inject provider specs into the schema
+	@yq -n '{"type": "object", "title": "ModelConfig", "description": "ModelConfig contains the resolved model configuration from the ConfigMap", "properties": {"provider": {"type": "object", "title": "Provider", "description": "Provider contains provider type and connection configuration", "properties": {"type": {"type": "string", "title": "ProviderType", "enum": ["openai", "anthropic", "google", "bedrock"], "description": "The provider type"}, "defaultHeaders": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Default headers to include in all requests"}}, "required": ["type"]}, "model": {"type": "string", "description": "The model identifier (e.g., gpt-4o, claude-sonnet-4-20250514)"}}, "required": ["provider", "model"]}' > /tmp/modelconfig_schema.yaml
+	@# Inject provider specs into the schema with titles to avoid naming collisions
 	@yq eval -i '.properties.provider.properties.openai = load("/tmp/openai_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.provider.properties.openai.title = "OpenAIProviderConfig"' /tmp/modelconfig_schema.yaml
 	@yq eval -i '.properties.provider.properties.anthropic = load("/tmp/anthropic_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.provider.properties.anthropic.title = "AnthropicProviderConfig"' /tmp/modelconfig_schema.yaml
 	@yq eval -i '.properties.provider.properties.google = load("/tmp/google_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.provider.properties.google.title = "GoogleProviderConfig"' /tmp/modelconfig_schema.yaml
 	@yq eval -i '.properties.provider.properties.bedrock = load("/tmp/bedrock_provider.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.provider.properties.bedrock.title = "BedrockProviderConfig"' /tmp/modelconfig_schema.yaml
+	@# Inject model parameters with titles
 	@yq eval -i '.properties.parameters = load("/tmp/model_parameters.json")' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.title = "ModelParameters"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.openai.title = "OpenAIModelParameters"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.anthropic.title = "AnthropicModelParameters"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.title = "GoogleModelParameters"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.bedrock.title = "BedrockModelParameters"' /tmp/modelconfig_schema.yaml
+	@# Add titles to nested types that would otherwise collide (Type, Type1, Type2, etc.)
+	@yq eval -i '.properties.parameters.properties.anthropic.properties.thinking.title = "AnthropicThinking"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.anthropic.properties.thinking.properties.type.title = "AnthropicThinkingType"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.anthropic.properties.container.title = "AnthropicContainer"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.bedrock.properties.serviceTier.title = "BedrockServiceTier"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.bedrock.properties.serviceTier.properties.type.title = "BedrockServiceTierType"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.bedrock.properties.guardrailConfig.title = "BedrockGuardrailConfig"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.bedrock.properties.guardrailConfig.properties.trace.title = "BedrockGuardrailTrace"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.bedrock.properties.performanceConfiguration.title = "BedrockPerformanceConfig"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.bedrock.properties.performanceConfiguration.properties.latency.title = "BedrockLatency"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.properties.thinkingConfig.title = "GoogleThinkingConfig"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.properties.thinkingConfig.properties.thinkingLevel.title = "GoogleThinkingLevel"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.title = "GoogleSafetySetting"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.properties.category.title = "GoogleHarmCategory"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.properties.method.title = "GoogleSafetyMethod"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.properties.threshold.title = "GoogleSafetyThreshold"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.google.properties.videoResolution.title = "GoogleVideoResolution"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.openai.properties.serviceTier.title = "OpenAIServiceTier"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.openai.properties.reasoningEffort.title = "OpenAIReasoningEffort"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.openai.properties.reasoningGenerateSummary.title = "OpenAIReasoningGenerateSummary"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.openai.properties.reasoningSummary.title = "OpenAIReasoningSummary"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.openai.properties.truncation.title = "OpenAITruncation"' /tmp/modelconfig_schema.yaml
+	@yq eval -i '.properties.parameters.properties.openai.properties.textVerbosity.title = "OpenAITextVerbosity"' /tmp/modelconfig_schema.yaml
 	@# Convert final schema to JSON
 	@yq eval -o json '.' /tmp/modelconfig_schema.yaml > /tmp/modelconfig_schema.json
-	@# Generate ModelConfig Pydantic v2 models
+	@# Generate ModelConfig Pydantic v2 models with --use-title-as-name for proper class naming
 	@$(DATAMODEL_CODEGEN) \
 		--input /tmp/modelconfig_schema.json \
 		--input-file-type jsonschema \
 		--output-model-type pydantic_v2.BaseModel \
 		--snake-case-field \
 		--use-annotated \
-  		--allow-population-by-field-name \
-		--class-name ModelConfig \
+		--allow-population-by-field-name \
+		--use-title-as-name \
 		--output $(PYTHON_MODELS_DIR)/modelconfig.py
 	@rm /tmp/openai_provider.json /tmp/anthropic_provider.json /tmp/google_provider.json \
 		/tmp/bedrock_provider.json /tmp/model_parameters.json /tmp/modelconfig_schema.yaml /tmp/modelconfig_schema.json
