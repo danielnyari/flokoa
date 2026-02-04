@@ -4,6 +4,13 @@ from glob import glob
 
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
+from flokoa.cache import (
+    CACHE_KEY_AGENT_CARD,
+    CACHE_KEY_MODEL_CONFIG,
+    CACHE_KEY_TOOLS,
+    ConfigCache,
+    get_global_cache,
+)
 from flokoa.types import ModelConfig, ToolDefinition
 from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
 from flokoa.types.agenttool import AgentToolSpec
@@ -13,17 +20,14 @@ AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
 MODEL_CONFIG_PATH = "/etc/flokoa/model.json"
 
 
-def load_agent_card(url: str | None = None) -> AgentCard | None:
-    """Load agent card from /etc/flokoa/agent-card.json.
+def _load_agent_card_from_file(url: str | None = None) -> AgentCard | None:
+    """Internal function to load agent card from file (uncached).
 
     Args:
-        url: Override URL for the agent card. If not provided, uses FLOKOA_AGENT_URL
-             environment variable or defaults to empty string.
+        url: Override URL for the agent card.
 
     Returns:
         AgentCard (a2a type) if the file exists, None otherwise.
-
-    The JSON format matches the Kubernetes Agent CRD card structure.
     """
     if not os.path.exists(AGENT_CARD_PATH):
         return None
@@ -70,8 +74,83 @@ def load_agent_card(url: str | None = None) -> AgentCard | None:
     )
 
 
-def load_tools() -> list[ToolDefinition]:
-    """Load tool definitions from /etc/flokoa/tools/.
+def load_agent_card(
+    url: str | None = None,
+    use_cache: bool = True,
+    cache: ConfigCache | None = None,
+) -> AgentCard | None:
+    """Load agent card from /etc/flokoa/agent-card.json with optional caching.
+
+    Args:
+        url: Override URL for the agent card. If not provided, uses FLOKOA_AGENT_URL
+             environment variable or defaults to empty string.
+        use_cache: Whether to use caching (default: True).
+        cache: Optional cache instance. Uses global cache if not provided.
+
+    Returns:
+        AgentCard (a2a type) if the file exists, None otherwise.
+
+    The JSON format matches the Kubernetes Agent CRD card structure.
+
+    Caching:
+        The result is cached with TTL and file modification detection.
+        Set FLOKOA_CACHE_TTL_SECONDS to configure TTL (default: 60).
+        Set FLOKOA_CACHE_ENABLED=false to disable caching.
+    """
+    if not use_cache:
+        return _load_agent_card_from_file(url)
+
+    cache = cache or get_global_cache()
+
+    # Check cache first
+    cached = cache.get(CACHE_KEY_AGENT_CARD)
+    if cached is not None:
+        return cached
+
+    # Load from file
+    result = _load_agent_card_from_file(url)
+
+    # Cache the result (even None, to avoid repeated file checks)
+    if os.path.exists(AGENT_CARD_PATH):
+        cache.set(CACHE_KEY_AGENT_CARD, result, file_paths=[AGENT_CARD_PATH])
+    else:
+        # File doesn't exist - cache with path so we detect when it's created
+        cache.set(CACHE_KEY_AGENT_CARD, result, file_paths=[AGENT_CARD_PATH])
+
+    return result
+
+
+def _load_tools_from_files() -> tuple[list[ToolDefinition], list[str]]:
+    """Internal function to load tools from files (uncached).
+
+    Returns:
+        Tuple of (tool definitions list, list of file paths that were loaded).
+    """
+    if not os.path.exists(TOOLS_PATH):
+        return [], []
+
+    definitions: list[ToolDefinition] = []
+    file_paths: list[str] = []
+
+    for filename in glob(os.path.join(TOOLS_PATH, "*.json")):
+        file_paths.append(filename)
+        with open(filename) as f:
+            tool_cfg = json.load(f)
+            tool_definition = ToolDefinition(
+                name=tool_cfg["name"],
+                spec=AgentToolSpec(**tool_cfg["spec"]),
+                metadata=tool_cfg.get("metadata", None),
+            )
+            definitions.append(tool_definition)
+
+    return definitions, file_paths
+
+
+def load_tools(
+    use_cache: bool = True,
+    cache: ConfigCache | None = None,
+) -> list[ToolDefinition]:
+    """Load tool definitions from /etc/flokoa/tools/ with optional caching.
 
     The JSON format matches the Kubernetes AgentTool CRD structure:
     {
@@ -88,30 +167,71 @@ def load_tools() -> list[ToolDefinition]:
         },
         "metadata": {...}  // optional
     }
+
+    Args:
+        use_cache: Whether to use caching (default: True).
+        cache: Optional cache instance. Uses global cache if not provided.
+
+    Returns:
+        List of ToolDefinition objects.
+
+    Caching:
+        The result is cached with TTL and file modification detection.
+        Set FLOKOA_CACHE_TTL_SECONDS to configure TTL (default: 60).
+        Set FLOKOA_CACHE_ENABLED=false to disable caching.
     """
-    if not os.path.exists(TOOLS_PATH):
-        return []
+    if not use_cache:
+        definitions, _ = _load_tools_from_files()
+        return definitions
 
-    definitions: list[ToolDefinition] = []
+    cache = cache or get_global_cache()
 
-    for filename in glob(os.path.join(TOOLS_PATH, "*.json")):
-        with open(filename) as f:
-            tool_cfg = json.load(f)
-            tool_definition = ToolDefinition(
-                name=tool_cfg["name"],
-                spec=AgentToolSpec(**tool_cfg["spec"]),
-                metadata=tool_cfg.get("metadata", None),
-            )
-            definitions.append(tool_definition)
+    # Check cache first
+    cached = cache.get(CACHE_KEY_TOOLS)
+    if cached is not None:
+        return cached
+
+    # Load from files
+    definitions, file_paths = _load_tools_from_files()
+
+    # Cache the result with file tracking
+    # Include the tools directory itself to detect new files
+    tracked_paths = file_paths.copy()
+    if os.path.exists(TOOLS_PATH):
+        tracked_paths.append(TOOLS_PATH)
+
+    cache.set(CACHE_KEY_TOOLS, definitions, file_paths=tracked_paths)
 
     return definitions
 
 
-def load_model_config() -> ModelConfig | None:
-    """Load model configuration from /etc/flokoa/model.json.
+def _load_model_config_from_file() -> ModelConfig | None:
+    """Internal function to load model config from file (uncached).
 
     Returns:
         ModelConfig if the file exists, None otherwise.
+    """
+    if not os.path.exists(MODEL_CONFIG_PATH):
+        return None
+
+    with open(MODEL_CONFIG_PATH) as f:
+        config_data = json.load(f)
+
+    return ModelConfig.model_validate(config_data)
+
+
+def load_model_config(
+    use_cache: bool = True,
+    cache: ConfigCache | None = None,
+) -> ModelConfig | None:
+    """Load model configuration from /etc/flokoa/model.json with optional caching.
+
+    Returns:
+        ModelConfig if the file exists, None otherwise.
+
+    Args:
+        use_cache: Whether to use caching (default: True).
+        cache: Optional cache instance. Uses global cache if not provided.
 
     The configuration maps to PydanticAI's provider/model architecture.
     See ModelConfig docstring for detailed usage examples.
@@ -126,11 +246,52 @@ def load_model_config() -> ModelConfig | None:
 
     For local development without the operator, this function returns None,
     allowing the agent to use its default model configuration.
+
+    Caching:
+        The result is cached with TTL and file modification detection.
+        Set FLOKOA_CACHE_TTL_SECONDS to configure TTL (default: 60).
+        Set FLOKOA_CACHE_ENABLED=false to disable caching.
     """
-    if not os.path.exists(MODEL_CONFIG_PATH):
-        return None
+    if not use_cache:
+        return _load_model_config_from_file()
 
-    with open(MODEL_CONFIG_PATH) as f:
-        config_data = json.load(f)
+    cache = cache or get_global_cache()
 
-    return ModelConfig.model_validate(config_data)
+    # Check cache first
+    cached = cache.get(CACHE_KEY_MODEL_CONFIG)
+    if cached is not None:
+        return cached
+
+    # Load from file
+    result = _load_model_config_from_file()
+
+    # Cache the result with file tracking
+    cache.set(CACHE_KEY_MODEL_CONFIG, result, file_paths=[MODEL_CONFIG_PATH])
+
+    return result
+
+
+def invalidate_config_cache(cache: ConfigCache | None = None) -> None:
+    """Invalidate all configuration caches.
+
+    This forces the next load_* call to re-read from files.
+
+    Args:
+        cache: Optional cache instance. Uses global cache if not provided.
+    """
+    cache = cache or get_global_cache()
+    cache.invalidate_all()
+
+
+def is_config_cache_valid(key: str, cache: ConfigCache | None = None) -> bool:
+    """Check if a specific config cache entry is still valid.
+
+    Args:
+        key: The cache key (use CACHE_KEY_* constants from flokoa.cache).
+        cache: Optional cache instance. Uses global cache if not provided.
+
+    Returns:
+        True if the cache entry exists and is valid, False otherwise.
+    """
+    cache = cache or get_global_cache()
+    return cache.is_valid(key)

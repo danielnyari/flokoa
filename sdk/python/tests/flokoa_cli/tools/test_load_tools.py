@@ -22,8 +22,8 @@ def test_load_tools_tools_config(tools_config, tmp_path, monkeypatch):
         assert matching_tool is not None
         assert t.spec.type.value == matching_tool["spec"]["type"]
         assert t.spec.description == matching_tool["spec"]["description"]
-        assert t.spec.inputSchema == matching_tool["spec"]["inputSchema"]
-        assert t.spec.outputSchema == matching_tool["spec"]["outputSchema"]
-        assert t.spec.httpApi is not None
-        assert t.spec.httpApi.method.value == matching_tool["spec"]["httpApi"]["method"]
-        assert t.spec.httpApi.url == matching_tool["spec"]["httpApi"]["url"]
+        assert t.spec.input_schema == matching_tool["spec"]["inputSchema"]
+        assert t.spec.output_schema == matching_tool["spec"]["outputSchema"]
+        assert t.spec.http_api is not None
+        assert t.spec.http_api.method.value == matching_tool["spec"]["httpApi"]["method"]
+        assert t.spec.http_api.url == matching_tool["spec"]["httpApi"]["url"]

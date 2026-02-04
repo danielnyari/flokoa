@@ -39,7 +39,7 @@ def tools_file(tools_config, monkeypatch, tmp_path):
     tools_file = tmp_path / "tools.json"
     tools_file.write_text(json.dumps(tools_config))
 
-    def patched_load_tools():
+    def patched_load_tools(use_cache=True, cache=None):
         with open(tools_file) as f:
             tools_cfg = json.load(f)
         return [
