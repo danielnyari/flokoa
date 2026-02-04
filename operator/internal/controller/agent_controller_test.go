@@ -4448,6 +4448,157 @@ var _ = Describe("Agent Controller", func() {
 				})
 			})
 
+			Context("Model reference errors", func() {
+				It("should handle non-existent Model reference", func() {
+					By("Creating an Agent with reference to non-existent Model")
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      agentName,
+							Namespace: agentNamespace,
+						},
+						Spec: agentv1alpha1.AgentSpec{
+							Card: minimalCard(),
+							Runtime: agentv1alpha1.RuntimeSpec{
+								Type: agentv1alpha1.RuntimeTypeStandard,
+								Spec: &agentv1alpha1.StandardRuntimeSpec{
+									Container: corev1.Container{
+										Name:  "agent",
+										Image: "nginx:latest",
+									},
+								},
+							},
+							Model: &agentv1alpha1.AgentModelRef{
+								Name: "non-existent-model",
+							},
+						},
+					}
+					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+					By("Reconciling the Agent")
+					controllerReconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					// First reconcile adds finalizer
+					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: typeNamespacedName,
+					})
+
+					// Second reconcile should fail to resolve model
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: typeNamespacedName,
+					})
+					Expect(err).To(HaveOccurred())
+
+					By("Verifying ModelReady condition is False")
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, typeNamespacedName, agent)
+						if err != nil {
+							return false
+						}
+						condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
+						return condition != nil && condition.Status == metav1.ConditionFalse
+					}, timeout, interval).Should(BeTrue())
+
+					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
+					Expect(condition.Reason).To(Equal(ReasonModelResolveFailed))
+					Expect(condition.Message).To(ContainSubstring("failed to get Model"))
+				})
+
+				It("should handle Model that is not ready", func() {
+					By("Creating a ModelProvider")
+					providerName := "test-provider-not-ready"
+					timeoutSeconds := int32(120)
+					provider := &agentv1alpha1.ModelProvider{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      providerName,
+							Namespace: agentNamespace,
+						},
+						Spec: agentv1alpha1.ModelProviderSpec{
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
+								TimeoutSeconds: &timeoutSeconds,
+							},
+						},
+					}
+					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
+
+					By("Creating a Model WITHOUT reconciling the provider (so provider not ready)")
+					modelName := "test-model-not-ready"
+					model := &agentv1alpha1.Model{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      modelName,
+							Namespace: agentNamespace,
+						},
+						Spec: agentv1alpha1.ModelSpec{
+							Model: "gpt-4o",
+							ProviderRef: agentv1alpha1.ProviderRef{
+								Name: providerName,
+							},
+						},
+					}
+					Expect(k8sClient.Create(ctx, model)).To(Succeed())
+
+					// Note: We do NOT reconcile the provider, so it stays not ready
+					// We also do NOT reconcile the model, so it stays not ready
+
+					By("Creating an Agent with Model reference")
+					agent := &agentv1alpha1.Agent{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      agentName,
+							Namespace: agentNamespace,
+						},
+						Spec: agentv1alpha1.AgentSpec{
+							Card: minimalCard(),
+							Runtime: agentv1alpha1.RuntimeSpec{
+								Type: agentv1alpha1.RuntimeTypeStandard,
+								Spec: &agentv1alpha1.StandardRuntimeSpec{
+									Container: corev1.Container{
+										Name:  "agent",
+										Image: "nginx:latest",
+									},
+								},
+							},
+							Model: &agentv1alpha1.AgentModelRef{
+								Name: modelName,
+							},
+						},
+					}
+					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+					By("Reconciling the Agent")
+					controllerReconciler := &AgentReconciler{
+						Client: k8sClient,
+						Scheme: k8sClient.Scheme(),
+					}
+
+					// First reconcile adds finalizer
+					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: typeNamespacedName,
+					})
+
+					// Second reconcile should fail because model is not ready
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: typeNamespacedName,
+					})
+					Expect(err).To(HaveOccurred())
+
+					By("Verifying ModelReady condition is False")
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, typeNamespacedName, agent)
+						if err != nil {
+							return false
+						}
+						condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
+						return condition != nil && condition.Status == metav1.ConditionFalse
+					}, timeout, interval).Should(BeTrue())
+
+					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
+					Expect(condition.Reason).To(Equal(ReasonModelResolveFailed))
+					Expect(condition.Message).To(ContainSubstring("not ready"))
+				})
+			})
+
 			Context("Multiple providers", func() {
 				It("should support all registered providers", func() {
 					By("Verifying all providers have handlers")
