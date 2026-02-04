@@ -67,7 +67,7 @@ def api_tool_definition():
                     "condition": {"type": "string"},
                 },
             },
-            httpApi=HttpApi(url="https://api.weather.com/current", method=Method.GET),
+            httpApi=HttpApi(url="https://api.weather.com/current", method=Method.get),
         ),
     )
 
@@ -87,7 +87,7 @@ def multiple_tool_definitions():
                     "required": ["location"],
                 },
                 outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.weather.com/current", method=Method.GET),
+                httpApi=HttpApi(url="https://api.weather.com/current", method=Method.get),
             ),
         ),
         ToolDefinition(
@@ -105,7 +105,7 @@ def multiple_tool_definitions():
                     "required": ["to", "subject", "body"],
                 },
                 outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.email.com/send", method=Method.POST),
+                httpApi=HttpApi(url="https://api.email.com/send", method=Method.post),
             ),
         ),
     ]
@@ -123,11 +123,11 @@ def tools_file(tmp_path, multiple_tool_definitions, monkeypatch, mock_http_api):
             "spec": {
                 "type": td.spec.type.value,
                 "description": td.spec.description,
-                "inputSchema": td.spec.inputSchema,
-                "outputSchema": td.spec.outputSchema,
+                "inputSchema": td.spec.input_schema,
+                "outputSchema": td.spec.output_schema,
                 "httpApi": {
-                    "url": td.spec.httpApi.url,
-                    "method": td.spec.httpApi.method.value,
+                    "url": td.spec.http_api.url,
+                    "method": td.spec.http_api.method.value,
                 },
             },
         }
@@ -137,7 +137,7 @@ def tools_file(tmp_path, multiple_tool_definitions, monkeypatch, mock_http_api):
     tools_file = tmp_path / "tools.json"
     tools_file.write_text(json.dumps(tools_config))
 
-    def patched_load_tools():
+    def patched_load_tools(use_cache=True, cache=None):
         return multiple_tool_definitions
 
     monkeypatch.setattr("flokoa.agent_executor.load_tools", patched_load_tools)
@@ -245,11 +245,24 @@ class TestPydanticAIAgentExecutorGetToolset:
         assert email_tool.name == "send_email"
         assert email_tool.description == "Send an email to a recipient"
 
-    def test_get_toolset_creates_fresh_toolset_each_call(self, pydantic_agent_executor):
-        """Verify that each call to _get_toolset creates a new toolset."""
+    def test_get_toolset_returns_cached_toolset(self, pydantic_agent_executor):
+        """Verify that _get_toolset returns cached toolset when tools unchanged."""
         toolset1 = pydantic_agent_executor._get_toolset()
         toolset2 = pydantic_agent_executor._get_toolset()
 
+        # With caching, the same toolset should be returned
+        assert toolset1 is toolset2
+
+    def test_get_toolset_rebuilds_after_invalidation(self, pydantic_agent_executor):
+        """Verify that _get_toolset rebuilds toolset after cache invalidation."""
+        toolset1 = pydantic_agent_executor._get_toolset()
+
+        # Invalidate caches
+        pydantic_agent_executor.invalidate_caches()
+
+        toolset2 = pydantic_agent_executor._get_toolset()
+
+        # After invalidation, a new toolset should be built
         assert toolset1 is not toolset2
 
 

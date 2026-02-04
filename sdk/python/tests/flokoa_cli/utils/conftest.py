@@ -34,7 +34,7 @@ def full_agent_card_data():
         "capabilities": {
             "streaming": True,
             "pushNotifications": True,
-            "stateTransitionHistroy": True,
+            "stateTransitionHistory": True,
             "extensions": [
                 {
                     "uri": "https://example.com/extension",
@@ -76,7 +76,7 @@ def agent_card_with_none_capabilities():
         "capabilities": {
             "streaming": None,
             "pushNotifications": None,
-            "stateTransitionHistroy": None,
+            "stateTransitionHistory": None,
         },
         "skills": [
             {
