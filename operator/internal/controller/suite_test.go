@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,4 +114,15 @@ func getFirstFoundEnvTestBinaryDir() string {
 		}
 	}
 	return ""
+}
+
+// findCondition is a helper function to find a condition by type in a list of conditions.
+// This is used across multiple test files to check status conditions.
+func findCondition(conditions []metav1.Condition, condType string) *metav1.Condition {
+	for _, c := range conditions {
+		if c.Type == condType {
+			return &c
+		}
+	}
+	return nil
 }

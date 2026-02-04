@@ -318,7 +318,7 @@ var _ = Describe("ModelProvider Controller", func() {
 			Expect(updated.Status.Provider).To(BeEmpty())
 
 			// Check that the status condition reflects no provider set
-			condition := findConditionInProvider(updated.Status.Conditions, ModelProviderConditionTypeReady)
+			condition := findCondition(updated.Status.Conditions, ModelProviderConditionTypeReady)
 			Expect(condition).NotTo(BeNil())
 			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(condition.Reason).To(Equal(ModelProviderReasonNoProviderSet))
@@ -388,7 +388,7 @@ var _ = Describe("ModelProvider Controller", func() {
 			Expect(updated.Status.Provider).To(BeEmpty())
 
 			// Check that the status condition reflects multiple providers error
-			condition := findConditionInProvider(updated.Status.Conditions, ModelProviderConditionTypeReady)
+			condition := findCondition(updated.Status.Conditions, ModelProviderConditionTypeReady)
 			Expect(condition).NotTo(BeNil())
 			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(condition.Reason).To(Equal(ModelProviderReasonNoProviderSet))
@@ -396,13 +396,3 @@ var _ = Describe("ModelProvider Controller", func() {
 		})
 	})
 })
-
-// Helper function to find a condition by type in ModelProvider
-func findConditionInProvider(conditions []metav1.Condition, condType string) *metav1.Condition {
-	for _, c := range conditions {
-		if c.Type == condType {
-			return &c
-		}
-	}
-	return nil
-}

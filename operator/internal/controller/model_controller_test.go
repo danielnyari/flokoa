@@ -546,13 +546,3 @@ var _ = Describe("Model Controller", func() {
 		})
 	})
 })
-
-// Helper function to find a condition by type
-func findCondition(conditions []metav1.Condition, condType string) *metav1.Condition {
-	for _, c := range conditions {
-		if c.Type == condType {
-			return &c
-		}
-	}
-	return nil
-}
