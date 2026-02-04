@@ -45,8 +45,8 @@ def load_agent_card(url: str | None = None) -> AgentCard | None:
             description=skill.description,
             tags=skill.tags,
             examples=skill.examples,
-            input_modes=skill.inputModes,
-            output_modes=skill.outputModes,
+            input_modes=skill.input_modes,
+            output_modes=skill.output_modes,
         )
         for skill in flokoa_card.skills
     ]
@@ -54,8 +54,8 @@ def load_agent_card(url: str | None = None) -> AgentCard | None:
     # Convert capabilities
     capabilities = AgentCapabilities(
         streaming=flokoa_card.capabilities.streaming or False,
-        push_notifications=flokoa_card.capabilities.pushNotifications or False,
-        state_transition_history=flokoa_card.capabilities.stateTransitionHistroy or False,
+        push_notifications=flokoa_card.capabilities.push_notifications or False,
+        state_transition_history=flokoa_card.capabilities.state_transition_history or False,
     )
 
     return AgentCard(
@@ -63,8 +63,8 @@ def load_agent_card(url: str | None = None) -> AgentCard | None:
         description=flokoa_card.description,
         version=flokoa_card.version,
         url=agent_url,
-        default_input_modes=flokoa_card.defaultInputModes,
-        default_output_modes=flokoa_card.defaultOutputModes,
+        default_input_modes=flokoa_card.default_input_modes,
+        default_output_modes=flokoa_card.default_output_modes,
         capabilities=capabilities,
         skills=skills,
     )

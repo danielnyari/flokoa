@@ -4,7 +4,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from flokoa.types.agenttool import AgentToolSpec, Type
-from flokoa.types.modelconfig import ModelConfig, ModelProvider
+from flokoa.types.modelconfig import ModelConfig
 
 
 class ToolType(StrEnum):
@@ -44,10 +44,17 @@ class ToolDefinition(BaseModel):
     @property
     def input_json_schema(self) -> dict[str, Any]:
         """Get the input JSON schema from the spec."""
-        return self.spec.inputSchema or {}
+        return self.spec.input_schema or {}
 
     @computed_field
     @property
     def output_json_schema(self) -> dict[str, Any]:
         """Get the output JSON schema from the spec."""
-        return self.spec.outputSchema or {}
+        return self.spec.output_schema or {}
+
+
+__all__ = [
+    "ModelConfig",
+    "ToolDefinition",
+    "ToolType",
+]

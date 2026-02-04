@@ -113,15 +113,11 @@ spec:
                             minimum: 1024
                             type: integer
                           type:
-                            allOf:
-                            - enum:
-                              - enabled
-                              - disabled
-                            - enum:
-                              - enabled
-                              - disabled
                             default: disabled
                             description: Type enables or disables extended thinking
+                            enum:
+                            - enabled
+                            - disabled
                             type: string
                         required:
                         - type

@@ -6,12 +6,12 @@ from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
 from pydantic_ai import FunctionToolset, Tool
 
-# Import module for dynamic lookup (allows mocking in tests)
 from flokoa import tools as flokoa_tools
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.exceptions import CancelNotSupportedError
+from flokoa.types import ModelConfig, ToolType
 from flokoa.types import ToolDefinition as FlokoaToolDefinition
-from flokoa.types import ToolType
+from flokoa.utils import load_model_config
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +29,15 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         and passes them to the appropriate tool handler with the tool's configuration.
         """
         if tool_definition.type == ToolType.HTTP_API:
-            http_api = tool_definition.spec.httpApi
+            http_api = tool_definition.spec.http_api
             if http_api is None:
-                raise ValueError(f"Tool '{tool_definition.name}' has type http-api but no httpApi configuration")
+                raise ValueError(f"Tool '{tool_definition.name}' has type http-api but no http_api configuration")
             endpoint = http_api.url or ""
             method = http_api.method.value
 
             async def api_tool_wrapper(**kwargs: Any) -> dict[str, Any]:
                 # Dynamic lookup allows mocking in tests
-                return await flokoa_tools.call_http_api_tool(
-                    endpoint=endpoint, method=method, params=kwargs
-                )
+                return await flokoa_tools.call_http_api_tool(endpoint=endpoint, method=method, params=kwargs)
 
             return api_tool_wrapper
 
@@ -65,6 +63,17 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
             toolset.add_tool(tool)
             logger.info(f"Added tool '{tool_definition.name}' to agent toolset.")
         return toolset
+
+    def _get_model_config(self) -> ModelConfig | None:
+        return load_model_config()
+
+    # def _create_model(self) -> Any:
+    #     model_config = self._get_model_config()
+    #     if model_config:
+    #         provider_entry = PROVIDER_MODEL_MAP.get(model_config.provider.type, None) if model_config else None
+    #         model_class = provider_entry.get("model_class") if provider_entry else None
+    #         provider_class = provider_entry.get("provider_class") if provider_entry else None
+    #         settings_class = provider_entry.get("settings_class") if provider_entry else None
 
     @override
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:

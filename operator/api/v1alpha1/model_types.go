@@ -241,7 +241,6 @@ const (
 // AnthropicThinkingConfig defines the thinking configuration for Anthropic models
 type AnthropicThinkingConfig struct {
 	// Type enables or disables extended thinking
-	// +kubebuilder:validation:Enum=enabled;disabled
 	// +kubebuilder:default=disabled
 	Type ThinkingType `json:"type"`
 
