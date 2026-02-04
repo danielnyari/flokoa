@@ -8,9 +8,20 @@ from flokoa.cache import (
     ConfigCache,
     get_global_cache,
 )
+from flokoa.exceptions import ProviderNotConfiguredError
 from flokoa.tools import TOOL_CALLABLES
-from flokoa.types import ModelConfig
-from flokoa.types import ToolDefinition as FlokoaToolDefinition
+from flokoa.types import (
+    ModelConfig,
+    ProviderConfigType,
+    ProviderModelParametersType,
+)
+from flokoa.types import (
+    ModelParameters as ModelParameters,
+)
+from flokoa.types import (
+    ToolDefinition as FlokoaToolDefinition,
+)
+from flokoa.types.modelconfig import ProviderType
 from flokoa.utils import load_model_config, load_tools
 
 if TYPE_CHECKING:
@@ -64,6 +75,28 @@ class FlokoaAgentExecutor(AgentExecutor):
         if not self._model_config_loaded or not self._cache.is_valid(CACHE_KEY_MODEL_CONFIG):
             self._reload_model_config()
         return self._model_config
+
+    @property
+    def model_provider(self) -> ProviderType | None:
+        if self.model_config:
+            return self.model_config.provider.type
+        return None
+
+    @property
+    def provider_config(self) -> ProviderConfigType | None:
+        if self.model_provider is None:
+            raise ProviderNotConfiguredError("model_provider must be set to access provider_config")
+        if self.model_config:
+            return getattr(self.model_config, self.model_provider.value, None)
+        return None
+
+    @property
+    def provider_model_parameters(self) -> ProviderModelParametersType | None:
+        if self.model_provider is None:
+            raise ProviderNotConfiguredError("model_provider must be set to access provider_model_parameters")
+        if self.model_config:
+            return getattr(self.model_config, self.model_provider.value, None)
+        return None
 
     @property
     def agent(self) -> "Agent":

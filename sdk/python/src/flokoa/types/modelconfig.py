@@ -644,7 +644,7 @@ class OpenAIModelParameters(BaseModel):
             title="OpenAIReasoningSummary",
         ),
     ] = None
-    send_reasoning_i_ds: Annotated[
+    send_reasoning_ids: Annotated[
         bool | None,
         Field(
             alias="sendReasoningIDs",

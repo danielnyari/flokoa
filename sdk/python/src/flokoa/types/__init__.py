@@ -4,7 +4,29 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from flokoa.types.agenttool import AgentToolSpec, Type
-from flokoa.types.modelconfig import ModelConfig
+from flokoa.types.modelconfig import (
+    AnthropicModelParameters,
+    AnthropicProviderConfig,
+    BedrockModelParameters,
+    BedrockProviderConfig,
+    GoogleModelParameters,
+    GoogleProviderConfig,
+    ModelConfig,
+    ModelParameters,
+    OpenAIModelParameters,
+    OpenAIProviderConfig,
+    ProviderType,
+)
+
+ProviderConfigType = Annotated[
+    AnthropicProviderConfig | OpenAIProviderConfig | GoogleProviderConfig | BedrockProviderConfig,
+    Field(description="The provider-specific configuration for the model."),
+]
+
+ProviderModelParametersType = Annotated[
+    AnthropicModelParameters | OpenAIModelParameters | GoogleModelParameters | BedrockModelParameters,
+    Field(description="The provider-specific model parameters."),
+]
 
 
 class ToolType(StrEnum):
@@ -55,6 +77,10 @@ class ToolDefinition(BaseModel):
 
 __all__ = [
     "ModelConfig",
+    "ModelParameters",
+    "ProviderConfigType",
+    "ProviderModelParametersType",
+    "ProviderType",
     "ToolDefinition",
     "ToolType",
 ]
