@@ -21,10 +21,13 @@ WORKDIR /
 # Copy the binary from builder
 COPY --from=builder /workspace/server .
 
+# Copy swagger files
+COPY --from=builder /workspace/server/gen/openapiv2 /swagger
+
 # Use non-root user
 USER 65532:65532
 
-# Expose gRPC port
-EXPOSE 50051
+# Expose gRPC and HTTP ports
+EXPOSE 50051 8080
 
 ENTRYPOINT ["/server"]

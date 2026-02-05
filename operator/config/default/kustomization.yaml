@@ -1,12 +1,8 @@
 # Adds namespace to all resources.
-namespace: operator-system
+namespace: flokoa-system
 
-# Value of this field is prepended to the
-# names of all resources, e.g. a deployment named
-# "wordpress" becomes "alices-wordpress".
-# Note that it should also match with the prefix (text before '-') of the namespace
-# field above.
-namePrefix: operator-
+# namePrefix is disabled to use clean names like flokoa-controller, flokoa-server
+# namePrefix: flokoa-
 
 # Labels to add to all resources and selectors.
 #labels:
@@ -41,6 +37,7 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
+    name: flokoa-controller
 
 # Uncomment the patches line if you enable Metrics and CertManager
 # [METRICS-WITH-CERTS] To enable metrics protected with certManager, uncomment the following line.

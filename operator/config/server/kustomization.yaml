@@ -3,13 +3,11 @@ kind: Kustomization
 
 namespace: system
 
-namePrefix: flokoa-
-
 resources:
-  - deployment.yaml
-  - service.yaml
+- deployment.yaml
+- service.yaml
 
 images:
-  - name: server
-    newName: ghcr.io/danielnyari/flokoa-server
-    newTag: latest
+- name: server
+  newName: ghcr.io/danielnyari/flokoa-server
+  newTag: 0.0.3
