@@ -357,8 +357,8 @@ class TestPydanticAIAgentExecutorModelConfig:
         return PydanticAIAgentExecutor(pydantic_agent)
 
     def test_get_model_config_returns_config(self, executor_with_full_config):
-        """Verify _get_model_config returns the loaded configuration."""
-        config = executor_with_full_config._get_model_config()
+        """Verify model_config property returns the loaded configuration."""
+        config = executor_with_full_config.model_config
 
         assert config is not None
         assert config.provider.type == ProviderType.openai

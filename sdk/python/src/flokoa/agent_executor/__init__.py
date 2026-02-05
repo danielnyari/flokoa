@@ -87,15 +87,15 @@ class FlokoaAgentExecutor(AgentExecutor):
         if self.model_provider is None:
             raise ProviderNotConfiguredError("model_provider must be set to access provider_config")
         if self.model_config:
-            return getattr(self.model_config, self.model_provider.value, None)
+            return getattr(self.model_config.provider, self.model_provider.value, None)
         return None
 
     @property
     def provider_model_parameters(self) -> ProviderModelParametersType | None:
         if self.model_provider is None:
             raise ProviderNotConfiguredError("model_provider must be set to access provider_model_parameters")
-        if self.model_config:
-            return getattr(self.model_config, self.model_provider.value, None)
+        if self.model_config and self.model_config.parameters:
+            return getattr(self.model_config.parameters, self.model_provider.value, None)
         return None
 
     @property
