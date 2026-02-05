@@ -1,0 +1,46 @@
+name: Python SDK Tests
+
+on:
+  push:
+    paths:
+      - 'sdk/python/**'
+      - '.github/workflows/test-python.yml'
+  pull_request:
+    paths:
+      - 'sdk/python/**'
+      - '.github/workflows/test-python.yml'
+
+jobs:
+  test:
+    name: Run Python SDK Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sdk/python/uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: sdk/python/.python-version
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: sdk/python/coverage.xml
+          flags: python-sdk
+          name: python-sdk-coverage
