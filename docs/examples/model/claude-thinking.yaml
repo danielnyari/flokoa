@@ -1,0 +1,28 @@
+# Claude with Extended Thinking
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: claude-thinking
+  labels:
+    provider: anthropic
+    model: claude-sonnet-4
+    feature: extended-thinking
+spec:
+  model: "claude-sonnet-4-20250514"
+  
+  providerRef:
+    name: anthropic-provider
+  
+  parameters:
+    temperature: "0.7"
+    maxTokens: 8192
+    
+    anthropic:
+      # Enable extended thinking
+      thinking:
+        type: "enabled"
+        budgetTokens: 4096
+      
+      # Enable caching for cost optimization
+      cacheInstructions: "5m"
+      cacheToolDefinitions: "5m"

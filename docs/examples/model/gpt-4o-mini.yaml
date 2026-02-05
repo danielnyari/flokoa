@@ -1,0 +1,18 @@
+# GPT-4 Omni Mini Model (faster, cheaper)
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o-mini
+  labels:
+    provider: openai
+    model: gpt-4o-mini
+spec:
+  model: "gpt-4o-mini"
+  
+  providerRef:
+    name: openai-provider
+  
+  parameters:
+    temperature: "0.7"
+    maxTokens: 4096
+    topP: "0.9"

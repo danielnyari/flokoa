@@ -1,0 +1,18 @@
+# Anthropic Provider
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: anthropic-provider
+  labels:
+    provider: anthropic
+spec:
+  apiKeySecretRef:
+    name: anthropic-credentials
+    key: api-key
+  
+  anthropic:
+    # Optional: override default endpoint
+    # baseURL: "https://api.anthropic.com"
+    
+    # Optional: request timeout
+    timeoutSeconds: 60

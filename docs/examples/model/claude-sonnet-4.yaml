@@ -1,0 +1,18 @@
+# Claude Sonnet 4 Model
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: claude-sonnet-4
+  labels:
+    provider: anthropic
+    model: claude-sonnet-4
+spec:
+  model: "claude-sonnet-4-20250514"
+  
+  providerRef:
+    name: anthropic-provider
+  
+  parameters:
+    temperature: "0.7"
+    maxTokens: 8192
+    topP: "0.9"

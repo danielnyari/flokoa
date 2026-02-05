@@ -1,0 +1,29 @@
+# Model optimized for code generation
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o-code
+  labels:
+    provider: openai
+    model: gpt-4o
+    use-case: code-generation
+spec:
+  model: "gpt-4o"
+  
+  providerRef:
+    name: openai-provider
+  
+  parameters:
+    # Lower temperature for more deterministic code
+    temperature: "0.2"
+    
+    # Higher token limit for longer code
+    maxTokens: 16384
+    
+    # More focused sampling
+    topP: "0.1"
+    
+    # Stop after code blocks
+    stopSequences:
+      - "```\n\n"
+      - "\n\n\n"
