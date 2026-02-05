@@ -58,7 +58,7 @@ spec:
     
     headers:
       Accept: "application/json"
-      User-Agent: "FlokQa-Agent/1.0"
+      User-Agent: "Flokoa-Agent/1.0"
   
   inputSchema:
     type: object
