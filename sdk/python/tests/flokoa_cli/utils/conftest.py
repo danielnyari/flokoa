@@ -90,14 +90,14 @@ def agent_card_with_none_capabilities():
 
 
 # Model config fixtures
-# These use PydanticAI's ModelSettings field names (snake_case, flat structure)
+# These use the CRD-based schema (provider with type field, parameters structure)
 
 
 @pytest.fixture
 def minimal_model_config_data():
     """Minimal valid model config data with required fields only."""
     return {
-        "provider": "openai",
+        "provider": {"type": "openai"},
         "model": "gpt-4o",
     }
 
@@ -106,22 +106,24 @@ def minimal_model_config_data():
 def openai_model_config_data():
     """OpenAI model config with all fields populated."""
     return {
-        "provider": "openai",
-        "model": "gpt-4o",
-        "config": {
-            "baseURL": "https://api.openai.com/v1",
-            "organizationID": "org-12345",
-            "timeoutSeconds": 120,
-            "defaultHeaders": {
-                "X-Custom-Header": "custom-value",
+        "provider": {
+            "type": "openai",
+            "openai": {
+                "baseURL": "https://api.openai.com/v1",
+                "organizationID": "org-12345",
+                "timeoutSeconds": 120,
             },
         },
-        "settings": {
-            "temperature": 0.7,
-            "max_tokens": 4096,
-            "top_p": 0.9,
-            "frequency_penalty": 0.5,
-            "presence_penalty": 0.3,
+        "model": "gpt-4o",
+        "parameters": {
+            "temperature": "0.7",
+            "maxTokens": 4096,
+            "topP": "0.9",
+            "frequencyPenalty": "0.5",
+            "presencePenalty": "0.3",
+            "openai": {
+                "serviceTier": "default",
+            },
         },
     }
 
@@ -130,78 +132,73 @@ def openai_model_config_data():
 def anthropic_model_config_data():
     """Anthropic model config."""
     return {
-        "provider": "anthropic",
+        "provider": {
+            "type": "anthropic",
+            "anthropic": {
+                "baseURL": "https://api.anthropic.com",
+                "timeoutSeconds": 90,
+            },
+        },
         "model": "claude-sonnet-4-20250514",
-        "config": {
-            "baseURL": "https://api.anthropic.com",
-            "timeoutSeconds": 90,
-        },
-        "settings": {
-            "temperature": 0.5,
-            "max_tokens": 8192,
-        },
-    }
-
-
-@pytest.fixture
-def ollama_model_config_data():
-    """Ollama model config for local models."""
-    return {
-        "provider": "ollama",
-        "model": "llama3.2",
-        "config": {
-            "host": "http://localhost:11434",
-        },
-        "settings": {
-            "temperature": 0.8,
+        "parameters": {
+            "temperature": "0.5",
+            "maxTokens": 8192,
+            "anthropic": {
+                "cacheInstructions": "5m",
+            },
         },
     }
 
 
 @pytest.fixture
-def azure_openai_model_config_data():
-    """Azure OpenAI model config."""
+def google_model_config_data():
+    """Google/Gemini model config."""
     return {
-        "provider": "azure-openai",
-        "model": "gpt-4o",
-        "config": {
-            "endpoint": "https://myresource.openai.azure.com",
-            "deploymentName": "my-gpt4o-deployment",
-            "apiVersion": "2024-02-15-preview",
+        "provider": {
+            "type": "google",
+            "google": {
+                "location": "us-central1",
+                "project": "test-project",
+                "timeoutSeconds": 60,
+            },
         },
-        "settings": {
-            "temperature": 0.7,
-            "max_tokens": 4096,
-        },
-    }
-
-
-@pytest.fixture
-def gemini_model_config_data():
-    """Gemini model config."""
-    return {
-        "provider": "gemini",
         "model": "gemini-1.5-pro",
-        "config": {
-            "timeoutSeconds": 60,
+        "parameters": {
+            "temperature": "0.9",
+            "maxTokens": 2048,
         },
-        "settings": {
-            "temperature": 0.9,
-            "seed": 42,
+    }
+
+
+@pytest.fixture
+def bedrock_model_config_data():
+    """AWS Bedrock model config."""
+    return {
+        "provider": {
+            "type": "bedrock",
+            "bedrock": {
+                "region": "us-east-1",
+                "inferenceProfileARN": "arn:aws:bedrock:us-east-1:123456789:inference-profile/test",
+            },
+        },
+        "model": "anthropic.claude-3-sonnet",
+        "parameters": {
+            "temperature": "0.7",
+            "maxTokens": 4096,
         },
     }
 
 
 @pytest.fixture
 def model_config_with_settings():
-    """Model config with settings but no provider-specific config."""
+    """Model config with parameters including stop sequences and seed."""
     return {
-        "provider": "openai",
+        "provider": {"type": "openai"},
         "model": "gpt-4o-mini",
-        "settings": {
-            "temperature": 1.0,
-            "max_tokens": 2048,
-            "stop_sequences": ["END", "STOP"],
+        "parameters": {
+            "temperature": "1.0",
+            "maxTokens": 2048,
+            "stopSequences": ["END", "STOP"],
             "seed": 42,
         },
     }
@@ -211,12 +208,12 @@ def model_config_with_settings():
 def model_config_with_default_headers():
     """Model config with default headers."""
     return {
-        "provider": "openai",
-        "model": "gpt-4o",
-        "config": {
+        "provider": {
+            "type": "openai",
             "defaultHeaders": {
                 "X-Request-Source": "flokoa",
                 "X-Tenant-ID": "tenant-123",
             },
         },
+        "model": "gpt-4o",
     }
