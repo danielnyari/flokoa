@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/model.proto";
+import "flokoa/agent/v1alpha1/common.proto";
+import "google/protobuf/field_mask.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// ModelService provides CRUD operations for Model resources.
+service ModelService {
+  // GetModel retrieves a Model by name and namespace.
+  rpc GetModel(GetModelRequest) returns (Model) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/namespaces/{namespace}/models/{name}"
+    };
+  }
+
+  // ListModels lists Models in a namespace or across all namespaces.
+  rpc ListModels(ListModelsRequest) returns (ModelList) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/models"
+      additional_bindings {
+        get: "/api/v1alpha1/namespaces/{namespace}/models"
+      }
+    };
+  }
+
+  // CreateModel creates a new Model.
+  rpc CreateModel(CreateModelRequest) returns (Model) {
+    option (google.api.http) = {
+      post: "/api/v1alpha1/namespaces/{namespace}/models"
+      body: "model"
+    };
+  }
+
+  // UpdateModel updates an existing Model.
+  rpc UpdateModel(UpdateModelRequest) returns (Model) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{model.metadata.namespace}/models/{model.metadata.name}"
+      body: "model"
+    };
+  }
+
+  // DeleteModel deletes a Model.
+  rpc DeleteModel(DeleteModelRequest) returns (DeleteModelResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1alpha1/namespaces/{namespace}/models/{name}"
+    };
+  }
+
+  // WatchModels watches for changes to Models.
+  rpc WatchModels(WatchModelsRequest) returns (stream WatchModelsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/watch/models"
+      additional_bindings {
+        get: "/api/v1alpha1/watch/namespaces/{namespace}/models"
+      }
+    };
+  }
+
+  // UpdateModelStatus updates only the status subresource.
+  rpc UpdateModelStatus(UpdateModelStatusRequest) returns (Model) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{namespace}/models/{name}/status"
+      body: "status"
+    };
+  }
+}
+
+// GetModelRequest is the request for GetModel.
+message GetModelRequest {
+  string namespace = 1;
+  string name = 2;
+}
+
+// ListModelsRequest is the request for ListModels.
+message ListModelsRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// CreateModelRequest is the request for CreateModel.
+message CreateModelRequest {
+  string namespace = 1;
+  Model model = 2;
+}
+
+// UpdateModelRequest is the request for UpdateModel.
+message UpdateModelRequest {
+  Model model = 1;
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// DeleteModelRequest is the request for DeleteModel.
+message DeleteModelRequest {
+  string namespace = 1;
+  string name = 2;
+  DeleteOptions options = 3;
+}
+
+// DeleteModelResponse is the response for DeleteModel.
+message DeleteModelResponse {}
+
+// WatchModelsRequest is the request for WatchModels.
+message WatchModelsRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// WatchModelsResponse is a single event in the watch stream.
+message WatchModelsResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_ADDED = 1;
+    EVENT_TYPE_MODIFIED = 2;
+    EVENT_TYPE_DELETED = 3;
+    EVENT_TYPE_BOOKMARK = 4;
+    EVENT_TYPE_ERROR = 5;
+  }
+  EventType type = 1;
+  Model model = 2;
+}
+
+// UpdateModelStatusRequest is the request for UpdateModelStatus.
+message UpdateModelStatusRequest {
+  string namespace = 1;
+  string name = 2;
+  ModelStatus status = 3;
+}

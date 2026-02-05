@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/modelprovider.proto";
+import "flokoa/agent/v1alpha1/common.proto";
+import "google/protobuf/field_mask.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// ModelProviderService provides CRUD operations for ModelProvider resources.
+service ModelProviderService {
+  // GetModelProvider retrieves a ModelProvider by name and namespace.
+  rpc GetModelProvider(GetModelProviderRequest) returns (ModelProvider) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/namespaces/{namespace}/modelproviders/{name}"
+    };
+  }
+
+  // ListModelProviders lists ModelProviders in a namespace or across all namespaces.
+  rpc ListModelProviders(ListModelProvidersRequest) returns (ModelProviderList) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/modelproviders"
+      additional_bindings {
+        get: "/api/v1alpha1/namespaces/{namespace}/modelproviders"
+      }
+    };
+  }
+
+  // CreateModelProvider creates a new ModelProvider.
+  rpc CreateModelProvider(CreateModelProviderRequest) returns (ModelProvider) {
+    option (google.api.http) = {
+      post: "/api/v1alpha1/namespaces/{namespace}/modelproviders"
+      body: "model_provider"
+    };
+  }
+
+  // UpdateModelProvider updates an existing ModelProvider.
+  rpc UpdateModelProvider(UpdateModelProviderRequest) returns (ModelProvider) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{model_provider.metadata.namespace}/modelproviders/{model_provider.metadata.name}"
+      body: "model_provider"
+    };
+  }
+
+  // DeleteModelProvider deletes a ModelProvider.
+  rpc DeleteModelProvider(DeleteModelProviderRequest) returns (DeleteModelProviderResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1alpha1/namespaces/{namespace}/modelproviders/{name}"
+    };
+  }
+
+  // WatchModelProviders watches for changes to ModelProviders.
+  rpc WatchModelProviders(WatchModelProvidersRequest) returns (stream WatchModelProvidersResponse) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/watch/modelproviders"
+      additional_bindings {
+        get: "/api/v1alpha1/watch/namespaces/{namespace}/modelproviders"
+      }
+    };
+  }
+
+  // UpdateModelProviderStatus updates only the status subresource.
+  rpc UpdateModelProviderStatus(UpdateModelProviderStatusRequest) returns (ModelProvider) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{namespace}/modelproviders/{name}/status"
+      body: "status"
+    };
+  }
+}
+
+// GetModelProviderRequest is the request for GetModelProvider.
+message GetModelProviderRequest {
+  string namespace = 1;
+  string name = 2;
+}
+
+// ListModelProvidersRequest is the request for ListModelProviders.
+message ListModelProvidersRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// CreateModelProviderRequest is the request for CreateModelProvider.
+message CreateModelProviderRequest {
+  string namespace = 1;
+  ModelProvider model_provider = 2;
+}
+
+// UpdateModelProviderRequest is the request for UpdateModelProvider.
+message UpdateModelProviderRequest {
+  ModelProvider model_provider = 1;
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// DeleteModelProviderRequest is the request for DeleteModelProvider.
+message DeleteModelProviderRequest {
+  string namespace = 1;
+  string name = 2;
+  DeleteOptions options = 3;
+}
+
+// DeleteModelProviderResponse is the response for DeleteModelProvider.
+message DeleteModelProviderResponse {}
+
+// WatchModelProvidersRequest is the request for WatchModelProviders.
+message WatchModelProvidersRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// WatchModelProvidersResponse is a single event in the watch stream.
+message WatchModelProvidersResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_ADDED = 1;
+    EVENT_TYPE_MODIFIED = 2;
+    EVENT_TYPE_DELETED = 3;
+    EVENT_TYPE_BOOKMARK = 4;
+    EVENT_TYPE_ERROR = 5;
+  }
+  EventType type = 1;
+  ModelProvider model_provider = 2;
+}
+
+// UpdateModelProviderStatusRequest is the request for UpdateModelProviderStatus.
+message UpdateModelProviderStatusRequest {
+  string namespace = 1;
+  string name = 2;
+  ModelProviderStatus status = 3;
+}

@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/agent.proto";
+import "flokoa/agent/v1alpha1/common.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// AgentService provides read-only operations for Agent resources.
+// Note: Create, Update, and Delete operations are not available in this version.
+service AgentService {
+  // GetAgent retrieves an Agent by name and namespace.
+  rpc GetAgent(GetAgentRequest) returns (Agent) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/namespaces/{namespace}/agents/{name}"
+    };
+  }
+
+  // ListAgents lists Agents in a namespace or across all namespaces.
+  rpc ListAgents(ListAgentsRequest) returns (AgentList) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/agents"
+      additional_bindings {
+        get: "/api/v1alpha1/namespaces/{namespace}/agents"
+      }
+    };
+  }
+
+  // WatchAgents watches for changes to Agents.
+  rpc WatchAgents(WatchAgentsRequest) returns (stream WatchAgentsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/watch/agents"
+      additional_bindings {
+        get: "/api/v1alpha1/watch/namespaces/{namespace}/agents"
+      }
+    };
+  }
+}
+
+// GetAgentRequest is the request for GetAgent.
+message GetAgentRequest {
+  string namespace = 1;
+  string name = 2;
+}
+
+// ListAgentsRequest is the request for ListAgents.
+message ListAgentsRequest {
+  // Empty namespace means all namespaces
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// WatchAgentsRequest is the request for WatchAgents.
+message WatchAgentsRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// WatchAgentsResponse is a single event in the watch stream.
+message WatchAgentsResponse {
+  // EventType represents the type of watch event.
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_ADDED = 1;
+    EVENT_TYPE_MODIFIED = 2;
+    EVENT_TYPE_DELETED = 3;
+    EVENT_TYPE_BOOKMARK = 4;
+    EVENT_TYPE_ERROR = 5;
+  }
+  EventType type = 1;
+  Agent agent = 2;
+}

@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// ObjectMeta contains metadata that all persisted resources must have.
+// Simplified version of k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta
+message ObjectMeta {
+  string name = 1;
+  string namespace = 2;
+  string uid = 3;
+  string resource_version = 4;
+  int64 generation = 5;
+  google.protobuf.Timestamp creation_timestamp = 6;
+  google.protobuf.Timestamp deletion_timestamp = 7;
+  map<string, string> labels = 8;
+  map<string, string> annotations = 9;
+  repeated OwnerReference owner_references = 10;
+  repeated string finalizers = 11;
+}
+
+// OwnerReference contains information about the owning object.
+message OwnerReference {
+  string api_version = 1;
+  string kind = 2;
+  string name = 3;
+  string uid = 4;
+  bool controller = 5;
+  bool block_owner_deletion = 6;
+}
+
+// Condition represents a condition for a Kubernetes resource.
+message Condition {
+  string type = 1;
+  string status = 2;  // True, False, Unknown
+  int64 observed_generation = 3;
+  google.protobuf.Timestamp last_transition_time = 4;
+  string reason = 5;
+  string message = 6;
+}
+
+// ListMeta contains metadata for list operations.
+message ListMeta {
+  string resource_version = 1;
+  string continue = 2;
+  int64 remaining_item_count = 3;
+}
+
+// ListOptions contains options for list operations.
+message ListOptions {
+  string label_selector = 1;
+  string field_selector = 2;
+  int64 limit = 3;
+  string continue = 4;
+}
+
+// DeleteOptions contains options for delete operations.
+message DeleteOptions {
+  // Propagation policy: Orphan, Background, Foreground
+  string propagation_policy = 1;
+  // Grace period in seconds
+  int64 grace_period_seconds = 2;
+}
+
+// SecretKeySelector references a specific key within a Secret.
+message SecretKeySelector {
+  string name = 1;
+  string key = 2;
+  bool optional = 3;
+}
+
+// LocalObjectReference references a local object by name.
+message LocalObjectReference {
+  string name = 1;
+}
+
+// NamespacedRef is a generic reference to a namespaced resource.
+message NamespacedRef {
+  string name = 1;
+  string namespace = 2;
+}

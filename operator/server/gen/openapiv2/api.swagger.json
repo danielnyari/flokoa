@@ -1,0 +1,4364 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "flokoa/agent/v1alpha1/common.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "AgentService"
+    },
+    {
+      "name": "AgentToolService"
+    },
+    {
+      "name": "ModelService"
+    },
+    {
+      "name": "ModelProviderService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/v1alpha1/agents": {
+      "get": {
+        "summary": "ListAgents lists Agents in a namespace or across all namespaces.",
+        "operationId": "AgentService_ListAgents",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "description": "Empty namespace means all namespaces",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentService"
+        ]
+      }
+    },
+    "/api/v1alpha1/agenttools": {
+      "get": {
+        "summary": "ListAgentTools lists AgentTools in a namespace or across all namespaces.",
+        "operationId": "AgentToolService_ListAgentTools",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentToolList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/modelproviders": {
+      "get": {
+        "summary": "ListModelProviders lists ModelProviders in a namespace or across all namespaces.",
+        "operationId": "ModelProviderService_ListModelProviders",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProviderList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      }
+    },
+    "/api/v1alpha1/models": {
+      "get": {
+        "summary": "ListModels lists Models in a namespace or across all namespaces.",
+        "operationId": "ModelService_ListModels",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{agentTool.metadata.namespace}/agenttools/{agentTool.metadata.name}": {
+      "put": {
+        "summary": "UpdateAgentTool updates an existing AgentTool.",
+        "operationId": "AgentToolService_UpdateAgentTool",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTool"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "agentTool.metadata.namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "agentTool.metadata.name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "agentTool",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "metadata": {
+                  "type": "object",
+                  "properties": {
+                    "uid": {
+                      "type": "string"
+                    },
+                    "resourceVersion": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "string",
+                      "format": "int64"
+                    },
+                    "creationTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletionTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "ownerReferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "$ref": "#/definitions/v1alpha1OwnerReference"
+                      }
+                    },
+                    "finalizers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "title": "ObjectMeta contains metadata that all persisted resources must have.\nSimplified version of k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"
+                },
+                "spec": {
+                  "$ref": "#/definitions/v1alpha1AgentToolSpec"
+                },
+                "status": {
+                  "$ref": "#/definitions/v1alpha1AgentToolStatus"
+                }
+              },
+              "description": "AgentTool is the top-level AgentTool resource."
+            }
+          },
+          {
+            "name": "updateMask",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{model.metadata.namespace}/models/{model.metadata.name}": {
+      "put": {
+        "summary": "UpdateModel updates an existing Model.",
+        "operationId": "ModelService_UpdateModel",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1Model"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "model.metadata.namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "model.metadata.name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "model",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "metadata": {
+                  "type": "object",
+                  "properties": {
+                    "uid": {
+                      "type": "string"
+                    },
+                    "resourceVersion": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "string",
+                      "format": "int64"
+                    },
+                    "creationTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletionTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "ownerReferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "$ref": "#/definitions/v1alpha1OwnerReference"
+                      }
+                    },
+                    "finalizers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "title": "ObjectMeta contains metadata that all persisted resources must have.\nSimplified version of k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"
+                },
+                "spec": {
+                  "$ref": "#/definitions/v1alpha1ModelSpec"
+                },
+                "status": {
+                  "$ref": "#/definitions/v1alpha1ModelStatus"
+                }
+              },
+              "description": "Model is the top-level Model resource."
+            }
+          },
+          {
+            "name": "updateMask",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{modelProvider.metadata.namespace}/modelproviders/{modelProvider.metadata.name}": {
+      "put": {
+        "summary": "UpdateModelProvider updates an existing ModelProvider.",
+        "operationId": "ModelProviderService_UpdateModelProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProvider"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "modelProvider.metadata.namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "modelProvider.metadata.name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "modelProvider",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "metadata": {
+                  "type": "object",
+                  "properties": {
+                    "uid": {
+                      "type": "string"
+                    },
+                    "resourceVersion": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "string",
+                      "format": "int64"
+                    },
+                    "creationTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletionTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "ownerReferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "$ref": "#/definitions/v1alpha1OwnerReference"
+                      }
+                    },
+                    "finalizers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "title": "ObjectMeta contains metadata that all persisted resources must have.\nSimplified version of k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"
+                },
+                "spec": {
+                  "$ref": "#/definitions/v1alpha1ModelProviderSpec"
+                },
+                "status": {
+                  "$ref": "#/definitions/v1alpha1ModelProviderStatus"
+                }
+              },
+              "description": "ModelProvider is the top-level ModelProvider resource."
+            }
+          },
+          {
+            "name": "updateMask",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agents": {
+      "get": {
+        "summary": "ListAgents lists Agents in a namespace or across all namespaces.",
+        "operationId": "AgentService_ListAgents2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "description": "Empty namespace means all namespaces",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agents/{name}": {
+      "get": {
+        "summary": "GetAgent retrieves an Agent by name and namespace.",
+        "operationId": "AgentService_GetAgent",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1Agent"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agenttools": {
+      "get": {
+        "summary": "ListAgentTools lists AgentTools in a namespace or across all namespaces.",
+        "operationId": "AgentToolService_ListAgentTools2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentToolList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      },
+      "post": {
+        "summary": "CreateAgentTool creates a new AgentTool.",
+        "operationId": "AgentToolService_CreateAgentTool",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTool"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "agentTool",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTool"
+            }
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agenttools/{name}": {
+      "get": {
+        "summary": "GetAgentTool retrieves an AgentTool by name and namespace.",
+        "operationId": "AgentToolService_GetAgentTool",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTool"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      },
+      "delete": {
+        "summary": "DeleteAgentTool deletes an AgentTool.",
+        "operationId": "AgentToolService_DeleteAgentTool",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1DeleteAgentToolResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.propagationPolicy",
+            "description": "Propagation policy: Orphan, Background, Foreground",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.gracePeriodSeconds",
+            "description": "Grace period in seconds",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agenttools/{name}/status": {
+      "put": {
+        "summary": "UpdateAgentToolStatus updates only the status subresource.",
+        "operationId": "AgentToolService_UpdateAgentToolStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTool"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentToolStatus"
+            }
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/modelproviders": {
+      "get": {
+        "summary": "ListModelProviders lists ModelProviders in a namespace or across all namespaces.",
+        "operationId": "ModelProviderService_ListModelProviders2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProviderList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      },
+      "post": {
+        "summary": "CreateModelProvider creates a new ModelProvider.",
+        "operationId": "ModelProviderService_CreateModelProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProvider"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "modelProvider",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProvider"
+            }
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/modelproviders/{name}": {
+      "get": {
+        "summary": "GetModelProvider retrieves a ModelProvider by name and namespace.",
+        "operationId": "ModelProviderService_GetModelProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProvider"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      },
+      "delete": {
+        "summary": "DeleteModelProvider deletes a ModelProvider.",
+        "operationId": "ModelProviderService_DeleteModelProvider",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1DeleteModelProviderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.propagationPolicy",
+            "description": "Propagation policy: Orphan, Background, Foreground",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.gracePeriodSeconds",
+            "description": "Grace period in seconds",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/modelproviders/{name}/status": {
+      "put": {
+        "summary": "UpdateModelProviderStatus updates only the status subresource.",
+        "operationId": "ModelProviderService_UpdateModelProviderStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProvider"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelProviderStatus"
+            }
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/models": {
+      "get": {
+        "summary": "ListModels lists Models in a namespace or across all namespaces.",
+        "operationId": "ModelService_ListModels2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      },
+      "post": {
+        "summary": "CreateModel creates a new Model.",
+        "operationId": "ModelService_CreateModel",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1Model"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "model",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1Model"
+            }
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/models/{name}": {
+      "get": {
+        "summary": "GetModel retrieves a Model by name and namespace.",
+        "operationId": "ModelService_GetModel",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1Model"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      },
+      "delete": {
+        "summary": "DeleteModel deletes a Model.",
+        "operationId": "ModelService_DeleteModel",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1DeleteModelResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.propagationPolicy",
+            "description": "Propagation policy: Orphan, Background, Foreground",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.gracePeriodSeconds",
+            "description": "Grace period in seconds",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/models/{name}/status": {
+      "put": {
+        "summary": "UpdateModelStatus updates only the status subresource.",
+        "operationId": "ModelService_UpdateModelStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1Model"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1ModelStatus"
+            }
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/agents": {
+      "get": {
+        "summary": "WatchAgents watches for changes to Agents.",
+        "operationId": "AgentService_WatchAgents",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchAgentsResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchAgentsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/agenttools": {
+      "get": {
+        "summary": "WatchAgentTools watches for changes to AgentTools.",
+        "operationId": "AgentToolService_WatchAgentTools",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchAgentToolsResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchAgentToolsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/modelproviders": {
+      "get": {
+        "summary": "WatchModelProviders watches for changes to ModelProviders.",
+        "operationId": "ModelProviderService_WatchModelProviders",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchModelProvidersResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchModelProvidersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/models": {
+      "get": {
+        "summary": "WatchModels watches for changes to Models.",
+        "operationId": "ModelService_WatchModels",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchModelsResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchModelsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/namespaces/{namespace}/agents": {
+      "get": {
+        "summary": "WatchAgents watches for changes to Agents.",
+        "operationId": "AgentService_WatchAgents2",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchAgentsResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchAgentsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/namespaces/{namespace}/agenttools": {
+      "get": {
+        "summary": "WatchAgentTools watches for changes to AgentTools.",
+        "operationId": "AgentToolService_WatchAgentTools2",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchAgentToolsResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchAgentToolsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/namespaces/{namespace}/modelproviders": {
+      "get": {
+        "summary": "WatchModelProviders watches for changes to ModelProviders.",
+        "operationId": "ModelProviderService_WatchModelProviders2",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchModelProvidersResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchModelProvidersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelProviderService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/namespaces/{namespace}/models": {
+      "get": {
+        "summary": "WatchModels watches for changes to Models.",
+        "operationId": "ModelService_WatchModels2",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchModelsResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchModelsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ModelService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "protobufNullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "default": "NULL_VALUE",
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\nThe JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1alpha1Affinity": {
+      "type": "object",
+      "properties": {
+        "nodeAffinity": {
+          "$ref": "#/definitions/v1alpha1NodeAffinity"
+        },
+        "podAffinity": {
+          "$ref": "#/definitions/v1alpha1PodAffinity"
+        },
+        "podAntiAffinity": {
+          "$ref": "#/definitions/v1alpha1PodAntiAffinity"
+        }
+      },
+      "description": "Affinity defines pod affinity rules."
+    },
+    "v1alpha1Agent": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ObjectMeta"
+        },
+        "spec": {
+          "$ref": "#/definitions/v1alpha1AgentSpec"
+        },
+        "status": {
+          "$ref": "#/definitions/v1alpha1AgentStatus"
+        }
+      },
+      "description": "Agent is the top-level Agent resource."
+    },
+    "v1alpha1AgentCapabilities": {
+      "type": "object",
+      "properties": {
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1AgentExtension"
+          }
+        },
+        "pushNotifications": {
+          "type": "boolean"
+        },
+        "stateTransitionHistory": {
+          "type": "boolean"
+        },
+        "streaming": {
+          "type": "boolean"
+        }
+      },
+      "description": "AgentCapabilities defines agent capabilities."
+    },
+    "v1alpha1AgentCard": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "defaultInputModes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1alpha1InputOutputMode"
+          }
+        },
+        "defaultOutputModes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1alpha1InputOutputMode"
+          }
+        },
+        "capabilities": {
+          "$ref": "#/definitions/v1alpha1AgentCapabilities"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1AgentSkill"
+          }
+        }
+      },
+      "description": "AgentCard contains agent metadata following A2A protocol."
+    },
+    "v1alpha1AgentExtension": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "description": "AgentExtension represents an extension with parameters."
+    },
+    "v1alpha1AgentList": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ListMeta"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Agent"
+          }
+        }
+      },
+      "description": "AgentList contains a list of Agent resources."
+    },
+    "v1alpha1AgentModelRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      },
+      "description": "AgentModelRef references a Model resource."
+    },
+    "v1alpha1AgentPhase": {
+      "type": "string",
+      "enum": [
+        "AGENT_PHASE_UNSPECIFIED",
+        "AGENT_PHASE_PENDING",
+        "AGENT_PHASE_RUNNING",
+        "AGENT_PHASE_FAILED"
+      ],
+      "default": "AGENT_PHASE_UNSPECIFIED",
+      "description": "AgentPhase represents the current phase of the agent lifecycle."
+    },
+    "v1alpha1AgentSkill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputModes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputModes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "security": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1SecurityRequirement"
+          },
+          "title": "Security schemes represented as a list of requirements (OR of ANDs)"
+        }
+      },
+      "description": "AgentSkill describes a specific capability or function."
+    },
+    "v1alpha1AgentSpec": {
+      "type": "object",
+      "properties": {
+        "card": {
+          "$ref": "#/definitions/v1alpha1AgentCard"
+        },
+        "runtime": {
+          "$ref": "#/definitions/v1alpha1RuntimeSpec"
+        },
+        "model": {
+          "$ref": "#/definitions/v1alpha1AgentModelRef"
+        },
+        "framework": {
+          "$ref": "#/definitions/v1alpha1Framework"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1ToolEntry"
+          }
+        }
+      },
+      "description": "AgentSpec defines the desired state of an Agent."
+    },
+    "v1alpha1AgentStatus": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "#/definitions/v1alpha1AgentPhase"
+        },
+        "backend": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "replicas": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "availableReplicas": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "lastToolSync": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "detectedFramework": {
+          "$ref": "#/definitions/v1alpha1Framework"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Condition"
+          }
+        },
+        "observedGeneration": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "description": "AgentStatus defines the observed state of Agent."
+    },
+    "v1alpha1AgentTool": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ObjectMeta"
+        },
+        "spec": {
+          "$ref": "#/definitions/v1alpha1AgentToolSpec"
+        },
+        "status": {
+          "$ref": "#/definitions/v1alpha1AgentToolStatus"
+        }
+      },
+      "description": "AgentTool is the top-level AgentTool resource."
+    },
+    "v1alpha1AgentToolList": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ListMeta"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1AgentTool"
+          }
+        }
+      },
+      "description": "AgentToolList contains a list of AgentTool resources."
+    },
+    "v1alpha1AgentToolSpec": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1AgentToolType"
+        },
+        "description": {
+          "type": "string"
+        },
+        "httpApi": {
+          "$ref": "#/definitions/v1alpha1HTTPApiSpec"
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "outputSchema": {
+          "type": "object"
+        },
+        "openApiSchemaRef": {
+          "$ref": "#/definitions/v1alpha1OpenApiSchemaRef"
+        }
+      },
+      "description": "AgentToolSpec defines the desired state of AgentTool."
+    },
+    "v1alpha1AgentToolStatus": {
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Condition"
+          }
+        },
+        "observedGeneration": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "description": "AgentToolStatus defines the observed state of AgentTool."
+    },
+    "v1alpha1AgentToolType": {
+      "type": "string",
+      "enum": [
+        "AGENT_TOOL_TYPE_UNSPECIFIED",
+        "AGENT_TOOL_TYPE_HTTP_API"
+      ],
+      "default": "AGENT_TOOL_TYPE_UNSPECIFIED",
+      "description": "AgentToolType represents the type of tool."
+    },
+    "v1alpha1AnthropicContainerConfig": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "disabled": {
+          "type": "boolean"
+        }
+      },
+      "description": "AnthropicContainerConfig defines container configuration for multi-turn."
+    },
+    "v1alpha1AnthropicParameters": {
+      "type": "object",
+      "properties": {
+        "metadataUserId": {
+          "type": "string"
+        },
+        "thinking": {
+          "$ref": "#/definitions/v1alpha1AnthropicThinkingConfig"
+        },
+        "cacheToolDefinitions": {
+          "type": "string"
+        },
+        "cacheInstructions": {
+          "type": "string"
+        },
+        "cacheMessages": {
+          "type": "string"
+        },
+        "container": {
+          "$ref": "#/definitions/v1alpha1AnthropicContainerConfig"
+        }
+      },
+      "description": "AnthropicParameters contains Anthropic-specific parameters."
+    },
+    "v1alpha1AnthropicProviderSpec": {
+      "type": "object",
+      "properties": {
+        "baseUrl": {
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "AnthropicProviderSpec defines Anthropic provider configuration."
+    },
+    "v1alpha1AnthropicThinkingConfig": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1ThinkingType"
+        },
+        "budgetTokens": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "AnthropicThinkingConfig defines thinking configuration."
+    },
+    "v1alpha1BedrockGuardrailConfig": {
+      "type": "object",
+      "properties": {
+        "guardrailIdentifier": {
+          "type": "string"
+        },
+        "guardrailVersion": {
+          "type": "string"
+        },
+        "trace": {
+          "type": "string"
+        }
+      },
+      "description": "BedrockGuardrailConfig defines guardrail settings."
+    },
+    "v1alpha1BedrockParameters": {
+      "type": "object",
+      "properties": {
+        "guardrailConfig": {
+          "$ref": "#/definitions/v1alpha1BedrockGuardrailConfig"
+        },
+        "performanceConfiguration": {
+          "$ref": "#/definitions/v1alpha1BedrockPerformanceConfig"
+        },
+        "requestMetadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "additionalModelResponseFieldsPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "promptVariables": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "additionalModelRequestFields": {
+          "type": "object"
+        },
+        "cacheToolDefinitions": {
+          "type": "boolean"
+        },
+        "cacheInstructions": {
+          "type": "boolean"
+        },
+        "cacheMessages": {
+          "type": "boolean"
+        },
+        "serviceTier": {
+          "$ref": "#/definitions/v1alpha1BedrockServiceTier"
+        }
+      },
+      "description": "BedrockParameters contains Bedrock-specific parameters."
+    },
+    "v1alpha1BedrockPerformanceConfig": {
+      "type": "object",
+      "properties": {
+        "latency": {
+          "type": "string"
+        }
+      },
+      "description": "BedrockPerformanceConfig defines performance settings."
+    },
+    "v1alpha1BedrockProviderSpec": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "inferenceProfileArn": {
+          "type": "string"
+        }
+      },
+      "description": "BedrockProviderSpec defines Bedrock provider configuration."
+    },
+    "v1alpha1BedrockServiceTier": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        }
+      },
+      "description": "BedrockServiceTier defines service tier."
+    },
+    "v1alpha1Capabilities": {
+      "type": "object",
+      "properties": {
+        "add": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "drop": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Capabilities adds/removes POSIX capabilities."
+    },
+    "v1alpha1Condition": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "title": "True, False, Unknown"
+        },
+        "observedGeneration": {
+          "type": "string",
+          "format": "int64"
+        },
+        "lastTransitionTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "description": "Condition represents a condition for a Kubernetes resource."
+    },
+    "v1alpha1ConfigMapEnvSource": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "ConfigMapEnvSource references a ConfigMap for env vars."
+    },
+    "v1alpha1ConfigMapKeyRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "description": "ConfigMapKeyRef references a key in a ConfigMap."
+    },
+    "v1alpha1ConfigMapKeySelector": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "ConfigMapKeySelector references a key in a ConfigMap."
+    },
+    "v1alpha1ConfigMapProjection": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1KeyToPath"
+          }
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "ConfigMapProjection projects a config map into a volume."
+    },
+    "v1alpha1ConfigMapVolumeSource": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1KeyToPath"
+          }
+        },
+        "defaultMode": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "ConfigMapVolumeSource adapts a ConfigMap into a volume."
+    },
+    "v1alpha1Container": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workingDir": {
+          "type": "string"
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1ContainerPort"
+          }
+        },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1EnvVar"
+          }
+        },
+        "envFrom": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1EnvFromSource"
+          }
+        },
+        "resources": {
+          "$ref": "#/definitions/v1alpha1ResourceRequirements"
+        },
+        "volumeMounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1VolumeMount"
+          }
+        },
+        "livenessProbe": {
+          "$ref": "#/definitions/v1alpha1Probe"
+        },
+        "readinessProbe": {
+          "$ref": "#/definitions/v1alpha1Probe"
+        },
+        "startupProbe": {
+          "$ref": "#/definitions/v1alpha1Probe"
+        },
+        "imagePullPolicy": {
+          "type": "string"
+        },
+        "securityContext": {
+          "$ref": "#/definitions/v1alpha1SecurityContext"
+        }
+      },
+      "title": "Container spec (simplified from corev1.Container)"
+    },
+    "v1alpha1ContainerPort": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "containerPort": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "protocol": {
+          "type": "string"
+        }
+      },
+      "description": "ContainerPort represents a port on a container."
+    },
+    "v1alpha1DeleteAgentToolResponse": {
+      "type": "object",
+      "description": "DeleteAgentToolResponse is the response for DeleteAgentTool."
+    },
+    "v1alpha1DeleteModelProviderResponse": {
+      "type": "object",
+      "description": "DeleteModelProviderResponse is the response for DeleteModelProvider."
+    },
+    "v1alpha1DeleteModelResponse": {
+      "type": "object",
+      "description": "DeleteModelResponse is the response for DeleteModel."
+    },
+    "v1alpha1DeleteOptions": {
+      "type": "object",
+      "properties": {
+        "propagationPolicy": {
+          "type": "string",
+          "title": "Propagation policy: Orphan, Background, Foreground"
+        },
+        "gracePeriodSeconds": {
+          "type": "string",
+          "format": "int64",
+          "title": "Grace period in seconds"
+        }
+      },
+      "description": "DeleteOptions contains options for delete operations."
+    },
+    "v1alpha1DownwardAPIProjection": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1DownwardAPIVolumeFile"
+          }
+        }
+      },
+      "description": "DownwardAPIProjection projects downward API info into a volume."
+    },
+    "v1alpha1DownwardAPIVolumeFile": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "fieldRef": {
+          "$ref": "#/definitions/v1alpha1ObjectFieldSelector"
+        },
+        "resourceFieldRef": {
+          "$ref": "#/definitions/v1alpha1ResourceFieldSelector"
+        },
+        "mode": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "DownwardAPIVolumeFile represents a file with downward API info."
+    },
+    "v1alpha1EmptyDirVolumeSource": {
+      "type": "object",
+      "properties": {
+        "medium": {
+          "type": "string"
+        },
+        "sizeLimit": {
+          "type": "string"
+        }
+      },
+      "description": "EmptyDirVolumeSource represents an empty directory volume."
+    },
+    "v1alpha1EnvFromSource": {
+      "type": "object",
+      "properties": {
+        "prefix": {
+          "type": "string"
+        },
+        "configMapRef": {
+          "$ref": "#/definitions/v1alpha1ConfigMapEnvSource"
+        },
+        "secretRef": {
+          "$ref": "#/definitions/v1alpha1SecretEnvSource"
+        }
+      },
+      "description": "EnvFromSource represents a source for environment variables."
+    },
+    "v1alpha1EnvVar": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "valueFrom": {
+          "$ref": "#/definitions/v1alpha1EnvVarSource"
+        }
+      },
+      "description": "EnvVar represents an environment variable."
+    },
+    "v1alpha1EnvVarSource": {
+      "type": "object",
+      "properties": {
+        "secretKeyRef": {
+          "$ref": "#/definitions/v1alpha1SecretKeySelector"
+        },
+        "configMapKeyRef": {
+          "$ref": "#/definitions/v1alpha1ConfigMapKeySelector"
+        },
+        "fieldRef": {
+          "$ref": "#/definitions/v1alpha1ObjectFieldSelector"
+        },
+        "resourceFieldRef": {
+          "$ref": "#/definitions/v1alpha1ResourceFieldSelector"
+        }
+      },
+      "description": "EnvVarSource represents a source for an environment variable's value."
+    },
+    "v1alpha1ExecAction": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "ExecAction describes a command to execute."
+    },
+    "v1alpha1Framework": {
+      "type": "string",
+      "enum": [
+        "FRAMEWORK_UNSPECIFIED",
+        "FRAMEWORK_PYDANTIC_AI",
+        "FRAMEWORK_LANGCHAIN",
+        "FRAMEWORK_GOOGLE_ADK",
+        "FRAMEWORK_MARVIN",
+        "FRAMEWORK_AUTOGEN",
+        "FRAMEWORK_A2A"
+      ],
+      "default": "FRAMEWORK_UNSPECIFIED",
+      "description": "Framework represents the AI framework used by the agent."
+    },
+    "v1alpha1GRPCAction": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "description": "GRPCAction describes a gRPC health check."
+    },
+    "v1alpha1GoogleMediaResolution": {
+      "type": "string",
+      "enum": [
+        "GOOGLE_MEDIA_RESOLUTION_UNSPECIFIED",
+        "GOOGLE_MEDIA_RESOLUTION_LOW",
+        "GOOGLE_MEDIA_RESOLUTION_MEDIUM",
+        "GOOGLE_MEDIA_RESOLUTION_HIGH"
+      ],
+      "default": "GOOGLE_MEDIA_RESOLUTION_UNSPECIFIED",
+      "description": "GoogleMediaResolution for Google models."
+    },
+    "v1alpha1GoogleParameters": {
+      "type": "object",
+      "properties": {
+        "safetySettings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1GoogleSafetySetting"
+          }
+        },
+        "thinkingConfig": {
+          "$ref": "#/definitions/v1alpha1GoogleThinkingConfig"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "videoResolution": {
+          "$ref": "#/definitions/v1alpha1GoogleMediaResolution"
+        },
+        "cachedContent": {
+          "type": "string"
+        }
+      },
+      "description": "GoogleParameters contains Google-specific parameters."
+    },
+    "v1alpha1GoogleProviderSpec": {
+      "type": "object",
+      "properties": {
+        "timeoutSeconds": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "project": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "serviceAccountKeySecretRef": {
+          "$ref": "#/definitions/v1alpha1SecretKeySelector"
+        }
+      },
+      "description": "GoogleProviderSpec defines Google provider configuration."
+    },
+    "v1alpha1GoogleSafetySetting": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "threshold": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        }
+      },
+      "description": "GoogleSafetySetting defines safety settings."
+    },
+    "v1alpha1GoogleThinkingConfig": {
+      "type": "object",
+      "properties": {
+        "includeThoughts": {
+          "type": "boolean"
+        },
+        "thinkingBudget": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "thinkingLevel": {
+          "$ref": "#/definitions/v1alpha1GoogleThinkingLevel"
+        }
+      },
+      "description": "GoogleThinkingConfig defines thinking configuration for Google models."
+    },
+    "v1alpha1GoogleThinkingLevel": {
+      "type": "string",
+      "enum": [
+        "GOOGLE_THINKING_LEVEL_UNSPECIFIED",
+        "GOOGLE_THINKING_LEVEL_MINIMAL",
+        "GOOGLE_THINKING_LEVEL_LOW",
+        "GOOGLE_THINKING_LEVEL_MEDIUM",
+        "GOOGLE_THINKING_LEVEL_HIGH"
+      ],
+      "default": "GOOGLE_THINKING_LEVEL_UNSPECIFIED",
+      "description": "GoogleThinkingLevel for Google models."
+    },
+    "v1alpha1HTTPApiSpec": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "serviceRef": {
+          "$ref": "#/definitions/v1alpha1ServiceRef"
+        },
+        "path": {
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/definitions/v1alpha1HTTPMethod"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "HTTPApiSpec defines configuration for HTTP API tools."
+    },
+    "v1alpha1HTTPGetAction": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "host": {
+          "type": "string"
+        },
+        "scheme": {
+          "type": "string"
+        },
+        "httpHeaders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1HTTPHeader"
+          }
+        }
+      },
+      "description": "HTTPGetAction describes an HTTP GET request."
+    },
+    "v1alpha1HTTPHeader": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "description": "HTTPHeader represents an HTTP header."
+    },
+    "v1alpha1HTTPMethod": {
+      "type": "string",
+      "enum": [
+        "HTTP_METHOD_UNSPECIFIED",
+        "HTTP_METHOD_GET",
+        "HTTP_METHOD_POST",
+        "HTTP_METHOD_PUT",
+        "HTTP_METHOD_PATCH",
+        "HTTP_METHOD_DELETE"
+      ],
+      "default": "HTTP_METHOD_UNSPECIFIED",
+      "description": "HTTPMethod represents HTTP methods."
+    },
+    "v1alpha1HostPathVolumeSource": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "description": "HostPathVolumeSource represents a host path volume."
+    },
+    "v1alpha1InputOutputMode": {
+      "type": "string",
+      "enum": [
+        "INPUT_OUTPUT_MODE_UNSPECIFIED",
+        "INPUT_OUTPUT_MODE_TEXT",
+        "INPUT_OUTPUT_MODE_JSON"
+      ],
+      "default": "INPUT_OUTPUT_MODE_UNSPECIFIED",
+      "description": "InputOutputMode represents supported input/output modes."
+    },
+    "v1alpha1KeyToPath": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "KeyToPath maps a key to a file path."
+    },
+    "v1alpha1LabelSelector": {
+      "type": "object",
+      "properties": {
+        "matchLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "matchExpressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1LabelSelectorRequirement"
+          }
+        }
+      },
+      "description": "LabelSelector is a label query over a set of resources."
+    },
+    "v1alpha1LabelSelectorRequirement": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "operator": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "LabelSelectorRequirement is a selector requirement."
+    },
+    "v1alpha1ListMeta": {
+      "type": "object",
+      "properties": {
+        "resourceVersion": {
+          "type": "string"
+        },
+        "continue": {
+          "type": "string"
+        },
+        "remainingItemCount": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "description": "ListMeta contains metadata for list operations."
+    },
+    "v1alpha1ListOptions": {
+      "type": "object",
+      "properties": {
+        "labelSelector": {
+          "type": "string"
+        },
+        "fieldSelector": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "string",
+          "format": "int64"
+        },
+        "continue": {
+          "type": "string"
+        }
+      },
+      "description": "ListOptions contains options for list operations."
+    },
+    "v1alpha1LocalObjectReference": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "description": "LocalObjectReference references a local object by name."
+    },
+    "v1alpha1Model": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ObjectMeta"
+        },
+        "spec": {
+          "$ref": "#/definitions/v1alpha1ModelSpec"
+        },
+        "status": {
+          "$ref": "#/definitions/v1alpha1ModelStatus"
+        }
+      },
+      "description": "Model is the top-level Model resource."
+    },
+    "v1alpha1ModelList": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ListMeta"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Model"
+          }
+        }
+      },
+      "description": "ModelList contains a list of Model resources."
+    },
+    "v1alpha1ModelParameters": {
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "string",
+          "title": "Base parameters (all optional)"
+        },
+        "maxTokens": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "topP": {
+          "type": "string"
+        },
+        "topK": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "presencePenalty": {
+          "type": "string"
+        },
+        "frequencyPenalty": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "parallelToolCalls": {
+          "type": "boolean"
+        },
+        "logitBias": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "stopSequences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "seed": {
+          "type": "string",
+          "format": "int64"
+        },
+        "extraHeaders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "extraBody": {
+          "type": "object"
+        },
+        "openai": {
+          "$ref": "#/definitions/v1alpha1OpenAIParameters",
+          "title": "Provider-specific parameters (only one should be set)"
+        },
+        "anthropic": {
+          "$ref": "#/definitions/v1alpha1AnthropicParameters"
+        },
+        "google": {
+          "$ref": "#/definitions/v1alpha1GoogleParameters"
+        },
+        "bedrock": {
+          "$ref": "#/definitions/v1alpha1BedrockParameters"
+        }
+      },
+      "description": "ModelParameters defines model parameters with provider-specific extensions."
+    },
+    "v1alpha1ModelProvider": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ObjectMeta"
+        },
+        "spec": {
+          "$ref": "#/definitions/v1alpha1ModelProviderSpec"
+        },
+        "status": {
+          "$ref": "#/definitions/v1alpha1ModelProviderStatus"
+        }
+      },
+      "description": "ModelProvider is the top-level ModelProvider resource."
+    },
+    "v1alpha1ModelProviderList": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ListMeta"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1ModelProvider"
+          }
+        }
+      },
+      "description": "ModelProviderList contains a list of ModelProvider resources."
+    },
+    "v1alpha1ModelProviderSpec": {
+      "type": "object",
+      "properties": {
+        "apiKeySecretRef": {
+          "$ref": "#/definitions/v1alpha1SecretKeySelector"
+        },
+        "openai": {
+          "$ref": "#/definitions/v1alpha1OpenAIProviderSpec",
+          "title": "Exactly one of the following should be set"
+        },
+        "anthropic": {
+          "$ref": "#/definitions/v1alpha1AnthropicProviderSpec"
+        },
+        "google": {
+          "$ref": "#/definitions/v1alpha1GoogleProviderSpec"
+        },
+        "bedrock": {
+          "$ref": "#/definitions/v1alpha1BedrockProviderSpec"
+        },
+        "tls": {
+          "$ref": "#/definitions/v1alpha1TLSConfig"
+        },
+        "defaultHeaders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "ModelProviderSpec defines the desired state of ModelProvider."
+    },
+    "v1alpha1ModelProviderStatus": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/v1alpha1ProviderType"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Condition"
+          }
+        },
+        "observedGeneration": {
+          "type": "string",
+          "format": "int64"
+        },
+        "secretHash": {
+          "type": "string"
+        },
+        "ready": {
+          "type": "boolean"
+        }
+      },
+      "description": "ModelProviderStatus defines the observed state of ModelProvider."
+    },
+    "v1alpha1ModelSpec": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "providerRef": {
+          "$ref": "#/definitions/v1alpha1ProviderRef"
+        },
+        "parameters": {
+          "$ref": "#/definitions/v1alpha1ModelParameters"
+        }
+      },
+      "description": "ModelSpec defines the desired state of Model."
+    },
+    "v1alpha1ModelStatus": {
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Condition"
+          }
+        },
+        "observedGeneration": {
+          "type": "string",
+          "format": "int64"
+        },
+        "resolvedProvider": {
+          "$ref": "#/definitions/v1alpha1ResolvedProviderInfo"
+        },
+        "ready": {
+          "type": "boolean"
+        }
+      },
+      "description": "ModelStatus defines the observed state of Model."
+    },
+    "v1alpha1NodeAffinity": {
+      "type": "object",
+      "properties": {
+        "requiredDuringSchedulingIgnoredDuringExecution": {
+          "$ref": "#/definitions/v1alpha1NodeSelector"
+        },
+        "preferredDuringSchedulingIgnoredDuringExecution": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1PreferredSchedulingTerm"
+          }
+        }
+      },
+      "description": "NodeAffinity defines node affinity scheduling rules."
+    },
+    "v1alpha1NodeSelector": {
+      "type": "object",
+      "properties": {
+        "nodeSelectorTerms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1NodeSelectorTerm"
+          }
+        }
+      },
+      "description": "NodeSelector defines node selection constraints."
+    },
+    "v1alpha1NodeSelectorRequirement": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "operator": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "NodeSelectorRequirement is a selector requirement."
+    },
+    "v1alpha1NodeSelectorTerm": {
+      "type": "object",
+      "properties": {
+        "matchExpressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1NodeSelectorRequirement"
+          }
+        },
+        "matchFields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1NodeSelectorRequirement"
+          }
+        }
+      },
+      "description": "NodeSelectorTerm defines node selector requirements."
+    },
+    "v1alpha1ObjectFieldSelector": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string"
+        },
+        "fieldPath": {
+          "type": "string"
+        }
+      },
+      "description": "ObjectFieldSelector selects an APIVersioned field of an object."
+    },
+    "v1alpha1ObjectMeta": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "uid": {
+          "type": "string"
+        },
+        "resourceVersion": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "string",
+          "format": "int64"
+        },
+        "creationTimestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "deletionTimestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "ownerReferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1OwnerReference"
+          }
+        },
+        "finalizers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "title": "ObjectMeta contains metadata that all persisted resources must have.\nSimplified version of k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"
+    },
+    "v1alpha1OpenAIParameters": {
+      "type": "object",
+      "properties": {
+        "reasoningEffort": {
+          "$ref": "#/definitions/v1alpha1ReasoningEffort"
+        },
+        "logProbs": {
+          "type": "boolean"
+        },
+        "topLogProbs": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "user": {
+          "type": "string"
+        },
+        "serviceTier": {
+          "type": "string"
+        },
+        "promptCacheKey": {
+          "type": "string"
+        },
+        "promptRetention": {
+          "type": "string"
+        },
+        "reasoningGenerateSummary": {
+          "type": "string"
+        },
+        "reasoningSummary": {
+          "type": "string"
+        },
+        "sendReasoningIds": {
+          "type": "boolean"
+        },
+        "truncation": {
+          "type": "string"
+        },
+        "textVerbosity": {
+          "type": "string"
+        },
+        "previousResponseId": {
+          "type": "string"
+        },
+        "includeCodeExecutionOutputs": {
+          "type": "boolean"
+        },
+        "includeWebSearchSources": {
+          "type": "boolean"
+        },
+        "includeFileSearchResults": {
+          "type": "boolean"
+        },
+        "includeRawAnnotations": {
+          "type": "boolean"
+        }
+      },
+      "description": "OpenAIParameters contains OpenAI-specific parameters."
+    },
+    "v1alpha1OpenAIProviderSpec": {
+      "type": "object",
+      "properties": {
+        "baseUrl": {
+          "type": "string"
+        },
+        "organizationId": {
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "OpenAIProviderSpec defines OpenAI provider configuration."
+    },
+    "v1alpha1OpenApiSchemaRef": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "configMapRef": {
+          "$ref": "#/definitions/v1alpha1ConfigMapKeyRef"
+        }
+      },
+      "description": "OpenApiSchemaRef references an OpenAPI specification."
+    },
+    "v1alpha1OwnerReference": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "uid": {
+          "type": "string"
+        },
+        "controller": {
+          "type": "boolean"
+        },
+        "blockOwnerDeletion": {
+          "type": "boolean"
+        }
+      },
+      "description": "OwnerReference contains information about the owning object."
+    },
+    "v1alpha1PersistentVolumeClaimVolumeSource": {
+      "type": "object",
+      "properties": {
+        "claimName": {
+          "type": "string"
+        },
+        "readOnly": {
+          "type": "boolean"
+        }
+      },
+      "description": "PersistentVolumeClaimVolumeSource references a PVC."
+    },
+    "v1alpha1PodAffinity": {
+      "type": "object",
+      "properties": {
+        "requiredDuringSchedulingIgnoredDuringExecution": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1PodAffinityTerm"
+          }
+        },
+        "preferredDuringSchedulingIgnoredDuringExecution": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1WeightedPodAffinityTerm"
+          }
+        }
+      },
+      "description": "PodAffinity defines pod affinity scheduling rules."
+    },
+    "v1alpha1PodAffinityTerm": {
+      "type": "object",
+      "properties": {
+        "labelSelector": {
+          "$ref": "#/definitions/v1alpha1LabelSelector"
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "topologyKey": {
+          "type": "string"
+        },
+        "namespaceSelector": {
+          "$ref": "#/definitions/v1alpha1LabelSelector"
+        }
+      },
+      "description": "PodAffinityTerm defines a pod affinity term."
+    },
+    "v1alpha1PodAntiAffinity": {
+      "type": "object",
+      "properties": {
+        "requiredDuringSchedulingIgnoredDuringExecution": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1PodAffinityTerm"
+          }
+        },
+        "preferredDuringSchedulingIgnoredDuringExecution": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1WeightedPodAffinityTerm"
+          }
+        }
+      },
+      "description": "PodAntiAffinity defines pod anti-affinity scheduling rules."
+    },
+    "v1alpha1PodSecurityContext": {
+      "type": "object",
+      "properties": {
+        "seLinuxOptions": {
+          "$ref": "#/definitions/v1alpha1SELinuxOptions"
+        },
+        "runAsUser": {
+          "type": "string",
+          "format": "int64"
+        },
+        "runAsGroup": {
+          "type": "string",
+          "format": "int64"
+        },
+        "runAsNonRoot": {
+          "type": "boolean"
+        },
+        "supplementalGroups": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "int64"
+          }
+        },
+        "fsGroup": {
+          "type": "string",
+          "format": "int64"
+        },
+        "fsGroupChangePolicy": {
+          "type": "string"
+        },
+        "seccompProfile": {
+          "$ref": "#/definitions/v1alpha1SeccompProfile"
+        }
+      },
+      "description": "PodSecurityContext holds pod-level security attributes."
+    },
+    "v1alpha1PreferredSchedulingTerm": {
+      "type": "object",
+      "properties": {
+        "weight": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "preference": {
+          "$ref": "#/definitions/v1alpha1NodeSelectorTerm"
+        }
+      },
+      "description": "PreferredSchedulingTerm is a preferred scheduling term."
+    },
+    "v1alpha1Probe": {
+      "type": "object",
+      "properties": {
+        "handler": {
+          "$ref": "#/definitions/v1alpha1ProbeHandler"
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "successThreshold": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "Probe describes a health check."
+    },
+    "v1alpha1ProbeHandler": {
+      "type": "object",
+      "properties": {
+        "httpGet": {
+          "$ref": "#/definitions/v1alpha1HTTPGetAction"
+        },
+        "tcpSocket": {
+          "$ref": "#/definitions/v1alpha1TCPSocketAction"
+        },
+        "exec": {
+          "$ref": "#/definitions/v1alpha1ExecAction"
+        },
+        "grpc": {
+          "$ref": "#/definitions/v1alpha1GRPCAction"
+        }
+      },
+      "description": "ProbeHandler defines a health check action."
+    },
+    "v1alpha1ProjectedVolumeSource": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1VolumeProjection"
+          }
+        },
+        "defaultMode": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "ProjectedVolumeSource represents a projected volume."
+    },
+    "v1alpha1ProviderRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      },
+      "description": "ProviderRef references a ModelProvider resource."
+    },
+    "v1alpha1ProviderType": {
+      "type": "string",
+      "enum": [
+        "PROVIDER_TYPE_UNSPECIFIED",
+        "PROVIDER_TYPE_OPENAI",
+        "PROVIDER_TYPE_ANTHROPIC",
+        "PROVIDER_TYPE_GOOGLE",
+        "PROVIDER_TYPE_BEDROCK"
+      ],
+      "default": "PROVIDER_TYPE_UNSPECIFIED",
+      "description": "ProviderType represents the LLM provider type."
+    },
+    "v1alpha1ReasoningEffort": {
+      "type": "string",
+      "enum": [
+        "REASONING_EFFORT_UNSPECIFIED",
+        "REASONING_EFFORT_NONE",
+        "REASONING_EFFORT_MINIMAL",
+        "REASONING_EFFORT_LOW",
+        "REASONING_EFFORT_MEDIUM",
+        "REASONING_EFFORT_HIGH",
+        "REASONING_EFFORT_XHIGH"
+      ],
+      "default": "REASONING_EFFORT_UNSPECIFIED",
+      "description": "ReasoningEffort for OpenAI models."
+    },
+    "v1alpha1ResolvedProviderInfo": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/v1alpha1ProviderType"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "description": "ResolvedProviderInfo contains resolved provider information."
+    },
+    "v1alpha1ResourceFieldSelector": {
+      "type": "object",
+      "properties": {
+        "containerName": {
+          "type": "string"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "divisor": {
+          "type": "string"
+        }
+      },
+      "description": "ResourceFieldSelector represents container resources."
+    },
+    "v1alpha1ResourceRequirements": {
+      "type": "object",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "requests": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "ResourceRequirements describes compute resource requirements."
+    },
+    "v1alpha1RuntimeSpec": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1RuntimeType"
+        },
+        "spec": {
+          "$ref": "#/definitions/v1alpha1StandardRuntimeSpec"
+        }
+      },
+      "description": "RuntimeSpec defines the runtime backend configuration."
+    },
+    "v1alpha1RuntimeType": {
+      "type": "string",
+      "enum": [
+        "RUNTIME_TYPE_UNSPECIFIED",
+        "RUNTIME_TYPE_STANDARD"
+      ],
+      "default": "RUNTIME_TYPE_UNSPECIFIED",
+      "description": "RuntimeType represents the type of runtime backend."
+    },
+    "v1alpha1SELinuxOptions": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        }
+      },
+      "description": "SELinuxOptions are the SELinux context settings."
+    },
+    "v1alpha1SeccompProfile": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "localhostProfile": {
+          "type": "string"
+        }
+      },
+      "description": "SeccompProfile defines a seccomp profile."
+    },
+    "v1alpha1SecretEnvSource": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "SecretEnvSource references a Secret for env vars."
+    },
+    "v1alpha1SecretKeySelector": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "SecretKeySelector references a specific key within a Secret."
+    },
+    "v1alpha1SecretProjection": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1KeyToPath"
+          }
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "SecretProjection projects a secret into a volume."
+    },
+    "v1alpha1SecretVolumeSource": {
+      "type": "object",
+      "properties": {
+        "secretName": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1KeyToPath"
+          }
+        },
+        "defaultMode": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "description": "SecretVolumeSource adapts a Secret into a volume."
+    },
+    "v1alpha1SecurityContext": {
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "$ref": "#/definitions/v1alpha1Capabilities"
+        },
+        "privileged": {
+          "type": "boolean"
+        },
+        "seLinuxOptions": {
+          "$ref": "#/definitions/v1alpha1SELinuxOptions"
+        },
+        "runAsUser": {
+          "type": "string",
+          "format": "int64"
+        },
+        "runAsGroup": {
+          "type": "string",
+          "format": "int64"
+        },
+        "runAsNonRoot": {
+          "type": "boolean"
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean"
+        },
+        "allowPrivilegeEscalation": {
+          "type": "boolean"
+        },
+        "procMount": {
+          "type": "string"
+        },
+        "seccompProfile": {
+          "$ref": "#/definitions/v1alpha1SeccompProfile"
+        }
+      },
+      "description": "SecurityContext holds security configuration for a container."
+    },
+    "v1alpha1SecurityRequirement": {
+      "type": "object",
+      "properties": {
+        "requirements": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1alpha1SecurityScopes"
+          }
+        }
+      },
+      "description": "SecurityRequirement represents a security scheme requirement."
+    },
+    "v1alpha1SecurityScopes": {
+      "type": "object",
+      "properties": {
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "SecurityScopes contains the scopes for a security scheme."
+    },
+    "v1alpha1ServiceAccountTokenProjection": {
+      "type": "object",
+      "properties": {
+        "audience": {
+          "type": "string"
+        },
+        "expirationSeconds": {
+          "type": "string",
+          "format": "int64"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "description": "ServiceAccountTokenProjection projects a service account token."
+    },
+    "v1alpha1ServiceRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "portName": {
+          "type": "string"
+        }
+      },
+      "description": "ServiceRef references a Kubernetes service."
+    },
+    "v1alpha1StandardRuntimeSpec": {
+      "type": "object",
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "container": {
+          "$ref": "#/definitions/v1alpha1Container"
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Volume"
+          }
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1LocalObjectReference"
+          }
+        },
+        "serviceAccountName": {
+          "type": "string"
+        },
+        "securityContext": {
+          "$ref": "#/definitions/v1alpha1PodSecurityContext"
+        },
+        "nodeSelector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tolerations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Toleration"
+          }
+        },
+        "affinity": {
+          "$ref": "#/definitions/v1alpha1Affinity"
+        }
+      },
+      "description": "StandardRuntimeSpec defines the Deployment-based runtime configuration."
+    },
+    "v1alpha1TCPSocketAction": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "host": {
+          "type": "string"
+        }
+      },
+      "description": "TCPSocketAction describes a TCP socket check."
+    },
+    "v1alpha1TLSConfig": {
+      "type": "object",
+      "properties": {
+        "insecureSkipVerify": {
+          "type": "boolean"
+        },
+        "caSecretRef": {
+          "$ref": "#/definitions/v1alpha1SecretKeySelector"
+        },
+        "useSystemCas": {
+          "type": "boolean"
+        }
+      },
+      "description": "TLSConfig defines TLS settings for custom endpoints."
+    },
+    "v1alpha1ThinkingType": {
+      "type": "string",
+      "enum": [
+        "THINKING_TYPE_UNSPECIFIED",
+        "THINKING_TYPE_ENABLED",
+        "THINKING_TYPE_DISABLED"
+      ],
+      "default": "THINKING_TYPE_UNSPECIFIED",
+      "description": "ThinkingType for Anthropic models."
+    },
+    "v1alpha1Toleration": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "operator": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "effect": {
+          "type": "string"
+        },
+        "tolerationSeconds": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "description": "Toleration defines pod tolerations."
+    },
+    "v1alpha1ToolEntry": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "inline": {
+          "$ref": "#/definitions/v1alpha1AgentToolSpec"
+        },
+        "toolRef": {
+          "$ref": "#/definitions/v1alpha1ToolRef"
+        }
+      },
+      "description": "ToolEntry represents either an inline tool or a reference."
+    },
+    "v1alpha1ToolRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      },
+      "description": "ToolRef references an AgentTool resource."
+    },
+    "v1alpha1Volume": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "volumeSource": {
+          "$ref": "#/definitions/v1alpha1VolumeSource"
+        }
+      },
+      "description": "Volume represents a named volume."
+    },
+    "v1alpha1VolumeMount": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "readOnly": {
+          "type": "boolean"
+        },
+        "mountPath": {
+          "type": "string"
+        },
+        "subPath": {
+          "type": "string"
+        },
+        "subPathExpr": {
+          "type": "string"
+        },
+        "mountPropagation": {
+          "type": "string"
+        }
+      },
+      "description": "VolumeMount describes a mounting of a Volume within a container."
+    },
+    "v1alpha1VolumeProjection": {
+      "type": "object",
+      "properties": {
+        "secret": {
+          "$ref": "#/definitions/v1alpha1SecretProjection"
+        },
+        "configMap": {
+          "$ref": "#/definitions/v1alpha1ConfigMapProjection"
+        },
+        "downwardApi": {
+          "$ref": "#/definitions/v1alpha1DownwardAPIProjection"
+        },
+        "serviceAccountToken": {
+          "$ref": "#/definitions/v1alpha1ServiceAccountTokenProjection"
+        }
+      },
+      "description": "VolumeProjection is a projection of a volume source."
+    },
+    "v1alpha1VolumeSource": {
+      "type": "object",
+      "properties": {
+        "configMap": {
+          "$ref": "#/definitions/v1alpha1ConfigMapVolumeSource"
+        },
+        "secret": {
+          "$ref": "#/definitions/v1alpha1SecretVolumeSource"
+        },
+        "emptyDir": {
+          "$ref": "#/definitions/v1alpha1EmptyDirVolumeSource"
+        },
+        "persistentVolumeClaim": {
+          "$ref": "#/definitions/v1alpha1PersistentVolumeClaimVolumeSource"
+        },
+        "hostPath": {
+          "$ref": "#/definitions/v1alpha1HostPathVolumeSource"
+        },
+        "projected": {
+          "$ref": "#/definitions/v1alpha1ProjectedVolumeSource"
+        }
+      },
+      "description": "VolumeSource represents the source of a volume."
+    },
+    "v1alpha1WatchAgentToolsResponse": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1WatchAgentToolsResponseEventType"
+        },
+        "agentTool": {
+          "$ref": "#/definitions/v1alpha1AgentTool"
+        }
+      },
+      "description": "WatchAgentToolsResponse is a single event in the watch stream."
+    },
+    "v1alpha1WatchAgentToolsResponseEventType": {
+      "type": "string",
+      "enum": [
+        "EVENT_TYPE_UNSPECIFIED",
+        "EVENT_TYPE_ADDED",
+        "EVENT_TYPE_MODIFIED",
+        "EVENT_TYPE_DELETED",
+        "EVENT_TYPE_BOOKMARK",
+        "EVENT_TYPE_ERROR"
+      ],
+      "default": "EVENT_TYPE_UNSPECIFIED"
+    },
+    "v1alpha1WatchAgentsResponse": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1WatchAgentsResponseEventType"
+        },
+        "agent": {
+          "$ref": "#/definitions/v1alpha1Agent"
+        }
+      },
+      "description": "WatchAgentsResponse is a single event in the watch stream."
+    },
+    "v1alpha1WatchAgentsResponseEventType": {
+      "type": "string",
+      "enum": [
+        "EVENT_TYPE_UNSPECIFIED",
+        "EVENT_TYPE_ADDED",
+        "EVENT_TYPE_MODIFIED",
+        "EVENT_TYPE_DELETED",
+        "EVENT_TYPE_BOOKMARK",
+        "EVENT_TYPE_ERROR"
+      ],
+      "default": "EVENT_TYPE_UNSPECIFIED",
+      "description": "EventType represents the type of watch event."
+    },
+    "v1alpha1WatchModelProvidersResponse": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1WatchModelProvidersResponseEventType"
+        },
+        "modelProvider": {
+          "$ref": "#/definitions/v1alpha1ModelProvider"
+        }
+      },
+      "description": "WatchModelProvidersResponse is a single event in the watch stream."
+    },
+    "v1alpha1WatchModelProvidersResponseEventType": {
+      "type": "string",
+      "enum": [
+        "EVENT_TYPE_UNSPECIFIED",
+        "EVENT_TYPE_ADDED",
+        "EVENT_TYPE_MODIFIED",
+        "EVENT_TYPE_DELETED",
+        "EVENT_TYPE_BOOKMARK",
+        "EVENT_TYPE_ERROR"
+      ],
+      "default": "EVENT_TYPE_UNSPECIFIED"
+    },
+    "v1alpha1WatchModelsResponse": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1WatchModelsResponseEventType"
+        },
+        "model": {
+          "$ref": "#/definitions/v1alpha1Model"
+        }
+      },
+      "description": "WatchModelsResponse is a single event in the watch stream."
+    },
+    "v1alpha1WatchModelsResponseEventType": {
+      "type": "string",
+      "enum": [
+        "EVENT_TYPE_UNSPECIFIED",
+        "EVENT_TYPE_ADDED",
+        "EVENT_TYPE_MODIFIED",
+        "EVENT_TYPE_DELETED",
+        "EVENT_TYPE_BOOKMARK",
+        "EVENT_TYPE_ERROR"
+      ],
+      "default": "EVENT_TYPE_UNSPECIFIED"
+    },
+    "v1alpha1WeightedPodAffinityTerm": {
+      "type": "object",
+      "properties": {
+        "weight": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "podAffinityTerm": {
+          "$ref": "#/definitions/v1alpha1PodAffinityTerm"
+        }
+      },
+      "description": "WeightedPodAffinityTerm is a weighted pod affinity term."
+    }
+  }
+}
