@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/agenttool.proto";
+import "flokoa/agent/v1alpha1/common.proto";
+import "google/protobuf/field_mask.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// AgentToolService provides CRUD operations for AgentTool resources.
+service AgentToolService {
+  // GetAgentTool retrieves an AgentTool by name and namespace.
+  rpc GetAgentTool(GetAgentToolRequest) returns (AgentTool) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/namespaces/{namespace}/agenttools/{name}"
+    };
+  }
+
+  // ListAgentTools lists AgentTools in a namespace or across all namespaces.
+  rpc ListAgentTools(ListAgentToolsRequest) returns (AgentToolList) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/agenttools"
+      additional_bindings {
+        get: "/api/v1alpha1/namespaces/{namespace}/agenttools"
+      }
+    };
+  }
+
+  // CreateAgentTool creates a new AgentTool.
+  rpc CreateAgentTool(CreateAgentToolRequest) returns (AgentTool) {
+    option (google.api.http) = {
+      post: "/api/v1alpha1/namespaces/{namespace}/agenttools"
+      body: "agent_tool"
+    };
+  }
+
+  // UpdateAgentTool updates an existing AgentTool.
+  rpc UpdateAgentTool(UpdateAgentToolRequest) returns (AgentTool) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{agent_tool.metadata.namespace}/agenttools/{agent_tool.metadata.name}"
+      body: "agent_tool"
+    };
+  }
+
+  // DeleteAgentTool deletes an AgentTool.
+  rpc DeleteAgentTool(DeleteAgentToolRequest) returns (DeleteAgentToolResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1alpha1/namespaces/{namespace}/agenttools/{name}"
+    };
+  }
+
+  // WatchAgentTools watches for changes to AgentTools.
+  rpc WatchAgentTools(WatchAgentToolsRequest) returns (stream WatchAgentToolsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/watch/agenttools"
+      additional_bindings {
+        get: "/api/v1alpha1/watch/namespaces/{namespace}/agenttools"
+      }
+    };
+  }
+
+  // UpdateAgentToolStatus updates only the status subresource.
+  rpc UpdateAgentToolStatus(UpdateAgentToolStatusRequest) returns (AgentTool) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{namespace}/agenttools/{name}/status"
+      body: "status"
+    };
+  }
+}
+
+// GetAgentToolRequest is the request for GetAgentTool.
+message GetAgentToolRequest {
+  string namespace = 1;
+  string name = 2;
+}
+
+// ListAgentToolsRequest is the request for ListAgentTools.
+message ListAgentToolsRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// CreateAgentToolRequest is the request for CreateAgentTool.
+message CreateAgentToolRequest {
+  string namespace = 1;
+  AgentTool agent_tool = 2;
+}
+
+// UpdateAgentToolRequest is the request for UpdateAgentTool.
+message UpdateAgentToolRequest {
+  AgentTool agent_tool = 1;
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// DeleteAgentToolRequest is the request for DeleteAgentTool.
+message DeleteAgentToolRequest {
+  string namespace = 1;
+  string name = 2;
+  DeleteOptions options = 3;
+}
+
+// DeleteAgentToolResponse is the response for DeleteAgentTool.
+message DeleteAgentToolResponse {}
+
+// WatchAgentToolsRequest is the request for WatchAgentTools.
+message WatchAgentToolsRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// WatchAgentToolsResponse is a single event in the watch stream.
+message WatchAgentToolsResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_ADDED = 1;
+    EVENT_TYPE_MODIFIED = 2;
+    EVENT_TYPE_DELETED = 3;
+    EVENT_TYPE_BOOKMARK = 4;
+    EVENT_TYPE_ERROR = 5;
+  }
+  EventType type = 1;
+  AgentTool agent_tool = 2;
+}
+
+// UpdateAgentToolStatusRequest is the request for UpdateAgentToolStatus.
+message UpdateAgentToolStatusRequest {
+  string namespace = 1;
+  string name = 2;
+  AgentToolStatus status = 3;
+}

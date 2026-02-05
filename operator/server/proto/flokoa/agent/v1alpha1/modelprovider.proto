@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/common.proto";
+import "flokoa/agent/v1alpha1/model.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// TLSConfig defines TLS settings for custom endpoints.
+message TLSConfig {
+  bool insecure_skip_verify = 1;
+  SecretKeySelector ca_secret_ref = 2;
+  bool use_system_cas = 3;
+}
+
+// OpenAIProviderSpec defines OpenAI provider configuration.
+message OpenAIProviderSpec {
+  string base_url = 1;
+  string organization_id = 2;
+  int32 timeout_seconds = 3;
+}
+
+// AnthropicProviderSpec defines Anthropic provider configuration.
+message AnthropicProviderSpec {
+  string base_url = 1;
+  int32 timeout_seconds = 2;
+}
+
+// GoogleProviderSpec defines Google provider configuration.
+message GoogleProviderSpec {
+  int32 timeout_seconds = 1;
+  string project = 2;
+  string location = 3;
+  SecretKeySelector service_account_key_secret_ref = 4;
+}
+
+// BedrockProviderSpec defines Bedrock provider configuration.
+message BedrockProviderSpec {
+  string region = 1;
+  string inference_profile_arn = 2;
+}
+
+// ModelProviderSpec defines the desired state of ModelProvider.
+message ModelProviderSpec {
+  SecretKeySelector api_key_secret_ref = 1;
+  // Exactly one of the following should be set
+  OpenAIProviderSpec openai = 2;
+  AnthropicProviderSpec anthropic = 3;
+  GoogleProviderSpec google = 4;
+  BedrockProviderSpec bedrock = 5;
+  TLSConfig tls = 6;
+  map<string, string> default_headers = 7;
+}
+
+// ModelProviderStatus defines the observed state of ModelProvider.
+message ModelProviderStatus {
+  ProviderType provider = 1;
+  repeated Condition conditions = 2;
+  int64 observed_generation = 3;
+  string secret_hash = 4;
+  bool ready = 5;
+}
+
+// ModelProvider is the top-level ModelProvider resource.
+message ModelProvider {
+  ObjectMeta metadata = 1;
+  ModelProviderSpec spec = 2;
+  ModelProviderStatus status = 3;
+}
+
+// ModelProviderList contains a list of ModelProvider resources.
+message ModelProviderList {
+  ListMeta metadata = 1;
+  repeated ModelProvider items = 2;
+}

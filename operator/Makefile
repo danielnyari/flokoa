@@ -52,6 +52,10 @@ OPERATOR_SDK_VERSION ?= v1.42.0
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
 
+# Server image settings
+SERVER_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-server
+SERVER_IMG ?= $(SERVER_IMAGE_TAG_BASE):$(VERSION)
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -274,11 +278,34 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		/tmp/bedrock_provider.json /tmp/model_parameters.json /tmp/modelconfig_schema.yaml /tmp/modelconfig_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/modelconfig.py"
 
+##@ gRPC Server
+
+.PHONY: buf-generate
+buf-generate: buf-dep-update ## Generate gRPC code from proto files.
+	cd server && buf generate
+
+.PHONY: buf-lint
+buf-lint: ## Lint proto files.
+	cd server && buf lint
+
+.PHONY: buf-format
+buf-format: ## Format proto files.
+	cd server && buf format -w
+
+.PHONY: buf-breaking
+buf-breaking: ## Check for breaking proto changes.
+	cd server && buf breaking --against '.git#branch=main,subdir=operator/server'
+
+.PHONY: buf-dep-update
+buf-dep-update: ## Update buf dependencies.
+	cd server && buf dep update
+
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: manifests generate buf-generate fmt vet ## Build manager and server binaries.
 	go build -o bin/manager cmd/main.go
+	go build -o bin/server cmd/server/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -288,12 +315,14 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+docker-build: ## Build docker images for manager and server.
 	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build -f server/Dockerfile -t ${SERVER_IMG} .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
+docker-push: ## Push docker images for manager and server.
 	$(CONTAINER_TOOL) push ${IMG}
+	$(CONTAINER_TOOL) push ${SERVER_IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -333,8 +362,9 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy: manifests kustomize ## Deploy controller and server to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/server && $(KUSTOMIZE) edit set image server=${SERVER_IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy

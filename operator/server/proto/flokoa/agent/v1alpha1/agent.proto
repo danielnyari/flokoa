@@ -1,0 +1,550 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/common.proto";
+import "flokoa/agent/v1alpha1/agenttool.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// Framework represents the AI framework used by the agent.
+enum Framework {
+  FRAMEWORK_UNSPECIFIED = 0;
+  FRAMEWORK_PYDANTIC_AI = 1;
+  FRAMEWORK_LANGCHAIN = 2;
+  FRAMEWORK_GOOGLE_ADK = 3;
+  FRAMEWORK_MARVIN = 4;
+  FRAMEWORK_AUTOGEN = 5;
+  FRAMEWORK_A2A = 6;
+}
+
+// AgentPhase represents the current phase of the agent lifecycle.
+enum AgentPhase {
+  AGENT_PHASE_UNSPECIFIED = 0;
+  AGENT_PHASE_PENDING = 1;
+  AGENT_PHASE_RUNNING = 2;
+  AGENT_PHASE_FAILED = 3;
+}
+
+// RuntimeType represents the type of runtime backend.
+enum RuntimeType {
+  RUNTIME_TYPE_UNSPECIFIED = 0;
+  RUNTIME_TYPE_STANDARD = 1;
+}
+
+// InputOutputMode represents supported input/output modes.
+enum InputOutputMode {
+  INPUT_OUTPUT_MODE_UNSPECIFIED = 0;
+  INPUT_OUTPUT_MODE_TEXT = 1;
+  INPUT_OUTPUT_MODE_JSON = 2;
+}
+
+// AgentSkill describes a specific capability or function.
+message AgentSkill {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string tags = 4;
+  repeated string examples = 5;
+  repeated string input_modes = 6;
+  repeated string output_modes = 7;
+  // Security schemes represented as a list of requirements (OR of ANDs)
+  repeated SecurityRequirement security = 8;
+}
+
+// SecurityRequirement represents a security scheme requirement.
+message SecurityRequirement {
+  map<string, SecurityScopes> requirements = 1;
+}
+
+// SecurityScopes contains the scopes for a security scheme.
+message SecurityScopes {
+  repeated string scopes = 1;
+}
+
+// AgentExtension represents an extension with parameters.
+message AgentExtension {
+  string description = 1;
+  google.protobuf.Struct params = 2;
+  bool required = 3;
+  string uri = 4;
+}
+
+// AgentCapabilities defines agent capabilities.
+message AgentCapabilities {
+  repeated AgentExtension extensions = 1;
+  bool push_notifications = 2;
+  bool state_transition_history = 3;
+  bool streaming = 4;
+}
+
+// AgentCard contains agent metadata following A2A protocol.
+message AgentCard {
+  string name = 1;
+  string description = 2;
+  string version = 3;
+  repeated InputOutputMode default_input_modes = 4;
+  repeated InputOutputMode default_output_modes = 5;
+  AgentCapabilities capabilities = 6;
+  repeated AgentSkill skills = 7;
+}
+
+// AgentModelRef references a Model resource.
+message AgentModelRef {
+  string name = 1;
+  string namespace = 2;
+}
+
+// ToolRef references an AgentTool resource.
+message ToolRef {
+  string name = 1;
+  string namespace = 2;
+}
+
+// ToolEntry represents either an inline tool or a reference.
+message ToolEntry {
+  string name = 1;
+  oneof tool {
+    AgentToolSpec inline = 2;
+    ToolRef tool_ref = 3;
+  }
+}
+
+// RuntimeSpec defines the runtime backend configuration.
+message RuntimeSpec {
+  RuntimeType type = 1;
+  StandardRuntimeSpec spec = 2;
+}
+
+// StandardRuntimeSpec defines the Deployment-based runtime configuration.
+message StandardRuntimeSpec {
+  int32 replicas = 1;
+  Container container = 2;
+  repeated Volume volumes = 3;
+  repeated LocalObjectReference image_pull_secrets = 4;
+  string service_account_name = 5;
+  PodSecurityContext security_context = 6;
+  map<string, string> node_selector = 7;
+  repeated Toleration tolerations = 8;
+  Affinity affinity = 9;
+}
+
+// Container spec (simplified from corev1.Container)
+message Container {
+  string name = 1;
+  string image = 2;
+  repeated string command = 3;
+  repeated string args = 4;
+  string working_dir = 5;
+  repeated ContainerPort ports = 6;
+  repeated EnvVar env = 7;
+  repeated EnvFromSource env_from = 8;
+  ResourceRequirements resources = 9;
+  repeated VolumeMount volume_mounts = 10;
+  Probe liveness_probe = 11;
+  Probe readiness_probe = 12;
+  Probe startup_probe = 13;
+  string image_pull_policy = 14;
+  SecurityContext security_context = 15;
+}
+
+// ContainerPort represents a port on a container.
+message ContainerPort {
+  string name = 1;
+  int32 container_port = 2;
+  string protocol = 3;
+}
+
+// EnvVar represents an environment variable.
+message EnvVar {
+  string name = 1;
+  string value = 2;
+  EnvVarSource value_from = 3;
+}
+
+// EnvVarSource represents a source for an environment variable's value.
+message EnvVarSource {
+  SecretKeySelector secret_key_ref = 1;
+  ConfigMapKeySelector config_map_key_ref = 2;
+  ObjectFieldSelector field_ref = 3;
+  ResourceFieldSelector resource_field_ref = 4;
+}
+
+// EnvFromSource represents a source for environment variables.
+message EnvFromSource {
+  string prefix = 1;
+  ConfigMapEnvSource config_map_ref = 2;
+  SecretEnvSource secret_ref = 3;
+}
+
+// ConfigMapEnvSource references a ConfigMap for env vars.
+message ConfigMapEnvSource {
+  string name = 1;
+  bool optional = 2;
+}
+
+// SecretEnvSource references a Secret for env vars.
+message SecretEnvSource {
+  string name = 1;
+  bool optional = 2;
+}
+
+// ConfigMapKeySelector references a key in a ConfigMap.
+message ConfigMapKeySelector {
+  string name = 1;
+  string key = 2;
+  bool optional = 3;
+}
+
+// ObjectFieldSelector selects an APIVersioned field of an object.
+message ObjectFieldSelector {
+  string api_version = 1;
+  string field_path = 2;
+}
+
+// ResourceFieldSelector represents container resources.
+message ResourceFieldSelector {
+  string container_name = 1;
+  string resource = 2;
+  string divisor = 3;
+}
+
+// ResourceRequirements describes compute resource requirements.
+message ResourceRequirements {
+  map<string, string> limits = 1;
+  map<string, string> requests = 2;
+}
+
+// VolumeMount describes a mounting of a Volume within a container.
+message VolumeMount {
+  string name = 1;
+  bool read_only = 2;
+  string mount_path = 3;
+  string sub_path = 4;
+  string sub_path_expr = 5;
+  string mount_propagation = 6;
+}
+
+// Volume represents a named volume.
+message Volume {
+  string name = 1;
+  VolumeSource volume_source = 2;
+}
+
+// VolumeSource represents the source of a volume.
+message VolumeSource {
+  ConfigMapVolumeSource config_map = 1;
+  SecretVolumeSource secret = 2;
+  EmptyDirVolumeSource empty_dir = 3;
+  PersistentVolumeClaimVolumeSource persistent_volume_claim = 4;
+  HostPathVolumeSource host_path = 5;
+  ProjectedVolumeSource projected = 6;
+}
+
+// ConfigMapVolumeSource adapts a ConfigMap into a volume.
+message ConfigMapVolumeSource {
+  string name = 1;
+  repeated KeyToPath items = 2;
+  int32 default_mode = 3;
+  bool optional = 4;
+}
+
+// SecretVolumeSource adapts a Secret into a volume.
+message SecretVolumeSource {
+  string secret_name = 1;
+  repeated KeyToPath items = 2;
+  int32 default_mode = 3;
+  bool optional = 4;
+}
+
+// EmptyDirVolumeSource represents an empty directory volume.
+message EmptyDirVolumeSource {
+  string medium = 1;
+  string size_limit = 2;
+}
+
+// PersistentVolumeClaimVolumeSource references a PVC.
+message PersistentVolumeClaimVolumeSource {
+  string claim_name = 1;
+  bool read_only = 2;
+}
+
+// HostPathVolumeSource represents a host path volume.
+message HostPathVolumeSource {
+  string path = 1;
+  string type = 2;
+}
+
+// ProjectedVolumeSource represents a projected volume.
+message ProjectedVolumeSource {
+  repeated VolumeProjection sources = 1;
+  int32 default_mode = 2;
+}
+
+// VolumeProjection is a projection of a volume source.
+message VolumeProjection {
+  SecretProjection secret = 1;
+  ConfigMapProjection config_map = 2;
+  DownwardAPIProjection downward_api = 3;
+  ServiceAccountTokenProjection service_account_token = 4;
+}
+
+// SecretProjection projects a secret into a volume.
+message SecretProjection {
+  string name = 1;
+  repeated KeyToPath items = 2;
+  bool optional = 3;
+}
+
+// ConfigMapProjection projects a config map into a volume.
+message ConfigMapProjection {
+  string name = 1;
+  repeated KeyToPath items = 2;
+  bool optional = 3;
+}
+
+// DownwardAPIProjection projects downward API info into a volume.
+message DownwardAPIProjection {
+  repeated DownwardAPIVolumeFile items = 1;
+}
+
+// DownwardAPIVolumeFile represents a file with downward API info.
+message DownwardAPIVolumeFile {
+  string path = 1;
+  ObjectFieldSelector field_ref = 2;
+  ResourceFieldSelector resource_field_ref = 3;
+  int32 mode = 4;
+}
+
+// ServiceAccountTokenProjection projects a service account token.
+message ServiceAccountTokenProjection {
+  string audience = 1;
+  int64 expiration_seconds = 2;
+  string path = 3;
+}
+
+// KeyToPath maps a key to a file path.
+message KeyToPath {
+  string key = 1;
+  string path = 2;
+  int32 mode = 3;
+}
+
+// Probe describes a health check.
+message Probe {
+  ProbeHandler handler = 1;
+  int32 initial_delay_seconds = 2;
+  int32 timeout_seconds = 3;
+  int32 period_seconds = 4;
+  int32 success_threshold = 5;
+  int32 failure_threshold = 6;
+  int32 termination_grace_period_seconds = 7;
+}
+
+// ProbeHandler defines a health check action.
+message ProbeHandler {
+  HTTPGetAction http_get = 1;
+  TCPSocketAction tcp_socket = 2;
+  ExecAction exec = 3;
+  GRPCAction grpc = 4;
+}
+
+// HTTPGetAction describes an HTTP GET request.
+message HTTPGetAction {
+  string path = 1;
+  int32 port = 2;
+  string host = 3;
+  string scheme = 4;
+  repeated HTTPHeader http_headers = 5;
+}
+
+// HTTPHeader represents an HTTP header.
+message HTTPHeader {
+  string name = 1;
+  string value = 2;
+}
+
+// TCPSocketAction describes a TCP socket check.
+message TCPSocketAction {
+  int32 port = 1;
+  string host = 2;
+}
+
+// ExecAction describes a command to execute.
+message ExecAction {
+  repeated string command = 1;
+}
+
+// GRPCAction describes a gRPC health check.
+message GRPCAction {
+  int32 port = 1;
+  string service = 2;
+}
+
+// SecurityContext holds security configuration for a container.
+message SecurityContext {
+  Capabilities capabilities = 1;
+  bool privileged = 2;
+  SELinuxOptions se_linux_options = 3;
+  int64 run_as_user = 4;
+  int64 run_as_group = 5;
+  bool run_as_non_root = 6;
+  bool read_only_root_filesystem = 7;
+  bool allow_privilege_escalation = 8;
+  string proc_mount = 9;
+  SeccompProfile seccomp_profile = 10;
+}
+
+// PodSecurityContext holds pod-level security attributes.
+message PodSecurityContext {
+  SELinuxOptions se_linux_options = 1;
+  int64 run_as_user = 2;
+  int64 run_as_group = 3;
+  bool run_as_non_root = 4;
+  repeated int64 supplemental_groups = 5;
+  int64 fs_group = 6;
+  string fs_group_change_policy = 7;
+  SeccompProfile seccomp_profile = 8;
+}
+
+// Capabilities adds/removes POSIX capabilities.
+message Capabilities {
+  repeated string add = 1;
+  repeated string drop = 2;
+}
+
+// SELinuxOptions are the SELinux context settings.
+message SELinuxOptions {
+  string user = 1;
+  string role = 2;
+  string type = 3;
+  string level = 4;
+}
+
+// SeccompProfile defines a seccomp profile.
+message SeccompProfile {
+  string type = 1;
+  string localhost_profile = 2;
+}
+
+// Toleration defines pod tolerations.
+message Toleration {
+  string key = 1;
+  string operator = 2;
+  string value = 3;
+  string effect = 4;
+  int64 toleration_seconds = 5;
+}
+
+// Affinity defines pod affinity rules.
+message Affinity {
+  NodeAffinity node_affinity = 1;
+  PodAffinity pod_affinity = 2;
+  PodAntiAffinity pod_anti_affinity = 3;
+}
+
+// NodeAffinity defines node affinity scheduling rules.
+message NodeAffinity {
+  NodeSelector required_during_scheduling_ignored_during_execution = 1;
+  repeated PreferredSchedulingTerm preferred_during_scheduling_ignored_during_execution = 2;
+}
+
+// PodAffinity defines pod affinity scheduling rules.
+message PodAffinity {
+  repeated PodAffinityTerm required_during_scheduling_ignored_during_execution = 1;
+  repeated WeightedPodAffinityTerm preferred_during_scheduling_ignored_during_execution = 2;
+}
+
+// PodAntiAffinity defines pod anti-affinity scheduling rules.
+message PodAntiAffinity {
+  repeated PodAffinityTerm required_during_scheduling_ignored_during_execution = 1;
+  repeated WeightedPodAffinityTerm preferred_during_scheduling_ignored_during_execution = 2;
+}
+
+// NodeSelector defines node selection constraints.
+message NodeSelector {
+  repeated NodeSelectorTerm node_selector_terms = 1;
+}
+
+// NodeSelectorTerm defines node selector requirements.
+message NodeSelectorTerm {
+  repeated NodeSelectorRequirement match_expressions = 1;
+  repeated NodeSelectorRequirement match_fields = 2;
+}
+
+// NodeSelectorRequirement is a selector requirement.
+message NodeSelectorRequirement {
+  string key = 1;
+  string operator = 2;
+  repeated string values = 3;
+}
+
+// PreferredSchedulingTerm is a preferred scheduling term.
+message PreferredSchedulingTerm {
+  int32 weight = 1;
+  NodeSelectorTerm preference = 2;
+}
+
+// PodAffinityTerm defines a pod affinity term.
+message PodAffinityTerm {
+  LabelSelector label_selector = 1;
+  repeated string namespaces = 2;
+  string topology_key = 3;
+  LabelSelector namespace_selector = 4;
+}
+
+// WeightedPodAffinityTerm is a weighted pod affinity term.
+message WeightedPodAffinityTerm {
+  int32 weight = 1;
+  PodAffinityTerm pod_affinity_term = 2;
+}
+
+// LabelSelector is a label query over a set of resources.
+message LabelSelector {
+  map<string, string> match_labels = 1;
+  repeated LabelSelectorRequirement match_expressions = 2;
+}
+
+// LabelSelectorRequirement is a selector requirement.
+message LabelSelectorRequirement {
+  string key = 1;
+  string operator = 2;
+  repeated string values = 3;
+}
+
+// AgentSpec defines the desired state of an Agent.
+message AgentSpec {
+  AgentCard card = 1;
+  RuntimeSpec runtime = 2;
+  AgentModelRef model = 3;
+  Framework framework = 4;
+  repeated ToolEntry tools = 5;
+}
+
+// AgentStatus defines the observed state of Agent.
+message AgentStatus {
+  AgentPhase phase = 1;
+  string backend = 2;
+  string url = 3;
+  int32 replicas = 4;
+  int32 available_replicas = 5;
+  google.protobuf.Timestamp last_tool_sync = 6;
+  Framework detected_framework = 7;
+  repeated Condition conditions = 8;
+  int64 observed_generation = 9;
+}
+
+// Agent is the top-level Agent resource.
+message Agent {
+  ObjectMeta metadata = 1;
+  AgentSpec spec = 2;
+  AgentStatus status = 3;
+}
+
+// AgentList contains a list of Agent resources.
+message AgentList {
+  ListMeta metadata = 1;
+  repeated Agent items = 2;
+}
