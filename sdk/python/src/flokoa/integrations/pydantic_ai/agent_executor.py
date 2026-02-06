@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, cast, override
+from typing import TYPE_CHECKING, Any, Callable, override
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
@@ -231,19 +231,18 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         request = context.get_user_input()
         logger.info(f"Executing PydanticAI agent with request: {request}")
 
-        if self.model_config is None and self.agent.model is None:
+        if not self.model_config and not self.model_provider and self.agent.model is None:
             raise ProviderNotConfiguredError("Model provider must be configured to execute agent")
-        else:
-            cast(Provider, self.model_provider)
+
         result = await self.agent.run(
             request,
             toolsets=[self._get_toolset()],
             model=(
-                self._create_model(self._create_provider(self.model_provider))
+                self._create_model(self._create_provider(self.model_config.provider.type))
                 if self.model_config
                 else self.agent.model
             ),
-        )  #
+        )
         await event_queue.enqueue_event(new_agent_text_message(result.output))
 
     @override
