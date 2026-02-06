@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import os
 import sys
@@ -7,14 +8,10 @@ import uvicorn
 from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import (
-    AgentCapabilities,
-    AgentCard,
-    AgentSkill,
-)
 
 from flokoa.integrations import IntegrationType, get_executor_cls
 from flokoa.utils import load_agent_card
+from flokoa.utils.agent_card_builder import AgentCardBuilder
 
 
 @click.command()
@@ -28,29 +25,6 @@ def main(agent: str, host: str, port: int, framework: str) -> None:
     cwd = os.getcwd()
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
-
-    # Try to load agent card from mounted ConfigMap (Kubernetes deployment)
-    # Falls back to default values for local development
-    agent_card = load_agent_card(url=f"http://{host}:{port}/")
-
-    if agent_card is None:
-        # Default agent card for local development
-        skill = AgentSkill(
-            id="default",
-            name="Default Skill",
-            description="Default skill for local development",
-            tags=["default"],
-        )
-        agent_card = AgentCard(
-            name="Flokoa Agent",
-            description="A Flokoa agent (local development mode)",
-            url=f"http://{host}:{port}/",
-            version="0.0.1",
-            default_input_modes=["application/json"],
-            default_output_modes=["application/json"],
-            capabilities=AgentCapabilities(streaming=False),
-            skills=[skill],
-        )
 
     executor_cls = get_executor_cls(framework)
     agent_parts = agent.split(":")
@@ -66,6 +40,14 @@ def main(agent: str, host: str, port: int, framework: str) -> None:
             raise ImportError(f"Agent '{agent_cls_name}' not found in module '{agent_module_name}': {e}") from e
     except ImportError as e:
         raise ImportError(f"Could not import agent module '{agent}': {e}") from e
+
+    # Try to load agent card from mounted ConfigMap (Kubernetes deployment)
+    # Falls back to building from the provided agent for local development
+    agent_card = load_agent_card(url=f"http://{host}:{port}/")
+
+    if agent_card is None:
+        builder = AgentCardBuilder(agent=agent_obj, rpc_url=f"http://{host}:{port}/")
+        agent_card = asyncio.run(builder.build())
 
     request_handler = DefaultRequestHandler(
         agent_executor=agent_executor,
