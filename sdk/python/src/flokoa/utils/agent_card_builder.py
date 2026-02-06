@@ -553,7 +553,7 @@ def _coerce_text(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value.strip() or None
     if isinstance(value, (list, tuple)):
-        parts = [part_text for part in (str(part).strip() for part in value) if part_text]
+        parts = [part_text for part_text in (str(part).strip() for part in value) if part_text]
         return " ".join(parts) if parts else None
     return None
 
