@@ -31,16 +31,16 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "operator-system"
+const namespace = "flokoa-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "operator-controller-manager"
+const serviceAccountName = "flokoa-controller"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "operator-controller-manager-metrics-service"
+const metricsServiceName = "flokoa-controller-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "operator-metrics-binding"
+const metricsRoleBindingName = "flokoa-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -65,10 +65,10 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
-		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		By("deploying the controller-manager and server")
+		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage), fmt.Sprintf("SERVER_IMG=%s", serverImage))
 		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager and server")
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
@@ -143,7 +143,7 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyControllerUp := func(g Gomega) {
 				// Get the name of the controller-manager pod
 				cmd := exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=controller-manager",
+					"pods", "-l", "app.kubernetes.io/name=flokoa,app.kubernetes.io/component=controller",
 					"-o", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
 						"{{ .metadata.name }}"+
@@ -156,7 +156,7 @@ var _ = Describe("Manager", Ordered, func() {
 				podNames := utils.GetNonEmptyLines(podOutput)
 				g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
 				controllerPodName = podNames[0]
-				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
+				g.Expect(controllerPodName).To(ContainSubstring("flokoa-controller"))
 
 				// Validate the pod's status
 				cmd = exec.Command("kubectl", "get",
@@ -173,7 +173,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=operator-metrics-reader",
+				"--clusterrole=metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)
