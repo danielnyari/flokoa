@@ -383,9 +383,6 @@ def _build_parallel_description(agent: Any) -> str:
 
 def _build_loop_description(agent: Any) -> str:
     """Build description for loop workflow agent."""
-    max_iterations = getattr(agent, "max_iterations", None)
-    if max_iterations is None:
-        max_iterations = "unlimited"
     descriptions = []
     sub_agents = _get_sub_agents(agent)
     for i, sub_agent in enumerate(sub_agents):
@@ -396,6 +393,9 @@ def _build_loop_description(agent: Any) -> str:
             descriptions.append(f"and {sub_description}")
         else:
             descriptions.append(f", {sub_description}")
+    max_iterations = getattr(agent, "max_iterations", None)
+    if max_iterations is None:
+        return f"{' '.join(descriptions)} in a loop (no iteration limit)."
     return f"{' '.join(descriptions)} in a loop (max {max_iterations} iterations)."
 
 
@@ -493,7 +493,8 @@ def _get_input_modes(agent: Any) -> Optional[List[str]]:
     if not _is_llm_agent(agent):
         return None
 
-    return None
+    input_modes = getattr(agent, "input_modes", None) or getattr(agent, "input_modalities", None)
+    return input_modes
 
 
 def _get_output_modes(agent: Any) -> Optional[List[str]]:
