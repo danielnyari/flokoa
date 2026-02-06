@@ -13,6 +13,9 @@ on:
       - "operator/**"
       - ".github/workflows/python-models.yml"
 
+permissions:
+  contents: read
+
 jobs:
   generate:
     name: Validate Generated Python Models
