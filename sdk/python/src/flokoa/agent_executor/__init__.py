@@ -137,7 +137,11 @@ class FlokoaAgentExecutor(AgentExecutor):
 
         The wrapper function accepts **kwargs matching the tool's input schema,
         and passes them to the appropriate tool handler with the tool's configuration.
+
+        The returned callable has __name__ and __doc__ set from the tool definition.
         """
+        callable_fn: Callable[..., Any]
+
         if tool_definition.type == ToolType.HTTP_API:
             http_api = tool_definition.spec.http_api
             if http_api is None:
@@ -148,6 +152,18 @@ class FlokoaAgentExecutor(AgentExecutor):
             async def api_tool_wrapper(**kwargs: Any) -> dict[str, Any]:
                 return await flokoa_tools.call_http_api_tool(endpoint=endpoint, method=method, params=kwargs)
 
-            return api_tool_wrapper
+            callable_fn = api_tool_wrapper
+        else:
+            # Wrap the shared callable to avoid mutating it
+            base_callable = TOOL_CALLABLES[tool_definition.type]
 
-        return TOOL_CALLABLES[tool_definition.type]
+            async def tool_wrapper(**kwargs: Any) -> Any:
+                return await base_callable(**kwargs)
+
+            callable_fn = tool_wrapper
+
+        # Set name and description from the tool definition
+        callable_fn.__name__ = tool_definition.name
+        callable_fn.__doc__ = tool_definition.description
+
+        return callable_fn

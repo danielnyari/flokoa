@@ -45,12 +45,11 @@ class FlokoaToolset(BaseToolset):
         self._get_tool_callable = get_tool_callable
 
         # Create FunctionTool instances once during init (following ADK pattern)
+        # FunctionTool extracts name from __name__ and description from __doc__,
+        # which are set by _get_tool_callable in the base class
         self._tools: list[BaseTool] = []
         for tool_def in tool_definitions:
             callable_fn = get_tool_callable(tool_def)
-            # FunctionTool extracts name from __name__ and description from __doc__
-            callable_fn.__name__ = tool_def.name
-            callable_fn.__doc__ = tool_def.description
             tool = FunctionTool(func=callable_fn)
             self._tools.append(tool)
             logger.info(f"Created Flokoa tool '{tool_def.name}' for ADK.")
