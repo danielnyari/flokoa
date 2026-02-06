@@ -110,7 +110,6 @@ def openai_model_config_data():
             "type": "openai",
             "openai": {
                 "baseURL": "https://api.openai.com/v1",
-                "organizationID": "org-12345",
                 "timeoutSeconds": 120,
             },
         },

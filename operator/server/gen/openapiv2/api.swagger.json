@@ -2380,9 +2380,6 @@
       "properties": {
         "region": {
           "type": "string"
-        },
-        "inferenceProfileArn": {
-          "type": "string"
         }
       },
       "description": "BedrockProviderSpec defines Bedrock provider configuration."
@@ -3494,9 +3491,6 @@
       "type": "object",
       "properties": {
         "baseUrl": {
-          "type": "string"
-        },
-        "organizationId": {
           "type": "string"
         },
         "timeoutSeconds": {

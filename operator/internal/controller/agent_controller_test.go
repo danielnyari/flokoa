@@ -3569,7 +3569,6 @@ var _ = Describe("Agent Controller", func() {
 						Spec: agentv1alpha1.ModelProviderSpec{
 							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
 								BaseURL:        "https://custom.openai.api.com/v1",
-								OrganizationID: "org-12345",
 								TimeoutSeconds: &timeoutSeconds,
 							},
 						},
@@ -3662,7 +3661,6 @@ var _ = Describe("Agent Controller", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(providerConfig.Provider.OpenAI).NotTo(BeNil())
 					Expect(providerConfig.Provider.OpenAI.BaseURL).To(Equal("https://custom.openai.api.com/v1"))
-					Expect(providerConfig.Provider.OpenAI.OrganizationID).To(Equal("org-12345"))
 					Expect(providerConfig.Provider.OpenAI.TimeoutSeconds).NotTo(BeNil())
 					Expect(*providerConfig.Provider.OpenAI.TimeoutSeconds).To(Equal(int32(120)))
 

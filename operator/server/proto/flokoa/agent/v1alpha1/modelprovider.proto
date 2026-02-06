@@ -17,8 +17,7 @@ message TLSConfig {
 // OpenAIProviderSpec defines OpenAI provider configuration.
 message OpenAIProviderSpec {
   string base_url = 1;
-  string organization_id = 2;
-  int32 timeout_seconds = 3;
+  int32 timeout_seconds = 2;
 }
 
 // AnthropicProviderSpec defines Anthropic provider configuration.
@@ -38,7 +37,6 @@ message GoogleProviderSpec {
 // BedrockProviderSpec defines Bedrock provider configuration.
 message BedrockProviderSpec {
   string region = 1;
-  string inference_profile_arn = 2;
 }
 
 // ModelProviderSpec defines the desired state of ModelProvider.

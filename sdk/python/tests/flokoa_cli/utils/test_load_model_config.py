@@ -76,7 +76,6 @@ class TestLoadModelConfigProviders:
         assert result.model == "gpt-4o"
         assert result.provider.openai is not None
         assert result.provider.openai.base_url == "https://api.openai.com/v1"
-        assert result.provider.openai.organization_id == "org-12345"
         assert result.provider.openai.timeout_seconds == 120
 
     def test_loads_anthropic_config(self, anthropic_model_config_data, tmp_path, monkeypatch):

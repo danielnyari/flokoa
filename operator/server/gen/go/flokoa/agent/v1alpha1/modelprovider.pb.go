@@ -86,8 +86,7 @@ func (x *TLSConfig) GetUseSystemCas() bool {
 type OpenAIProviderSpec struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	BaseUrl        string                 `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
-	OrganizationId string                 `protobuf:"bytes,2,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
-	TimeoutSeconds int32                  `protobuf:"varint,3,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	TimeoutSeconds int32                  `protobuf:"varint,2,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -125,13 +124,6 @@ func (*OpenAIProviderSpec) Descriptor() ([]byte, []int) {
 func (x *OpenAIProviderSpec) GetBaseUrl() string {
 	if x != nil {
 		return x.BaseUrl
-	}
-	return ""
-}
-
-func (x *OpenAIProviderSpec) GetOrganizationId() string {
-	if x != nil {
-		return x.OrganizationId
 	}
 	return ""
 }
@@ -267,11 +259,10 @@ func (x *GoogleProviderSpec) GetServiceAccountKeySecretRef() *SecretKeySelector 
 
 // BedrockProviderSpec defines Bedrock provider configuration.
 type BedrockProviderSpec struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Region              string                 `protobuf:"bytes,1,opt,name=region,proto3" json:"region,omitempty"`
-	InferenceProfileArn string                 `protobuf:"bytes,2,opt,name=inference_profile_arn,json=inferenceProfileArn,proto3" json:"inference_profile_arn,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Region        string                 `protobuf:"bytes,1,opt,name=region,proto3" json:"region,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BedrockProviderSpec) Reset() {
@@ -307,13 +298,6 @@ func (*BedrockProviderSpec) Descriptor() ([]byte, []int) {
 func (x *BedrockProviderSpec) GetRegion() string {
 	if x != nil {
 		return x.Region
-	}
-	return ""
-}
-
-func (x *BedrockProviderSpec) GetInferenceProfileArn() string {
-	if x != nil {
-		return x.InferenceProfileArn
 	}
 	return ""
 }
@@ -611,11 +595,10 @@ const file_flokoa_agent_v1alpha1_modelprovider_proto_rawDesc = "" +
 	"\tTLSConfig\x120\n" +
 	"\x14insecure_skip_verify\x18\x01 \x01(\bR\x12insecureSkipVerify\x12L\n" +
 	"\rca_secret_ref\x18\x02 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\vcaSecretRef\x12$\n" +
-	"\x0euse_system_cas\x18\x03 \x01(\bR\fuseSystemCas\"\x81\x01\n" +
+	"\x0euse_system_cas\x18\x03 \x01(\bR\fuseSystemCas\"X\n" +
 	"\x12OpenAIProviderSpec\x12\x19\n" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12'\n" +
-	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12'\n" +
-	"\x0ftimeout_seconds\x18\x03 \x01(\x05R\x0etimeoutSeconds\"[\n" +
+	"\x0ftimeout_seconds\x18\x02 \x01(\x05R\x0etimeoutSeconds\"[\n" +
 	"\x15AnthropicProviderSpec\x12\x19\n" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12'\n" +
 	"\x0ftimeout_seconds\x18\x02 \x01(\x05R\x0etimeoutSeconds\"\xe1\x01\n" +
@@ -623,10 +606,9 @@ const file_flokoa_agent_v1alpha1_modelprovider_proto_rawDesc = "" +
 	"\x0ftimeout_seconds\x18\x01 \x01(\x05R\x0etimeoutSeconds\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12\x1a\n" +
 	"\blocation\x18\x03 \x01(\tR\blocation\x12l\n" +
-	"\x1eservice_account_key_secret_ref\x18\x04 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\x1aserviceAccountKeySecretRef\"a\n" +
+	"\x1eservice_account_key_secret_ref\x18\x04 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\x1aserviceAccountKeySecretRef\"-\n" +
 	"\x13BedrockProviderSpec\x12\x16\n" +
-	"\x06region\x18\x01 \x01(\tR\x06region\x122\n" +
-	"\x15inference_profile_arn\x18\x02 \x01(\tR\x13inferenceProfileArn\"\xe0\x04\n" +
+	"\x06region\x18\x01 \x01(\tR\x06region\"\xe0\x04\n" +
 	"\x11ModelProviderSpec\x12U\n" +
 	"\x12api_key_secret_ref\x18\x01 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\x0fapiKeySecretRef\x12A\n" +
 	"\x06openai\x18\x02 \x01(\v2).flokoa.agent.v1alpha1.OpenAIProviderSpecR\x06openai\x12J\n" +

@@ -72,10 +72,6 @@ type OpenAIProviderSpec struct {
 	// +optional
 	BaseURL string `json:"baseURL,omitempty"`
 
-	// Organization ID for OpenAI API requests
-	// +optional
-	OrganizationID string `json:"organizationID,omitempty"`
-
 	// Timeout in seconds for API requests
 	// +kubebuilder:default=60
 	// +optional
@@ -119,10 +115,6 @@ type BedrockProviderSpec struct {
 	// Region is the AWS region
 	// +optional
 	Region string `json:"region,omitempty"`
-
-	// InferenceProfileARN is the ARN of the Bedrock inference profile to use
-	// +optional
-	InferenceProfileARN string `json:"inferenceProfileARN,omitempty"`
 }
 
 // TLSConfig defines TLS settings for custom endpoints

@@ -37,8 +37,7 @@ func ModelProviderSpecToProto(spec *agentv1alpha1.ModelProviderSpec) *pb.ModelPr
 
 	if spec.OpenAI != nil {
 		pbSpec.Openai = &pb.OpenAIProviderSpec{
-			BaseUrl:        spec.OpenAI.BaseURL,
-			OrganizationId: spec.OpenAI.OrganizationID,
+			BaseUrl: spec.OpenAI.BaseURL,
 		}
 		if spec.OpenAI.TimeoutSeconds != nil {
 			pbSpec.Openai.TimeoutSeconds = *spec.OpenAI.TimeoutSeconds
@@ -66,8 +65,7 @@ func ModelProviderSpecToProto(spec *agentv1alpha1.ModelProviderSpec) *pb.ModelPr
 
 	if spec.Bedrock != nil {
 		pbSpec.Bedrock = &pb.BedrockProviderSpec{
-			Region:              spec.Bedrock.Region,
-			InferenceProfileArn: spec.Bedrock.InferenceProfileARN,
+			Region: spec.Bedrock.Region,
 		}
 	}
 
@@ -143,8 +141,7 @@ func ModelProviderSpecFromProto(proto *pb.ModelProviderSpec) *agentv1alpha1.Mode
 
 	if proto.Openai != nil {
 		spec.OpenAI = &agentv1alpha1.OpenAIProviderSpec{
-			BaseURL:        proto.Openai.BaseUrl,
-			OrganizationID: proto.Openai.OrganizationId,
+			BaseURL: proto.Openai.BaseUrl,
 		}
 		if proto.Openai.TimeoutSeconds > 0 {
 			spec.OpenAI.TimeoutSeconds = &proto.Openai.TimeoutSeconds
@@ -172,8 +169,7 @@ func ModelProviderSpecFromProto(proto *pb.ModelProviderSpec) *agentv1alpha1.Mode
 
 	if proto.Bedrock != nil {
 		spec.Bedrock = &agentv1alpha1.BedrockProviderSpec{
-			Region:              proto.Bedrock.Region,
-			InferenceProfileARN: proto.Bedrock.InferenceProfileArn,
+			Region: proto.Bedrock.Region,
 		}
 	}
 

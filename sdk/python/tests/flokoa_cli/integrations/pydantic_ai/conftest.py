@@ -22,7 +22,6 @@ def openai_model_config_json():
             "type": "openai",
             "openai": {
                 "baseURL": "https://api.openai.com/v1",
-                "organizationID": "org-test-123",
                 "timeoutSeconds": 120,
             },
         },

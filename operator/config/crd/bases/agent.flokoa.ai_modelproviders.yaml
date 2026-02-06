@@ -97,10 +97,6 @@ spec:
                 description: Bedrock-specific configuration. If set, provider is AWS
                   Bedrock.
                 properties:
-                  inferenceProfileARN:
-                    description: InferenceProfileARN is the ARN of the Bedrock inference
-                      profile to use
-                    type: string
                   region:
                     description: Region is the AWS region
                     type: string
@@ -157,9 +153,6 @@ spec:
                 properties:
                   baseURL:
                     description: BaseURL overrides the default OpenAI API endpoint
-                    type: string
-                  organizationID:
-                    description: Organization ID for OpenAI API requests
                     type: string
                   timeoutSeconds:
                     default: 60
