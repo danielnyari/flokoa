@@ -8,6 +8,18 @@ from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
 logger = logging.getLogger(__name__)
 
+_PRONOUN_MAP = {
+    "you are": "I am",
+    "you were": "I was",
+    "you're": "I am",
+    "you've": "I have",
+    "yours": "mine",
+    "your": "my",
+    "you": "I",
+}
+_PRONOUN_KEYS = sorted(_PRONOUN_MAP.keys(), key=len, reverse=True)
+_PRONOUN_PATTERN = re.compile(r"\b(" + "|".join(re.escape(key) for key in _PRONOUN_KEYS) + r")\b", re.IGNORECASE)
+
 try:  # pragma: no cover - optional dependency
     from google.adk.agents import BaseAgent, LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
     from google.adk.tools.example_tool import ExampleTool
@@ -315,24 +327,9 @@ def _build_llm_agent_description_with_instructions(agent: Any) -> str:
 
 def _replace_pronouns(text: str) -> str:
     """Replace pronouns and conjugate common verbs for agent description."""
-    pronoun_map = {
-        "you are": "I am",
-        "you were": "I was",
-        "you're": "I am",
-        "you've": "I have",
-        "yours": "mine",
-        "your": "my",
-        "you": "I",
-    }
-
-    sorted_keys = sorted(pronoun_map.keys(), key=len, reverse=True)
-    pattern = r"\b(" + "|".join(re.escape(key) for key in sorted_keys) + r")\b"
-
-    return re.sub(
-        pattern,
-        lambda match: pronoun_map[match.group(1).lower()],
+    return _PRONOUN_PATTERN.sub(
+        lambda match: _PRONOUN_MAP[match.group(1).lower()],
         text,
-        flags=re.IGNORECASE,
     )
 
 
@@ -525,7 +522,7 @@ def _get_agent_name(agent: Any) -> str:
 
 def _get_sub_agents(agent: Any) -> list[Any]:
     sub_agents = getattr(agent, "sub_agents", None) or []
-    return list(sub_agents)
+    return sub_agents if isinstance(sub_agents, list) else list(sub_agents)
 
 
 def _is_llm_agent(agent: Any) -> bool:
@@ -556,11 +553,7 @@ def _coerce_text(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value.strip() or None
     if isinstance(value, (list, tuple)):
-        parts = []
-        for part in value:
-            part_text = str(part).strip()
-            if part_text:
-                parts.append(part_text)
+        parts = [part_text for part in (str(part).strip() for part in value) if part_text]
         return " ".join(parts) if parts else None
     return None
 
