@@ -1,0 +1,25 @@
+# OpenAI o1 Reasoning Model
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: o1
+  labels:
+    provider: openai
+    model: o1
+    type: reasoning
+spec:
+  model: "o1"
+  
+  providerRef:
+    name: openai-provider
+  
+  parameters:
+    maxTokens: 16000
+    
+    openai:
+      # High reasoning effort for complex problems
+      reasoningEffort: "high"
+      
+      # Include reasoning process in output
+      sendReasoningIDs: true
+      reasoningSummary: "detailed"

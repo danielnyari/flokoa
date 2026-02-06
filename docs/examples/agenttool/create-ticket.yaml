@@ -1,0 +1,59 @@
+# POST request tool for creating resources
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: create-ticket
+  labels:
+    type: http-api
+    category: support
+spec:
+  type: http-api
+  description: "Create a support ticket in the helpdesk system"
+  
+  httpApi:
+    url: "https://api.helpdesk.com/v1/tickets"
+    method: POST
+    timeoutSeconds: 30
+    
+    headers:
+      Content-Type: "application/json"
+  
+  # For POST, inputSchema becomes the request body
+  inputSchema:
+    type: object
+    properties:
+      title:
+        type: string
+        description: "Ticket title/summary"
+      description:
+        type: string
+        description: "Detailed description of the issue"
+      priority:
+        type: string
+        enum: ["low", "medium", "high", "urgent"]
+        default: "medium"
+      category:
+        type: string
+        description: "Issue category"
+      customerEmail:
+        type: string
+        format: email
+        description: "Customer email address"
+    required:
+      - title
+      - description
+      - customerEmail
+  
+  outputSchema:
+    type: object
+    properties:
+      ticketId:
+        type: string
+        description: "Created ticket ID"
+      status:
+        type: string
+        description: "Ticket status"
+      createdAt:
+        type: string
+        format: date-time
+        description: "Creation timestamp"

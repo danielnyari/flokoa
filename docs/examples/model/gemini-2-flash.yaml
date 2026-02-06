@@ -1,0 +1,31 @@
+# Gemini 2.0 Flash Model
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: gemini-2-flash
+  labels:
+    provider: google
+    model: gemini-2-flash
+spec:
+  model: "gemini-2.0-flash-exp"
+  
+  providerRef:
+    name: google-provider
+  
+  parameters:
+    temperature: "0.7"
+    maxTokens: 8192
+    topK: 40
+    
+    google:
+      # Configure thinking behavior
+      thinkingConfig:
+        includeThoughts: true
+        thinkingBudget: -1  # Automatic
+      
+      # Safety settings
+      safetySettings:
+        - category: "HARM_CATEGORY_HARASSMENT"
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        - category: "HARM_CATEGORY_HATE_SPEECH"
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"

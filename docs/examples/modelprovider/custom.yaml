@@ -1,0 +1,34 @@
+# Custom/Self-Hosted OpenAI-Compatible Provider
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: custom-llm-provider
+  labels:
+    provider: custom
+spec:
+  apiKeySecretRef:
+    name: custom-api-credentials
+    key: api-key
+  
+  openai:
+    # Custom endpoint (e.g., Ollama, vLLM, LM Studio, etc.)
+    baseURL: "https://my-custom-llm.example.com/v1"
+    timeoutSeconds: 120
+  
+  # Optional custom headers
+  defaultHeaders:
+    X-Custom-Header: "value"
+    X-Tenant-ID: "tenant-123"
+  
+  # Optional TLS configuration
+  tls:
+    # For development/testing only - don't skip verification in production
+    insecureSkipVerify: false
+    
+    # For self-signed certificates
+    # caSecretRef:
+    #   name: custom-ca-cert
+    #   key: ca.crt
+    
+    # Include system CAs
+    useSystemCAs: true

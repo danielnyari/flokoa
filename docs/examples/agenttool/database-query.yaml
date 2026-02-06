@@ -1,0 +1,54 @@
+# Database query tool (via query service)
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: database-query
+  labels:
+    type: http-api
+    category: database
+spec:
+  type: http-api
+  description: "Execute read-only SQL queries against the database"
+  
+  httpApi:
+    serviceRef:
+      name: query-service
+      namespace: data-layer
+      port: 5000
+    path: "/query"
+    method: POST
+    timeoutSeconds: 60
+  
+  inputSchema:
+    type: object
+    properties:
+      sql:
+        type: string
+        description: "SELECT query to execute (read-only)"
+      maxRows:
+        type: integer
+        default: 100
+        maximum: 1000
+        description: "Maximum number of rows to return"
+      timeout:
+        type: integer
+        default: 30
+        maximum: 60
+        description: "Query timeout in seconds"
+    required:
+      - sql
+  
+  outputSchema:
+    type: object
+    properties:
+      rows:
+        type: array
+        description: "Query results"
+        items:
+          type: object
+      rowCount:
+        type: integer
+        description: "Number of rows returned"
+      executionTime:
+        type: number
+        description: "Query execution time in milliseconds"

@@ -1,0 +1,294 @@
+# Complete example: Customer Service Agent
+# This example shows all CRDs working together
+
+---
+# Step 1: Create ModelProvider
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: openai-provider
+  namespace: customer-service
+spec:
+  apiKeySecretRef:
+    name: openai-credentials
+    key: api-key
+  openai:
+    timeoutSeconds: 60
+
+---
+# Step 2: Create Model
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o-support
+  namespace: customer-service
+spec:
+  model: "gpt-4o"
+  providerRef:
+    name: openai-provider
+  parameters:
+    temperature: "0.7"
+    maxTokens: 4096
+    topP: "0.9"
+
+---
+# Step 3: Create AgentTools
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: search-knowledge-base
+  namespace: customer-service
+spec:
+  type: http-api
+  description: "Search the knowledge base for answers to customer questions"
+  httpApi:
+    serviceRef:
+      name: kb-service
+      namespace: backend
+      port: 8080
+    path: "/search"
+    method: GET
+    timeoutSeconds: 10
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: "Search query"
+      limit:
+        type: integer
+        default: 5
+    required: ["query"]
+  outputSchema:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          type: object
+          properties:
+            title: {type: string}
+            content: {type: string}
+            url: {type: string}
+
+---
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: create-support-ticket
+  namespace: customer-service
+spec:
+  type: http-api
+  description: "Create a support ticket when the agent cannot resolve the issue"
+  httpApi:
+    serviceRef:
+      name: ticket-service
+      namespace: backend
+      port: 8080
+    path: "/tickets"
+    method: POST
+    timeoutSeconds: 15
+  inputSchema:
+    type: object
+    properties:
+      title: {type: string}
+      description: {type: string}
+      priority:
+        type: string
+        enum: ["low", "medium", "high", "urgent"]
+      customerEmail: {type: string, format: email}
+    required: ["title", "description", "customerEmail"]
+  outputSchema:
+    type: object
+    properties:
+      ticketId: {type: string}
+      status: {type: string}
+
+---
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: check-order-status
+  namespace: customer-service
+spec:
+  type: http-api
+  description: "Check the status of a customer order"
+  httpApi:
+    serviceRef:
+      name: order-service
+      namespace: backend
+      port: 8080
+    path: "/orders"
+    method: GET
+    timeoutSeconds: 10
+  inputSchema:
+    type: object
+    properties:
+      orderId:
+        type: string
+        description: "Order ID to check"
+    required: ["orderId"]
+  outputSchema:
+    type: object
+    properties:
+      orderId: {type: string}
+      status: {type: string}
+      trackingNumber: {type: string}
+      estimatedDelivery: {type: string}
+
+---
+# Step 4: Create Agent with all components
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: customer-service-agent
+  namespace: customer-service
+  labels:
+    app.kubernetes.io/name: customer-service-agent
+    app.kubernetes.io/component: ai-agent
+spec:
+  # Agent metadata (A2A protocol)
+  card:
+    name: "Customer Service Agent"
+    description: "AI agent that handles customer inquiries, searches knowledge base, and creates support tickets"
+    version: "1.0.0"
+    
+    defaultInputModes:
+      - "application/json"
+    defaultOutputModes:
+      - "application/json"
+    
+    capabilities:
+      streaming: false
+      pushNotifications: false
+    
+    skills:
+      - id: "answer-questions"
+        name: "Answer Customer Questions"
+        description: "Provide answers to common customer questions using the knowledge base"
+        tags: ["support", "faq"]
+        examples:
+          - "What are your business hours?"
+          - "How do I reset my password?"
+      
+      - id: "order-status"
+        name: "Check Order Status"
+        description: "Look up and provide information about customer orders"
+        tags: ["orders", "tracking"]
+        examples:
+          - "Where is my order?"
+          - "When will my package arrive?"
+      
+      - id: "create-ticket"
+        name: "Create Support Ticket"
+        description: "Escalate complex issues to human support staff"
+        tags: ["support", "escalation"]
+  
+  # Framework declaration
+  framework: pydantic-ai
+  
+  # Model reference
+  model:
+    name: gpt-4o-support
+  
+  # Tools available to this agent
+  tools:
+    - toolRef:
+        name: search-knowledge-base
+    - toolRef:
+        name: create-support-ticket
+    - toolRef:
+        name: check-order-status
+  
+  # Runtime configuration
+  runtime:
+    type: standard
+    spec:
+      # High availability with 3 replicas
+      replicas: 3
+      
+      # Container configuration
+      container:
+        name: agent
+        image: ghcr.io/example/customer-service-agent:v1.0.0
+        
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        
+        # Environment configuration
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: AGENT_NAME
+          value: "customer-service"
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      
+      # Pod-level security
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # High availability: spread across zones
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: customer-service-agent
+              topologyKey: topology.kubernetes.io/zone
+
+---
+# Step 5: Create required secret
+# Note: Apply this secret separately with your actual API key
+# kubectl create secret generic openai-credentials \
+#   --from-literal=api-key=sk-proj-YOUR-KEY-HERE \
+#   -n customer-service

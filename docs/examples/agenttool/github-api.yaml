@@ -1,0 +1,24 @@
+# Tool using OpenAPI specification
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: github-api
+  labels:
+    type: http-api
+    category: integration
+    provider: github
+spec:
+  type: http-api
+  description: "Search GitHub repositories and get repository information"
+  
+  httpApi:
+    url: "https://api.github.com/search/repositories"
+    method: GET
+    timeoutSeconds: 30
+    
+    headers:
+      Accept: "application/vnd.github.v3+json"
+  
+  # Use OpenAPI spec instead of inline schemas
+  openApiSchemaRef:
+    url: "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json"

@@ -1,0 +1,35 @@
+# Google AI API Provider (simpler, API key based)
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: google-provider
+  labels:
+    provider: google
+spec:
+  apiKeySecretRef:
+    name: google-credentials
+    key: api-key
+  
+  google:
+    timeoutSeconds: 60
+---
+# Google Vertex AI Provider (requires service account)
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: vertex-ai-provider
+  labels:
+    provider: google
+    service: vertex-ai
+spec:
+  google:
+    # GCP project and location
+    project: "my-gcp-project-id"
+    location: "us-central1"
+    
+    # Service account key
+    serviceAccountKeySecretRef:
+      name: gcp-sa-credentials
+      key: service-account.json
+    
+    timeoutSeconds: 60

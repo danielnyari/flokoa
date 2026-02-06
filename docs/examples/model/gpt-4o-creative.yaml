@@ -1,0 +1,29 @@
+# Model optimized for creative writing
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o-creative
+  labels:
+    provider: openai
+    model: gpt-4o
+    use-case: creative-writing
+spec:
+  model: "gpt-4o"
+  
+  providerRef:
+    name: openai-provider
+  
+  parameters:
+    # Higher temperature for more creative output
+    temperature: "1.2"
+    
+    maxTokens: 8192
+    
+    # Allow more diverse vocabulary
+    topP: "0.95"
+    
+    # Encourage novel vocabulary
+    presencePenalty: "0.6"
+    
+    # Reduce repetition
+    frequencyPenalty: "0.3"
