@@ -30,9 +30,16 @@ pydantic-ai = [
     "pydantic-ai>=1.44.0",
 ]
 
+google-adk = [
+    "google-adk>=1.14.1",
+]
+
 [dependency-groups]
 pydantic-ai = [
     "flokoa[pydantic-ai]",
+]
+google-adk = [
+    "flokoa[google-adk]",
 ]
 dev = [
     "mypy-boto3-bedrock-runtime>=1.42.31",

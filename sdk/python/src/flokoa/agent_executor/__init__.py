@@ -1,7 +1,8 @@
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from a2a.server.agent_execution import AgentExecutor
 
+from flokoa import tools as flokoa_tools
 from flokoa.cache import (
     CACHE_KEY_MODEL_CONFIG,
     CACHE_KEY_TOOLS,
@@ -13,6 +14,7 @@ from flokoa.types import (
     ModelConfig,
     ProviderConfigType,
     ProviderModelParametersType,
+    ToolType,
 )
 from flokoa.types import (
     ModelParameters as ModelParameters,
@@ -24,7 +26,10 @@ from flokoa.types.modelconfig import ProviderType
 from flokoa.utils import load_model_config, load_tools
 
 if TYPE_CHECKING:
+    from google.adk.agents import BaseAgent
     from pydantic_ai import Agent
+
+    AgentType = Agent | BaseAgent
 
 
 class FlokoaAgentExecutor(AgentExecutor):
@@ -41,7 +46,7 @@ class FlokoaAgentExecutor(AgentExecutor):
         FLOKOA_CACHE_ENABLED: Enable/disable caching (default: true)
     """
 
-    def __init__(self, agent: "Agent", cache: ConfigCache | None = None):
+    def __init__(self, agent: "AgentType", cache: ConfigCache | None = None):
         """Initialize the executor.
 
         Args:
@@ -94,7 +99,7 @@ class FlokoaAgentExecutor(AgentExecutor):
         return getattr(self.model_config.parameters, self.model_provider.value, None)
 
     @property
-    def agent(self) -> "Agent":
+    def agent(self) -> "AgentType":
         return self._agent
 
     def _reload_tools(self) -> None:
@@ -127,5 +132,22 @@ class FlokoaAgentExecutor(AgentExecutor):
         self._cache.invalidate_all()
         self._model_config_loaded = False
 
-    def _get_tool_callable(self, tool_definition: FlokoaToolDefinition) -> Callable:
+    def _get_tool_callable(self, tool_definition: FlokoaToolDefinition) -> Callable[..., Any]:
+        """Create a callable that accepts schema parameters and calls the underlying tool.
+
+        The wrapper function accepts **kwargs matching the tool's input schema,
+        and passes them to the appropriate tool handler with the tool's configuration.
+        """
+        if tool_definition.type == ToolType.HTTP_API:
+            http_api = tool_definition.spec.http_api
+            if http_api is None:
+                raise ValueError(f"Tool '{tool_definition.name}' has type http-api but no http_api configuration")
+            endpoint = http_api.url or ""
+            method = http_api.method.value
+
+            async def api_tool_wrapper(**kwargs: Any) -> dict[str, Any]:
+                return await flokoa_tools.call_http_api_tool(endpoint=endpoint, method=method, params=kwargs)
+
+            return api_tool_wrapper
+
         return TOOL_CALLABLES[tool_definition.type]

@@ -10,7 +10,6 @@ from pydantic_ai import FunctionToolset, Tool
 from pydantic_ai.providers import infer_provider_class
 from pydantic_ai.settings import ModelSettings, merge_model_settings
 
-from flokoa import tools as flokoa_tools
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.cache import ConfigCache
 from flokoa.exceptions import (
@@ -20,7 +19,6 @@ from flokoa.exceptions import (
 )
 from flokoa.types import (
     ModelParameters,
-    ToolType,
 )
 from flokoa.types import (
     ToolDefinition as FlokoaToolDefinition,
@@ -67,27 +65,6 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         super().__init__(agent, cache)
         self._cached_toolset: FunctionToolset | None = None
         self._cached_tool_definitions: list[FlokoaToolDefinition] | None = None
-
-    def _get_tool_callable(self, tool_definition: FlokoaToolDefinition) -> Callable[..., Any]:
-        """Create a callable that accepts schema parameters and calls the underlying tool.
-
-        The wrapper function accepts **kwargs matching the tool's input schema,
-        and passes them to the appropriate tool handler with the tool's configuration.
-        """
-        if tool_definition.type == ToolType.HTTP_API:
-            http_api = tool_definition.spec.http_api
-            if http_api is None:
-                raise ValueError(f"Tool '{tool_definition.name}' has type http-api but no http_api configuration")
-            endpoint = http_api.url or ""
-            method = http_api.method.value
-
-            async def api_tool_wrapper(**kwargs: Any) -> dict[str, Any]:
-                # Dynamic lookup allows mocking in tests
-                return await flokoa_tools.call_http_api_tool(endpoint=endpoint, method=method, params=kwargs)
-
-            return api_tool_wrapper
-
-        return super()._get_tool_callable(tool_definition)
 
     def _create_tool(self, tool_definition: FlokoaToolDefinition) -> Tool:
         tool_callable = self._get_tool_callable(tool_definition)

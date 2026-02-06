@@ -5,10 +5,12 @@ from flokoa.agent_executor import FlokoaAgentExecutor
 
 class IntegrationType(StrEnum):
     PYDANTIC_AI = "pydantic-ai"
+    GOOGLE_ADK = "google-adk"
 
 
 _EXTRA_NAMES: dict[IntegrationType, str] = {
     IntegrationType.PYDANTIC_AI: "pydantic-ai",
+    IntegrationType.GOOGLE_ADK: "google-adk",
 }
 
 _loaded: dict[IntegrationType, type[FlokoaAgentExecutor]] = {}
@@ -44,4 +46,9 @@ _try_load(
     IntegrationType.PYDANTIC_AI,
     "flokoa.integrations.pydantic_ai.agent_executor",
     "PydanticAIAgentExecutor",
+)
+_try_load(
+    IntegrationType.GOOGLE_ADK,
+    "flokoa.integrations.google_adk.agent_executor",
+    "GoogleADKAgentExecutor",
 )
