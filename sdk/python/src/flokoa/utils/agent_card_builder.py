@@ -22,6 +22,14 @@ except ImportError:  # pragma: no cover - optional dependency
     ExampleTool = None  # type: ignore[assignment]
     _ADK_AVAILABLE = False
 
+try:  # pragma: no cover - optional dependency
+    from pydantic_ai import Agent as PydanticAIAgent
+
+    _PYDANTIC_AI_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    PydanticAIAgent = None  # type: ignore[assignment]
+    _PYDANTIC_AI_AVAILABLE = False
+
 
 class AgentCardBuilder:
     """Builder for creating agent cards from Flokoa agent instances."""
@@ -151,7 +159,7 @@ async def _build_tool_skills(agent: Any) -> List[AgentSkill]:
         if ExampleTool is not None and isinstance(tool, ExampleTool):
             continue
 
-        tool_name = tool.name if getattr(tool, "name", None) else tool.__class__.__name__
+        tool_name = getattr(tool, "name", None) or tool.__class__.__name__
 
         tool_skills.append(
             AgentSkill(
@@ -261,7 +269,11 @@ def _get_agent_skill_name(agent: Any) -> str:
     """Get the skill name based on agent type."""
     if _is_llm_agent(agent):
         return "model"
-    if _ADK_AVAILABLE and SequentialAgent is not None and isinstance(agent, (SequentialAgent, ParallelAgent, LoopAgent)):
+    if _ADK_AVAILABLE and (
+        (SequentialAgent is not None and isinstance(agent, SequentialAgent))
+        or (ParallelAgent is not None and isinstance(agent, ParallelAgent))
+        or (LoopAgent is not None and isinstance(agent, LoopAgent))
+    ):
         return "workflow"
     return "custom"
 
@@ -371,7 +383,9 @@ def _build_parallel_description(agent: Any) -> str:
 
 def _build_loop_description(agent: Any) -> str:
     """Build description for loop workflow agent."""
-    max_iterations = getattr(agent, "max_iterations", None) or "unlimited"
+    max_iterations = getattr(agent, "max_iterations", None)
+    if max_iterations is None:
+        max_iterations = "unlimited"
     descriptions = []
     sub_agents = _get_sub_agents(agent)
     for i, sub_agent in enumerate(sub_agents):
@@ -462,17 +476,14 @@ def _extract_examples_from_instruction(instruction: str) -> Optional[List[Dict]]
     """Extract examples from agent instruction text using regex patterns."""
     examples = []
     example_patterns = [
-        r'Example Query:\s*<a>"\'</a>["\']',
-        r'Example Response:\s*<a>"\'</a>["\']',
-        r'Example:\s*<a>"\'</a>["\']',
+        r'Example Query:\s*["\'](.*?)["\']\s*Example Response:\s*["\'](.*?)["\']',
+        r'Example:\s*["\'](.*?)["\']\s*Response:\s*["\'](.*?)["\']',
     ]
 
     for pattern in example_patterns:
-        matches = re.findall(pattern, instruction, re.IGNORECASE)
-        if matches:
-            for i in range(0, len(matches), 2):
-                if i + 1 < len(matches):
-                    examples.append({"input": {"text": matches[i]}, "output": [{"text": matches[i + 1]}]})
+        matches = re.findall(pattern, instruction, re.IGNORECASE | re.DOTALL)
+        for query, response in matches:
+            examples.append({"input": {"text": query}, "output": [{"text": response}]})
 
     return examples if examples else None
 
@@ -516,8 +527,7 @@ def _is_llm_agent(agent: Any) -> bool:
 
 
 def _is_pydantic_ai_agent(agent: Any) -> bool:
-    module_name = getattr(agent.__class__, "__module__", "")
-    return module_name.startswith("pydantic_ai")
+    return _PYDANTIC_AI_AVAILABLE and PydanticAIAgent is not None and isinstance(agent, PydanticAIAgent)
 
 
 def _get_generic_agent_description(agent: Any) -> str:
