@@ -37,20 +37,13 @@ func ModelProviderSpecToProto(spec *agentv1alpha1.ModelProviderSpec) *pb.ModelPr
 
 	if spec.OpenAI != nil {
 		pbSpec.Openai = &pb.OpenAIProviderSpec{
-			BaseUrl:        spec.OpenAI.BaseURL,
-			OrganizationId: spec.OpenAI.OrganizationID,
-		}
-		if spec.OpenAI.TimeoutSeconds != nil {
-			pbSpec.Openai.TimeoutSeconds = *spec.OpenAI.TimeoutSeconds
+			BaseUrl: spec.OpenAI.BaseURL,
 		}
 	}
 
 	if spec.Anthropic != nil {
 		pbSpec.Anthropic = &pb.AnthropicProviderSpec{
 			BaseUrl: spec.Anthropic.BaseURL,
-		}
-		if spec.Anthropic.TimeoutSeconds != nil {
-			pbSpec.Anthropic.TimeoutSeconds = *spec.Anthropic.TimeoutSeconds
 		}
 	}
 
@@ -59,15 +52,11 @@ func ModelProviderSpecToProto(spec *agentv1alpha1.ModelProviderSpec) *pb.ModelPr
 			Project:  spec.Google.Project,
 			Location: spec.Google.Location,
 		}
-		if spec.Google.TimeoutSeconds != nil {
-			pbSpec.Google.TimeoutSeconds = *spec.Google.TimeoutSeconds
-		}
 	}
 
 	if spec.Bedrock != nil {
 		pbSpec.Bedrock = &pb.BedrockProviderSpec{
-			Region:              spec.Bedrock.Region,
-			InferenceProfileArn: spec.Bedrock.InferenceProfileARN,
+			Region: spec.Bedrock.Region,
 		}
 	}
 
@@ -143,20 +132,13 @@ func ModelProviderSpecFromProto(proto *pb.ModelProviderSpec) *agentv1alpha1.Mode
 
 	if proto.Openai != nil {
 		spec.OpenAI = &agentv1alpha1.OpenAIProviderSpec{
-			BaseURL:        proto.Openai.BaseUrl,
-			OrganizationID: proto.Openai.OrganizationId,
-		}
-		if proto.Openai.TimeoutSeconds > 0 {
-			spec.OpenAI.TimeoutSeconds = &proto.Openai.TimeoutSeconds
+			BaseURL: proto.Openai.BaseUrl,
 		}
 	}
 
 	if proto.Anthropic != nil {
 		spec.Anthropic = &agentv1alpha1.AnthropicProviderSpec{
 			BaseURL: proto.Anthropic.BaseUrl,
-		}
-		if proto.Anthropic.TimeoutSeconds > 0 {
-			spec.Anthropic.TimeoutSeconds = &proto.Anthropic.TimeoutSeconds
 		}
 	}
 
@@ -165,15 +147,11 @@ func ModelProviderSpecFromProto(proto *pb.ModelProviderSpec) *agentv1alpha1.Mode
 			Project:  proto.Google.Project,
 			Location: proto.Google.Location,
 		}
-		if proto.Google.TimeoutSeconds > 0 {
-			spec.Google.TimeoutSeconds = &proto.Google.TimeoutSeconds
-		}
 	}
 
 	if proto.Bedrock != nil {
 		spec.Bedrock = &agentv1alpha1.BedrockProviderSpec{
-			Region:              proto.Bedrock.Region,
-			InferenceProfileARN: proto.Bedrock.InferenceProfileArn,
+			Region: proto.Bedrock.Region,
 		}
 	}
 

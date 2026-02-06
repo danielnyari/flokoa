@@ -150,9 +150,10 @@ def pydantic_agent():
 
     This simulates a user's agent that already has tools defined.
     The executor should inject additional tools alongside this native tool.
+    Uses TestModel as default to avoid requiring model provider configuration.
     """
     agent = Agent(
-        "test",  # Will be overridden in tests
+        TestModel(),  # Use TestModel as default to avoid ProviderNotConfiguredError
         system_prompt="You are a helpful assistant.",
     )
 

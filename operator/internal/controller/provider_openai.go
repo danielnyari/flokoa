@@ -26,12 +26,6 @@ func (h *OpenAIProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvide
 			})
 		}
 
-		if openaiSpec.OrganizationID != "" {
-			config.EnvVars = append(config.EnvVars, corev1.EnvVar{
-				Name:  "OPENAI_ORG_ID",
-				Value: openaiSpec.OrganizationID,
-			})
-		}
 	}
 
 	return config, nil

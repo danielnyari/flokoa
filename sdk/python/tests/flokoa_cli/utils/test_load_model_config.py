@@ -76,8 +76,6 @@ class TestLoadModelConfigProviders:
         assert result.model == "gpt-4o"
         assert result.provider.openai is not None
         assert result.provider.openai.base_url == "https://api.openai.com/v1"
-        assert result.provider.openai.organization_id == "org-12345"
-        assert result.provider.openai.timeout_seconds == 120
 
     def test_loads_anthropic_config(self, anthropic_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
@@ -91,7 +89,6 @@ class TestLoadModelConfigProviders:
         assert result.model == "claude-sonnet-4-20250514"
         assert result.provider.anthropic is not None
         assert result.provider.anthropic.base_url == "https://api.anthropic.com"
-        assert result.provider.anthropic.timeout_seconds == 90
 
     def test_loads_google_config(self, google_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
