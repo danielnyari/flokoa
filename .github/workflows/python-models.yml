@@ -1,5 +1,8 @@
 name: Python Models
 
+env:
+  YQ_VERSION: "v4.45.1"
+
 on:
   push:
     paths:
@@ -33,7 +36,7 @@ jobs:
 
       - name: Install yq
         run: |
-          sudo wget -q https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo wget -q https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64 -O /usr/local/bin/yq
           sudo chmod +x /usr/local/bin/yq
           yq --version
 
@@ -41,7 +44,6 @@ jobs:
         run: make generate-python-models
 
       - name: Verify generated models are committed
-        working-directory: .
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
             git diff
