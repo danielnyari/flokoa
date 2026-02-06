@@ -393,10 +393,11 @@ def _build_loop_description(agent: Any) -> str:
             descriptions.append(f"and {sub_description}")
         else:
             descriptions.append(f", {sub_description}")
+    description_text = " ".join(descriptions)
     max_iterations = getattr(agent, "max_iterations", None)
     if max_iterations is None:
-        return f"{' '.join(descriptions)} in a loop (no iteration limit)."
-    return f"{' '.join(descriptions)} in a loop (max {max_iterations} iterations)."
+        return f"{description_text} in a loop (no iteration limit)."
+    return f"{description_text} in a loop (max {max_iterations} iterations)."
 
 
 def _get_default_description(agent: Any) -> str:
@@ -424,15 +425,19 @@ def _extract_inputs_from_examples(examples: Optional[list[dict]]) -> list[str]:
         if not example_input:
             continue
 
-        parts = example_input.get("parts") if isinstance(example_input, dict) else None
+        if not isinstance(example_input, dict):
+            continue
+
+        parts = example_input.get("parts")
         if parts is not None:
             part_texts = [part.get("text") for part in parts if part.get("text") is not None]
             if part_texts:
                 extracted_inputs.append("\n".join(part_texts))
-        elif isinstance(example_input, dict):
-            text = example_input.get("text")
-            if text is not None:
-                extracted_inputs.append(text)
+            continue
+
+        text = example_input.get("text")
+        if text is not None:
+            extracted_inputs.append(text)
 
     return extracted_inputs
 
@@ -476,8 +481,8 @@ def _extract_examples_from_instruction(instruction: str) -> Optional[List[Dict]]
     """Extract examples from agent instruction text using regex patterns."""
     examples = []
     example_patterns = [
-        r'Example Query:\s*["\'](.*?)["\']\s*Example Response:\s*["\'](.*?)["\']',
-        r'Example:\s*["\'](.*?)["\']\s*Response:\s*["\'](.*?)["\']',
+        r'Example Query:\s*["\']([^"\']+)["\']\s*Example Response:\s*["\']([^"\']+)["\']',
+        r'Example:\s*["\']([^"\']+)["\']\s*Response:\s*["\']([^"\']+)["\']',
     ]
 
     for pattern in example_patterns:
@@ -551,7 +556,11 @@ def _coerce_text(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value.strip() or None
     if isinstance(value, (list, tuple)):
-        parts = [str(part).strip() for part in value if str(part).strip()]
+        parts = []
+        for part in value:
+            part_text = str(part).strip()
+            if part_text:
+                parts.append(part_text)
         return " ".join(parts) if parts else None
     return None
 
