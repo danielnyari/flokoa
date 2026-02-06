@@ -13,7 +13,11 @@ from pydantic_ai.settings import ModelSettings, merge_model_settings
 from flokoa import tools as flokoa_tools
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.cache import ConfigCache
-from flokoa.exceptions import CancelNotSupportedError, ModelNotConfiguredError, ProviderNotConfiguredError
+from flokoa.exceptions import (
+    CancelNotSupportedError,
+    ModelNotConfiguredError,
+    ProviderNotConfiguredError,
+)
 from flokoa.types import (
     ModelParameters,
     ToolType,
@@ -226,7 +230,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         request = context.get_user_input()
         logger.info(f"Executing PydanticAI agent with request: {request}")
-        if self.model_provider is None:
+        if self.model_provider is None and self.agent.model is None:
             raise ProviderNotConfiguredError("Model provider must be configured to execute agent")
         result = await self.agent.run(
             request,
