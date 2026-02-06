@@ -327,10 +327,13 @@ def _build_llm_agent_description_with_instructions(agent: Any) -> str:
 
 def _replace_pronouns(text: str) -> str:
     """Replace pronouns and conjugate common verbs for agent description."""
-    return _PRONOUN_PATTERN.sub(
-        lambda match: _PRONOUN_MAP[match.group(1).lower()],
-        text,
-    )
+    def _replacement(match: re.Match[str]) -> str:
+        replacement = _PRONOUN_MAP[match.group(1).lower()]
+        if match.group(0)[0].isupper():
+            return replacement[:1].upper() + replacement[1:]
+        return replacement
+
+    return _PRONOUN_PATTERN.sub(_replacement, text)
 
 
 def _get_workflow_description(agent: Any) -> Optional[str]:
@@ -478,8 +481,8 @@ def _extract_examples_from_instruction(instruction: str) -> Optional[List[Dict]]
     """Extract examples from agent instruction text using regex patterns."""
     examples = []
     example_patterns = [
-        r'Example Query:\s*["\']([^"\']+)["\']\s*Example Response:\s*["\']([^"\']+)["\']',
-        r'Example:\s*["\']([^"\']+)["\']\s*Response:\s*["\']([^"\']+)["\']',
+        r'Example Query:\s*["\']((?:[^"\'\\\\]|\\\\.)+)["\']\s*Example Response:\s*["\']((?:[^"\'\\\\]|\\\\.)+)["\']',
+        r'Example:\s*["\']((?:[^"\'\\\\]|\\\\.)+)["\']\s*Response:\s*["\']((?:[^"\'\\\\]|\\\\.)+)["\']',
     ]
 
     for pattern in example_patterns:
@@ -553,7 +556,16 @@ def _coerce_text(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value.strip() or None
     if isinstance(value, (list, tuple)):
-        parts = [part_text for part_text in (str(part).strip() for part in value) if part_text]
+        parts = []
+        for part in value:
+            if isinstance(part, str):
+                part_text = part.strip()
+            elif hasattr(part, "text"):
+                part_text = str(getattr(part, "text")).strip()
+            else:
+                part_text = str(part).strip()
+            if part_text:
+                parts.append(part_text)
         return " ".join(parts) if parts else None
     return None
 

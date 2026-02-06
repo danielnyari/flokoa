@@ -29,10 +29,10 @@ async def test_builds_agent_card_for_adk_llm_agent():
     adk_agents = pytest.importorskip("google.adk.agents")
     adk_tools = pytest.importorskip("google.adk.tools")
 
-    def add_numbers(a: int, b: int) -> int:
+    def dummy_tool_function(a: int, b: int) -> int:
         return a + b
 
-    tool = adk_tools.FunctionTool(func=add_numbers)
+    tool = adk_tools.FunctionTool(func=dummy_tool_function)
     agent = adk_agents.LlmAgent(name="test_agent", model="gemini-2.0-flash", tools=[tool])
 
     builder = AgentCardBuilder(agent=agent, rpc_url="http://localhost:10001/")
@@ -40,4 +40,4 @@ async def test_builds_agent_card_for_adk_llm_agent():
 
     skill_names = {skill.name for skill in card.skills}
     assert "model" in skill_names
-    assert "add_numbers" in skill_names
+    assert "dummy_tool_function" in skill_names
