@@ -1,3 +1,7 @@
+---
+icon: lucide/rocket
+---
+
 # Flokoa Documentation
 
 Welcome to the Flokoa documentation. Flokoa is a Kubernetes-native platform for deploying and managing AI agents.
