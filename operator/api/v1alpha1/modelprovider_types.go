@@ -71,11 +71,6 @@ type OpenAIProviderSpec struct {
 	// BaseURL overrides the default OpenAI API endpoint
 	// +optional
 	BaseURL string `json:"baseURL,omitempty"`
-
-	// Timeout in seconds for API requests
-	// +kubebuilder:default=60
-	// +optional
-	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // AnthropicProviderSpec defines Anthropic-specific provider configuration
@@ -83,19 +78,10 @@ type AnthropicProviderSpec struct {
 	// BaseURL overrides the default Anthropic API endpoint
 	// +optional
 	BaseURL string `json:"baseURL,omitempty"`
-
-	// Timeout in seconds for API requests
-	// +kubebuilder:default=60
-	// +optional
-	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // GoogleProviderSpec defines Google/Gemini-specific provider configuration
 type GoogleProviderSpec struct {
-	// Timeout in seconds for API requests
-	// +kubebuilder:default=60
-	// +optional
-	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 
 	// Project is the Google Cloud project ID (for Vertex AI)
 	// +optional

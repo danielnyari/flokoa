@@ -17,18 +17,15 @@ message TLSConfig {
 // OpenAIProviderSpec defines OpenAI provider configuration.
 message OpenAIProviderSpec {
   string base_url = 1;
-  int32 timeout_seconds = 2;
 }
 
 // AnthropicProviderSpec defines Anthropic provider configuration.
 message AnthropicProviderSpec {
   string base_url = 1;
-  int32 timeout_seconds = 2;
 }
 
 // GoogleProviderSpec defines Google provider configuration.
 message GoogleProviderSpec {
-  int32 timeout_seconds = 1;
   string project = 2;
   string location = 3;
   SecretKeySelector service_account_key_secret_ref = 4;

@@ -39,17 +39,11 @@ func ModelProviderSpecToProto(spec *agentv1alpha1.ModelProviderSpec) *pb.ModelPr
 		pbSpec.Openai = &pb.OpenAIProviderSpec{
 			BaseUrl: spec.OpenAI.BaseURL,
 		}
-		if spec.OpenAI.TimeoutSeconds != nil {
-			pbSpec.Openai.TimeoutSeconds = *spec.OpenAI.TimeoutSeconds
-		}
 	}
 
 	if spec.Anthropic != nil {
 		pbSpec.Anthropic = &pb.AnthropicProviderSpec{
 			BaseUrl: spec.Anthropic.BaseURL,
-		}
-		if spec.Anthropic.TimeoutSeconds != nil {
-			pbSpec.Anthropic.TimeoutSeconds = *spec.Anthropic.TimeoutSeconds
 		}
 	}
 
@@ -57,9 +51,6 @@ func ModelProviderSpecToProto(spec *agentv1alpha1.ModelProviderSpec) *pb.ModelPr
 		pbSpec.Google = &pb.GoogleProviderSpec{
 			Project:  spec.Google.Project,
 			Location: spec.Google.Location,
-		}
-		if spec.Google.TimeoutSeconds != nil {
-			pbSpec.Google.TimeoutSeconds = *spec.Google.TimeoutSeconds
 		}
 	}
 
@@ -143,17 +134,11 @@ func ModelProviderSpecFromProto(proto *pb.ModelProviderSpec) *agentv1alpha1.Mode
 		spec.OpenAI = &agentv1alpha1.OpenAIProviderSpec{
 			BaseURL: proto.Openai.BaseUrl,
 		}
-		if proto.Openai.TimeoutSeconds > 0 {
-			spec.OpenAI.TimeoutSeconds = &proto.Openai.TimeoutSeconds
-		}
 	}
 
 	if proto.Anthropic != nil {
 		spec.Anthropic = &agentv1alpha1.AnthropicProviderSpec{
 			BaseURL: proto.Anthropic.BaseUrl,
-		}
-		if proto.Anthropic.TimeoutSeconds > 0 {
-			spec.Anthropic.TimeoutSeconds = &proto.Anthropic.TimeoutSeconds
 		}
 	}
 
@@ -161,9 +146,6 @@ func ModelProviderSpecFromProto(proto *pb.ModelProviderSpec) *agentv1alpha1.Mode
 		spec.Google = &agentv1alpha1.GoogleProviderSpec{
 			Project:  proto.Google.Project,
 			Location: proto.Google.Location,
-		}
-		if proto.Google.TimeoutSeconds > 0 {
-			spec.Google.TimeoutSeconds = &proto.Google.TimeoutSeconds
 		}
 	}
 

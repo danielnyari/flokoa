@@ -167,7 +167,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         if model_settings is None:
             raise ModelNotConfiguredError("Model settings could not be built from configuration")
 
-        return model_cls(provider=provider, settings=model_settings)
+        return model_cls(self.model_config.model, provider=provider, settings=model_settings)
 
     def _build_model_settings(self) -> ModelSettings | None:
         """Build pydantic_ai ModelSettings from flokoa ModelParameters."""

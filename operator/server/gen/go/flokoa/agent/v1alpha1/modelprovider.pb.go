@@ -84,11 +84,10 @@ func (x *TLSConfig) GetUseSystemCas() bool {
 
 // OpenAIProviderSpec defines OpenAI provider configuration.
 type OpenAIProviderSpec struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	BaseUrl        string                 `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
-	TimeoutSeconds int32                  `protobuf:"varint,2,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BaseUrl       string                 `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *OpenAIProviderSpec) Reset() {
@@ -128,20 +127,12 @@ func (x *OpenAIProviderSpec) GetBaseUrl() string {
 	return ""
 }
 
-func (x *OpenAIProviderSpec) GetTimeoutSeconds() int32 {
-	if x != nil {
-		return x.TimeoutSeconds
-	}
-	return 0
-}
-
 // AnthropicProviderSpec defines Anthropic provider configuration.
 type AnthropicProviderSpec struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	BaseUrl        string                 `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
-	TimeoutSeconds int32                  `protobuf:"varint,2,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BaseUrl       string                 `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AnthropicProviderSpec) Reset() {
@@ -181,17 +172,9 @@ func (x *AnthropicProviderSpec) GetBaseUrl() string {
 	return ""
 }
 
-func (x *AnthropicProviderSpec) GetTimeoutSeconds() int32 {
-	if x != nil {
-		return x.TimeoutSeconds
-	}
-	return 0
-}
-
 // GoogleProviderSpec defines Google provider configuration.
 type GoogleProviderSpec struct {
 	state                      protoimpl.MessageState `protogen:"open.v1"`
-	TimeoutSeconds             int32                  `protobuf:"varint,1,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
 	Project                    string                 `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
 	Location                   string                 `protobuf:"bytes,3,opt,name=location,proto3" json:"location,omitempty"`
 	ServiceAccountKeySecretRef *SecretKeySelector     `protobuf:"bytes,4,opt,name=service_account_key_secret_ref,json=serviceAccountKeySecretRef,proto3" json:"service_account_key_secret_ref,omitempty"`
@@ -227,13 +210,6 @@ func (x *GoogleProviderSpec) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GoogleProviderSpec.ProtoReflect.Descriptor instead.
 func (*GoogleProviderSpec) Descriptor() ([]byte, []int) {
 	return file_flokoa_agent_v1alpha1_modelprovider_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *GoogleProviderSpec) GetTimeoutSeconds() int32 {
-	if x != nil {
-		return x.TimeoutSeconds
-	}
-	return 0
 }
 
 func (x *GoogleProviderSpec) GetProject() string {
@@ -595,15 +571,12 @@ const file_flokoa_agent_v1alpha1_modelprovider_proto_rawDesc = "" +
 	"\tTLSConfig\x120\n" +
 	"\x14insecure_skip_verify\x18\x01 \x01(\bR\x12insecureSkipVerify\x12L\n" +
 	"\rca_secret_ref\x18\x02 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\vcaSecretRef\x12$\n" +
-	"\x0euse_system_cas\x18\x03 \x01(\bR\fuseSystemCas\"X\n" +
+	"\x0euse_system_cas\x18\x03 \x01(\bR\fuseSystemCas\"/\n" +
 	"\x12OpenAIProviderSpec\x12\x19\n" +
-	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12'\n" +
-	"\x0ftimeout_seconds\x18\x02 \x01(\x05R\x0etimeoutSeconds\"[\n" +
+	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\"2\n" +
 	"\x15AnthropicProviderSpec\x12\x19\n" +
-	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12'\n" +
-	"\x0ftimeout_seconds\x18\x02 \x01(\x05R\x0etimeoutSeconds\"\xe1\x01\n" +
-	"\x12GoogleProviderSpec\x12'\n" +
-	"\x0ftimeout_seconds\x18\x01 \x01(\x05R\x0etimeoutSeconds\x12\x18\n" +
+	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\"\xb8\x01\n" +
+	"\x12GoogleProviderSpec\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12\x1a\n" +
 	"\blocation\x18\x03 \x01(\tR\blocation\x12l\n" +
 	"\x1eservice_account_key_secret_ref\x18\x04 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\x1aserviceAccountKeySecretRef\"-\n" +

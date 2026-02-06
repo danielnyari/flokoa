@@ -2285,10 +2285,6 @@
       "properties": {
         "baseUrl": {
           "type": "string"
-        },
-        "timeoutSeconds": {
-          "type": "integer",
-          "format": "int32"
         }
       },
       "description": "AnthropicProviderSpec defines Anthropic provider configuration."
@@ -2808,10 +2804,6 @@
     "v1alpha1GoogleProviderSpec": {
       "type": "object",
       "properties": {
-        "timeoutSeconds": {
-          "type": "integer",
-          "format": "int32"
-        },
         "project": {
           "type": "string"
         },
@@ -3492,10 +3484,6 @@
       "properties": {
         "baseUrl": {
           "type": "string"
-        },
-        "timeoutSeconds": {
-          "type": "integer",
-          "format": "int32"
         }
       },
       "description": "OpenAIProviderSpec defines OpenAI provider configuration."

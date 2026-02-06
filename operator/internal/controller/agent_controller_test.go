@@ -681,7 +681,6 @@ var _ = Describe("Agent Controller", func() {
 
 			It("should create AgentTool CR and mount inline tools", func() {
 				By("Creating an Agent with inline tools")
-				timeoutSec := int32(60)
 				agent := &agentv1alpha1.Agent{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      agentName,
@@ -705,9 +704,8 @@ var _ = Describe("Agent Controller", func() {
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "Get weather information",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
-										URL:            "https://api.weather.com/v1/weather",
-										Method:         agentv1alpha1.HTTPMethodGet,
-										TimeoutSeconds: &timeoutSec,
+										URL:    "https://api.weather.com/v1/weather",
+										Method: agentv1alpha1.HTTPMethodGet,
 									},
 								},
 							},
@@ -2610,7 +2608,6 @@ var _ = Describe("Agent Controller", func() {
 			Context("Model reference", func() {
 				It("should reconcile agent with Model reference", func() {
 					By("Creating a ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
@@ -2623,9 +2620,7 @@ var _ = Describe("Agent Controller", func() {
 								},
 								Key: "api-key",
 							},
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -2738,16 +2733,13 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should mount model ConfigMap in deployment", func() {
 					By("Creating an Anthropic ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							Anthropic: &agentv1alpha1.AnthropicProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							Anthropic: &agentv1alpha1.AnthropicProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -2860,7 +2852,6 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should inject API key secret env var for OpenAI", func() {
 					By("Creating an OpenAI ModelProvider with API key reference")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
@@ -2873,9 +2864,7 @@ var _ = Describe("Agent Controller", func() {
 								},
 								Key: "api-key",
 							},
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -2974,7 +2963,6 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should inject API key secret env var for Anthropic", func() {
 					By("Creating an Anthropic ModelProvider with API key reference")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
@@ -2987,9 +2975,7 @@ var _ = Describe("Agent Controller", func() {
 								},
 								Key: "anthropic-key",
 							},
-							Anthropic: &agentv1alpha1.AnthropicProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							Anthropic: &agentv1alpha1.AnthropicProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -3088,16 +3074,13 @@ var _ = Describe("Agent Controller", func() {
 			Context("Model with parameters", func() {
 				It("should reconcile agent with Model that has parameters", func() {
 					By("Creating a ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -3210,16 +3193,13 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should include penalty parameters from Model", func() {
 					By("Creating a ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -3319,16 +3299,13 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should include Anthropic thinking parameters from Model", func() {
 					By("Creating an Anthropic ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							Anthropic: &agentv1alpha1.AnthropicProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							Anthropic: &agentv1alpha1.AnthropicProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -3448,16 +3425,13 @@ var _ = Describe("Agent Controller", func() {
 					}
 
 					By("Creating a ModelProvider in other namespace")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: otherNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -3558,9 +3532,8 @@ var _ = Describe("Agent Controller", func() {
 			})
 
 			Context("Provider-specific configurations", func() {
-				It("should handle OpenAI provider with custom baseURL and orgID", func() {
+				It("should handle OpenAI provider with custom baseURL", func() {
 					By("Creating an OpenAI ModelProvider with custom config")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
@@ -3568,8 +3541,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
 							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								BaseURL:        "https://custom.openai.api.com/v1",
-								TimeoutSeconds: &timeoutSeconds,
+								BaseURL: "https://custom.openai.api.com/v1",
 							},
 						},
 					}
@@ -3661,8 +3633,6 @@ var _ = Describe("Agent Controller", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(providerConfig.Provider.OpenAI).NotTo(BeNil())
 					Expect(providerConfig.Provider.OpenAI.BaseURL).To(Equal("https://custom.openai.api.com/v1"))
-					Expect(providerConfig.Provider.OpenAI.TimeoutSeconds).NotTo(BeNil())
-					Expect(*providerConfig.Provider.OpenAI.TimeoutSeconds).To(Equal(int32(120)))
 
 					By("Verifying Deployment has env vars for OpenAI config")
 					deployment := &appsv1.Deployment{}
@@ -3678,12 +3648,10 @@ var _ = Describe("Agent Controller", func() {
 						}
 					}
 					Expect(envMap["OPENAI_BASE_URL"]).To(Equal("https://custom.openai.api.com/v1"))
-					Expect(envMap["OPENAI_ORG_ID"]).To(Equal("org-12345"))
 				})
 
 				It("should handle Anthropic provider with custom baseURL", func() {
 					By("Creating an Anthropic ModelProvider with custom config")
-					timeoutSeconds := int32(90)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
@@ -3691,8 +3659,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
 							Anthropic: &agentv1alpha1.AnthropicProviderSpec{
-								BaseURL:        "https://custom.anthropic.api.com",
-								TimeoutSeconds: &timeoutSeconds,
+								BaseURL: "https://custom.anthropic.api.com",
 							},
 						},
 					}
@@ -3777,21 +3744,19 @@ var _ = Describe("Agent Controller", func() {
 							Name:      modelCMName,
 							Namespace: agentNamespace,
 						}, modelCM)
-					}, timeoutSeconds, interval).Should(Succeed())
+					}, timeout, interval).Should(Succeed())
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(providerConfig.Provider.Anthropic).NotTo(BeNil())
 					Expect(providerConfig.Provider.Anthropic.BaseURL).To(Equal("https://custom.anthropic.api.com"))
-					Expect(providerConfig.Provider.Anthropic.TimeoutSeconds).NotTo(BeNil())
-					Expect(*providerConfig.Provider.Anthropic.TimeoutSeconds).To(Equal(int32(90)))
 
 					By("Verifying Deployment has ANTHROPIC_BASE_URL env var")
 					deployment := &appsv1.Deployment{}
 					Eventually(func() error {
 						return k8sClient.Get(ctx, typeNamespacedName, deployment)
-					}, timeoutSeconds, interval).Should(Succeed())
+					}, timeout, interval).Should(Succeed())
 
 					container := deployment.Spec.Template.Spec.Containers[0]
 					var baseURLEnv *corev1.EnvVar
@@ -3807,16 +3772,13 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should include default headers in config", func() {
 					By("Creating a ModelProvider with default headers")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 							DefaultHeaders: map[string]string{
 								"X-Custom-Header":  "custom-value",
 								"X-Request-Source": "flokoa",
@@ -4051,16 +4013,13 @@ var _ = Describe("Agent Controller", func() {
 			Context("Model ConfigMap updates", func() {
 				It("should update model ConfigMap when Model spec changes", func() {
 					By("Creating a ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -4178,16 +4137,13 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should have correct labels on model ConfigMap", func() {
 					By("Creating a ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())
@@ -4281,16 +4237,13 @@ var _ = Describe("Agent Controller", func() {
 
 				It("should set owner reference on model ConfigMap", func() {
 					By("Creating a ModelProvider resource")
-					timeoutSeconds := int32(120)
 					provider := &agentv1alpha1.ModelProvider{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      providerName,
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.ModelProviderSpec{
-							OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-								TimeoutSeconds: &timeoutSeconds,
-							},
+							OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 						},
 					}
 					Expect(k8sClient.Create(ctx, provider)).To(Succeed())

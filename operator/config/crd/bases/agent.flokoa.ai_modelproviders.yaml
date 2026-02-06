@@ -62,11 +62,6 @@ spec:
                   baseURL:
                     description: BaseURL overrides the default Anthropic API endpoint
                     type: string
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
                 type: object
               apiKeySecretRef:
                 description: |-
@@ -142,11 +137,6 @@ spec:
                     - key
                     type: object
                     x-kubernetes-map-type: atomic
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
                 type: object
               openai:
                 description: OpenAI-specific configuration. If set, provider is OpenAI.
@@ -154,11 +144,6 @@ spec:
                   baseURL:
                     description: BaseURL overrides the default OpenAI API endpoint
                     type: string
-                  timeoutSeconds:
-                    default: 60
-                    description: Timeout in seconds for API requests
-                    format: int32
-                    type: integer
                 type: object
               tls:
                 description: TLS configuration for custom endpoints
