@@ -13,7 +13,11 @@ from pydantic_ai.settings import ModelSettings, merge_model_settings
 from flokoa import tools as flokoa_tools
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.cache import ConfigCache
-from flokoa.exceptions import CancelNotSupportedError, ModelNotConfiguredError, ProviderNotConfiguredError
+from flokoa.exceptions import (
+    CancelNotSupportedError,
+    ModelNotConfiguredError,
+    ProviderNotConfiguredError,
+)
 from flokoa.types import (
     ModelParameters,
     ToolType,
@@ -163,7 +167,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         if model_settings is None:
             raise ModelNotConfiguredError("Model settings could not be built from configuration")
 
-        return model_cls(provider=provider, settings=model_settings)
+        return model_cls(self.model_config.model, provider=provider, settings=model_settings)
 
     def _build_model_settings(self) -> ModelSettings | None:
         """Build pydantic_ai ModelSettings from flokoa ModelParameters."""
@@ -226,13 +230,19 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         request = context.get_user_input()
         logger.info(f"Executing PydanticAI agent with request: {request}")
-        if self.model_provider is None:
+
+        if not self.model_config and not self.model_provider and self.agent.model is None:
             raise ProviderNotConfiguredError("Model provider must be configured to execute agent")
+
         result = await self.agent.run(
             request,
             toolsets=[self._get_toolset()],
-            model=self._create_model(self._create_provider(self.model_provider)),
-        )  #
+            model=(
+                self._create_model(self._create_provider(self.model_config.provider.type))
+                if self.model_config
+                else self.agent.model
+            ),
+        )
         await event_queue.enqueue_event(new_agent_text_message(result.output))
 
     @override

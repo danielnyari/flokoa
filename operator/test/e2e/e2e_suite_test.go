@@ -37,9 +37,13 @@ var (
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
-	// projectImage is the name of the image which will be build and loaded
+	// projectImage is the name of the controller image which will be build and loaded
 	// with the code source changes to be tested.
 	projectImage = "example.com/operator:v0.0.1"
+
+	// serverImage is the name of the server image which will be build and loaded
+	// with the code source changes to be tested.
+	serverImage = "example.com/server:v0.0.1"
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
@@ -53,16 +57,22 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	By("building the manager(Operator) image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
+	By("building the manager(Operator) and server images")
+	cmd := exec.Command("make", "docker-build",
+		fmt.Sprintf("IMG=%s", projectImage),
+		fmt.Sprintf("SERVER_IMG=%s", serverImage))
 	_, err := utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) and server images")
 
 	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
 	// built and available before running the tests. Also, remove the following block.
 	By("loading the manager(Operator) image on Kind")
 	err = utils.LoadImageToKindClusterWithName(projectImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
+
+	By("loading the server image on Kind")
+	err = utils.LoadImageToKindClusterWithName(serverImage)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the server image into Kind")
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,

@@ -46,16 +46,13 @@ var _ = Describe("ModelProvider Controller", func() {
 			By("creating the custom resource for the Kind ModelProvider")
 			err := k8sClient.Get(ctx, typeNamespacedName, modelprovider)
 			if err != nil && errors.IsNotFound(err) {
-				timeoutSeconds := int32(120)
 				resource := &agentv1alpha1.ModelProvider{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
 					Spec: agentv1alpha1.ModelProviderSpec{
-						OpenAI: &agentv1alpha1.OpenAIProviderSpec{
-							TimeoutSeconds: &timeoutSeconds,
-						},
+						OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())

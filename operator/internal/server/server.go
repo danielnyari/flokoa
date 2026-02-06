@@ -103,7 +103,9 @@ func (s *Server) Start(ctx context.Context) error {
 	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
 	s.grpcServer.GracefulStop()
 	if s.httpServer != nil {
-		s.httpServer.Shutdown(context.Background())
+		if err := s.httpServer.Shutdown(context.Background()); err != nil {
+			s.log.Error(err, "Failed to shutdown HTTP server")
+		}
 	}
 
 	return nil
@@ -150,7 +152,9 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// Health check endpoint
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+			s.log.Error(err, "Failed to encode health check response")
+		}
 	})
 
 	// Root redirect to Swagger UI
@@ -198,6 +202,8 @@ func corsMiddleware(h http.Handler) http.Handler {
 func (s *Server) Stop() {
 	s.grpcServer.GracefulStop()
 	if s.httpServer != nil {
-		s.httpServer.Shutdown(context.Background())
+		if err := s.httpServer.Shutdown(context.Background()); err != nil {
+			s.log.Error(err, "Failed to shutdown HTTP server")
+		}
 	}
 }

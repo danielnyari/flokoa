@@ -1,9 +1,16 @@
+"""Tests for load_model_config utility function.
+
+These tests verify the model config loading functionality with the CRD-based
+ModelConfig schema (provider with type field, parameters structure, etc.).
+"""
+
 import json
 
 import pytest
 
 import flokoa.utils as utils_module
-from flokoa.types import ModelConfig, ModelProvider
+from flokoa.types import ModelConfig
+from flokoa.types.modelconfig import ProviderType
 from flokoa.utils import load_model_config
 
 
@@ -40,10 +47,9 @@ class TestLoadModelConfigBasic:
 
         assert result is not None
         assert isinstance(result, ModelConfig)
-        assert result.provider == ModelProvider.OPENAI
+        assert result.provider.type == ProviderType.openai
         assert result.model == "gpt-4o"
-        assert result.config is None
-        assert result.settings is None
+        assert result.parameters is None
 
     def test_returns_model_config_type(self, minimal_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
@@ -66,12 +72,10 @@ class TestLoadModelConfigProviders:
         result = load_model_config()
 
         assert result is not None
-        assert result.provider == ModelProvider.OPENAI
+        assert result.provider.type == ProviderType.openai
         assert result.model == "gpt-4o"
-        assert result.config is not None
-        assert result.config["baseURL"] == "https://api.openai.com/v1"
-        assert result.config["organizationID"] == "org-12345"
-        assert result.config["timeoutSeconds"] == 120
+        assert result.provider.openai is not None
+        assert result.provider.openai.base_url == "https://api.openai.com/v1"
 
     def test_loads_anthropic_config(self, anthropic_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
@@ -81,73 +85,63 @@ class TestLoadModelConfigProviders:
         result = load_model_config()
 
         assert result is not None
-        assert result.provider == ModelProvider.ANTHROPIC
+        assert result.provider.type == ProviderType.anthropic
         assert result.model == "claude-sonnet-4-20250514"
-        assert result.config["baseURL"] == "https://api.anthropic.com"
-        assert result.config["timeoutSeconds"] == 90
+        assert result.provider.anthropic is not None
+        assert result.provider.anthropic.base_url == "https://api.anthropic.com"
 
-    def test_loads_ollama_config(self, ollama_model_config_data, tmp_path, monkeypatch):
+    def test_loads_google_config(self, google_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(ollama_model_config_data))
+        model_config_path.write_text(json.dumps(google_model_config_data))
         monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
 
         result = load_model_config()
 
         assert result is not None
-        assert result.provider == ModelProvider.OLLAMA
-        assert result.model == "llama3.2"
-        assert result.config["host"] == "http://localhost:11434"
-
-    def test_loads_azure_openai_config(self, azure_openai_model_config_data, tmp_path, monkeypatch):
-        model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(azure_openai_model_config_data))
-        monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
-
-        result = load_model_config()
-
-        assert result is not None
-        assert result.provider == ModelProvider.AZURE_OPENAI
-        assert result.model == "gpt-4o"
-        assert result.config["endpoint"] == "https://myresource.openai.azure.com"
-        assert result.config["deploymentName"] == "my-gpt4o-deployment"
-
-    def test_loads_gemini_config(self, gemini_model_config_data, tmp_path, monkeypatch):
-        model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(gemini_model_config_data))
-        monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
-
-        result = load_model_config()
-
-        assert result is not None
-        assert result.provider == ModelProvider.GEMINI
+        assert result.provider.type == ProviderType.google
         assert result.model == "gemini-1.5-pro"
+        assert result.provider.google is not None
+        assert result.provider.google.location == "us-central1"
+
+    def test_loads_bedrock_config(self, bedrock_model_config_data, tmp_path, monkeypatch):
+        model_config_path = tmp_path / "model.json"
+        model_config_path.write_text(json.dumps(bedrock_model_config_data))
+        monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
+
+        result = load_model_config()
+
+        assert result is not None
+        assert result.provider.type == ProviderType.bedrock
+        assert result.model == "anthropic.claude-3-sonnet"
+        assert result.provider.bedrock is not None
+        assert result.provider.bedrock.region == "us-east-1"
 
 
-class TestLoadModelConfigSettings:
-    """Tests for loading PydanticAI ModelSettings."""
+class TestLoadModelConfigParameters:
+    """Tests for loading model parameters."""
 
-    def test_loads_common_settings(self, openai_model_config_data, tmp_path, monkeypatch):
+    def test_loads_common_parameters(self, openai_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
         model_config_path.write_text(json.dumps(openai_model_config_data))
         monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
 
         result = load_model_config()
 
-        assert result.settings is not None
-        assert result.settings["temperature"] == 0.7
-        assert result.settings["max_tokens"] == 4096
-        assert result.settings["top_p"] == 0.9
+        assert result.parameters is not None
+        assert result.parameters.temperature == "0.7"
+        assert result.parameters.max_tokens == 4096
+        assert result.parameters.top_p == "0.9"
 
-    def test_loads_penalty_settings(self, openai_model_config_data, tmp_path, monkeypatch):
+    def test_loads_penalty_parameters(self, openai_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
         model_config_path.write_text(json.dumps(openai_model_config_data))
         monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
 
         result = load_model_config()
 
-        assert result.settings is not None
-        assert result.settings["frequency_penalty"] == 0.5
-        assert result.settings["presence_penalty"] == 0.3
+        assert result.parameters is not None
+        assert result.parameters.frequency_penalty == "0.5"
+        assert result.parameters.presence_penalty == "0.3"
 
     def test_loads_stop_sequences_and_seed(self, model_config_with_settings, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
@@ -156,85 +150,52 @@ class TestLoadModelConfigSettings:
 
         result = load_model_config()
 
-        assert result.settings is not None
-        assert result.settings["stop_sequences"] == ["END", "STOP"]
-        assert result.settings["seed"] == 42
+        assert result.parameters is not None
+        assert result.parameters.stop_sequences == ["END", "STOP"]
+        assert result.parameters.seed == 42
 
-    def test_settings_can_be_used_with_pydantic_ai(
-        self, openai_model_config_data, tmp_path, monkeypatch
-    ):
-        """Verify settings are compatible with PydanticAI ModelSettings type."""
-        from pydantic_ai.settings import ModelSettings
 
+class TestLoadModelConfigProviderSpecificParameters:
+    """Tests for provider-specific parameters."""
+
+    def test_loads_openai_specific_parameters(self, openai_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
         model_config_path.write_text(json.dumps(openai_model_config_data))
         monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
 
         result = load_model_config()
 
-        # The settings dict should be usable as ModelSettings
-        assert result.settings is not None
-        settings: ModelSettings = result.settings
-        assert settings["temperature"] == 0.7
+        assert result.parameters is not None
+        assert result.parameters.openai is not None
+        assert result.parameters.openai.service_tier.value == "default"
 
-
-class TestLoadModelConfigProperties:
-    """Tests for ModelConfig convenience properties."""
-
-    def test_base_url_property(self, openai_model_config_data, tmp_path, monkeypatch):
+    def test_loads_anthropic_cache_settings(self, anthropic_model_config_data, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(openai_model_config_data))
+        model_config_path.write_text(json.dumps(anthropic_model_config_data))
         monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
 
         result = load_model_config()
 
-        assert result.base_url == "https://api.openai.com/v1"
+        assert result.parameters is not None
+        assert result.parameters.anthropic is not None
+        assert result.parameters.anthropic.cache_instructions == "5m"
 
-    def test_base_url_property_when_no_config(
-        self, minimal_model_config_data, tmp_path, monkeypatch
-    ):
-        model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(minimal_model_config_data))
-        monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
 
-        result = load_model_config()
+class TestLoadModelConfigDefaultHeaders:
+    """Tests for default headers configuration."""
 
-        assert result.base_url is None
-
-    def test_timeout_seconds_property(self, openai_model_config_data, tmp_path, monkeypatch):
-        model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(openai_model_config_data))
-        monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
-
-        result = load_model_config()
-
-        assert result.timeout_seconds == 120
-
-    def test_timeout_seconds_property_when_no_config(
-        self, minimal_model_config_data, tmp_path, monkeypatch
-    ):
-        model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(minimal_model_config_data))
-        monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
-
-        result = load_model_config()
-
-        assert result.timeout_seconds is None
-
-    def test_default_headers_property(
-        self, model_config_with_default_headers, tmp_path, monkeypatch
-    ):
+    def test_loads_default_headers(self, model_config_with_default_headers, tmp_path, monkeypatch):
         model_config_path = tmp_path / "model.json"
         model_config_path.write_text(json.dumps(model_config_with_default_headers))
         monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
 
         result = load_model_config()
 
-        assert result.default_headers is not None
-        assert result.default_headers["X-Request-Source"] == "flokoa"
-        assert result.default_headers["X-Tenant-ID"] == "tenant-123"
+        assert result.provider.default_headers is not None
+        assert result.provider.default_headers["X-Request-Source"] == "flokoa"
+        assert result.provider.default_headers["X-Tenant-ID"] == "tenant-123"
 
-    def test_default_headers_property_when_no_config(
+    def test_default_headers_is_none_when_not_specified(
         self, minimal_model_config_data, tmp_path, monkeypatch
     ):
         model_config_path = tmp_path / "model.json"
@@ -243,60 +204,24 @@ class TestLoadModelConfigProperties:
 
         result = load_model_config()
 
-        assert result.default_headers is None
-
-
-class TestLoadModelConfigGetModelName:
-    """Tests for get_model_name() method."""
-
-    @pytest.mark.parametrize(
-        "provider,model,expected",
-        [
-            ("openai", "gpt-4o", "openai:gpt-4o"),
-            ("anthropic", "claude-sonnet-4-20250514", "anthropic:claude-sonnet-4-20250514"),
-            ("azure-openai", "gpt-4o", "azure:gpt-4o"),
-            ("ollama", "llama3.2", "ollama:llama3.2"),
-            ("gemini", "gemini-1.5-pro", "gemini:gemini-1.5-pro"),
-            ("gemini-vertex", "gemini-1.5-pro", "vertexai:gemini-1.5-pro"),
-            ("anthropic-vertex", "claude-sonnet-4-20250514", "vertexai:claude-sonnet-4-20250514"),
-            ("bedrock", "anthropic.claude-3-sonnet", "bedrock:anthropic.claude-3-sonnet"),
-        ],
-    )
-    def test_get_model_name_for_all_providers(
-        self, provider, model, expected, tmp_path, monkeypatch
-    ):
-        config_data = {
-            "provider": provider,
-            "model": model,
-        }
-        model_config_path = tmp_path / "model.json"
-        model_config_path.write_text(json.dumps(config_data))
-        monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", str(model_config_path))
-
-        result = load_model_config()
-
-        assert result.get_model_name() == expected
+        assert result.provider.default_headers is None
 
 
 class TestLoadModelConfigAllProviders:
     """Tests that all provider enum values are valid."""
 
     @pytest.mark.parametrize(
-        "provider,model",
+        "provider_type,model",
         [
             ("openai", "gpt-4o"),
             ("anthropic", "claude-sonnet-4-20250514"),
-            ("azure-openai", "gpt-4o"),
-            ("ollama", "llama3.2"),
-            ("gemini", "gemini-1.5-pro"),
-            ("gemini-vertex", "gemini-1.5-pro"),
-            ("anthropic-vertex", "claude-sonnet-4-20250514"),
+            ("google", "gemini-1.5-pro"),
             ("bedrock", "anthropic.claude-3-sonnet"),
         ],
     )
-    def test_loads_all_provider_types(self, provider, model, tmp_path, monkeypatch):
+    def test_loads_all_provider_types(self, provider_type, model, tmp_path, monkeypatch):
         config_data = {
-            "provider": provider,
+            "provider": {"type": provider_type},
             "model": model,
         }
         model_config_path = tmp_path / "model.json"
@@ -306,7 +231,7 @@ class TestLoadModelConfigAllProviders:
         result = load_model_config()
 
         assert result is not None
-        assert result.provider.value == provider
+        assert result.provider.type.value == provider_type
         assert result.model == model
 
 
@@ -315,7 +240,7 @@ class TestLoadModelConfigValidation:
 
     def test_raises_error_for_invalid_provider(self, tmp_path, monkeypatch):
         config_data = {
-            "provider": "invalid-provider",
+            "provider": {"type": "invalid-provider"},
             "model": "some-model",
         }
         model_config_path = tmp_path / "model.json"
@@ -338,7 +263,7 @@ class TestLoadModelConfigValidation:
 
     def test_raises_error_for_missing_model(self, tmp_path, monkeypatch):
         config_data = {
-            "provider": "openai",
+            "provider": {"type": "openai"},
         }
         model_config_path = tmp_path / "model.json"
         model_config_path.write_text(json.dumps(config_data))
