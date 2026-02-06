@@ -37,6 +37,9 @@ jobs:
       - name: Install yq
         run: |
           sudo wget -q https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64 -O /usr/local/bin/yq
+          curl -sSL https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/checksums.sha256 -o /tmp/yq_checksums.sha256
+          YQ_SHA=$(grep "yq_linux_amd64$" /tmp/yq_checksums.sha256 | awk '{print $1}')
+          echo "${YQ_SHA}  /usr/local/bin/yq" | sha256sum -c -
           sudo chmod +x /usr/local/bin/yq
           yq --version
 

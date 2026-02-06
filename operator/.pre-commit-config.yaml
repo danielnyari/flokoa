@@ -6,4 +6,4 @@ repos:
         entry: make generate-python-models
         language: system
         pass_filenames: false
-        files: ^(api/|config/)
+        files: ^operator/(api/|config/)
