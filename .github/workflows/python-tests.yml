@@ -1,0 +1,36 @@
+name: Python SDK Tests
+
+on:
+  push:
+    paths:
+      - "sdk/python/**"
+      - ".github/workflows/python-tests.yml"
+  pull_request:
+    paths:
+      - "sdk/python/**"
+      - ".github/workflows/python-tests.yml"
+
+jobs:
+  test:
+    name: Run Python SDK Checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Run checks
+        run: make check
+
+      - name: Run tests
+        run: make test

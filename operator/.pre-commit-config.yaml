@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: generate-python-models
+        name: Generate Python models
+        entry: make generate-python-models
+        language: system
+        pass_filenames: false

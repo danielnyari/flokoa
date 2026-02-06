@@ -2,7 +2,13 @@ name: E2E Tests
 
 on:
   push:
+    paths:
+      - "operator/**"
+      - ".github/workflows/test-e2e.yml"
   pull_request:
+    paths:
+      - "operator/**"
+      - ".github/workflows/test-e2e.yml"
 
 jobs:
   test-e2e:

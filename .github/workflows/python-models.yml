@@ -1,0 +1,50 @@
+name: Python Models
+
+on:
+  push:
+    paths:
+      - "operator/**"
+      - ".github/workflows/python-models.yml"
+  pull_request:
+    paths:
+      - "operator/**"
+      - ".github/workflows/python-models.yml"
+
+jobs:
+  generate:
+    name: Validate Generated Python Models
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/go.mod
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install yq
+        run: |
+          sudo wget -q https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Generate Python models
+        run: make generate-python-models
+
+      - name: Verify generated models are committed
+        working-directory: .
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git diff
+            echo "Generated Python models are out of date. Run 'make generate-python-models' in operator."
+            exit 1
+          fi

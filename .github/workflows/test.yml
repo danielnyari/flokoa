@@ -2,7 +2,13 @@ name: Tests
 
 on:
   push:
+    paths:
+      - "operator/**"
+      - ".github/workflows/test.yml"
   pull_request:
+    paths:
+      - "operator/**"
+      - ".github/workflows/test.yml"
 
 jobs:
   test:
