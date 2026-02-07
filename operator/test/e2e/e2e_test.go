@@ -477,7 +477,7 @@ spec:
       replicas: 1
       container:
         name: agent
-        image: nginx:latest
+        image: nginx:1.25
         ports:
         - containerPort: 8080
           name: http
@@ -547,7 +547,7 @@ spec:
       replicas: 1
       container:
         name: agent
-        image: nginx:latest
+        image: nginx:1.25
 `
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(agentYAML)
