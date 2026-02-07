@@ -12,11 +12,11 @@ except (ImportError, AttributeError):
         _BaseToolset = None
 
 # In tests, google.adk.tools is a MagicMock, so BaseToolset resolves to a non-type.
-if _BaseToolset is None or not isinstance(_BaseToolset, type):
+if _BaseToolset is None or not hasattr(_BaseToolset, "__mro__"):
     class BaseToolset:  # type: ignore[no-redef]
         async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
             raise NotImplementedError(
-                "Cannot use toolsets: google-adk is not installed or unavailable. "
+                "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
                 "Install it with: pip install google-adk."
             )
 
