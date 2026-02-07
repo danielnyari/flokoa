@@ -4,6 +4,14 @@ metadata:
   labels:
     app.kubernetes.io/name: operator
     app.kubernetes.io/managed-by: kustomize
-  name: instruction-sample
+  name: shared-support-instructions
 spec:
-  # TODO(user): Add fields here
+  content: |
+    You are a customer support agent. Follow these guidelines:
+
+    1. Always greet the customer professionally
+    2. Identify the issue category: billing, technical, account, or general
+    3. Attempt to resolve the issue or escalate appropriately
+    4. Always summarize the resolution or next steps
+
+    Tone: Professional, empathetic, concise.

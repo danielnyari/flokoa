@@ -4428,11 +4428,12 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Card: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Inline: "You are a test agent.",
+						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type: agentv1alpha1.RuntimeTypeInline,
-							Inline: &agentv1alpha1.InlineRuntimeSpec{
-								Instructions: "You are a test agent.",
-							},
+							Type:   agentv1alpha1.RuntimeTypeInline,
+							Inline: &agentv1alpha1.InlineRuntimeSpec{},
 						},
 					},
 				}
@@ -4477,6 +4478,9 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Card: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Inline: "You are a test agent.",
+						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeInline,
 							Spec: &agentv1alpha1.StandardRuntimeSpec{
@@ -4484,9 +4488,7 @@ var _ = Describe("Agent Controller", func() {
 									Image: "nginx:latest",
 								},
 							},
-							Inline: &agentv1alpha1.InlineRuntimeSpec{
-								Instructions: "You are a test agent.",
-							},
+							Inline: &agentv1alpha1.InlineRuntimeSpec{},
 						},
 						Model: &agentv1alpha1.AgentModelRef{
 							Name: "test-model",
@@ -4534,10 +4536,8 @@ var _ = Describe("Agent Controller", func() {
 					Spec: agentv1alpha1.AgentSpec{
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type: agentv1alpha1.RuntimeTypeStandard,
-							Inline: &agentv1alpha1.InlineRuntimeSpec{
-								Instructions: "You are a test agent.",
-							},
+							Type:   agentv1alpha1.RuntimeTypeStandard,
+							Inline: &agentv1alpha1.InlineRuntimeSpec{},
 						},
 					},
 				}
@@ -4570,6 +4570,139 @@ var _ = Describe("Agent Controller", func() {
 				Expect(readyCond).NotTo(BeNil())
 				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
 				Expect(readyCond.Message).To(ContainSubstring("runtime.inline must not be set"))
+			})
+
+			It("should fail validation when instruction is not set for inline runtime", func() {
+				By("Creating an inline Agent without instruction")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type:   agentv1alpha1.RuntimeTypeInline,
+							Inline: &agentv1alpha1.InlineRuntimeSpec{},
+						},
+						Model: &agentv1alpha1.AgentModelRef{
+							Name: "test-model",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Second reconcile should fail validation
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying agent status is Failed")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
+
+				readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
+				Expect(readyCond).NotTo(BeNil())
+				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
+				Expect(readyCond.Message).To(ContainSubstring("spec.instruction is required"))
+			})
+
+			It("should allow standard agents to have optional instruction", func() {
+				By("Creating a standard Agent with inline instruction")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						Card: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Inline: "You are a BYO agent with instructions.",
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "my-byo-agent:latest",
+									Ports: []corev1.ContainerPort{
+										{Name: "http", ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+									},
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Second reconcile creates resources including Instruction CR
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying the Instruction CR was created")
+				instruction := &agentv1alpha1.Instruction{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Name:      fmt.Sprintf("%s-instruction", agentName),
+						Namespace: agentNamespace,
+					}, instruction)
+				}, timeout, interval).Should(Succeed())
+
+				Expect(instruction.Spec.Content).To(Equal("You are a BYO agent with instructions."))
+				Expect(instruction.Labels["flokoa.ai/agent"]).To(Equal(agentName))
+
+				By("Verifying the Deployment has instruction volume mount")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				container := deployment.Spec.Template.Spec.Containers[0]
+				var foundInstructionMount bool
+				for _, vm := range container.VolumeMounts {
+					if vm.Name == instructionVolumeName {
+						foundInstructionMount = true
+						Expect(vm.MountPath).To(Equal(instructionMountPath))
+						Expect(vm.SubPath).To(Equal(instructionConfigMapKey))
+						Expect(vm.ReadOnly).To(BeTrue())
+					}
+				}
+				Expect(foundInstructionMount).To(BeTrue(), "instruction volume mount should exist on BYO agent")
+
+				// Check FLOKOA_INSTRUCTION_PATH env var
+				envMap := make(map[string]string)
+				for _, env := range container.Env {
+					if env.Value != "" {
+						envMap[env.Name] = env.Value
+					}
+				}
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_INSTRUCTION_PATH", instructionMountPath))
 			})
 
 			It("should create Deployment, Service, and inline config ConfigMap for an inline agent", func() {
@@ -4624,11 +4757,13 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Card: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Inline: "You are a support triage agent. Classify tickets by severity.",
+						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeInline,
 							Inline: &agentv1alpha1.InlineRuntimeSpec{
-								Instructions: "You are a support triage agent. Classify tickets by severity.",
-								Replicas:     &replicas,
+								Replicas: &replicas,
 								Env: []corev1.EnvVar{
 									{Name: "CUSTOM_VAR", Value: "custom-value"},
 								},
@@ -4675,7 +4810,6 @@ var _ = Describe("Agent Controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				Expect(inlineCM.Data).To(HaveKey(inlineConfigConfigMapKey))
-				Expect(inlineCM.Data[inlineConfigConfigMapKey]).To(ContainSubstring("support triage agent"))
 				Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("inline-config"))
 
 				By("Verifying the Deployment was created with correct inline configuration")
@@ -4792,10 +4926,12 @@ var _ = Describe("Agent Controller", func() {
 					},
 					Spec: agentv1alpha1.AgentSpec{
 						Card: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Inline: "Custom runtime test agent.",
+						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeInline,
 							Inline: &agentv1alpha1.InlineRuntimeSpec{
-								Instructions: "Custom runtime test agent.",
 								RuntimeImage: "my-registry.io/custom-runtime:v1.0",
 							},
 						},

@@ -43,16 +43,26 @@ const (
 )
 
 const (
-	ConditionTypeReady       = "Ready"
-	ConditionTypeToolsReady  = "ToolsReady"
-	ConditionTypeModelReady  = "ModelReady"
-	ReasonDeploymentReady    = "DeploymentReady"
-	ReasonDeploymentNotReady = "DeploymentNotReady"
-	ReasonReconcileError     = "ReconcileError"
-	ReasonToolsSynced        = "ToolsSynced"
-	ReasonToolSyncFailed     = "ToolSyncFailed"
-	ReasonModelResolved      = "ModelResolved"
-	ReasonModelResolveFailed = "ModelResolveFailed"
+	// instructionVolumeName is the name of the volume for the instruction ConfigMap
+	instructionVolumeName = "instruction"
+	// instructionMountPath is the file path where the instruction text is mounted
+	instructionMountPath = "/etc/flokoa/instruction.txt"
+)
+
+const (
+	ConditionTypeReady            = "Ready"
+	ConditionTypeToolsReady       = "ToolsReady"
+	ConditionTypeModelReady       = "ModelReady"
+	ConditionTypeInstructionReady = "InstructionReady"
+	ReasonDeploymentReady         = "DeploymentReady"
+	ReasonDeploymentNotReady      = "DeploymentNotReady"
+	ReasonReconcileError          = "ReconcileError"
+	ReasonToolsSynced             = "ToolsSynced"
+	ReasonToolSyncFailed          = "ToolSyncFailed"
+	ReasonModelResolved           = "ModelResolved"
+	ReasonModelResolveFailed      = "ModelResolveFailed"
+	ReasonInstructionResolved     = "InstructionResolved"
+	ReasonInstructionSyncFailed   = "InstructionSyncFailed"
 )
 
 const (
@@ -81,6 +91,7 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents/finalizers,verbs=update
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttools,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=instructions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models,verbs=get;list;watch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=modelproviders,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -142,6 +153,19 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		agent.Status.LastToolSync = &now
 	}
 
+	// Reconcile Instruction (if specified) - creates Instruction CR for inline, resolves ref for existing
+	var instructionConfigMapName string
+	if agent.Spec.Instruction != nil {
+		instructionConfigMapName, err = r.reconcileInstruction(ctx, agent)
+		if err != nil {
+			logger.Error(err, "Failed to reconcile Instruction")
+			r.setCondition(agent, ConditionTypeInstructionReady, metav1.ConditionFalse, ReasonInstructionSyncFailed, err.Error())
+			_ = r.Status().Update(ctx, agent)
+			return ctrl.Result{}, err
+		}
+		r.setCondition(agent, ConditionTypeInstructionReady, metav1.ConditionTrue, ReasonInstructionResolved, "Instruction resolved")
+	}
+
 	// Reconcile AgentCard ConfigMap
 	agentCardConfigMap, err := r.reconcileAgentCardConfigMap(ctx, agent)
 	if err != nil {
@@ -178,7 +202,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Reconcile Deployment
-	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, inlineConfigMapName)
+	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, inlineConfigMapName, instructionConfigMapName)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
@@ -217,8 +241,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, inlineConfigMapName string) (*appsv1.Deployment, error) {
-	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap, modelInfo, inlineConfigMapName)
+func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, inlineConfigMapName string, instructionConfigMapName string) (*appsv1.Deployment, error) {
+	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap, modelInfo, inlineConfigMapName, instructionConfigMapName)
 
 	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
@@ -578,7 +602,7 @@ func (r *AgentReconciler) reconcileModelConfigMap(ctx context.Context, agent *ag
 	return configMapName, nil
 }
 
-func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, inlineConfigMapName string) *appsv1.Deployment {
+func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, inlineConfigMapName string, instructionConfigMapName string) *appsv1.Deployment {
 	labels := r.buildLabels(agent)
 
 	var container corev1.Container
@@ -654,6 +678,33 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 
 		// Add secret-sourced environment variables
 		container.Env = append(container.Env, modelInfo.secretEnvVars...)
+	}
+
+	// Add instruction ConfigMap volume mount (works for both standard and inline agents)
+	if instructionConfigMapName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: instructionVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: instructionConfigMapName,
+					},
+				},
+			},
+		})
+
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      instructionVolumeName,
+			MountPath: instructionMountPath,
+			SubPath:   instructionConfigMapKey,
+			ReadOnly:  true,
+		})
+
+		// Set env var so the runtime knows where to find the instruction
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "FLOKOA_INSTRUCTION_PATH",
+			Value: instructionMountPath,
+		})
 	}
 
 	// Add tool volume mounts to the container and compute combined hash
@@ -750,9 +801,7 @@ func (r *AgentReconciler) buildStandardContainerSpec(agent *agentv1alpha1.Agent)
 func (r *AgentReconciler) buildInlineContainerSpec(agent *agentv1alpha1.Agent, inlineConfigMapName string) (corev1.Container, []corev1.Volume, int32, []corev1.LocalObjectReference, string) {
 	inline := agent.Spec.Runtime.Inline
 	if inline == nil {
-		inline = &agentv1alpha1.InlineRuntimeSpec{
-			Instructions: "",
-		}
+		inline = &agentv1alpha1.InlineRuntimeSpec{}
 	}
 
 	replicas := int32(1)
@@ -919,6 +968,16 @@ func (r *AgentReconciler) setCondition(agent *agentv1alpha1.Agent, conditionType
 
 // validateAgent checks the Agent spec for consistency.
 func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
+	// Validate instruction entry if present
+	if agent.Spec.Instruction != nil {
+		if agent.Spec.Instruction.Inline != "" && agent.Spec.Instruction.InstructionRef != nil {
+			return fmt.Errorf("instruction.inline and instruction.instructionRef are mutually exclusive")
+		}
+		if agent.Spec.Instruction.Inline == "" && agent.Spec.Instruction.InstructionRef == nil {
+			return fmt.Errorf("instruction must have either inline or instructionRef set")
+		}
+	}
+
 	switch agent.Spec.Runtime.Type {
 	case agentv1alpha1.RuntimeTypeStandard:
 		if agent.Spec.Runtime.Inline != nil {
@@ -934,6 +993,9 @@ func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
 		if agent.Spec.Model == nil {
 			return fmt.Errorf("spec.model is required when runtime.type is %q", agentv1alpha1.RuntimeTypeInline)
 		}
+		if agent.Spec.Instruction == nil {
+			return fmt.Errorf("spec.instruction is required when runtime.type is %q", agentv1alpha1.RuntimeTypeInline)
+		}
 	default:
 		return fmt.Errorf("unsupported runtime type: %q", agent.Spec.Runtime.Type)
 	}
@@ -942,8 +1004,8 @@ func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
 
 // inlineConfig represents the configuration written to the inline agent's ConfigMap.
 // The generic runtime image reads this config to configure the agent.
+// Instructions are stored separately in the Instruction CR's ConfigMap.
 type inlineConfig struct {
-	Instructions string      `json:"instructions"`
 	OutputSchema interface{} `json:"outputSchema,omitempty"`
 }
 
@@ -956,9 +1018,7 @@ func (r *AgentReconciler) reconcileInlineConfigMap(ctx context.Context, agent *a
 		return "", fmt.Errorf("inline spec is nil")
 	}
 
-	config := inlineConfig{
-		Instructions: inline.Instructions,
-	}
+	config := inlineConfig{}
 	if inline.OutputSchema != nil {
 		config.OutputSchema = inline.OutputSchema
 	}
@@ -1009,15 +1069,162 @@ func (r *AgentReconciler) reconcileInlineConfigMap(ctx context.Context, agent *a
 	return configMapName, nil
 }
 
+// reconcileInstruction handles both inline instruction definitions and instruction references.
+// For inline: creates a child Instruction CR, returns its ConfigMap name.
+// For ref: looks up the existing Instruction, returns its ConfigMap name.
+func (r *AgentReconciler) reconcileInstruction(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
+	logger := log.FromContext(ctx)
+
+	entry := agent.Spec.Instruction
+	if entry == nil {
+		return "", nil
+	}
+
+	if entry.Inline != "" {
+		// Inline instruction — create a child Instruction CR
+		return r.reconcileInlineInstruction(ctx, agent, entry.Inline)
+	}
+
+	if entry.InstructionRef != nil {
+		// Reference — look up the existing Instruction CR and its ConfigMap
+		namespace := entry.InstructionRef.Namespace
+		if namespace == "" {
+			namespace = agent.Namespace
+		}
+
+		instruction := &agentv1alpha1.Instruction{}
+		if err := r.Get(ctx, types.NamespacedName{Name: entry.InstructionRef.Name, Namespace: namespace}, instruction); err != nil {
+			return "", fmt.Errorf("failed to get referenced Instruction %s/%s: %w", namespace, entry.InstructionRef.Name, err)
+		}
+
+		if instruction.Status.ConfigMapName == "" {
+			return "", fmt.Errorf("instruction %s/%s has no ConfigMap yet (not reconciled)", namespace, instruction.Name)
+		}
+
+		logger.Info("Resolved instruction reference", "instruction", instruction.Name, "configMap", instruction.Status.ConfigMapName)
+		return instruction.Status.ConfigMapName, nil
+	}
+
+	return "", fmt.Errorf("instruction entry has neither inline nor instructionRef set")
+}
+
+// reconcileInlineInstruction creates or updates an Instruction CR for an inline instruction definition.
+// The Instruction controller handles creating the ConfigMap.
+func (r *AgentReconciler) reconcileInlineInstruction(ctx context.Context, agent *agentv1alpha1.Agent, content string) (string, error) {
+	instructionName := fmt.Sprintf("%s-instruction", agent.Name)
+
+	desired := &agentv1alpha1.Instruction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      instructionName,
+			Namespace: agent.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       agent.Name,
+				"app.kubernetes.io/component":  "inline-instruction",
+				"app.kubernetes.io/managed-by": "flokoa-operator",
+				"flokoa.ai/agent":              agent.Name,
+			},
+		},
+		Spec: agentv1alpha1.InstructionSpec{
+			Content: content,
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
+		return "", fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	existing := &agentv1alpha1.Instruction{}
+	err := r.Get(ctx, types.NamespacedName{Name: instructionName, Namespace: agent.Namespace}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Create(ctx, desired); err != nil {
+				return "", fmt.Errorf("failed to create Instruction: %w", err)
+			}
+		} else {
+			return "", fmt.Errorf("failed to get Instruction: %w", err)
+		}
+	} else {
+		existing.Spec = desired.Spec
+		existing.Labels = desired.Labels
+		if err := r.Update(ctx, existing); err != nil {
+			return "", fmt.Errorf("failed to update Instruction: %w", err)
+		}
+	}
+
+	// The Instruction controller creates a ConfigMap named "{instruction-name}-instruction"
+	configMapName := fmt.Sprintf("%s-instruction", instructionName)
+
+	// Check if the ConfigMap exists yet (the Instruction controller may not have run yet)
+	cm := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: agent.Namespace}, cm); err != nil {
+		if apierrors.IsNotFound(err) {
+			// ConfigMap not yet created by Instruction controller — return the expected name
+			// The agent will be re-reconciled when the Instruction controller creates it
+			return configMapName, nil
+		}
+		return "", fmt.Errorf("failed to check Instruction ConfigMap: %w", err)
+	}
+
+	return configMapName, nil
+}
+
+// findAgentsForInstruction returns the Agents that reference a given Instruction
+func (r *AgentReconciler) findAgentsForInstruction(ctx context.Context, obj client.Object) []reconcile.Request {
+	instruction := obj.(*agentv1alpha1.Instruction)
+	logger := log.FromContext(ctx)
+
+	// Check if this is an inline instruction (owned by an Agent)
+	if agentName, ok := instruction.Labels["flokoa.ai/agent"]; ok {
+		return []reconcile.Request{{
+			NamespacedName: types.NamespacedName{
+				Name:      agentName,
+				Namespace: instruction.Namespace,
+			},
+		}}
+	}
+
+	// List all agents in the same namespace to find those referencing this Instruction
+	agentList := &agentv1alpha1.AgentList{}
+	if err := r.List(ctx, agentList, client.InNamespace(instruction.Namespace)); err != nil {
+		logger.Error(err, "Failed to list Agents")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, agent := range agentList.Items {
+		if agent.Spec.Instruction != nil && agent.Spec.Instruction.InstructionRef != nil {
+			refNamespace := agent.Spec.Instruction.InstructionRef.Namespace
+			if refNamespace == "" {
+				refNamespace = agent.Namespace
+			}
+			if agent.Spec.Instruction.InstructionRef.Name == instruction.Name && refNamespace == instruction.Namespace {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      agent.Name,
+						Namespace: agent.Namespace,
+					},
+				})
+			}
+		}
+	}
+
+	return requests
+}
+
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&agentv1alpha1.Agent{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&agentv1alpha1.AgentTool{}).
+		Owns(&agentv1alpha1.Instruction{}).
 		Watches(
 			&agentv1alpha1.AgentTool{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForAgentTool),
+		).
+		Watches(
+			&agentv1alpha1.Instruction{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForInstruction),
 		).
 		Watches(
 			&corev1.ConfigMap{},
@@ -1078,9 +1285,14 @@ func (r *AgentReconciler) findAgentsForAgentTool(ctx context.Context, obj client
 func (r *AgentReconciler) findAgentsForConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
 	cm := obj.(*corev1.ConfigMap)
 
-	// Only care about tool spec ConfigMaps
+	// Only care about tool spec or instruction ConfigMaps
 	component := cm.Labels["app.kubernetes.io/component"]
-	if component != "agenttool-spec" && component != "inline-tool-spec" {
+	if component != "agenttool-spec" && component != "inline-tool-spec" && component != "instruction" {
+		return nil
+	}
+
+	// Instruction ConfigMaps are handled via Instruction watcher
+	if component == "instruction" {
 		return nil
 	}
 

@@ -27,6 +27,21 @@ spec:
   model:
     name: claude-sonnet
 
+  # Instructions defined inline — the operator creates an Instruction CR automatically
+  instruction:
+    inline: |
+      You are a support triage agent. Your job is to classify incoming
+      support tickets by severity (P0-P3) and route them to the
+      appropriate team.
+
+      Severity guidelines:
+      - P0: Complete service outage or data loss affecting all users
+      - P1: Major feature broken, significant user impact
+      - P2: Minor feature broken, workaround available
+      - P3: Cosmetic issue or feature request
+
+      Always provide a brief summary of the issue and recommended next steps.
+
   tools:
     - toolRef:
         name: jira-create
@@ -34,18 +49,6 @@ spec:
   runtime:
     type: inline
     inline:
-      instructions: |
-        You are a support triage agent. Your job is to classify incoming
-        support tickets by severity (P0-P3) and route them to the
-        appropriate team.
-
-        Severity guidelines:
-        - P0: Complete service outage or data loss affecting all users
-        - P1: Major feature broken, significant user impact
-        - P2: Minor feature broken, workaround available
-        - P3: Cosmetic issue or feature request
-
-        Always provide a brief summary of the issue and recommended next steps.
       outputSchema:
         type: object
         properties:

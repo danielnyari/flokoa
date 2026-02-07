@@ -1,18 +1,4 @@
-/*
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// api/v1alpha1/instruction_types.go
 
 package v1alpha1
 
@@ -20,28 +6,36 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// InstructionSpec defines the desired state of Instruction.
+// InstructionSpec defines the desired state of an Instruction (system prompt).
 type InstructionSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Instruction. Edit instruction_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Content is the system prompt text that defines the agent's behavior.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Content string `json:"content"`
 }
 
-// InstructionStatus defines the observed state of Instruction.
+// InstructionStatus defines the observed state of an Instruction.
 type InstructionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ConfigMapName is the name of the ConfigMap containing the instruction text.
+	// +optional
+	ConfigMapName string `json:"configMapName,omitempty"`
+
+	// Conditions represent the latest available observations of the Instruction's state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="ConfigMap",type="string",JSONPath=".status.configMapName"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Instruction is the Schema for the instructions API.
+// It represents a system prompt that can be shared across agents.
 type Instruction struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -52,7 +46,7 @@ type Instruction struct {
 
 // +kubebuilder:object:root=true
 
-// InstructionList contains a list of Instruction.
+// InstructionList contains a list of Instruction
 type InstructionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

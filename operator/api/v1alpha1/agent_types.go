@@ -134,6 +134,12 @@ type AgentSpec struct {
 	// +optional
 	Model *AgentModelRef `json:"model,omitempty"`
 
+	// Instruction defines the system prompt for this agent.
+	// Can be defined inline (creates an Instruction CR) or reference an existing Instruction resource.
+	// Supported by both standard (BYO) and inline runtime types.
+	// +optional
+	Instruction *InstructionEntry `json:"instruction,omitempty"`
+
 	// Framework explicitly declares the AI framework used by the agent.
 	// Used for observability and tooling integration.
 	// +optional
@@ -142,6 +148,19 @@ type AgentSpec struct {
 	// Tools available to this agent. Can be inline definitions or references to AgentTool resources.
 	// +optional
 	Tools []ToolEntry `json:"tools,omitempty"`
+}
+
+// InstructionEntry represents either an inline instruction or a reference to an Instruction resource.
+// Exactly one of Inline or InstructionRef must be specified.
+type InstructionEntry struct {
+	// Inline defines the instruction content directly in the Agent spec.
+	// When set, the operator creates a child Instruction CR.
+	// +optional
+	Inline string `json:"inline,omitempty"`
+
+	// InstructionRef references an existing Instruction resource.
+	// +optional
+	InstructionRef *NamespacedRef `json:"instructionRef,omitempty"`
 }
 
 // ToolEntry represents either an inline tool definition or a reference to an AgentTool resource.
@@ -264,14 +283,8 @@ type StandardRuntimeSpec struct {
 
 // InlineRuntimeSpec defines the configuration for an inline agent where the operator
 // generates the deployment using a generic runtime image. The agent's behavior is
-// defined entirely within this spec via instructions and output schema.
+// defined via spec.instruction and output schema.
 type InlineRuntimeSpec struct {
-	// Instructions is the system prompt that defines the agent's behavior.
-	// This is the core logic of the inline agent.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Instructions string `json:"instructions"`
-
 	// OutputSchema constrains the agent's response format using JSON Schema.
 	// When set, the agent runtime will validate responses against this schema.
 	// +optional

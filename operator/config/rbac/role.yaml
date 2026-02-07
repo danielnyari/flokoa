@@ -22,6 +22,7 @@ rules:
   resources:
   - agents
   - agenttools
+  - instructions
   - modelproviders
   - models
   verbs:
@@ -37,6 +38,7 @@ rules:
   resources:
   - agents/finalizers
   - agenttools/finalizers
+  - instructions/finalizers
   - modelproviders/finalizers
   - models/finalizers
   verbs:
@@ -46,6 +48,7 @@ rules:
   resources:
   - agents/status
   - agenttools/status
+  - instructions/status
   - modelproviders/status
   - models/status
   verbs:

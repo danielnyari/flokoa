@@ -179,6 +179,33 @@ spec:
                 - autogen
                 - a2a
                 type: string
+              instruction:
+                description: |-
+                  Instruction defines the system prompt for this agent.
+                  Can be defined inline (creates an Instruction CR) or reference an existing Instruction resource.
+                  Supported by both standard (BYO) and inline runtime types.
+                properties:
+                  inline:
+                    description: |-
+                      Inline defines the instruction content directly in the Agent spec.
+                      When set, the operator creates a child Instruction CR.
+                    type: string
+                  instructionRef:
+                    description: InstructionRef references an existing Instruction
+                      resource.
+                    properties:
+                      name:
+                        description: Name of the resource.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace of the resource. Defaults to the referencing
+                          resource's namespace if not specified.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               model:
                 description: |-
                   Model specifies the LLM model to use for this agent.
@@ -346,12 +373,6 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         type: array
-                      instructions:
-                        description: |-
-                          Instructions is the system prompt that defines the agent's behavior.
-                          This is the core logic of the inline agent.
-                        minLength: 1
-                        type: string
                       outputSchema:
                         description: |-
                           OutputSchema constrains the agent's response format using JSON Schema.
@@ -433,8 +454,6 @@ spec:
                         description: ServiceAccountName is the name of the ServiceAccount
                           to use for the pod.
                         type: string
-                    required:
-                    - instructions
                     type: object
                   spec:
                     description: |-
