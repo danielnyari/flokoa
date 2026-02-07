@@ -16,13 +16,17 @@ except (ImportError, AttributeError):
 if _BaseToolset is None or not inspect.isclass(_BaseToolset):
     class BaseToolset:  # type: ignore[no-redef]
         async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
+            """Return tools for the given readonly ADK context."""
             raise NotImplementedError(
                 "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
                 "Install it with your package manager (e.g., uv pip install google-adk)."
             )
 
         async def close(self) -> None:
-            return
+            raise NotImplementedError(
+                "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
+                "Install it with your package manager (e.g., uv pip install google-adk)."
+            )
 else:
     BaseToolset = _BaseToolset
 
