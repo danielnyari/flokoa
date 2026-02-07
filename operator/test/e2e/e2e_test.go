@@ -139,6 +139,16 @@ var _ = Describe("Manager", Ordered, func() {
 	SetDefaultEventuallyPollingInterval(time.Second)
 
 	Context("Manager", func() {
+		// E2E test suite for the Flokoa operator
+		// Tests include:
+		// 1. Controller pod deployment and health
+		// 2. Metrics endpoint availability
+		// 3. ModelProvider CR lifecycle (creation, reconciliation, deletion)
+		// 4. Model CR lifecycle (creation, reconciliation, Ready condition, deletion)
+		// 5. AgentTool CR lifecycle (creation, reconciliation, status updates, deletion)
+		// 6. Agent CR lifecycle (creation, Deployment/Service creation, status updates, deletion)
+		// 7. Agent finalizer handling and cleanup
+
 		It("should run successfully", func() {
 			By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
