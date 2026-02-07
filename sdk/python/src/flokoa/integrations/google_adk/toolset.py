@@ -1,5 +1,6 @@
 """Flokoa toolset implementation for Google ADK."""
 
+import inspect
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -12,12 +13,12 @@ except (ImportError, AttributeError):
         _BaseToolset = None
 
 # In tests, google.adk.tools is a MagicMock, so BaseToolset resolves to a non-type.
-if _BaseToolset is None or not hasattr(_BaseToolset, "__mro__"):
+if _BaseToolset is None or not inspect.isclass(_BaseToolset):
     class BaseToolset:  # type: ignore[no-redef]
         async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
             raise NotImplementedError(
                 "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
-                "Install it with: pip install google-adk."
+                "Install it with your package manager (e.g., uv pip install google-adk)."
             )
 
         async def close(self) -> None:
