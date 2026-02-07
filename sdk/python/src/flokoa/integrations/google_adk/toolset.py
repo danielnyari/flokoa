@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 _MISSING_ADK_MESSAGE = (
-    "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
+    "google-adk is not installed or unavailable at runtime. "
     "Install it with your package manager (e.g., uv pip install google-adk)."
 )
 
@@ -18,14 +18,15 @@ except (ImportError, AttributeError):
         _BaseToolset = None
 
 # In tests, google.adk.tools is a MagicMock, so BaseToolset resolves to a non-type.
+# This also handles any non-class sentinel returned by mocked imports.
 if _BaseToolset is None or not inspect.isclass(_BaseToolset):
     class BaseToolset:  # type: ignore[no-redef]
         async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
             """Return tools for the given readonly ADK context."""
-            raise ImportError(_MISSING_ADK_MESSAGE)
+            raise ImportError(f"Failed to call get_tools: {_MISSING_ADK_MESSAGE}")
 
         async def close(self) -> None:
-            raise ImportError(_MISSING_ADK_MESSAGE)
+            raise ImportError(f"Failed to call close: {_MISSING_ADK_MESSAGE}")
 else:
     BaseToolset = _BaseToolset
 
