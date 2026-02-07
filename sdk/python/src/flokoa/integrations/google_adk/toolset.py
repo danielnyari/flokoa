@@ -3,7 +3,23 @@
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from google.adk.tools.base_toolset import BaseToolset
+try:
+    from google.adk.tools import BaseToolset as _BaseToolset
+except (ImportError, AttributeError):
+    try:
+        from google.adk.tools.base_toolset import BaseToolset as _BaseToolset
+    except (ImportError, AttributeError):
+        _BaseToolset = None
+
+if _BaseToolset is None or not isinstance(_BaseToolset, type):
+    class BaseToolset:  # type: ignore[no-redef]
+        async def get_tools(self, readonly_context: Optional[Any] = None) -> list["BaseTool"]:
+            raise NotImplementedError
+
+        async def close(self) -> None:
+            return None
+else:
+    BaseToolset = _BaseToolset
 
 from flokoa.types import ToolDefinition as FlokoaToolDefinition
 
