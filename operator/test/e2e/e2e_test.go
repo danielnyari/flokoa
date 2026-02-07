@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -258,14 +259,313 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should successfully create and reconcile a ModelProvider resource", func() {
+			By("creating a Secret for API credentials")
+			secretYAML := `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-openai-credentials
+  namespace: ` + namespace + `
+type: Opaque
+stringData:
+  api-key: "test-key-12345"
+`
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(secretYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Secret")
+
+			By("creating a ModelProvider resource")
+			providerYAML := `
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: test-openai-provider
+  namespace: ` + namespace + `
+spec:
+  apiKeySecretRef:
+    name: test-openai-credentials
+    key: api-key
+  openai:
+    timeoutSeconds: 120
+`
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(providerYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create ModelProvider")
+
+			By("verifying the ModelProvider was created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "modelprovider", "test-openai-provider", "-n", namespace)
+				_, err := utils.Run(cmd)
+				return err
+			}, 30*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying reconciliation in metrics")
+			Eventually(func() string {
+				return getMetricsOutput()
+			}, 2*time.Minute, 5*time.Second).Should(ContainSubstring("controller_runtime_reconcile_total"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "modelprovider", "test-openai-provider", "-n", namespace)
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "secret", "test-openai-credentials", "-n", namespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should successfully create and reconcile a Model resource", func() {
+			By("creating a Secret for API credentials")
+			secretYAML := `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-model-credentials
+  namespace: ` + namespace + `
+type: Opaque
+stringData:
+  api-key: "test-key-67890"
+`
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(secretYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Secret")
+
+			By("creating a ModelProvider for the Model")
+			providerYAML := `
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: test-model-provider
+  namespace: ` + namespace + `
+spec:
+  apiKeySecretRef:
+    name: test-model-credentials
+    key: api-key
+  openai: {}
+`
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(providerYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create ModelProvider")
+
+			By("creating a Model resource")
+			modelYAML := `
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: test-gpt4-model
+  namespace: ` + namespace + `
+spec:
+  model: gpt-4
+  providerRef:
+    name: test-model-provider
+  parameters:
+    temperature: "0.7"
+    maxTokens: 2048
+`
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(modelYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Model")
+
+			By("verifying the Model was created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "model", "test-gpt4-model", "-n", namespace)
+				_, err := utils.Run(cmd)
+				return err
+			}, 30*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying Model has Ready condition")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "model", "test-gpt4-model", "-n", namespace, "-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+				output, err := utils.Run(cmd)
+				if err != nil {
+					return ""
+				}
+				return output
+			}, 2*time.Minute, 5*time.Second).Should(Equal("True"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "model", "test-gpt4-model", "-n", namespace)
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "modelprovider", "test-model-provider", "-n", namespace)
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "secret", "test-model-credentials", "-n", namespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should successfully create and reconcile an AgentTool resource", func() {
+			By("creating an AgentTool resource")
+			toolYAML := `
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: test-search-tool
+  namespace: ` + namespace + `
+spec:
+  type: http-api
+  description: "Search API for testing"
+  httpApi:
+    url: "https://api.example.com/search"
+    method: GET
+    timeoutSeconds: 30
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: "Search query"
+    required:
+      - query
+  outputSchema:
+    type: object
+    properties:
+      results:
+        type: array
+`
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(toolYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create AgentTool")
+
+			By("verifying the AgentTool was created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "agenttool", "test-search-tool", "-n", namespace)
+				_, err := utils.Run(cmd)
+				return err
+			}, 30*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying AgentTool status is updated")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "agenttool", "test-search-tool", "-n", namespace, "-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				if err != nil {
+					return ""
+				}
+				return output
+			}, 2*time.Minute, 5*time.Second).Should(Equal("Ready"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "agenttool", "test-search-tool", "-n", namespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should successfully create and reconcile an Agent resource", func() {
+			By("creating an Agent resource")
+			agentYAML := `
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent
+  namespace: ` + namespace + `
+spec:
+  framework: pydantic-ai
+  runtime:
+    type: standard
+    spec:
+      replicas: 1
+      container:
+        name: agent
+        image: nginx:latest
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+`
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(agentYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Agent")
+
+			By("verifying the Agent was created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "agent", "test-agent", "-n", namespace)
+				_, err := utils.Run(cmd)
+				return err
+			}, 30*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying Agent Deployment was created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "deployment", "test-agent", "-n", namespace)
+				_, err := utils.Run(cmd)
+				return err
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying Agent Service was created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "service", "test-agent", "-n", namespace)
+				_, err := utils.Run(cmd)
+				return err
+			}, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying Agent status phase is set")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "agent", "test-agent", "-n", namespace, "-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				if err != nil {
+					return ""
+				}
+				return output
+			}, 2*time.Minute, 5*time.Second).Should(Or(Equal("Pending"), Equal("Running")))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "agent", "test-agent", "-n", namespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should handle Agent deletion with finalizers properly", func() {
+			By("creating an Agent resource")
+			agentYAML := `
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent-finalizer
+  namespace: ` + namespace + `
+spec:
+  framework: langchain
+  runtime:
+    type: standard
+    spec:
+      replicas: 1
+      container:
+        name: agent
+        image: nginx:latest
+`
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(agentYAML)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Agent")
+
+			By("verifying the Agent has a finalizer")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "agent", "test-agent-finalizer", "-n", namespace, "-o", "jsonpath={.metadata.finalizers}")
+				output, err := utils.Run(cmd)
+				if err != nil {
+					return ""
+				}
+				return output
+			}, 2*time.Minute, 5*time.Second).Should(ContainSubstring("agent.flokoa.ai/finalizer"))
+
+			By("deleting the Agent")
+			cmd = exec.Command("kubectl", "delete", "agent", "test-agent-finalizer", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete Agent")
+
+			By("verifying the Agent is eventually deleted")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "agent", "test-agent-finalizer", "-n", namespace)
+				_, err := utils.Run(cmd)
+				return err
+			}, 2*time.Minute, 5*time.Second).ShouldNot(Succeed())
+		})
 	})
 })
 
