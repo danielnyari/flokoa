@@ -1,6 +1,7 @@
 ## Append samples of your project ##
 resources:
 - agent_v1alpha1_agent.yaml
+- agent_v1alpha1_agent_inline.yaml
 - agent_v1alpha1_agenttool.yaml
 - agent_v1alpha1_modelprovider.yaml
 - agent_v1alpha1_model.yaml

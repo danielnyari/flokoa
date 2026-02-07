@@ -36,12 +36,16 @@ const (
 )
 
 // RuntimeType represents the type of runtime backend for the agent.
-// +kubebuilder:validation:Enum=standard
+// +kubebuilder:validation:Enum=standard;inline
 type RuntimeType string
 
 const (
 	// RuntimeTypeStandard uses a Kubernetes Deployment for the agent runtime.
+	// The user provides their own container image.
 	RuntimeTypeStandard RuntimeType = "standard"
+	// RuntimeTypeInline uses a generic runtime image managed by the operator.
+	// The agent's behavior is defined entirely in the CR via instructions and output schema.
+	RuntimeTypeInline RuntimeType = "inline"
 )
 
 // AgentSkill describes a specific capability or function the agent can perform.
@@ -195,15 +199,25 @@ type NamespacedRef struct {
 }
 
 // RuntimeSpec defines the runtime backend and its configuration.
+// When type is "standard", the Spec field must be provided.
+// When type is "inline", the Inline field must be provided.
 type RuntimeSpec struct {
 	// Type specifies the runtime backend to use.
 	// +kubebuilder:default=standard
 	// +kubebuilder:validation:Required
 	Type RuntimeType `json:"type"`
 
-	// Spec contains the runtime-specific configuration.
+	// Spec contains the standard runtime configuration (container-based).
+	// Required when type is "standard".
 	// +optional
 	Spec *StandardRuntimeSpec `json:"spec,omitempty"`
+
+	// Inline contains the inline runtime configuration.
+	// The operator generates a deployment using a generic runtime image with
+	// the agent behavior defined by instructions and output schema.
+	// Required when type is "inline".
+	// +optional
+	Inline *InlineRuntimeSpec `json:"inline,omitempty"`
 }
 
 // StandardRuntimeSpec defines the configuration for the standard (Deployment-based) runtime.
@@ -246,6 +260,49 @@ type StandardRuntimeSpec struct {
 	// Affinity specifies scheduling constraints for the pod.
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+}
+
+// InlineRuntimeSpec defines the configuration for an inline agent where the operator
+// generates the deployment using a generic runtime image. The agent's behavior is
+// defined entirely within this spec via instructions and output schema.
+type InlineRuntimeSpec struct {
+	// Instructions is the system prompt that defines the agent's behavior.
+	// This is the core logic of the inline agent.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Instructions string `json:"instructions"`
+
+	// OutputSchema constrains the agent's response format using JSON Schema.
+	// When set, the agent runtime will validate responses against this schema.
+	// +optional
+	OutputSchema *apiextensionsv1.JSON `json:"outputSchema,omitempty"`
+
+	// RuntimeImage overrides the default generic runtime image used by the operator.
+	// If not set, the operator uses its built-in default runtime image.
+	// +optional
+	RuntimeImage string `json:"runtimeImage,omitempty"`
+
+	// Replicas is the number of desired pod replicas for the generated deployment.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Env allows injecting additional environment variables into the generated container.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources specifies compute resource requirements for the generated container.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ImagePullSecrets is a list of references to secrets for pulling the runtime image.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// ServiceAccountName is the name of the ServiceAccount to use for the pod.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // AgentStatus defines the observed state of Agent.

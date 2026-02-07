@@ -29,6 +29,17 @@ import (
 
 const (
 	agentFinalizer = "agent.flokoa.ai/finalizer"
+
+	// defaultInlineRuntimeImage is the default container image for inline agents.
+	// This image reads configuration from mounted ConfigMaps and runs an A2A server.
+	defaultInlineRuntimeImage = "ghcr.io/flokoa/agent-runtime:latest"
+
+	// inlineConfigVolumeName is the volume name for the inline agent config ConfigMap
+	inlineConfigVolumeName = "inline-config"
+	// inlineConfigConfigMapKey is the key in the ConfigMap for the inline config JSON
+	inlineConfigConfigMapKey = "inline-config.json"
+	// inlineConfigMountPath is the file path where the inline config is mounted
+	inlineConfigMountPath = "/etc/flokoa/inline-config.json"
 )
 
 const (
@@ -108,6 +119,15 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
+	// Validate the agent spec
+	if err := r.validateAgent(agent); err != nil {
+		logger.Error(err, "Agent validation failed")
+		agent.Status.Phase = agentv1alpha1.AgentPhaseFailed
+		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonValidationFailed, err.Error())
+		_ = r.Status().Update(ctx, agent)
+		return ctrl.Result{}, nil // Don't requeue on validation errors
+	}
+
 	// Reconcile tools (inline and referenced) - creates ConfigMaps and returns volume/mount info
 	toolConfigMaps, err := r.reconcileTools(ctx, agent)
 	if err != nil {
@@ -145,8 +165,20 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			fmt.Sprintf("Model %s/%s resolved", modelInfo.provider, modelInfo.model))
 	}
 
+	// Reconcile inline config ConfigMap (if inline runtime)
+	var inlineConfigMapName string
+	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeInline {
+		inlineConfigMapName, err = r.reconcileInlineConfigMap(ctx, agent)
+		if err != nil {
+			logger.Error(err, "Failed to reconcile inline config ConfigMap")
+			r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
+			_ = r.Status().Update(ctx, agent)
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Reconcile Deployment
-	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo)
+	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, inlineConfigMapName)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
@@ -185,8 +217,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo) (*appsv1.Deployment, error) {
-	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap, modelInfo)
+func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, inlineConfigMapName string) (*appsv1.Deployment, error) {
+	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap, modelInfo, inlineConfigMapName)
 
 	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
@@ -546,26 +578,24 @@ func (r *AgentReconciler) reconcileModelConfigMap(ctx context.Context, agent *ag
 	return configMapName, nil
 }
 
-func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo) *appsv1.Deployment {
+func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, inlineConfigMapName string) *appsv1.Deployment {
 	labels := r.buildLabels(agent)
-	spec := agent.Spec.Runtime.Spec
 
-	// Default spec if not provided
-	if spec == nil {
-		spec = &agentv1alpha1.StandardRuntimeSpec{}
-	}
+	var container corev1.Container
+	var volumes []corev1.Volume //nolint:prealloc // size depends on runtime type and optional configs
+	var replicas int32
+	var imagePullSecrets []corev1.LocalObjectReference
+	var serviceAccountName string
+	var securityContext *corev1.PodSecurityContext
+	var nodeSelector map[string]string
+	var tolerations []corev1.Toleration
+	var affinity *corev1.Affinity
 
-	replicas := int32(1)
-	if spec.Replicas != nil {
-		replicas = *spec.Replicas
-	}
-
-	// Use the container spec directly from the CRD
-	container := spec.Container
-
-	// Ensure the container has a name
-	if container.Name == "" {
-		container.Name = "agent"
+	switch agent.Spec.Runtime.Type {
+	case agentv1alpha1.RuntimeTypeInline:
+		container, volumes, replicas, imagePullSecrets, serviceAccountName = r.buildInlineContainerSpec(agent, inlineConfigMapName)
+	default:
+		container, volumes, replicas, imagePullSecrets, serviceAccountName, securityContext, nodeSelector, tolerations, affinity = r.buildStandardContainerSpec(agent)
 	}
 
 	// Compute the agent URL for the FLOKOA_AGENT_URL env var
@@ -576,9 +606,6 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 		Name:  "FLOKOA_AGENT_URL",
 		Value: agentURL,
 	})
-
-	// Build volumes from spec and tools
-	volumes := append([]corev1.Volume{}, spec.Volumes...)
 
 	// Add agent card ConfigMap volume
 	volumes = append(volumes, corev1.Volume{
@@ -684,16 +711,110 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 				Spec: corev1.PodSpec{
 					Containers:         []corev1.Container{container},
 					Volumes:            volumes,
-					ImagePullSecrets:   spec.ImagePullSecrets,
-					ServiceAccountName: spec.ServiceAccountName,
-					SecurityContext:    spec.SecurityContext,
-					NodeSelector:       spec.NodeSelector,
-					Tolerations:        spec.Tolerations,
-					Affinity:           spec.Affinity,
+					ImagePullSecrets:   imagePullSecrets,
+					ServiceAccountName: serviceAccountName,
+					SecurityContext:    securityContext,
+					NodeSelector:       nodeSelector,
+					Tolerations:        tolerations,
+					Affinity:           affinity,
 				},
 			},
 		},
 	}
+}
+
+// buildStandardContainerSpec builds the container, volumes, and pod spec fields for a standard runtime agent.
+func (r *AgentReconciler) buildStandardContainerSpec(agent *agentv1alpha1.Agent) (corev1.Container, []corev1.Volume, int32, []corev1.LocalObjectReference, string, *corev1.PodSecurityContext, map[string]string, []corev1.Toleration, *corev1.Affinity) {
+	spec := agent.Spec.Runtime.Spec
+	if spec == nil {
+		spec = &agentv1alpha1.StandardRuntimeSpec{}
+	}
+
+	replicas := int32(1)
+	if spec.Replicas != nil {
+		replicas = *spec.Replicas
+	}
+
+	container := spec.Container
+	if container.Name == "" {
+		container.Name = "agent"
+	}
+
+	volumes := append([]corev1.Volume{}, spec.Volumes...)
+
+	return container, volumes, replicas, spec.ImagePullSecrets, spec.ServiceAccountName, spec.SecurityContext, spec.NodeSelector, spec.Tolerations, spec.Affinity
+}
+
+// buildInlineContainerSpec builds the container, volumes, and pod spec fields for an inline runtime agent.
+// The operator generates the container using a generic runtime image with config mounted from ConfigMaps.
+func (r *AgentReconciler) buildInlineContainerSpec(agent *agentv1alpha1.Agent, inlineConfigMapName string) (corev1.Container, []corev1.Volume, int32, []corev1.LocalObjectReference, string) {
+	inline := agent.Spec.Runtime.Inline
+	if inline == nil {
+		inline = &agentv1alpha1.InlineRuntimeSpec{
+			Instructions: "",
+		}
+	}
+
+	replicas := int32(1)
+	if inline.Replicas != nil {
+		replicas = *inline.Replicas
+	}
+
+	runtimeImage := defaultInlineRuntimeImage
+	if inline.RuntimeImage != "" {
+		runtimeImage = inline.RuntimeImage
+	}
+
+	container := corev1.Container{
+		Name:  "agent",
+		Image: runtimeImage,
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "http",
+				ContainerPort: 8080,
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
+		Env: append([]corev1.EnvVar{
+			{
+				Name:  "FLOKOA_RUNTIME_MODE",
+				Value: "inline",
+			},
+			{
+				Name:  "FLOKOA_INLINE_CONFIG_PATH",
+				Value: inlineConfigMountPath,
+			},
+		}, inline.Env...),
+	}
+
+	if inline.Resources != nil {
+		container.Resources = *inline.Resources
+	}
+
+	var volumes []corev1.Volume
+
+	// Mount inline config ConfigMap
+	if inlineConfigMapName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: inlineConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: inlineConfigMapName,
+					},
+				},
+			},
+		})
+
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      inlineConfigVolumeName,
+			MountPath: inlineConfigMountPath,
+			SubPath:   inlineConfigConfigMapKey,
+			ReadOnly:  true,
+		})
+	}
+
+	return container, volumes, replicas, inline.ImagePullSecrets, inline.ServiceAccountName
 }
 
 func (r *AgentReconciler) reconcileService(ctx context.Context, agent *agentv1alpha1.Agent) (*corev1.Service, error) {
@@ -727,12 +848,11 @@ func (r *AgentReconciler) reconcileService(ctx context.Context, agent *agentv1al
 
 func (r *AgentReconciler) buildService(agent *agentv1alpha1.Agent) *corev1.Service {
 	labels := r.buildLabels(agent)
-	spec := agent.Spec.Runtime.Spec
 
 	// Build service ports from container ports
 	var servicePorts []corev1.ServicePort
-	if spec != nil {
-		for _, cp := range spec.Container.Ports {
+	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeStandard && agent.Spec.Runtime.Spec != nil {
+		for _, cp := range agent.Spec.Runtime.Spec.Container.Ports {
 			servicePorts = append(servicePorts, corev1.ServicePort{
 				Name:       cp.Name,
 				Port:       cp.ContainerPort,
@@ -742,7 +862,7 @@ func (r *AgentReconciler) buildService(agent *agentv1alpha1.Agent) *corev1.Servi
 		}
 	}
 
-	// Default to port 80 -> 8080 if no ports defined
+	// Default to port 80 -> 8080 if no ports defined (standard with no ports, or inline)
 	if len(servicePorts) == 0 {
 		servicePorts = []corev1.ServicePort{
 			{
@@ -795,6 +915,98 @@ func (r *AgentReconciler) setCondition(agent *agentv1alpha1.Agent, conditionType
 		Message:            message,
 	}
 	meta.SetStatusCondition(&agent.Status.Conditions, condition)
+}
+
+// validateAgent checks the Agent spec for consistency.
+func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
+	switch agent.Spec.Runtime.Type {
+	case agentv1alpha1.RuntimeTypeStandard:
+		if agent.Spec.Runtime.Inline != nil {
+			return fmt.Errorf("runtime.inline must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeStandard)
+		}
+	case agentv1alpha1.RuntimeTypeInline:
+		if agent.Spec.Runtime.Spec != nil {
+			return fmt.Errorf("runtime.spec must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeInline)
+		}
+		if agent.Spec.Runtime.Inline == nil {
+			return fmt.Errorf("runtime.inline is required when runtime.type is %q", agentv1alpha1.RuntimeTypeInline)
+		}
+		if agent.Spec.Model == nil {
+			return fmt.Errorf("spec.model is required when runtime.type is %q", agentv1alpha1.RuntimeTypeInline)
+		}
+	default:
+		return fmt.Errorf("unsupported runtime type: %q", agent.Spec.Runtime.Type)
+	}
+	return nil
+}
+
+// inlineConfig represents the configuration written to the inline agent's ConfigMap.
+// The generic runtime image reads this config to configure the agent.
+type inlineConfig struct {
+	Instructions string      `json:"instructions"`
+	OutputSchema interface{} `json:"outputSchema,omitempty"`
+}
+
+// reconcileInlineConfigMap creates or updates the ConfigMap containing the inline agent configuration.
+func (r *AgentReconciler) reconcileInlineConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
+	configMapName := fmt.Sprintf("%s-inline-config", agent.Name)
+
+	inline := agent.Spec.Runtime.Inline
+	if inline == nil {
+		return "", fmt.Errorf("inline spec is nil")
+	}
+
+	config := inlineConfig{
+		Instructions: inline.Instructions,
+	}
+	if inline.OutputSchema != nil {
+		config.OutputSchema = inline.OutputSchema
+	}
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal inline config to JSON: %w", err)
+	}
+
+	desired := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: agent.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       agent.Name,
+				"app.kubernetes.io/component":  "inline-config",
+				"app.kubernetes.io/managed-by": "flokoa-operator",
+				"flokoa.ai/agent":              agent.Name,
+			},
+		},
+		Data: map[string]string{
+			inlineConfigConfigMapKey: string(configJSON),
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
+		return "", fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	existing := &corev1.ConfigMap{}
+	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: agent.Namespace}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Create(ctx, desired); err != nil {
+				return "", fmt.Errorf("failed to create inline config ConfigMap: %w", err)
+			}
+			return configMapName, nil
+		}
+		return "", fmt.Errorf("failed to get inline config ConfigMap: %w", err)
+	}
+
+	existing.Data = desired.Data
+	existing.Labels = desired.Labels
+	if err := r.Update(ctx, existing); err != nil {
+		return "", fmt.Errorf("failed to update inline config ConfigMap: %w", err)
+	}
+
+	return configMapName, nil
 }
 
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
