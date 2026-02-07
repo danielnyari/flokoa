@@ -4,6 +4,11 @@ import inspect
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+_MISSING_ADK_MESSAGE = (
+    "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
+    "Install it with your package manager (e.g., uv pip install google-adk)."
+)
+
 try:
     from google.adk.tools import BaseToolset as _BaseToolset
 except (ImportError, AttributeError):
@@ -17,16 +22,10 @@ if _BaseToolset is None or not inspect.isclass(_BaseToolset):
     class BaseToolset:  # type: ignore[no-redef]
         async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
             """Return tools for the given readonly ADK context."""
-            raise ImportError(
-                "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
-                "Install it with your package manager (e.g., uv pip install google-adk)."
-            )
+            raise ImportError(_MISSING_ADK_MESSAGE)
 
         async def close(self) -> None:
-            raise ImportError(
-                "Failed to use BaseToolset: google-adk is not installed or unavailable at runtime. "
-                "Install it with your package manager (e.g., uv pip install google-adk)."
-            )
+            raise ImportError(_MISSING_ADK_MESSAGE)
 else:
     BaseToolset = _BaseToolset
 
