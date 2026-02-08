@@ -185,11 +185,6 @@ spec:
                   Can be defined inline (creates an Instruction CR) or reference an existing Instruction resource.
                   Supported by both standard and managed runtime types.
                 properties:
-                  inline:
-                    description: |-
-                      Inline defines the instruction content directly in the Agent spec.
-                      When set, the operator creates a child Instruction CR.
-                    type: string
                   instructionRef:
                     description: InstructionRef references an existing Instruction
                       resource.
@@ -205,6 +200,11 @@ spec:
                     required:
                     - name
                     type: object
+                  template:
+                    description: |-
+                      Template defines the instruction content directly in the Agent spec.
+                      When set, the operator creates a child Instruction CR.
+                    type: string
                 type: object
               model:
                 description: |-
@@ -6150,9 +6150,14 @@ spec:
                     ToolEntry represents either an inline tool definition or a reference to an AgentTool resource.
                     Exactly one of Inline or ToolRef must be specified.
                   properties:
-                    inline:
+                    name:
+                      description: Name of the tool. Required for inline tools, used
+                        as identifier.
+                      minLength: 1
+                      type: string
+                    template:
                       description: |-
-                        Inline defines the tool directly in the Agent spec.
+                        Template defines the tool directly in the Agent spec.
                         Uses the same spec as AgentTool for consistency.
                       properties:
                         description:
@@ -6279,11 +6284,6 @@ spec:
                       - description
                       - type
                       type: object
-                    name:
-                      description: Name of the tool. Required for inline tools, used
-                        as identifier.
-                      minLength: 1
-                      type: string
                     toolRef:
                       description: ToolRef references an existing AgentTool resource.
                       properties:

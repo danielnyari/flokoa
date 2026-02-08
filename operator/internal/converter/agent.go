@@ -29,7 +29,7 @@ func AgentSpecToProto(spec *agentv1alpha1.AgentSpec) *pb.AgentSpec {
 	}
 
 	// Convert Card
-	pbSpec.Card = AgentCardToProto(&spec.Card)
+	pbSpec.Card = AgentCardToProto(&spec.CardOverride)
 
 	// Convert Runtime
 	pbSpec.Runtime = RuntimeSpecToProto(&spec.Runtime)
@@ -51,7 +51,7 @@ func AgentSpecToProto(spec *agentv1alpha1.AgentSpec) *pb.AgentSpec {
 }
 
 // AgentCardToProto converts AgentCard to proto.
-func AgentCardToProto(card *agentv1alpha1.AgentCard) *pb.AgentCard {
+func AgentCardToProto(card *agentv1alpha1.AgentCardOverride) *pb.AgentCard {
 	if card == nil {
 		return nil
 	}
@@ -166,9 +166,9 @@ func ToolEntryToProto(entry *agentv1alpha1.ToolEntry) *pb.ToolEntry {
 		Name: entry.Name,
 	}
 
-	if entry.Inline != nil {
+	if entry.Template != nil {
 		pbEntry.Tool = &pb.ToolEntry_Inline{
-			Inline: AgentToolSpecToProto(entry.Inline),
+			Inline: AgentToolSpecToProto(entry.Template),
 		}
 	} else if entry.ToolRef != nil {
 		pbEntry.Tool = &pb.ToolEntry_ToolRef{

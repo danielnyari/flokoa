@@ -103,7 +103,7 @@ type AgentCapabilities struct {
 	Streaming              bool             `json:"streaming,omitempty"`
 }
 
-type AgentCard struct {
+type AgentCardOverride struct {
 	Name string `json:"name"`
 
 	Description string `json:"description"`
@@ -124,7 +124,7 @@ type AgentCard struct {
 
 // AgentSpec defines the desired state of an Agent
 type AgentSpec struct {
-	Card AgentCard `json:"card"`
+	CardOverride AgentCardOverride `json:"card"`
 
 	// Runtime configuration - specifies the backend and configuration
 	Runtime RuntimeSpec `json:"runtime"`
@@ -153,10 +153,10 @@ type AgentSpec struct {
 // InstructionEntry represents either an inline instruction or a reference to an Instruction resource.
 // Exactly one of Inline or InstructionRef must be specified.
 type InstructionEntry struct {
-	// Inline defines the instruction content directly in the Agent spec.
+	// Template defines the instruction content directly in the Agent spec.
 	// When set, the operator creates a child Instruction CR.
 	// +optional
-	Inline string `json:"inline,omitempty"`
+	Template string `json:"template,omitempty"`
 
 	// InstructionRef references an existing Instruction resource.
 	// +optional
@@ -171,10 +171,10 @@ type ToolEntry struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// Inline defines the tool directly in the Agent spec.
+	// Template defines the tool directly in the Agent spec.
 	// Uses the same spec as AgentTool for consistency.
 	// +optional
-	Inline *AgentToolSpec `json:"inline,omitempty"`
+	Template *AgentToolSpec `json:"template,omitempty"`
 
 	// ToolRef references an existing AgentTool resource.
 	// +optional

@@ -40,8 +40,8 @@ import (
 )
 
 // minimalCard creates a minimal valid AgentCard for testing
-func minimalCard() agentv1alpha1.AgentCard {
-	return agentv1alpha1.AgentCard{
+func minimalCard() agentv1alpha1.AgentCardOverride {
+	return agentv1alpha1.AgentCardOverride{
 		Name:        "Test Agent",
 		Description: "A test agent",
 		Version:     "1.0.0",
@@ -112,7 +112,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -194,7 +194,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -239,7 +239,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -293,7 +293,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -361,7 +361,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -427,7 +427,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -484,7 +484,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -536,7 +536,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -599,7 +599,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -689,7 +689,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -702,7 +702,7 @@ var _ = Describe("Agent Controller", func() {
 						Tools: []agentv1alpha1.ToolEntry{
 							{
 								Name: "weather-api",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "Get weather information",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -823,7 +823,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -836,7 +836,7 @@ var _ = Describe("Agent Controller", func() {
 						Tools: []agentv1alpha1.ToolEntry{
 							{
 								Name: "tool-one",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "First tool",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -847,7 +847,7 @@ var _ = Describe("Agent Controller", func() {
 							},
 							{
 								Name: "tool-two",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "Second tool",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -1004,7 +1004,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1083,7 +1083,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1172,7 +1172,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1289,7 +1289,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1302,7 +1302,7 @@ var _ = Describe("Agent Controller", func() {
 						Tools: []agentv1alpha1.ToolEntry{
 							{
 								Name: "inline-tool",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "Inline tool",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -1453,7 +1453,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1545,7 +1545,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1627,7 +1627,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1774,7 +1774,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -1937,7 +1937,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -2112,7 +2112,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -2190,7 +2190,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:               "Test Agent",
 							Description:        "A test agent for unit testing",
 							Version:            "1.0.0",
@@ -2263,7 +2263,7 @@ var _ = Describe("Agent Controller", func() {
 				Expect(cardJSON).NotTo(BeEmpty())
 
 				By("Verifying JSON content matches AgentCard")
-				var card agentv1alpha1.AgentCard
+				var card agentv1alpha1.AgentCardOverride
 				err = json.Unmarshal([]byte(cardJSON), &card)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -2286,7 +2286,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "Mount Test Agent",
 							Description: "Testing volume mount",
 							Version:     "1.0.0",
@@ -2363,7 +2363,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "URL Test Agent",
 							Description: "Testing URL injection",
 							Version:     "1.0.0",
@@ -2428,7 +2428,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "Original Name",
 							Description: "Original description",
 							Version:     "1.0.0",
@@ -2476,7 +2476,7 @@ var _ = Describe("Agent Controller", func() {
 					}, configMap)
 				}, timeout, interval).Should(Succeed())
 
-				var initialCard agentv1alpha1.AgentCard
+				var initialCard agentv1alpha1.AgentCardOverride
 				err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &initialCard)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(initialCard.Name).To(Equal("Original Name"))
@@ -2485,9 +2485,9 @@ var _ = Describe("Agent Controller", func() {
 				err = k8sClient.Get(ctx, typeNamespacedName, agent)
 				Expect(err).NotTo(HaveOccurred())
 
-				agent.Spec.Card.Name = "Updated Name"
-				agent.Spec.Card.Description = "Updated description"
-				agent.Spec.Card.Version = "2.0.0"
+				agent.Spec.CardOverride.Name = "Updated Name"
+				agent.Spec.CardOverride.Description = "Updated description"
+				agent.Spec.CardOverride.Version = "2.0.0"
 				Expect(k8sClient.Update(ctx, agent)).To(Succeed())
 
 				By("Reconciling again")
@@ -2503,7 +2503,7 @@ var _ = Describe("Agent Controller", func() {
 				}, configMap)
 				Expect(err).NotTo(HaveOccurred())
 
-				var updatedCard agentv1alpha1.AgentCard
+				var updatedCard agentv1alpha1.AgentCardOverride
 				err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &updatedCard)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedCard.Name).To(Equal("Updated Name"))
@@ -2519,7 +2519,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "Env Test Agent",
 							Description: "Testing env preservation",
 							Version:     "1.0.0",
@@ -2669,7 +2669,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -2786,7 +2786,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -2911,7 +2911,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3022,7 +3022,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3133,7 +3133,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3250,7 +3250,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3361,7 +3361,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3484,7 +3484,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3589,7 +3589,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3707,7 +3707,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3829,7 +3829,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3888,7 +3888,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -3970,7 +3970,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -4066,7 +4066,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -4190,7 +4190,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -4290,7 +4290,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -4346,7 +4346,7 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
 								Standard: &agentv1alpha1.StandardRuntimeSpec{
@@ -4429,9 +4429,9 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Instruction: &agentv1alpha1.InstructionEntry{
-							Inline: "You are a test agent.",
+							Template: "You are a test agent.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type:    agentv1alpha1.RuntimeTypeManaged,
@@ -4479,9 +4479,9 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Instruction: &agentv1alpha1.InstructionEntry{
-							Inline: "You are a test agent.",
+							Template: "You are a test agent.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeManaged,
@@ -4536,7 +4536,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type:    agentv1alpha1.RuntimeTypeStandard,
 							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
@@ -4582,7 +4582,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type:    agentv1alpha1.RuntimeTypeManaged,
 							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
@@ -4630,9 +4630,9 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Instruction: &agentv1alpha1.InstructionEntry{
-							Inline: "You are a BYO agent with instructions.",
+							Template: "You are a BYO agent with instructions.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
@@ -4758,9 +4758,9 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Instruction: &agentv1alpha1.InstructionEntry{
-							Inline: "You are a support triage agent. Classify tickets by severity.",
+							Template: "You are a support triage agent. Classify tickets by severity.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeManaged,

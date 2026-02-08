@@ -285,14 +285,14 @@ func (r *AgentReconciler) reconcileTools(ctx context.Context, agent *agentv1alph
 	var toolConfigMaps []toolConfigMapInfo
 
 	for i, tool := range agent.Spec.Tools {
-		if tool.Inline != nil {
+		if tool.Template != nil {
 			// Handle inline tool - create an AgentTool CR for it
 			toolName := tool.Name
 			if toolName == "" {
 				toolName = fmt.Sprintf("tool-%d", i)
 			}
 
-			cmName, err := r.reconcileInlineTool(ctx, agent, toolName, tool.Inline)
+			cmName, err := r.reconcileInlineTool(ctx, agent, toolName, tool.Template)
 			if err != nil {
 				return nil, fmt.Errorf("failed to reconcile inline tool %s: %w", toolName, err)
 			}
@@ -420,7 +420,7 @@ func (r *AgentReconciler) reconcileAgentCardConfigMap(ctx context.Context, agent
 	configMapName := fmt.Sprintf("%s-agent-card", agent.Name)
 
 	// Serialize the AgentCard to JSON
-	cardJSON, err := json.Marshal(agent.Spec.Card)
+	cardJSON, err := json.Marshal(agent.Spec.CardOverride)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal AgentCard to JSON: %w", err)
 	}
@@ -969,10 +969,10 @@ func (r *AgentReconciler) setCondition(agent *agentv1alpha1.Agent, conditionType
 func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
 	// Validate instruction entry if present
 	if agent.Spec.Instruction != nil {
-		if agent.Spec.Instruction.Inline != "" && agent.Spec.Instruction.InstructionRef != nil {
+		if agent.Spec.Instruction.Template != "" && agent.Spec.Instruction.InstructionRef != nil {
 			return fmt.Errorf("instruction.inline and instruction.instructionRef are mutually exclusive")
 		}
-		if agent.Spec.Instruction.Inline == "" && agent.Spec.Instruction.InstructionRef == nil {
+		if agent.Spec.Instruction.Template == "" && agent.Spec.Instruction.InstructionRef == nil {
 			return fmt.Errorf("instruction must have either inline or instructionRef set")
 		}
 	}
@@ -1079,9 +1079,9 @@ func (r *AgentReconciler) reconcileInstruction(ctx context.Context, agent *agent
 		return "", nil
 	}
 
-	if entry.Inline != "" {
+	if entry.Template != "" {
 		// Inline instruction — create a child Instruction CR
-		return r.reconcileInlineInstruction(ctx, agent, entry.Inline)
+		return r.reconcileInlineInstruction(ctx, agent, entry.Template)
 	}
 
 	if entry.InstructionRef != nil {
