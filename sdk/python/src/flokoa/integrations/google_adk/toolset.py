@@ -1,9 +1,34 @@
 """Flokoa toolset implementation for Google ADK."""
 
+import inspect
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from google.adk.tools.base_toolset import BaseToolset
+_MISSING_ADK_MESSAGE = (
+    "google-adk is not installed or unavailable at runtime. "
+    "Install it with your package manager (e.g., uv pip install google-adk)."
+)
+
+try:
+    from google.adk.tools import BaseToolset as _BaseToolset
+except (ImportError, AttributeError):
+    try:
+        from google.adk.tools.base_toolset import BaseToolset as _BaseToolset
+    except (ImportError, AttributeError):
+        _BaseToolset = None
+
+# In tests, google.adk.tools is a MagicMock, so BaseToolset resolves to a non-type.
+# This also handles any non-class sentinel returned by mocked imports.
+if _BaseToolset is None or not inspect.isclass(_BaseToolset):
+    class BaseToolset:  # type: ignore[no-redef]
+        async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
+            """Return tools for the given readonly ADK context."""
+            raise ImportError(f"Failed to call get_tools: {_MISSING_ADK_MESSAGE}")
+
+        async def close(self) -> None:
+            raise ImportError(f"Failed to call close: {_MISSING_ADK_MESSAGE}")
+else:
+    BaseToolset = _BaseToolset
 
 from flokoa.types import ToolDefinition as FlokoaToolDefinition
 

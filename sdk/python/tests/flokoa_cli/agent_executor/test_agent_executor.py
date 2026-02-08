@@ -83,7 +83,7 @@ class TestFlokoaAgentExecutorGetToolCallable:
         tool_def = dummy_agent_executor.tool_definitions[0]
         result = dummy_agent_executor._get_tool_callable(tool_def)
 
-        assert result.__name__ == "call_http_api_tool"
+        assert result.__name__ == "test_api_tool"
         assert callable(result)
 
     def test_get_tool_callable_for_all_loaded_tools(self, tools_file, dummy_agent_executor):
