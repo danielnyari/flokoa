@@ -121,8 +121,8 @@ func RuntimeSpecToProto(runtime *agentv1alpha1.RuntimeSpec) *pb.RuntimeSpec {
 		Type: RuntimeTypeToProto(runtime.Type),
 	}
 
-	if runtime.Spec != nil {
-		pbRuntime.Spec = StandardRuntimeSpecToProto(runtime.Spec)
+	if runtime.Standard != nil {
+		pbRuntime.Spec = StandardRuntimeSpecToProto(runtime.Standard)
 	}
 
 	return pbRuntime

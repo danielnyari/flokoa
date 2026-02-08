@@ -47,8 +47,8 @@ spec:
         name: jira-create
 
   runtime:
-    type: inline
-    inline:
+    type: managed
+    managed:
       outputSchema:
         type: object
         properties:

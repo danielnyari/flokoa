@@ -115,7 +115,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -197,7 +197,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -242,8 +242,10 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
-								Replicas: &replicas,
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
+								DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
+									Replicas: &replicas,
+								},
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -294,7 +296,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 									Ports: []corev1.ContainerPort{
@@ -362,7 +364,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 									Resources: corev1.ResourceRequirements{
@@ -428,7 +430,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -485,7 +487,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -537,7 +539,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -600,7 +602,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -690,7 +692,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -824,7 +826,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1005,7 +1007,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1084,7 +1086,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1173,7 +1175,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1290,7 +1292,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1454,7 +1456,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1546,7 +1548,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1628,7 +1630,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1775,7 +1777,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Image: "nginx:latest",
 									},
@@ -1938,7 +1940,7 @@ var _ = Describe("Agent Controller", func() {
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -2113,7 +2115,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Image: "nginx:latest",
 									},
@@ -2209,7 +2211,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2292,7 +2294,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2369,7 +2371,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2434,7 +2436,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2525,7 +2527,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2670,7 +2672,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -2787,7 +2789,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -2912,7 +2914,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3023,7 +3025,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3134,7 +3136,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3251,7 +3253,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3362,7 +3364,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3485,7 +3487,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3590,7 +3592,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3708,7 +3710,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3830,7 +3832,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3889,7 +3891,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3971,7 +3973,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4067,7 +4069,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4191,7 +4193,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4291,7 +4293,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4347,7 +4349,7 @@ var _ = Describe("Agent Controller", func() {
 							Card: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4418,9 +4420,9 @@ var _ = Describe("Agent Controller", func() {
 			})
 		})
 
-		Context("Inline runtime", func() {
-			It("should fail validation when model is not set for inline runtime", func() {
-				By("Creating an inline Agent without a model reference")
+		Context("Managed runtime", func() {
+			It("should fail validation when model is not set for managed runtime", func() {
+				By("Creating a managed Agent without a model reference")
 				agent := &agentv1alpha1.Agent{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      agentName,
@@ -4432,8 +4434,8 @@ var _ = Describe("Agent Controller", func() {
 							Inline: "You are a test agent.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:   agentv1alpha1.RuntimeTypeInline,
-							Inline: &agentv1alpha1.InlineRuntimeSpec{},
+							Type:    agentv1alpha1.RuntimeTypeManaged,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
 						},
 					},
 				}
@@ -4469,8 +4471,8 @@ var _ = Describe("Agent Controller", func() {
 				Expect(readyCond.Message).To(ContainSubstring("spec.model is required"))
 			})
 
-			It("should fail validation when runtime.spec is set with inline type", func() {
-				By("Creating an inline Agent with both spec and inline set")
+			It("should fail validation when runtime.standard is set with managed type", func() {
+				By("Creating a managed Agent with both standard and managed set")
 				agent := &agentv1alpha1.Agent{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      agentName,
@@ -4482,13 +4484,13 @@ var _ = Describe("Agent Controller", func() {
 							Inline: "You are a test agent.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type: agentv1alpha1.RuntimeTypeInline,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeManaged,
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
 							},
-							Inline: &agentv1alpha1.InlineRuntimeSpec{},
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
 						},
 						Model: &agentv1alpha1.AgentModelRef{
 							Name: "test-model",
@@ -4523,11 +4525,11 @@ var _ = Describe("Agent Controller", func() {
 				readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
 				Expect(readyCond).NotTo(BeNil())
 				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
-				Expect(readyCond.Message).To(ContainSubstring("runtime.spec must not be set"))
+				Expect(readyCond.Message).To(ContainSubstring("runtime.standard must not be set"))
 			})
 
-			It("should fail validation when runtime.inline is set with standard type", func() {
-				By("Creating a standard Agent with inline set")
+			It("should fail validation when runtime.managed is set with standard type", func() {
+				By("Creating a standard Agent with managed set")
 				agent := &agentv1alpha1.Agent{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      agentName,
@@ -4536,8 +4538,8 @@ var _ = Describe("Agent Controller", func() {
 					Spec: agentv1alpha1.AgentSpec{
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:   agentv1alpha1.RuntimeTypeStandard,
-							Inline: &agentv1alpha1.InlineRuntimeSpec{},
+							Type:    agentv1alpha1.RuntimeTypeStandard,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
 						},
 					},
 				}
@@ -4569,11 +4571,11 @@ var _ = Describe("Agent Controller", func() {
 				readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
 				Expect(readyCond).NotTo(BeNil())
 				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
-				Expect(readyCond.Message).To(ContainSubstring("runtime.inline must not be set"))
+				Expect(readyCond.Message).To(ContainSubstring("runtime.managed must not be set"))
 			})
 
-			It("should fail validation when instruction is not set for inline runtime", func() {
-				By("Creating an inline Agent without instruction")
+			It("should fail validation when instruction is not set for managed runtime", func() {
+				By("Creating a managed Agent without instruction")
 				agent := &agentv1alpha1.Agent{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      agentName,
@@ -4582,8 +4584,8 @@ var _ = Describe("Agent Controller", func() {
 					Spec: agentv1alpha1.AgentSpec{
 						Card: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:   agentv1alpha1.RuntimeTypeInline,
-							Inline: &agentv1alpha1.InlineRuntimeSpec{},
+							Type:    agentv1alpha1.RuntimeTypeManaged,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
 						},
 						Model: &agentv1alpha1.AgentModelRef{
 							Name: "test-model",
@@ -4634,7 +4636,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "my-byo-agent:latest",
@@ -4705,7 +4707,7 @@ var _ = Describe("Agent Controller", func() {
 				Expect(envMap).To(HaveKeyWithValue("FLOKOA_INSTRUCTION_PATH", instructionMountPath))
 			})
 
-			It("should create Deployment, Service, and inline config ConfigMap for an inline agent", func() {
+			It("should create Deployment, Service, and managed config ConfigMap for a managed agent", func() {
 				By("Creating prerequisite Model and ModelProvider")
 				modelProvider := &agentv1alpha1.ModelProvider{
 					ObjectMeta: metav1.ObjectMeta{
@@ -4748,7 +4750,7 @@ var _ = Describe("Agent Controller", func() {
 				}
 				Expect(k8sClient.Status().Update(ctx, model)).To(Succeed())
 
-				By("Creating the inline Agent")
+				By("Creating the managed Agent")
 				replicas := int32(2)
 				agent := &agentv1alpha1.Agent{
 					ObjectMeta: metav1.ObjectMeta{
@@ -4761,9 +4763,11 @@ var _ = Describe("Agent Controller", func() {
 							Inline: "You are a support triage agent. Classify tickets by severity.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type: agentv1alpha1.RuntimeTypeInline,
-							Inline: &agentv1alpha1.InlineRuntimeSpec{
-								Replicas: &replicas,
+							Type: agentv1alpha1.RuntimeTypeManaged,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{
+								DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
+									Replicas: &replicas,
+								},
 								Env: []corev1.EnvVar{
 									{Name: "CUSTOM_VAR", Value: "custom-value"},
 								},
@@ -4804,13 +4808,13 @@ var _ = Describe("Agent Controller", func() {
 				inlineCM := &corev1.ConfigMap{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
-						Name:      fmt.Sprintf("%s-inline-config", agentName),
+						Name:      fmt.Sprintf("%s-managed-config", agentName),
 						Namespace: agentNamespace,
 					}, inlineCM)
 				}, timeout, interval).Should(Succeed())
 
-				Expect(inlineCM.Data).To(HaveKey(inlineConfigConfigMapKey))
-				Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("inline-config"))
+				Expect(inlineCM.Data).To(HaveKey(managedConfigConfigMapKey))
+				Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("managed-config"))
 
 				By("Verifying the Deployment was created with correct inline configuration")
 				deployment := &appsv1.Deployment{}
@@ -4823,7 +4827,7 @@ var _ = Describe("Agent Controller", func() {
 
 				container := deployment.Spec.Template.Spec.Containers[0]
 				Expect(container.Name).To(Equal("agent"))
-				Expect(container.Image).To(Equal(defaultInlineRuntimeImage))
+				Expect(container.Image).To(Equal(defaultManagedRuntimeImage))
 				Expect(container.Ports).To(HaveLen(1))
 				Expect(container.Ports[0].ContainerPort).To(Equal(int32(8080)))
 
@@ -4834,8 +4838,8 @@ var _ = Describe("Agent Controller", func() {
 						envMap[env.Name] = env.Value
 					}
 				}
-				Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "inline"))
-				Expect(envMap).To(HaveKeyWithValue("FLOKOA_INLINE_CONFIG_PATH", inlineConfigMountPath))
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "managed"))
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_MANAGED_CONFIG_PATH", managedConfigMountPath))
 				Expect(envMap).To(HaveKeyWithValue("CUSTOM_VAR", "custom-value"))
 				Expect(envMap).To(HaveKey("FLOKOA_AGENT_URL"))
 
@@ -4843,16 +4847,16 @@ var _ = Describe("Agent Controller", func() {
 				Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
 				Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
 
-				// Check inline config volume mount exists
-				var foundInlineMount bool
+				// Check managed config volume mount exists
+				var foundManagedMount bool
 				for _, vm := range container.VolumeMounts {
-					if vm.Name == inlineConfigVolumeName {
-						foundInlineMount = true
-						Expect(vm.MountPath).To(Equal(inlineConfigMountPath))
+					if vm.Name == managedConfigVolumeName {
+						foundManagedMount = true
+						Expect(vm.MountPath).To(Equal(managedConfigMountPath))
 						Expect(vm.ReadOnly).To(BeTrue())
 					}
 				}
-				Expect(foundInlineMount).To(BeTrue(), "inline config volume mount should exist")
+				Expect(foundManagedMount).To(BeTrue(), "managed config volume mount should exist")
 
 				By("Verifying the Service was created with default ports")
 				service := &corev1.Service{}
@@ -4875,102 +4879,6 @@ var _ = Describe("Agent Controller", func() {
 				Expect(k8sClient.Delete(ctx, modelProvider)).To(Succeed())
 			})
 
-			It("should use custom runtime image when specified", func() {
-				By("Creating prerequisite Model and ModelProvider")
-				modelProvider := &agentv1alpha1.ModelProvider{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("img-provider-%s", agentName),
-						Namespace: agentNamespace,
-					},
-					Spec: agentv1alpha1.ModelProviderSpec{
-						OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
-						APIKeySecretRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: fmt.Sprintf("img-secret-%s", agentName),
-							},
-							Key: "api-key",
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, modelProvider)).To(Succeed())
-				modelProvider.Status.Ready = true
-				modelProvider.Status.Provider = agentv1alpha1.ProviderTypeOpenAI
-				Expect(k8sClient.Status().Update(ctx, modelProvider)).To(Succeed())
-
-				model := &agentv1alpha1.Model{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("img-model-%s", agentName),
-						Namespace: agentNamespace,
-					},
-					Spec: agentv1alpha1.ModelSpec{
-						Model: "gpt-4o",
-						ProviderRef: agentv1alpha1.ProviderRef{
-							Name: modelProvider.Name,
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, model)).To(Succeed())
-				model.Status.Ready = true
-				model.Status.ResolvedProvider = &agentv1alpha1.ResolvedProviderInfo{
-					Provider:  agentv1alpha1.ProviderTypeOpenAI,
-					Namespace: agentNamespace,
-					Name:      modelProvider.Name,
-				}
-				Expect(k8sClient.Status().Update(ctx, model)).To(Succeed())
-
-				By("Creating inline Agent with custom runtime image")
-				agent := &agentv1alpha1.Agent{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      agentName,
-						Namespace: agentNamespace,
-					},
-					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Inline: "Custom runtime test agent.",
-						},
-						Runtime: agentv1alpha1.RuntimeSpec{
-							Type: agentv1alpha1.RuntimeTypeInline,
-							Inline: &agentv1alpha1.InlineRuntimeSpec{
-								RuntimeImage: "my-registry.io/custom-runtime:v1.0",
-							},
-						},
-						Model: &agentv1alpha1.AgentModelRef{
-							Name: model.Name,
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
-
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// Second reconcile creates resources
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				By("Verifying the custom runtime image is used")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
-
-				Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("my-registry.io/custom-runtime:v1.0"))
-
-				By("Cleanup model and provider")
-				Expect(k8sClient.Delete(ctx, model)).To(Succeed())
-				Expect(k8sClient.Delete(ctx, modelProvider)).To(Succeed())
-			})
 		})
 	})
 })
