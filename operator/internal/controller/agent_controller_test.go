@@ -40,8 +40,8 @@ import (
 )
 
 // minimalCard creates a minimal valid AgentCard for testing
-func minimalCard() agentv1alpha1.AgentCard {
-	return agentv1alpha1.AgentCard{
+func minimalCard() agentv1alpha1.AgentCardOverride {
+	return agentv1alpha1.AgentCardOverride{
 		Name:        "Test Agent",
 		Description: "A test agent",
 		Version:     "1.0.0",
@@ -112,10 +112,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -194,10 +194,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -239,11 +239,13 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
-								Replicas: &replicas,
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
+								DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
+									Replicas: &replicas,
+								},
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -291,10 +293,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 									Ports: []corev1.ContainerPort{
@@ -359,10 +361,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 									Resources: corev1.ResourceRequirements{
@@ -425,10 +427,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -482,10 +484,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -534,10 +536,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -597,10 +599,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -687,10 +689,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -700,7 +702,7 @@ var _ = Describe("Agent Controller", func() {
 						Tools: []agentv1alpha1.ToolEntry{
 							{
 								Name: "weather-api",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "Get weather information",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -821,10 +823,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -834,7 +836,7 @@ var _ = Describe("Agent Controller", func() {
 						Tools: []agentv1alpha1.ToolEntry{
 							{
 								Name: "tool-one",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "First tool",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -845,7 +847,7 @@ var _ = Describe("Agent Controller", func() {
 							},
 							{
 								Name: "tool-two",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "Second tool",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -1002,10 +1004,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1081,10 +1083,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1170,10 +1172,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1287,10 +1289,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1300,7 +1302,7 @@ var _ = Describe("Agent Controller", func() {
 						Tools: []agentv1alpha1.ToolEntry{
 							{
 								Name: "inline-tool",
-								Inline: &agentv1alpha1.AgentToolSpec{
+								Template: &agentv1alpha1.AgentToolSpec{
 									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
 									Description: "Inline tool",
 									HTTPApi: &agentv1alpha1.HTTPApiSpec{
@@ -1451,10 +1453,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1543,10 +1545,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1625,10 +1627,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -1772,10 +1774,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Image: "nginx:latest",
 									},
@@ -1935,10 +1937,10 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: minimalCard(),
+						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
@@ -2110,10 +2112,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Image: "nginx:latest",
 									},
@@ -2188,7 +2190,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:               "Test Agent",
 							Description:        "A test agent for unit testing",
 							Version:            "1.0.0",
@@ -2209,7 +2211,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2261,7 +2263,7 @@ var _ = Describe("Agent Controller", func() {
 				Expect(cardJSON).NotTo(BeEmpty())
 
 				By("Verifying JSON content matches AgentCard")
-				var card agentv1alpha1.AgentCard
+				var card agentv1alpha1.AgentCardOverride
 				err = json.Unmarshal([]byte(cardJSON), &card)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -2284,7 +2286,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "Mount Test Agent",
 							Description: "Testing volume mount",
 							Version:     "1.0.0",
@@ -2292,7 +2294,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2361,7 +2363,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "URL Test Agent",
 							Description: "Testing URL injection",
 							Version:     "1.0.0",
@@ -2369,7 +2371,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2426,7 +2428,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "Original Name",
 							Description: "Original description",
 							Version:     "1.0.0",
@@ -2434,7 +2436,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2474,7 +2476,7 @@ var _ = Describe("Agent Controller", func() {
 					}, configMap)
 				}, timeout, interval).Should(Succeed())
 
-				var initialCard agentv1alpha1.AgentCard
+				var initialCard agentv1alpha1.AgentCardOverride
 				err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &initialCard)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(initialCard.Name).To(Equal("Original Name"))
@@ -2483,9 +2485,9 @@ var _ = Describe("Agent Controller", func() {
 				err = k8sClient.Get(ctx, typeNamespacedName, agent)
 				Expect(err).NotTo(HaveOccurred())
 
-				agent.Spec.Card.Name = "Updated Name"
-				agent.Spec.Card.Description = "Updated description"
-				agent.Spec.Card.Version = "2.0.0"
+				agent.Spec.CardOverride.Name = "Updated Name"
+				agent.Spec.CardOverride.Description = "Updated description"
+				agent.Spec.CardOverride.Version = "2.0.0"
 				Expect(k8sClient.Update(ctx, agent)).To(Succeed())
 
 				By("Reconciling again")
@@ -2501,7 +2503,7 @@ var _ = Describe("Agent Controller", func() {
 				}, configMap)
 				Expect(err).NotTo(HaveOccurred())
 
-				var updatedCard agentv1alpha1.AgentCard
+				var updatedCard agentv1alpha1.AgentCardOverride
 				err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &updatedCard)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updatedCard.Name).To(Equal("Updated Name"))
@@ -2517,7 +2519,7 @@ var _ = Describe("Agent Controller", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentSpec{
-						Card: agentv1alpha1.AgentCard{
+						CardOverride: agentv1alpha1.AgentCardOverride{
 							Name:        "Env Test Agent",
 							Description: "Testing env preservation",
 							Version:     "1.0.0",
@@ -2525,7 +2527,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeStandard,
-							Spec: &agentv1alpha1.StandardRuntimeSpec{
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Name:  "agent",
 									Image: "nginx:latest",
@@ -2667,10 +2669,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -2784,10 +2786,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -2909,10 +2911,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3020,10 +3022,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3131,10 +3133,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3248,10 +3250,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3359,10 +3361,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3482,10 +3484,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3587,10 +3589,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3705,10 +3707,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3827,10 +3829,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3886,10 +3888,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -3968,10 +3970,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4064,10 +4066,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4188,10 +4190,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4288,10 +4290,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4344,10 +4346,10 @@ var _ = Describe("Agent Controller", func() {
 							Namespace: agentNamespace,
 						},
 						Spec: agentv1alpha1.AgentSpec{
-							Card: minimalCard(),
+							CardOverride: minimalCard(),
 							Runtime: agentv1alpha1.RuntimeSpec{
 								Type: agentv1alpha1.RuntimeTypeStandard,
-								Spec: &agentv1alpha1.StandardRuntimeSpec{
+								Standard: &agentv1alpha1.StandardRuntimeSpec{
 									Container: corev1.Container{
 										Name:  "agent",
 										Image: "nginx:latest",
@@ -4416,6 +4418,467 @@ var _ = Describe("Agent Controller", func() {
 					}
 				})
 			})
+		})
+
+		Context("Managed runtime", func() {
+			It("should fail validation when model is not set for managed runtime", func() {
+				By("Creating a managed Agent without a model reference")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						CardOverride: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Template: "You are a test agent.",
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type:    agentv1alpha1.RuntimeTypeManaged,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile should fail validation (no model)
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred()) // validation errors don't return err, they set status
+
+				By("Verifying agent status is Failed")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
+
+				readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
+				Expect(readyCond).NotTo(BeNil())
+				Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
+				Expect(readyCond.Message).To(ContainSubstring("spec.model is required"))
+			})
+
+			It("should fail validation when runtime.standard is set with managed type", func() {
+				By("Creating a managed Agent with both standard and managed set")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						CardOverride: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Template: "You are a test agent.",
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeManaged,
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Image: "nginx:latest",
+								},
+							},
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+						},
+						Model: &agentv1alpha1.AgentModelRef{
+							Name: "test-model",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile should fail validation
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying agent status is Failed")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
+
+				readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
+				Expect(readyCond).NotTo(BeNil())
+				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
+				Expect(readyCond.Message).To(ContainSubstring("runtime.standard must not be set"))
+			})
+
+			It("should fail validation when runtime.managed is set with standard type", func() {
+				By("Creating a standard Agent with managed set")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						CardOverride: minimalCard(),
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type:    agentv1alpha1.RuntimeTypeStandard,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile should fail validation
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying agent status is Failed")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
+
+				readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
+				Expect(readyCond).NotTo(BeNil())
+				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
+				Expect(readyCond.Message).To(ContainSubstring("runtime.managed must not be set"))
+			})
+
+			It("should fail validation when instruction is not set for managed runtime", func() {
+				By("Creating a managed Agent without instruction")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						CardOverride: minimalCard(),
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type:    agentv1alpha1.RuntimeTypeManaged,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+						},
+						Model: &agentv1alpha1.AgentModelRef{
+							Name: "test-model",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Second reconcile should fail validation
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying agent status is Failed")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
+
+				readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
+				Expect(readyCond).NotTo(BeNil())
+				Expect(readyCond.Reason).To(Equal(ReasonValidationFailed))
+				Expect(readyCond.Message).To(ContainSubstring("spec.instruction is required"))
+			})
+
+			It("should allow standard agents to have optional instruction", func() {
+				By("Creating a standard Agent with inline instruction")
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						CardOverride: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Template: "You are a BYO agent with instructions.",
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{
+									Name:  "agent",
+									Image: "my-byo-agent:latest",
+									Ports: []corev1.ContainerPort{
+										{Name: "http", ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+									},
+								},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Second reconcile creates resources including Instruction CR
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying the Instruction CR was created")
+				instruction := &agentv1alpha1.Instruction{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Name:      fmt.Sprintf("%s-instruction", agentName),
+						Namespace: agentNamespace,
+					}, instruction)
+				}, timeout, interval).Should(Succeed())
+
+				Expect(instruction.Spec.Content).To(Equal("You are a BYO agent with instructions."))
+				Expect(instruction.Labels["flokoa.ai/agent"]).To(Equal(agentName))
+
+				By("Verifying the Deployment has instruction volume mount")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				container := deployment.Spec.Template.Spec.Containers[0]
+				var foundInstructionMount bool
+				for _, vm := range container.VolumeMounts {
+					if vm.Name == instructionVolumeName {
+						foundInstructionMount = true
+						Expect(vm.MountPath).To(Equal(instructionMountPath))
+						Expect(vm.SubPath).To(Equal(instructionConfigMapKey))
+						Expect(vm.ReadOnly).To(BeTrue())
+					}
+				}
+				Expect(foundInstructionMount).To(BeTrue(), "instruction volume mount should exist on BYO agent")
+
+				// Check FLOKOA_INSTRUCTION_PATH env var
+				envMap := make(map[string]string)
+				for _, env := range container.Env {
+					if env.Value != "" {
+						envMap[env.Name] = env.Value
+					}
+				}
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_INSTRUCTION_PATH", instructionMountPath))
+			})
+
+			It("should create Deployment, Service, and managed config ConfigMap for a managed agent", func() {
+				By("Creating prerequisite Model and ModelProvider")
+				modelProvider := &agentv1alpha1.ModelProvider{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("inline-provider-%s", agentName),
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.ModelProviderSpec{
+						Anthropic: &agentv1alpha1.AnthropicProviderSpec{},
+						APIKeySecretRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: fmt.Sprintf("inline-secret-%s", agentName),
+							},
+							Key: "api-key",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, modelProvider)).To(Succeed())
+				modelProvider.Status.Ready = true
+				modelProvider.Status.Provider = agentv1alpha1.ProviderTypeAnthropic
+				Expect(k8sClient.Status().Update(ctx, modelProvider)).To(Succeed())
+
+				model := &agentv1alpha1.Model{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("inline-model-%s", agentName),
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.ModelSpec{
+						Model: "claude-sonnet-4-20250514",
+						ProviderRef: agentv1alpha1.ProviderRef{
+							Name: modelProvider.Name,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, model)).To(Succeed())
+				model.Status.Ready = true
+				model.Status.ResolvedProvider = &agentv1alpha1.ResolvedProviderInfo{
+					Provider:  agentv1alpha1.ProviderTypeAnthropic,
+					Namespace: agentNamespace,
+					Name:      modelProvider.Name,
+				}
+				Expect(k8sClient.Status().Update(ctx, model)).To(Succeed())
+
+				By("Creating the managed Agent")
+				replicas := int32(2)
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						CardOverride: minimalCard(),
+						Instruction: &agentv1alpha1.InstructionEntry{
+							Template: "You are a support triage agent. Classify tickets by severity.",
+						},
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeManaged,
+							Managed: &agentv1alpha1.ManagedRuntimeSpec{
+								DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
+									Replicas: &replicas,
+								},
+								Env: []corev1.EnvVar{
+									{Name: "CUSTOM_VAR", Value: "custom-value"},
+								},
+								Resources: &corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU:    resource.MustParse("100m"),
+										corev1.ResourceMemory: resource.MustParse("128Mi"),
+									},
+								},
+							},
+						},
+						Model: &agentv1alpha1.AgentModelRef{
+							Name: model.Name,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				controllerReconciler := &AgentReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// First reconcile adds finalizer
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+				// Second reconcile creates resources
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying the inline config ConfigMap was created")
+				inlineCM := &corev1.ConfigMap{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Name:      fmt.Sprintf("%s-managed-config", agentName),
+						Namespace: agentNamespace,
+					}, inlineCM)
+				}, timeout, interval).Should(Succeed())
+
+				Expect(inlineCM.Data).To(HaveKey(managedConfigConfigMapKey))
+				Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("managed-config"))
+
+				By("Verifying the Deployment was created with correct inline configuration")
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, deployment)
+				}, timeout, interval).Should(Succeed())
+
+				Expect(*deployment.Spec.Replicas).To(Equal(int32(2)))
+				Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+				container := deployment.Spec.Template.Spec.Containers[0]
+				Expect(container.Name).To(Equal("agent"))
+				Expect(container.Image).To(Equal(defaultManagedRuntimeImage))
+				Expect(container.Ports).To(HaveLen(1))
+				Expect(container.Ports[0].ContainerPort).To(Equal(int32(8080)))
+
+				// Check for FLOKOA_RUNTIME_MODE env var
+				envMap := make(map[string]string)
+				for _, env := range container.Env {
+					if env.Value != "" {
+						envMap[env.Name] = env.Value
+					}
+				}
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "managed"))
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_MANAGED_CONFIG_PATH", managedConfigMountPath))
+				Expect(envMap).To(HaveKeyWithValue("CUSTOM_VAR", "custom-value"))
+				Expect(envMap).To(HaveKey("FLOKOA_AGENT_URL"))
+
+				// Check resource requests
+				Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
+				Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
+
+				// Check managed config volume mount exists
+				var foundManagedMount bool
+				for _, vm := range container.VolumeMounts {
+					if vm.Name == managedConfigVolumeName {
+						foundManagedMount = true
+						Expect(vm.MountPath).To(Equal(managedConfigMountPath))
+						Expect(vm.ReadOnly).To(BeTrue())
+					}
+				}
+				Expect(foundManagedMount).To(BeTrue(), "managed config volume mount should exist")
+
+				By("Verifying the Service was created with default ports")
+				service := &corev1.Service{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, service)
+				}, timeout, interval).Should(Succeed())
+
+				Expect(service.Spec.Ports).To(HaveLen(1))
+				Expect(service.Spec.Ports[0].Port).To(Equal(int32(80)))
+				Expect(service.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt32(8080)))
+
+				By("Verifying the Agent status")
+				err = k8sClient.Get(ctx, typeNamespacedName, agent)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(agent.Status.Backend).To(Equal("core"))
+				Expect(agent.Status.URL).To(ContainSubstring(agentName))
+
+				By("Cleanup model and provider")
+				Expect(k8sClient.Delete(ctx, model)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, modelProvider)).To(Succeed())
+			})
+
 		})
 	})
 })

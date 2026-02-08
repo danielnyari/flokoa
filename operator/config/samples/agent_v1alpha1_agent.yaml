@@ -10,7 +10,7 @@ spec:
 
   runtime:
     type: standard
-    spec:
+    standard:
       replicas: 1
 
       container:

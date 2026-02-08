@@ -1,0 +1,77 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: support-triage
+spec:
+  card:
+    name: support-triage
+    description: "Triages incoming support tickets by severity and routes them"
+    version: "1.0.0"
+    defaultInputModes:
+      - application/json
+    defaultOutputModes:
+      - application/json
+    capabilities:
+      streaming: false
+    skills:
+      - id: triage
+        name: Triage Ticket
+        description: "Classify and route a support ticket by severity"
+        tags: [support, triage, classification]
+        examples:
+          - "Classify this ticket: User reports login page returns 500 error"
+
+  model:
+    name: claude-sonnet
+
+  # Instructions defined inline — the operator creates an Instruction CR automatically
+  instruction:
+    inline: |
+      You are a support triage agent. Your job is to classify incoming
+      support tickets by severity (P0-P3) and route them to the
+      appropriate team.
+
+      Severity guidelines:
+      - P0: Complete service outage or data loss affecting all users
+      - P1: Major feature broken, significant user impact
+      - P2: Minor feature broken, workaround available
+      - P3: Cosmetic issue or feature request
+
+      Always provide a brief summary of the issue and recommended next steps.
+
+  tools:
+    - toolRef:
+        name: jira-create
+
+  runtime:
+    type: managed
+    managed:
+      outputSchema:
+        type: object
+        properties:
+          severity:
+            type: string
+            enum: [P0, P1, P2, P3]
+          team:
+            type: string
+          summary:
+            type: string
+          nextSteps:
+            type: array
+            items:
+              type: string
+        required: [severity, team, summary]
+      replicas: 2
+      env:
+        - name: LOG_LEVEL
+          value: "info"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"

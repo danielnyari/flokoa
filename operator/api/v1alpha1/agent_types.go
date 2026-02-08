@@ -36,12 +36,16 @@ const (
 )
 
 // RuntimeType represents the type of runtime backend for the agent.
-// +kubebuilder:validation:Enum=standard
+// +kubebuilder:validation:Enum=standard;managed
 type RuntimeType string
 
 const (
 	// RuntimeTypeStandard uses a Kubernetes Deployment for the agent runtime.
+	// The user provides their own container image.
 	RuntimeTypeStandard RuntimeType = "standard"
+	// RuntimeTypeManaged uses a generic runtime image fully managed by the operator.
+	// The agent's behavior is defined entirely in the CR via instructions and output schema.
+	RuntimeTypeManaged RuntimeType = "managed"
 )
 
 // AgentSkill describes a specific capability or function the agent can perform.
@@ -99,7 +103,7 @@ type AgentCapabilities struct {
 	Streaming              bool             `json:"streaming,omitempty"`
 }
 
-type AgentCard struct {
+type AgentCardOverride struct {
 	Name string `json:"name"`
 
 	Description string `json:"description"`
@@ -120,7 +124,7 @@ type AgentCard struct {
 
 // AgentSpec defines the desired state of an Agent
 type AgentSpec struct {
-	Card AgentCard `json:"card"`
+	CardOverride AgentCardOverride `json:"card"`
 
 	// Runtime configuration - specifies the backend and configuration
 	Runtime RuntimeSpec `json:"runtime"`
@@ -129,6 +133,12 @@ type AgentSpec struct {
 	// Can reference a Model resource directly (uses defaults) or a ModelConfig resource (full parameters).
 	// +optional
 	Model *AgentModelRef `json:"model,omitempty"`
+
+	// Instruction defines the system prompt for this agent.
+	// Can be defined inline (creates an Instruction CR) or reference an existing Instruction resource.
+	// Supported by both standard and managed runtime types.
+	// +optional
+	Instruction *InstructionEntry `json:"instruction,omitempty"`
 
 	// Framework explicitly declares the AI framework used by the agent.
 	// Used for observability and tooling integration.
@@ -140,6 +150,19 @@ type AgentSpec struct {
 	Tools []ToolEntry `json:"tools,omitempty"`
 }
 
+// InstructionEntry represents either an inline instruction or a reference to an Instruction resource.
+// Exactly one of Inline or InstructionRef must be specified.
+type InstructionEntry struct {
+	// Template defines the instruction content directly in the Agent spec.
+	// When set, the operator creates a child Instruction CR.
+	// +optional
+	Template string `json:"template,omitempty"`
+
+	// InstructionRef references an existing Instruction resource.
+	// +optional
+	InstructionRef *NamespacedRef `json:"instructionRef,omitempty"`
+}
+
 // ToolEntry represents either an inline tool definition or a reference to an AgentTool resource.
 // Exactly one of Inline or ToolRef must be specified.
 type ToolEntry struct {
@@ -148,10 +171,10 @@ type ToolEntry struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// Inline defines the tool directly in the Agent spec.
+	// Template defines the tool directly in the Agent spec.
 	// Uses the same spec as AgentTool for consistency.
 	// +optional
-	Inline *AgentToolSpec `json:"inline,omitempty"`
+	Template *AgentToolSpec `json:"template,omitempty"`
 
 	// ToolRef references an existing AgentTool resource.
 	// +optional
@@ -195,33 +218,35 @@ type NamespacedRef struct {
 }
 
 // RuntimeSpec defines the runtime backend and its configuration.
+// When type is "standard", the Standard field must be provided.
+// When type is "managed", the Managed field must be provided.
 type RuntimeSpec struct {
 	// Type specifies the runtime backend to use.
 	// +kubebuilder:default=standard
 	// +kubebuilder:validation:Required
 	Type RuntimeType `json:"type"`
 
-	// Spec contains the runtime-specific configuration.
+	// Standard contains the standard runtime configuration (container-based).
+	// Required when type is "standard".
 	// +optional
-	Spec *StandardRuntimeSpec `json:"spec,omitempty"`
+	Standard *StandardRuntimeSpec `json:"standard,omitempty"`
+
+	// Managed contains the managed runtime configuration.
+	// The operator generates a deployment using a generic runtime image with
+	// the agent behavior defined by instructions and output schema.
+	// Required when type is "managed".
+	// +optional
+	Managed *ManagedRuntimeSpec `json:"managed,omitempty"`
 }
 
-// StandardRuntimeSpec defines the configuration for the standard (Deployment-based) runtime.
-// Uses corev1 types directly where possible for maximum compatibility.
-type StandardRuntimeSpec struct {
+// DeploymentOverrides contains pod-level scheduling and infrastructure fields
+// shared across all runtime types.
+type DeploymentOverrides struct {
 	// Replicas is the number of desired pod replicas.
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
-
-	// Container defines the main container spec for the agent pod.
-	// +kubebuilder:validation:Required
-	Container corev1.Container `json:"container"`
-
-	// Volumes to mount into the pod.
-	// +optional
-	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
 	// ImagePullSecrets is a list of references to secrets for pulling container images.
 	// +optional
@@ -246,6 +271,40 @@ type StandardRuntimeSpec struct {
 	// Affinity specifies scheduling constraints for the pod.
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+}
+
+// StandardRuntimeSpec defines the configuration for the standard (Deployment-based) runtime.
+// Uses corev1 types directly where possible for maximum compatibility.
+type StandardRuntimeSpec struct {
+	DeploymentOverrides `json:",inline"`
+
+	// Container defines the main container spec for the agent pod.
+	// +kubebuilder:validation:Required
+	Container corev1.Container `json:"container"`
+
+	// Volumes to mount into the pod.
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+}
+
+// ManagedRuntimeSpec defines the configuration for a managed agent where the operator
+// generates the deployment using a generic runtime image. The agent's behavior is
+// defined via spec.instruction and output schema.
+type ManagedRuntimeSpec struct {
+	DeploymentOverrides `json:",inline"`
+
+	// OutputSchema constrains the agent's response format using JSON Schema.
+	// When set, the agent runtime will validate responses against this schema.
+	// +optional
+	OutputSchema *apiextensionsv1.JSON `json:"outputSchema,omitempty"`
+
+	// Env allows injecting additional environment variables into the generated container.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources specifies compute resource requirements for the generated container.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // AgentStatus defines the observed state of Agent.
