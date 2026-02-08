@@ -487,8 +487,8 @@ class TestPydanticAIAgentExecutorToolCallableMapping:
         callable_fn = pydantic_agent_executor._get_tool_callable(api_tool_definition)
 
         assert callable(callable_fn)
-        # The wrapper accepts schema parameters and forwards to call_http_api_tool
-        assert callable_fn.__name__ == "api_tool_wrapper"
+        # The callable has __name__ set from the tool definition
+        assert callable_fn.__name__ == api_tool_definition.name
 
     def test_tool_callable_is_async(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
         """Verify that tool callables are async functions."""
