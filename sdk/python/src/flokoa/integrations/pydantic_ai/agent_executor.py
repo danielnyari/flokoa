@@ -211,15 +211,21 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         if not self.model_config and not self.model_provider and self.agent.model is None:
             raise ProviderNotConfiguredError("Model provider must be configured to execute agent")
 
-        result = await self.agent.run(
-            request,
-            toolsets=[self._get_toolset()],
-            model=(
+        run_kwargs: dict[str, Any] = {
+            "toolsets": [self._get_toolset()],
+            "model": (
                 self._create_model(self._create_provider(self.model_config.provider.type))
                 if self.model_config
                 else self.agent.model
             ),
-        )
+        }
+
+        # Use operator-mounted instruction if available (overrides agent default)
+        instruction = self.instruction
+        if instruction is not None:
+            run_kwargs["instructions"] = instruction
+
+        result = await self.agent.run(request, **run_kwargs)
         await event_queue.enqueue_event(new_agent_text_message(result.output))
 
     @override

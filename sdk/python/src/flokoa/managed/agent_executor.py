@@ -1,16 +1,15 @@
 import logging
-from typing import override
+from typing import Any, override
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
-from pydantic import BaseModel
+from pydantic_ai import Agent
 
 from flokoa.cache import ConfigCache
 from flokoa.exceptions import ProviderNotConfiguredError
 from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
 from flokoa.managed.agent import ManagedAgentBuilder
-from flokoa.types import ManagedConfig
 
 logger = logging.getLogger(__name__)
 
@@ -19,29 +18,35 @@ class ManagedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
     """Agent executor for the managed pydantic-ai runtime.
 
     Unlike the integration executor which wraps a user-provided agent,
-    this executor builds the agent from operator-mounted configuration:
-    - Instruction from /etc/flokoa/instruction.txt
-    - Output schema from /etc/flokoa/managed-config.json
-    - Model config from /etc/flokoa/model.json
-    - Tools from /etc/flokoa/tools/
+    this executor creates a bare pydantic-ai Agent internally and drives
+    it entirely from operator-mounted configuration:
 
-    The pydantic-ai agent is generated via ManagedAgentBuilder.
+    - Instruction from /etc/flokoa/instruction.txt (passed at construction)
+    - Model config from /etc/flokoa/model.json (via parent)
+    - Tools from /etc/flokoa/tools/ (via parent)
+    - Managed config from /etc/flokoa/managed-config.json (via builder)
     """
 
     def __init__(
         self,
         builder: ManagedAgentBuilder,
-        managed_config: ManagedConfig | None = None,
+        instruction: str,
         cache: ConfigCache | None = None,
     ):
-        agent = builder.build()
+        agent: Agent[None, str] = Agent()
         super().__init__(agent=agent, cache=cache)
         self._builder = builder
-        self._managed_config = managed_config
+        self._instruction = instruction
 
     @property
-    def managed_config(self) -> ManagedConfig | None:
-        return self._managed_config
+    def builder(self) -> ManagedAgentBuilder:
+        return self._builder
+
+    @property
+    @override
+    def instruction(self) -> str:
+        """Managed agents always use the instruction passed at construction."""
+        return self._instruction
 
     @override
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
@@ -53,13 +58,11 @@ class ManagedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
 
         model = self._create_model(self._create_provider(self.model_config.provider.type))
 
-        result = await self.agent.run(
-            request,
-            toolsets=[self._get_toolset()],
-            model=model,
-        )
+        run_kwargs: dict[str, Any] = {
+            "toolsets": [self._get_toolset()],
+            "model": model,
+            "instructions": self.instruction,
+        }
 
-        if isinstance(result.output, BaseModel):
-            await event_queue.enqueue_event(new_agent_text_message(result.output.model_dump_json()))
-        else:
-            await event_queue.enqueue_event(new_agent_text_message(str(result.output)))
+        result = await self.agent.run(request, **run_kwargs)
+        await event_queue.enqueue_event(new_agent_text_message(str(result.output)))
