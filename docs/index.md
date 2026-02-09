@@ -62,6 +62,10 @@ Browse example configurations in the [`examples/`](examples/) directory:
 ### Complete Examples
 - [`complete-example.yaml`](examples/complete-example.yaml) - End-to-end customer service agent with all resources
 
+## Testing
+
+- **[End-to-End Test Plan](e2e-test-plan.md)** - Operator + Python SDK integration testing strategy
+
 ## Quick Reference
 
 ### Create an Agent
