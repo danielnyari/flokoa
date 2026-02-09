@@ -90,7 +90,7 @@ def run(module: str | None, templated: bool, host: str | None, port: int | None,
         _start_integration(module=module, host=host or "localhost", port=port or 10001, framework=framework)
 
 
-def _start_integration(module: str, host: str, port: int, framework: str) -> None:
+def _start_integration(module: str, host: str, port: int, framework: IntegrationType) -> None:
     """Start a user-provided agent with an A2A server."""
     cwd = os.getcwd()
     if cwd not in sys.path:

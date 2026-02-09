@@ -4434,8 +4434,8 @@ var _ = Describe("Agent Controller", func() {
 							Template: "You are a test agent.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:    agentv1alpha1.RuntimeTypeManaged,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Type:     agentv1alpha1.RuntimeTypeManaged,
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{},
 						},
 					},
 				}
@@ -4490,7 +4490,7 @@ var _ = Describe("Agent Controller", func() {
 									Image: "nginx:latest",
 								},
 							},
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{},
 						},
 						Model: &agentv1alpha1.AgentModelRef{
 							Name: "test-model",
@@ -4538,8 +4538,8 @@ var _ = Describe("Agent Controller", func() {
 					Spec: agentv1alpha1.AgentSpec{
 						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:    agentv1alpha1.RuntimeTypeStandard,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Type:     agentv1alpha1.RuntimeTypeStandard,
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{},
 						},
 					},
 				}
@@ -4584,8 +4584,8 @@ var _ = Describe("Agent Controller", func() {
 					Spec: agentv1alpha1.AgentSpec{
 						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:    agentv1alpha1.RuntimeTypeManaged,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Type:     agentv1alpha1.RuntimeTypeManaged,
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{},
 						},
 						Model: &agentv1alpha1.AgentModelRef{
 							Name: "test-model",
@@ -4764,7 +4764,7 @@ var _ = Describe("Agent Controller", func() {
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
 							Type: agentv1alpha1.RuntimeTypeManaged,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{
 								DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
 									Replicas: &replicas,
 								},
@@ -4813,7 +4813,7 @@ var _ = Describe("Agent Controller", func() {
 					}, inlineCM)
 				}, timeout, interval).Should(Succeed())
 
-				Expect(inlineCM.Data).To(HaveKey(managedConfigConfigMapKey))
+				Expect(inlineCM.Data).To(HaveKey(templateConfigConfigMapKey))
 				Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("managed-config"))
 
 				By("Verifying the Deployment was created with correct inline configuration")
@@ -4839,7 +4839,7 @@ var _ = Describe("Agent Controller", func() {
 					}
 				}
 				Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "managed"))
-				Expect(envMap).To(HaveKeyWithValue("FLOKOA_MANAGED_CONFIG_PATH", managedConfigMountPath))
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_MANAGED_CONFIG_PATH", templateConfigMountPath))
 				Expect(envMap).To(HaveKeyWithValue("CUSTOM_VAR", "custom-value"))
 				Expect(envMap).To(HaveKey("FLOKOA_AGENT_URL"))
 
@@ -4850,9 +4850,9 @@ var _ = Describe("Agent Controller", func() {
 				// Check managed config volume mount exists
 				var foundManagedMount bool
 				for _, vm := range container.VolumeMounts {
-					if vm.Name == managedConfigVolumeName {
+					if vm.Name == templateConfigVolumeName {
 						foundManagedMount = true
-						Expect(vm.MountPath).To(Equal(managedConfigMountPath))
+						Expect(vm.MountPath).To(Equal(templateConfigMountPath))
 						Expect(vm.ReadOnly).To(BeTrue())
 					}
 				}

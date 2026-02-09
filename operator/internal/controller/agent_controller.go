@@ -34,12 +34,12 @@ const (
 	// This image reads configuration from mounted ConfigMaps and runs an A2A server.
 	defaultManagedRuntimeImage = "ghcr.io/flokoa/agent-runtime:latest"
 
-	// managedConfigVolumeName is the volume name for the managed agent config ConfigMap
-	managedConfigVolumeName = "managed-config"
-	// managedConfigConfigMapKey is the key in the ConfigMap for the managed config JSON
-	managedConfigConfigMapKey = "managed-config.json"
-	// managedConfigMountPath is the file path where the managed config is mounted
-	managedConfigMountPath = "/etc/flokoa/managed-config.json"
+	// templateConfigVolumeName is the volume name for the managed agent config ConfigMap
+	templateConfigVolumeName = "managed-config"
+	// templateConfigConfigMapKey is the key in the ConfigMap for the managed config JSON
+	templateConfigConfigMapKey = "managed-config.json"
+	// templateConfigMountPath is the file path where the managed config is mounted
+	templateConfigMountPath = "/etc/flokoa/managed-config.json"
 )
 
 const (
@@ -190,9 +190,9 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Reconcile managed config ConfigMap (if managed runtime)
-	var managedConfigMapName string
+	var templateConfigMapName string
 	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeManaged {
-		managedConfigMapName, err = r.reconcileManagedConfigMap(ctx, agent)
+		templateConfigMapName, err = r.reconciletemplateConfigMap(ctx, agent)
 		if err != nil {
 			logger.Error(err, "Failed to reconcile managed config ConfigMap")
 			r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
@@ -202,7 +202,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Reconcile Deployment
-	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, managedConfigMapName, instructionConfigMapName)
+	deployment, err := r.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, templateConfigMapName, instructionConfigMapName)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		r.setCondition(agent, ConditionTypeReady, metav1.ConditionFalse, ReasonReconcileError, err.Error())
@@ -241,8 +241,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, managedConfigMapName string, instructionConfigMapName string) (*appsv1.Deployment, error) {
-	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap, modelInfo, managedConfigMapName, instructionConfigMapName)
+func (r *AgentReconciler) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, templateConfigMapName string, instructionConfigMapName string) (*appsv1.Deployment, error) {
+	desired := r.buildDeployment(agent, toolConfigMaps, agentCardConfigMap, modelInfo, templateConfigMapName, instructionConfigMapName)
 
 	if err := controllerutil.SetControllerReference(agent, desired, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
@@ -602,7 +602,7 @@ func (r *AgentReconciler) reconcileModelConfigMap(ctx context.Context, agent *ag
 	return configMapName, nil
 }
 
-func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, managedConfigMapName string, instructionConfigMapName string) *appsv1.Deployment {
+func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, templateConfigMapName string, instructionConfigMapName string) *appsv1.Deployment {
 	labels := r.buildLabels(agent)
 
 	overrides := r.getDeploymentOverrides(agent)
@@ -616,7 +616,7 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 
 	switch agent.Spec.Runtime.Type {
 	case agentv1alpha1.RuntimeTypeManaged:
-		container, volumes = r.buildManagedContainerSpec(agent, managedConfigMapName)
+		container, volumes = r.buildManagedContainerSpec(agent, templateConfigMapName)
 	default:
 		container, volumes = r.buildStandardContainerSpec(agent)
 	}
@@ -777,8 +777,8 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 func (r *AgentReconciler) getDeploymentOverrides(agent *agentv1alpha1.Agent) agentv1alpha1.DeploymentOverrides {
 	switch agent.Spec.Runtime.Type {
 	case agentv1alpha1.RuntimeTypeManaged:
-		if agent.Spec.Runtime.Managed != nil {
-			return agent.Spec.Runtime.Managed.DeploymentOverrides
+		if agent.Spec.Runtime.Template != nil {
+			return agent.Spec.Runtime.Template.DeploymentOverrides
 		}
 	case agentv1alpha1.RuntimeTypeStandard:
 		if agent.Spec.Runtime.Standard != nil {
@@ -807,10 +807,10 @@ func (r *AgentReconciler) buildStandardContainerSpec(agent *agentv1alpha1.Agent)
 
 // buildManagedContainerSpec builds the container and volumes for a managed runtime agent.
 // The operator generates the container using a generic runtime image with config mounted from ConfigMaps.
-func (r *AgentReconciler) buildManagedContainerSpec(agent *agentv1alpha1.Agent, managedConfigMapName string) (corev1.Container, []corev1.Volume) {
-	managed := agent.Spec.Runtime.Managed
+func (r *AgentReconciler) buildManagedContainerSpec(agent *agentv1alpha1.Agent, templateConfigMapName string) (corev1.Container, []corev1.Volume) {
+	managed := agent.Spec.Runtime.Template
 	if managed == nil {
-		managed = &agentv1alpha1.ManagedRuntimeSpec{}
+		managed = &agentv1alpha1.TemplatedRuntimeSpec{}
 	}
 
 	container := corev1.Container{
@@ -830,7 +830,7 @@ func (r *AgentReconciler) buildManagedContainerSpec(agent *agentv1alpha1.Agent, 
 			},
 			{
 				Name:  "FLOKOA_MANAGED_CONFIG_PATH",
-				Value: managedConfigMountPath,
+				Value: templateConfigMountPath,
 			},
 		}, managed.Env...),
 	}
@@ -842,22 +842,22 @@ func (r *AgentReconciler) buildManagedContainerSpec(agent *agentv1alpha1.Agent, 
 	var volumes []corev1.Volume
 
 	// Mount managed config ConfigMap
-	if managedConfigMapName != "" {
+	if templateConfigMapName != "" {
 		volumes = append(volumes, corev1.Volume{
-			Name: managedConfigVolumeName,
+			Name: templateConfigVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: managedConfigMapName,
+						Name: templateConfigMapName,
 					},
 				},
 			},
 		})
 
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      managedConfigVolumeName,
-			MountPath: managedConfigMountPath,
-			SubPath:   managedConfigConfigMapKey,
+			Name:      templateConfigVolumeName,
+			MountPath: templateConfigMountPath,
+			SubPath:   templateConfigConfigMapKey,
 			ReadOnly:  true,
 		})
 	}
@@ -979,14 +979,14 @@ func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
 
 	switch agent.Spec.Runtime.Type {
 	case agentv1alpha1.RuntimeTypeStandard:
-		if agent.Spec.Runtime.Managed != nil {
+		if agent.Spec.Runtime.Template != nil {
 			return fmt.Errorf("runtime.managed must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeStandard)
 		}
 	case agentv1alpha1.RuntimeTypeManaged:
 		if agent.Spec.Runtime.Standard != nil {
 			return fmt.Errorf("runtime.standard must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeManaged)
 		}
-		if agent.Spec.Runtime.Managed == nil {
+		if agent.Spec.Runtime.Template == nil {
 			return fmt.Errorf("runtime.managed is required when runtime.type is %q", agentv1alpha1.RuntimeTypeManaged)
 		}
 		if agent.Spec.Model == nil {
@@ -1001,25 +1001,31 @@ func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
 	return nil
 }
 
-// managedConfig represents the configuration written to the managed agent's ConfigMap.
+// templateConfig represents the configuration written to the managed agent's ConfigMap.
 // The generic runtime image reads this config to configure the agent.
 // Instructions are stored separately in the Instruction CR's ConfigMap.
-type managedConfig struct {
+type templateConfig struct {
 	OutputSchema interface{} `json:"outputSchema,omitempty"`
+	InputSchema  interface{} `json:"inputSchema,omitempty"`
 }
 
-// reconcileManagedConfigMap creates or updates the ConfigMap containing the managed agent configuration.
-func (r *AgentReconciler) reconcileManagedConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
+// reconciletemplateConfigMap creates or updates the ConfigMap containing the managed agent configuration.
+func (r *AgentReconciler) reconciletemplateConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
 	configMapName := fmt.Sprintf("%s-managed-config", agent.Name)
 
-	managed := agent.Spec.Runtime.Managed
+	managed := agent.Spec.Runtime.Template
 	if managed == nil {
 		return "", fmt.Errorf("managed spec is nil")
 	}
 
-	config := managedConfig{}
-	if managed.OutputSchema != nil {
-		config.OutputSchema = managed.OutputSchema
+	config := templateConfig{}
+	if managed.Config != nil {
+		if managed.Config.OutputSchema != nil {
+			config.OutputSchema = managed.Config.OutputSchema
+		}
+		if managed.Config.InputSchema != nil {
+			config.InputSchema = managed.Config.InputSchema
+		}
 	}
 
 	configJSON, err := json.Marshal(config)
@@ -1039,7 +1045,7 @@ func (r *AgentReconciler) reconcileManagedConfigMap(ctx context.Context, agent *
 			},
 		},
 		Data: map[string]string{
-			managedConfigConfigMapKey: string(configJSON),
+			templateConfigConfigMapKey: string(configJSON),
 		},
 	}
 

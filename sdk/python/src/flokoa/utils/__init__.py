@@ -11,7 +11,7 @@ from flokoa.cache import (
     ConfigCache,
     get_global_cache,
 )
-from flokoa.types import ManagedConfig, ModelConfig, ToolDefinition
+from flokoa.types import ModelConfig, TemplateConfig, ToolDefinition
 from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
 from flokoa.types.agenttool import AgentToolSpec
 
@@ -273,11 +273,11 @@ def load_model_config(
     return result
 
 
-def load_templated_config() -> ManagedConfig | None:
+def load_templated_config() -> TemplateConfig | None:
     """Load templated agent configuration from /etc/flokoa/managed-config.json.
 
     Returns:
-        ManagedConfig if the file exists, None otherwise.
+        TemplateConfig if the file exists, None otherwise.
     """
     path = os.environ.get("FLOKOA_MANAGED_CONFIG_PATH", MANAGED_CONFIG_PATH)
     if not os.path.exists(path):
@@ -286,7 +286,7 @@ def load_templated_config() -> ManagedConfig | None:
     with open(path) as f:
         config_data = json.load(f)
 
-    return ManagedConfig.model_validate(config_data)
+    return TemplateConfig.model_validate(config_data)
 
 
 def load_instruction() -> str | None:

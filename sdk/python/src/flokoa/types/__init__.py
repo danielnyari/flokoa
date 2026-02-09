@@ -4,7 +4,6 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from flokoa.types.agenttool import AgentToolSpec, Type
-from flokoa.types.managedconfig import ManagedConfig
 from flokoa.types.modelconfig import (
     AnthropicModelParameters,
     AnthropicProviderConfig,
@@ -18,6 +17,7 @@ from flokoa.types.modelconfig import (
     OpenAIProviderConfig,
     ProviderType,
 )
+from flokoa.types.templateconfig import TemplateConfig
 
 ProviderConfigType = Annotated[
     AnthropicProviderConfig | OpenAIProviderConfig | GoogleProviderConfig | BedrockProviderConfig,
@@ -77,12 +77,12 @@ class ToolDefinition(BaseModel):
 
 
 __all__ = [
-    "ManagedConfig",
     "ModelConfig",
     "ModelParameters",
     "ProviderConfigType",
     "ProviderModelParametersType",
     "ProviderType",
+    "TemplateConfig",
     "ToolDefinition",
     "ToolType",
 ]

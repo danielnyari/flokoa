@@ -231,12 +231,12 @@ type RuntimeSpec struct {
 	// +optional
 	Standard *StandardRuntimeSpec `json:"standard,omitempty"`
 
-	// Managed contains the managed runtime configuration.
+	// Template contains the managed runtime configuration.
 	// The operator generates a deployment using a generic runtime image with
 	// the agent behavior defined by instructions and output schema.
 	// Required when type is "managed".
 	// +optional
-	Managed *ManagedRuntimeSpec `json:"managed,omitempty"`
+	Template *TemplatedRuntimeSpec `json:"template,omitempty"`
 }
 
 // DeploymentOverrides contains pod-level scheduling and infrastructure fields
@@ -287,16 +287,32 @@ type StandardRuntimeSpec struct {
 	Volumes []corev1.Volume `json:"volumes,omitempty"`
 }
 
-// ManagedRuntimeSpec defines the configuration for a managed agent where the operator
+type StructuredIOSchema struct {
+	JSONSchema *apiextensionsv1.JSON `json:"jsonSchema"`
+
+	Name string `json:"name"`
+
+	Description string `json:"description"`
+}
+
+// TemplatedAgentConfig contains agent-specific configuration for the templated runtime.
+// This configuration is serialized to JSON and mounted as a ConfigMap for the runtime to consume.
+type TemplatedAgentConfig struct {
+
+	// OutputSchema defines the JSON Schema for constraining agent response format.
+	OutputSchema *StructuredIOSchema `json:"outputSchema"`
+
+}
+
+// TemplatedRuntimeSpec defines the configuration for a managed agent where the operator
 // generates the deployment using a generic runtime image. The agent's behavior is
 // defined via spec.instruction and output schema.
-type ManagedRuntimeSpec struct {
+type TemplatedRuntimeSpec struct {
 	DeploymentOverrides `json:",inline"`
 
-	// OutputSchema constrains the agent's response format using JSON Schema.
-	// When set, the agent runtime will validate responses against this schema.
-	// +optional
-	OutputSchema *apiextensionsv1.JSON `json:"outputSchema,omitempty"`
+	// Config contains agent-specific configuration (schemas, etc.) that is mounted
+	// as a ConfigMap for the templated runtime to consume.
+	Config *TemplatedAgentConfig `json:"config"`
 
 	// Env allows injecting additional environment variables into the generated container.
 	// +optional

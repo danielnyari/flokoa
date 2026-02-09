@@ -277,27 +277,26 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@rm /tmp/openai_provider.json /tmp/anthropic_provider.json /tmp/google_provider.json \
 		/tmp/bedrock_provider.json /tmp/model_parameters.json /tmp/modelconfig_schema.yaml /tmp/modelconfig_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/modelconfig.py"
-	@# Build ManagedConfig schema from Agent CRD managed runtime spec
-	@echo "Building ManagedConfig schema..."
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runtime.properties.managed.properties.outputSchema' \
-		config/crd/bases/agent.flokoa.ai_agents.yaml > /tmp/managed_output_schema.json
-	@yq -n '{"type": "object", "title": "ManagedConfig", "description": "Configuration for a managed agent runtime, mounted from the operator ConfigMap", "properties": {"outputSchema": {}}, "additionalProperties": false}' > /tmp/managedconfig_schema.yaml
-	@yq eval -i '.properties.outputSchema = load("/tmp/managed_output_schema.json")' /tmp/managedconfig_schema.yaml
-	@yq eval -i '.properties.outputSchema.title = "OutputSchema"' /tmp/managedconfig_schema.yaml
-	@yq eval -i '.properties.outputSchema.description = "JSON Schema constraining the agent response format"' /tmp/managedconfig_schema.yaml
-	@yq eval -o json '.' /tmp/managedconfig_schema.yaml > /tmp/managedconfig_schema.json
+	@# Build TemplateConfig schema from Agent CRD templated runtime config
+	@echo "Building TemplateConfig schema..."
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runtime.properties.template.properties.config' \
+		config/crd/bases/agent.flokoa.ai_agents.yaml > /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.title = "templateConfig"' /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.description = "Configuration for a managed agent runtime, mounted from the operator ConfigMap"' /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.properties.outputSchema.title = "OutputSchema"' /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.properties.inputSchema.title = "InputSchema"' /tmp/templateConfig_schema.json
 	@$(DATAMODEL_CODEGEN) \
-		--input /tmp/managedconfig_schema.json \
+		--input /tmp/templateConfig_schema.json \
 		--input-file-type jsonschema \
 		--output-model-type pydantic_v2.BaseModel \
 		--snake-case-field \
 		--use-annotated \
 		--allow-population-by-field-name \
 		--use-title-as-name \
-		--class-name ManagedConfig \
-		--output $(PYTHON_MODELS_DIR)/managedconfig.py
-	@rm /tmp/managed_output_schema.json /tmp/managedconfig_schema.yaml /tmp/managedconfig_schema.json
-	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/managedconfig.py"
+		--class-name templateConfig \
+		--output $(PYTHON_MODELS_DIR)/templateconfig.py
+	@rm /tmp/templateConfig_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/templateconfig.py"
 
 ##@ gRPC Server
 
