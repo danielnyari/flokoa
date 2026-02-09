@@ -33,7 +33,7 @@ class TemplatedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
         instruction: str,
         cache: ConfigCache | None = None,
     ):
-        agent: Agent[None, str] = Agent()
+        agent: Agent[None, str] = Agent(instructions=instruction)
         super().__init__(agent=agent, cache=cache)
         self._builder = builder
         self._instruction = instruction

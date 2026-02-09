@@ -9,7 +9,6 @@ import uvicorn
 from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCapabilities, AgentCard
 
 from flokoa.integrations import IntegrationType, get_executor_cls
 from flokoa.utils import load_agent_card, load_templated_config
@@ -140,26 +139,13 @@ def _start_templated(host: str, port: int) -> None:
     logger.info("Building templated pydantic-ai agent")
     executor = TemplatedPydanticAIAgentExecutor(builder=builder, instruction=instruction)
 
-    # Use operator-mounted cardOverride if available, otherwise generate a default card
+    # Use operator-mounted cardOverride if available, otherwise generate from agent
     agent_card = load_agent_card(url=f"http://{host}:{port}/")
     if agent_card is None:
-        agent_card = _build_default_agent_card(url=f"http://{host}:{port}/", instruction=instruction)
+        card_builder = AgentCardBuilder(agent=executor.agent, rpc_url=f"http://{host}:{port}/")
+        agent_card = asyncio.run(card_builder.build())
 
     _run_server(agent_executor=executor, agent_card=agent_card, host=host, port=port)
-
-
-def _build_default_agent_card(url: str, instruction: str) -> AgentCard:
-    """Build a minimal default A2A AgentCard for a templated agent."""
-    description = instruction.split("\n", 1)[0].strip()[:200] if instruction else "Flokoa templated agent"
-
-    return AgentCard(
-        name="flokoa-templated-agent",
-        description=description,
-        version="0.0.1",
-        url=url,
-        capabilities=AgentCapabilities(streaming=False),
-        skills=[],
-    )
 
 
 def _run_server(agent_executor, agent_card, host: str, port: int) -> None:
