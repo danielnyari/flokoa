@@ -1,0 +1,79 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: managed-assistant
+  labels:
+    app.kubernetes.io/name: managed-assistant
+    app.kubernetes.io/component: ai-agent
+    app.kubernetes.io/managed-by: flokoa-operator
+spec:
+  # Framework is always pydantic-ai for managed agents
+  framework: pydantic-ai
+
+  card:
+    name: managed-assistant
+    description: A managed AI assistant that answers questions with structured output
+    version: "1.0.0"
+    defaultInputModes:
+      - "application/json"
+    defaultOutputModes:
+      - "application/json"
+    capabilities:
+      streaming: false
+    skills:
+      - id: answer-questions
+        name: Answer Questions
+        description: Answers user questions based on the configured instruction
+        tags:
+          - assistant
+          - qa
+        examples:
+          - "What is Kubernetes?"
+          - "Explain the difference between a Pod and a Deployment"
+
+  # Model reference (must point to an existing Model CR)
+  model:
+    name: gpt-4o
+
+  # System instruction (inline)
+  instruction:
+    template: |
+      You are a helpful AI assistant. Be concise and accurate in your responses.
+      Always provide well-structured answers.
+
+  runtime:
+    type: managed
+    managed:
+      replicas: 1
+
+      # Optional: constrain the agent's response format with JSON Schema
+      outputSchema:
+        type: object
+        required:
+          - answer
+        properties:
+          answer:
+            type: string
+            description: The main answer to the user's question
+          confidence:
+            type: number
+            description: Confidence score between 0 and 1
+          sources:
+            type: array
+            items:
+              type: string
+            description: Sources or references used in the answer
+
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+  # Optional: tools available to the managed agent
+  tools:
+    - name: weather-api
+      toolRef:
+        name: weather-api

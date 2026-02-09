@@ -1,0 +1,27 @@
+FROM python:3.13-slim AS builder
+
+WORKDIR /build
+
+COPY pyproject.toml uv.lock ./
+COPY src/ src/
+
+RUN pip install --no-cache-dir uv && \
+    uv pip install --system --no-cache ".[pydantic-ai]"
+
+# --- Runtime stage ---
+FROM python:3.13-slim
+
+RUN groupadd --gid 65532 nonroot && \
+    useradd --uid 65532 --gid 65532 --no-create-home nonroot
+
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder /usr/local/bin/flokoa-managed /usr/local/bin/flokoa-managed
+
+# Create mount points for operator ConfigMaps
+RUN mkdir -p /etc/flokoa/tools && chown -R nonroot:nonroot /etc/flokoa
+
+USER 65532:65532
+
+EXPOSE 8080
+
+ENTRYPOINT ["flokoa-managed"]

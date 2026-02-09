@@ -11,13 +11,15 @@ from flokoa.cache import (
     ConfigCache,
     get_global_cache,
 )
-from flokoa.types import ModelConfig, ToolDefinition
+from flokoa.types import ManagedConfig, ModelConfig, ToolDefinition
 from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
 from flokoa.types.agenttool import AgentToolSpec
 
 TOOLS_PATH = "/etc/flokoa/tools/"
 AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
 MODEL_CONFIG_PATH = "/etc/flokoa/model.json"
+MANAGED_CONFIG_PATH = "/etc/flokoa/managed-config.json"
+INSTRUCTION_PATH = "/etc/flokoa/instruction.txt"
 
 
 def _load_agent_card_from_file(url: str | None = None) -> AgentCard | None:
@@ -269,6 +271,36 @@ def load_model_config(
     cache.set(CACHE_KEY_MODEL_CONFIG, result, file_paths=[MODEL_CONFIG_PATH])
 
     return result
+
+
+def load_managed_config() -> ManagedConfig | None:
+    """Load managed agent configuration from /etc/flokoa/managed-config.json.
+
+    Returns:
+        ManagedConfig if the file exists, None otherwise.
+    """
+    path = os.environ.get("FLOKOA_MANAGED_CONFIG_PATH", MANAGED_CONFIG_PATH)
+    if not os.path.exists(path):
+        return None
+
+    with open(path) as f:
+        config_data = json.load(f)
+
+    return ManagedConfig.model_validate(config_data)
+
+
+def load_instruction() -> str | None:
+    """Load instruction text from /etc/flokoa/instruction.txt.
+
+    Returns:
+        The instruction text if the file exists, None otherwise.
+    """
+    path = os.environ.get("FLOKOA_INSTRUCTION_PATH", INSTRUCTION_PATH)
+    if not os.path.exists(path):
+        return None
+
+    with open(path) as f:
+        return f.read()
 
 
 def invalidate_config_cache(cache: ConfigCache | None = None) -> None:

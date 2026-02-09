@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 flokoa = "flokoa.__main__:main"
+flokoa-managed = "flokoa.managed_cli:managed"
 
 [build-system]
 requires = ["hatchling"]
