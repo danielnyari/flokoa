@@ -32,6 +32,8 @@ if TYPE_CHECKING:
     from pydantic_ai.models import Model
     from pydantic_ai.providers import Provider
 
+    PydanticAIAgent = Agent[Any, Any]
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +57,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         FLOKOA_CACHE_ENABLED: Enable/disable caching (default: true)
     """
 
-    def __init__(self, agent: "Agent", cache: ConfigCache | None = None):
+    def __init__(self, agent: "PydanticAIAgent", cache: ConfigCache | None = None):
         """Initialize the executor.
 
         Args:
@@ -78,6 +80,11 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
             sequential=False,
         )
         return tool
+
+    @property
+    @override
+    def agent(self) -> "PydanticAIAgent":
+        return super().agent  # type: ignore[return-value]
 
     def _build_toolset(self) -> FunctionToolset:
         """Build a new toolset from current tool definitions."""

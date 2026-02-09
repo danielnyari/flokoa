@@ -273,7 +273,7 @@ def load_model_config(
     return result
 
 
-def load_templated_config() -> TemplateConfig | None:
+def load_templated_config() -> TemplateConfig:
     """Load templated agent configuration from /etc/flokoa/managed-config.json.
 
     Returns:
@@ -281,7 +281,7 @@ def load_templated_config() -> TemplateConfig | None:
     """
     path = os.environ.get("FLOKOA_MANAGED_CONFIG_PATH", MANAGED_CONFIG_PATH)
     if not os.path.exists(path):
-        return None
+        raise FileNotFoundError(f"Templated config file not found at {path}")
 
     with open(path) as f:
         config_data = json.load(f)

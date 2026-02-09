@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from google.adk.agents import BaseAgent
     from pydantic_ai import Agent
 
-    AgentType = Agent | BaseAgent
+    AgentType = Agent[Any, Any] | BaseAgent
 
 
 class FlokoaAgentExecutor(AgentExecutor):

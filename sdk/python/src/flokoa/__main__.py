@@ -124,7 +124,6 @@ def _start_templated(host: str, port: int) -> None:
     """Start a templated agent from operator-mounted configuration."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-    from flokoa.templated.agent import TemplatedAgentBuilder
     from flokoa.templated.agent_executor import TemplatedPydanticAIAgentExecutor
     from flokoa.utils import load_instruction
 
@@ -134,10 +133,8 @@ def _start_templated(host: str, port: int) -> None:
     if instruction is None:
         raise click.ClickException("No instruction found. Templated agents require spec.instruction to be set.")
 
-    builder = TemplatedAgentBuilder(config=templated_config)
-
     logger.info("Building templated pydantic-ai agent")
-    executor = TemplatedPydanticAIAgentExecutor(builder=builder, instruction=instruction)
+    executor = TemplatedPydanticAIAgentExecutor(config=templated_config)
 
     # Use operator-mounted cardOverride if available, otherwise generate from agent
     agent_card = load_agent_card(url=f"http://{host}:{port}/")
