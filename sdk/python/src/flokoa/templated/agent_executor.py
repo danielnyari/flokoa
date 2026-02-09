@@ -9,13 +9,13 @@ from pydantic_ai import Agent
 from flokoa.cache import ConfigCache
 from flokoa.exceptions import ProviderNotConfiguredError
 from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
-from flokoa.managed.agent import ManagedAgentBuilder
+from flokoa.templated.agent import TemplatedAgentBuilder
 
 logger = logging.getLogger(__name__)
 
 
-class ManagedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
-    """Agent executor for the managed pydantic-ai runtime.
+class TemplatedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
+    """Agent executor for the templated pydantic-ai runtime.
 
     Unlike the integration executor which wraps a user-provided agent,
     this executor creates a bare pydantic-ai Agent internally and drives
@@ -24,12 +24,12 @@ class ManagedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
     - Instruction from /etc/flokoa/instruction.txt (passed at construction)
     - Model config from /etc/flokoa/model.json (via parent)
     - Tools from /etc/flokoa/tools/ (via parent)
-    - Managed config from /etc/flokoa/managed-config.json (via builder)
+    - Templated config from /etc/flokoa/managed-config.json (via builder)
     """
 
     def __init__(
         self,
-        builder: ManagedAgentBuilder,
+        builder: TemplatedAgentBuilder,
         instruction: str,
         cache: ConfigCache | None = None,
     ):
@@ -39,22 +39,22 @@ class ManagedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
         self._instruction = instruction
 
     @property
-    def builder(self) -> ManagedAgentBuilder:
+    def builder(self) -> TemplatedAgentBuilder:
         return self._builder
 
     @property
     @override
     def instruction(self) -> str:
-        """Managed agents always use the instruction passed at construction."""
+        """Templated agents always use the instruction passed at construction."""
         return self._instruction
 
     @override
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         request = context.get_user_input()
-        logger.info("Executing managed PydanticAI agent with request: %s", request)
+        logger.info("Executing templated PydanticAI agent with request: %s", request)
 
         if not self.model_config:
-            raise ProviderNotConfiguredError("Model configuration is required for managed agents")
+            raise ProviderNotConfiguredError("Model configuration is required for templated agents")
 
         model = self._create_model(self._create_provider(self.model_config.provider.type))
 

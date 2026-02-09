@@ -273,8 +273,8 @@ def load_model_config(
     return result
 
 
-def load_managed_config() -> ManagedConfig | None:
-    """Load managed agent configuration from /etc/flokoa/managed-config.json.
+def load_templated_config() -> ManagedConfig | None:
+    """Load templated agent configuration from /etc/flokoa/managed-config.json.
 
     Returns:
         ManagedConfig if the file exists, None otherwise.
