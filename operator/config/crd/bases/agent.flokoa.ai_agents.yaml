@@ -6157,7 +6157,7 @@ spec:
                     description: Type specifies the runtime backend to use.
                     enum:
                     - standard
-                    - managed
+                    - template
                     type: string
                 required:
                 - type

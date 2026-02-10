@@ -191,7 +191,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// Reconcile managed config ConfigMap (if managed runtime)
 	var templateConfigMapName string
-	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeManaged {
+	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeTemplate {
 		templateConfigMapName, err = r.reconciletemplateConfigMap(ctx, agent)
 		if err != nil {
 			logger.Error(err, "Failed to reconcile managed config ConfigMap")
@@ -615,7 +615,7 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 	var volumes []corev1.Volume //nolint:prealloc // size depends on runtime type and optional configs
 
 	switch agent.Spec.Runtime.Type {
-	case agentv1alpha1.RuntimeTypeManaged:
+	case agentv1alpha1.RuntimeTypeTemplate:
 		container, volumes = r.buildManagedContainerSpec(agent, templateConfigMapName)
 	default:
 		container, volumes = r.buildStandardContainerSpec(agent)
@@ -776,7 +776,7 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 // getDeploymentOverrides extracts the shared DeploymentOverrides from the agent's runtime spec.
 func (r *AgentReconciler) getDeploymentOverrides(agent *agentv1alpha1.Agent) agentv1alpha1.DeploymentOverrides {
 	switch agent.Spec.Runtime.Type {
-	case agentv1alpha1.RuntimeTypeManaged:
+	case agentv1alpha1.RuntimeTypeTemplate:
 		if agent.Spec.Runtime.Template != nil {
 			return agent.Spec.Runtime.Template.DeploymentOverrides
 		}
@@ -982,18 +982,18 @@ func (r *AgentReconciler) validateAgent(agent *agentv1alpha1.Agent) error {
 		if agent.Spec.Runtime.Template != nil {
 			return fmt.Errorf("runtime.managed must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeStandard)
 		}
-	case agentv1alpha1.RuntimeTypeManaged:
+	case agentv1alpha1.RuntimeTypeTemplate:
 		if agent.Spec.Runtime.Standard != nil {
-			return fmt.Errorf("runtime.standard must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeManaged)
+			return fmt.Errorf("runtime.standard must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeTemplate)
 		}
 		if agent.Spec.Runtime.Template == nil {
-			return fmt.Errorf("runtime.managed is required when runtime.type is %q", agentv1alpha1.RuntimeTypeManaged)
+			return fmt.Errorf("runtime.managed is required when runtime.type is %q", agentv1alpha1.RuntimeTypeTemplate)
 		}
 		if agent.Spec.Model == nil {
-			return fmt.Errorf("spec.model is required when runtime.type is %q", agentv1alpha1.RuntimeTypeManaged)
+			return fmt.Errorf("spec.model is required when runtime.type is %q", agentv1alpha1.RuntimeTypeTemplate)
 		}
 		if agent.Spec.Instruction == nil {
-			return fmt.Errorf("spec.instruction is required when runtime.type is %q", agentv1alpha1.RuntimeTypeManaged)
+			return fmt.Errorf("spec.instruction is required when runtime.type is %q", agentv1alpha1.RuntimeTypeTemplate)
 		}
 	default:
 		return fmt.Errorf("unsupported runtime type: %q", agent.Spec.Runtime.Type)

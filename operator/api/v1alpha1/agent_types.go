@@ -36,16 +36,16 @@ const (
 )
 
 // RuntimeType represents the type of runtime backend for the agent.
-// +kubebuilder:validation:Enum=standard;managed
+// +kubebuilder:validation:Enum=standard;template
 type RuntimeType string
 
 const (
 	// RuntimeTypeStandard uses a Kubernetes Deployment for the agent runtime.
 	// The user provides their own container image.
 	RuntimeTypeStandard RuntimeType = "standard"
-	// RuntimeTypeManaged uses a generic runtime image fully managed by the operator.
+	// RuntimeTypeTemplate uses a generic runtime image fully managed by the operator.
 	// The agent's behavior is defined entirely in the CR via instructions and output schema.
-	RuntimeTypeManaged RuntimeType = "managed"
+	RuntimeTypeTemplate RuntimeType = "template"
 )
 
 // AgentSkill describes a specific capability or function the agent can perform.
