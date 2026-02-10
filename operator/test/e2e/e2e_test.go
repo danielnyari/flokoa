@@ -298,9 +298,9 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("building the template agent image")
 			cmd = exec.Command("docker", "build",
-				"-f", "operator/test/e2e/fixtures/Dockerfile",
+				"-f", "test/e2e/fixtures/Dockerfile",
 				"-t", "localhost/template-agent:test",
-				".")
+				"..")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to build template agent image")
 
