@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -4434,8 +4435,16 @@ var _ = Describe("Agent Controller", func() {
 							Template: "You are a test agent.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:    agentv1alpha1.RuntimeTypeManaged,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Type: agentv1alpha1.RuntimeTypeTemplate,
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{
+								Config: &agentv1alpha1.TemplatedAgentConfig{
+									OutputSchema: &agentv1alpha1.StructuredIOSchema{
+										Name:        "test-schema",
+										Description: "Test schema",
+										JSONSchema:  &apiextensionsv1.JSON{Raw: []byte(`{"type":"object"}`)},
+									},
+								},
+							},
 						},
 					},
 				}
@@ -4484,13 +4493,21 @@ var _ = Describe("Agent Controller", func() {
 							Template: "You are a test agent.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type: agentv1alpha1.RuntimeTypeManaged,
+							Type: agentv1alpha1.RuntimeTypeTemplate,
 							Standard: &agentv1alpha1.StandardRuntimeSpec{
 								Container: corev1.Container{
 									Image: "nginx:latest",
 								},
 							},
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{
+								Config: &agentv1alpha1.TemplatedAgentConfig{
+									OutputSchema: &agentv1alpha1.StructuredIOSchema{
+										Name:        "test-schema",
+										Description: "Test schema",
+										JSONSchema:  &apiextensionsv1.JSON{Raw: []byte(`{"type":"object"}`)},
+									},
+								},
+							},
 						},
 						Model: &agentv1alpha1.AgentModelRef{
 							Name: "test-model",
@@ -4538,8 +4555,16 @@ var _ = Describe("Agent Controller", func() {
 					Spec: agentv1alpha1.AgentSpec{
 						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:    agentv1alpha1.RuntimeTypeStandard,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{
+								Config: &agentv1alpha1.TemplatedAgentConfig{
+									OutputSchema: &agentv1alpha1.StructuredIOSchema{
+										Name:        "test-schema",
+										Description: "Test schema",
+										JSONSchema:  &apiextensionsv1.JSON{Raw: []byte(`{"type":"object"}`)},
+									},
+								},
+							},
 						},
 					},
 				}
@@ -4584,8 +4609,16 @@ var _ = Describe("Agent Controller", func() {
 					Spec: agentv1alpha1.AgentSpec{
 						CardOverride: minimalCard(),
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type:    agentv1alpha1.RuntimeTypeManaged,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{},
+							Type: agentv1alpha1.RuntimeTypeTemplate,
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{
+								Config: &agentv1alpha1.TemplatedAgentConfig{
+									OutputSchema: &agentv1alpha1.StructuredIOSchema{
+										Name:        "test-schema",
+										Description: "Test schema",
+										JSONSchema:  &apiextensionsv1.JSON{Raw: []byte(`{"type":"object"}`)},
+									},
+								},
+							},
 						},
 						Model: &agentv1alpha1.AgentModelRef{
 							Name: "test-model",
@@ -4763,8 +4796,15 @@ var _ = Describe("Agent Controller", func() {
 							Template: "You are a support triage agent. Classify tickets by severity.",
 						},
 						Runtime: agentv1alpha1.RuntimeSpec{
-							Type: agentv1alpha1.RuntimeTypeManaged,
-							Managed: &agentv1alpha1.ManagedRuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeTemplate,
+							Template: &agentv1alpha1.TemplatedRuntimeSpec{
+								Config: &agentv1alpha1.TemplatedAgentConfig{
+									OutputSchema: &agentv1alpha1.StructuredIOSchema{
+										Name:        "ticket-classification",
+										Description: "Ticket classification agent",
+										JSONSchema:  &apiextensionsv1.JSON{Raw: []byte(`{"type":"object"}`)},
+									},
+								},
 								DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
 									Replicas: &replicas,
 								},
@@ -4813,7 +4853,7 @@ var _ = Describe("Agent Controller", func() {
 					}, inlineCM)
 				}, timeout, interval).Should(Succeed())
 
-				Expect(inlineCM.Data).To(HaveKey(managedConfigConfigMapKey))
+				Expect(inlineCM.Data).To(HaveKey(templateConfigConfigMapKey))
 				Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("managed-config"))
 
 				By("Verifying the Deployment was created with correct inline configuration")
@@ -4839,7 +4879,7 @@ var _ = Describe("Agent Controller", func() {
 					}
 				}
 				Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "managed"))
-				Expect(envMap).To(HaveKeyWithValue("FLOKOA_MANAGED_CONFIG_PATH", managedConfigMountPath))
+				Expect(envMap).To(HaveKeyWithValue("FLOKOA_MANAGED_CONFIG_PATH", templateConfigMountPath))
 				Expect(envMap).To(HaveKeyWithValue("CUSTOM_VAR", "custom-value"))
 				Expect(envMap).To(HaveKey("FLOKOA_AGENT_URL"))
 
@@ -4850,9 +4890,9 @@ var _ = Describe("Agent Controller", func() {
 				// Check managed config volume mount exists
 				var foundManagedMount bool
 				for _, vm := range container.VolumeMounts {
-					if vm.Name == managedConfigVolumeName {
+					if vm.Name == templateConfigVolumeName {
 						foundManagedMount = true
-						Expect(vm.MountPath).To(Equal(managedConfigMountPath))
+						Expect(vm.MountPath).To(Equal(templateConfigMountPath))
 						Expect(vm.ReadOnly).To(BeTrue())
 					}
 				}

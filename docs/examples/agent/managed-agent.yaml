@@ -1,0 +1,27 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: managed-assistant
+spec:
+  framework: pydantic-ai
+
+  # Model reference (must point to an existing Model CR)
+  model:
+    name: gpt-4o
+
+  # System instruction (inline - creates an Instruction CR)
+  instruction:
+    template: |
+      You are a helpful AI assistant. Be concise and accurate in your responses.
+      Always provide well-structured answers.
+
+  runtime:
+    type: managed
+    managed:
+      replicas: 1
+
+  # Optional: tools available to the managed agent
+  tools:
+    - name: weather-api
+      toolRef:
+        name: weather-api

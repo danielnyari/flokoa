@@ -23,13 +23,13 @@ from flokoa.types import (
     ToolDefinition as FlokoaToolDefinition,
 )
 from flokoa.types.modelconfig import ProviderType
-from flokoa.utils import load_model_config, load_tools
+from flokoa.utils import load_instruction, load_model_config, load_tools
 
 if TYPE_CHECKING:
     from google.adk.agents import BaseAgent
     from pydantic_ai import Agent
 
-    AgentType = Agent | BaseAgent
+    AgentType = Agent[Any, Any] | BaseAgent
 
 
 class FlokoaAgentExecutor(AgentExecutor):
@@ -101,6 +101,15 @@ class FlokoaAgentExecutor(AgentExecutor):
     @property
     def agent(self) -> "AgentType":
         return self._agent
+
+    @property
+    def instruction(self) -> str | None:
+        """Load instruction text from the operator-mounted file.
+
+        Returns the content of /etc/flokoa/instruction.txt if it exists,
+        None otherwise. Supports both integration and managed runtimes.
+        """
+        return load_instruction()
 
     def _reload_tools(self) -> None:
         """Reload tool definitions from files."""

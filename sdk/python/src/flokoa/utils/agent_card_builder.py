@@ -549,6 +549,11 @@ def _get_generic_agent_description(agent: Any) -> str:
     if description:
         return description
 
+    # pydantic-ai stores instructions in _instructions (list of strings)
+    description = _coerce_text(getattr(agent, "_instructions", None))
+    if description:
+        return description
+
     return "A Flokoa agent"
 
 
@@ -561,7 +566,7 @@ def _coerce_text(value: Any) -> Optional[str]:
             if isinstance(part, str):
                 part_text = part.strip()
             elif hasattr(part, "text"):
-                part_text = str(getattr(part, "text")).strip()
+                part_text = str(part.text).strip()
             else:
                 part_text = str(part).strip()
             if part_text:
