@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/test/utils"
 )
 
@@ -44,6 +51,13 @@ var (
 	// serverImage is the name of the server image which will be build and loaded
 	// with the code source changes to be tested.
 	serverImage = "example.com/server:v0.0.1"
+
+	// k8sClient is the Kubernetes client for interacting with the cluster
+	k8sClient client.Client
+	// cfg is the rest config for the cluster
+	cfg *rest.Config
+	// ctx is the context for client operations
+	ctx context.Context
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
@@ -57,11 +71,34 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	ctx = context.Background()
+
+	By("setting up Kubernetes client")
+	var err error
+	// Get kubeconfig from default location or KUBECONFIG env var
+	kubeconfigPath := clientcmd.RecommendedHomeFile
+	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
+		kubeconfigPath = envPath
+	}
+	cfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load kubeconfig")
+
+	// Add our custom schemes
+	myScheme := runtime.NewScheme()
+	err = scheme.AddToScheme(myScheme)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add core scheme")
+	err = agentv1alpha1.AddToScheme(myScheme)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add agent scheme")
+
+	// Create the client
+	k8sClient, err = client.New(cfg, client.Options{Scheme: myScheme})
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create Kubernetes client")
+
 	By("building the manager(Operator) and server images")
 	cmd := exec.Command("make", "docker-build",
 		fmt.Sprintf("IMG=%s", projectImage),
 		fmt.Sprintf("SERVER_IMG=%s", serverImage))
-	_, err := utils.Run(cmd)
+	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) and server images")
 
 	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is

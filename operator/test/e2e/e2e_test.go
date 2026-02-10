@@ -26,7 +26,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/test/utils"
 )
 
@@ -141,31 +146,28 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should run successfully", func() {
 			By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
-				// Get the name of the controller-manager pod
-				cmd := exec.Command("kubectl", "get",
-					"pods", "-l", "app.kubernetes.io/name=flokoa,app.kubernetes.io/component=controller",
-					"-o", "go-template={{ range .items }}"+
-						"{{ if not .metadata.deletionTimestamp }}"+
-						"{{ .metadata.name }}"+
-						"{{ \"\\n\" }}{{ end }}{{ end }}",
-					"-n", namespace,
-				)
-
-				podOutput, err := utils.Run(cmd)
+				// Get the controller-manager pods
+				podList := &corev1.PodList{}
+				err := k8sClient.List(ctx, podList,
+					client.InNamespace(namespace),
+					client.MatchingLabels{
+						"app.kubernetes.io/name":      "flokoa",
+						"app.kubernetes.io/component": "controller",
+					})
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve controller-manager pod information")
-				podNames := utils.GetNonEmptyLines(podOutput)
-				g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-				controllerPodName = podNames[0]
-				g.Expect(controllerPodName).To(ContainSubstring("flokoa-controller"))
 
-				// Validate the pod's status
-				cmd = exec.Command("kubectl", "get",
-					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
-					"-n", namespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Running"), "Incorrect controller-manager pod status")
+				// Filter out pods with deletion timestamp
+				var runningPods []corev1.Pod
+				for _, pod := range podList.Items {
+					if pod.DeletionTimestamp == nil {
+						runningPods = append(runningPods, pod)
+					}
+				}
+				
+				g.Expect(runningPods).To(HaveLen(1), "expected 1 controller pod running")
+				controllerPodName = runningPods[0].Name
+				g.Expect(controllerPodName).To(ContainSubstring("flokoa-controller"))
+				g.Expect(runningPods[0].Status.Phase).To(Equal(corev1.PodRunning), "Incorrect controller-manager pod status")
 			}
 			Eventually(verifyControllerUp).Should(Succeed())
 		})
@@ -313,11 +315,13 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for LLM stub to be ready")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pod", "llm-stub",
-					"-n", namespace, "-o", "jsonpath={.status.phase}")
-				output, err := utils.Run(cmd)
+				pod := &corev1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "llm-stub",
+					Namespace: namespace,
+				}, pod)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Running"))
+				g.Expect(pod.Status.Phase).To(Equal(corev1.PodRunning))
 			}, 2*time.Minute).Should(Succeed())
 
 			By("deploying the tool service")
@@ -327,11 +331,13 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for tool service to be ready")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pod", "tool-service",
-					"-n", namespace, "-o", "jsonpath={.status.phase}")
-				output, err := utils.Run(cmd)
+				pod := &corev1.Pod{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "tool-service",
+					Namespace: namespace,
+				}, pod)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Running"))
+				g.Expect(pod.Status.Phase).To(Equal(corev1.PodRunning))
 			}, 2*time.Minute).Should(Succeed())
 
 			By("creating the API key secret for ModelProvider")
@@ -356,11 +362,13 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("verifying Instruction ConfigMap is created")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "instruction", "template-instruction",
-					"-n", namespace, "-o", "jsonpath={.status.configMapName}")
-				output, err := utils.Run(cmd)
+				instruction := &agentv1alpha1.Instruction{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "template-instruction",
+					Namespace: namespace,
+				}, instruction)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).NotTo(BeEmpty(), "ConfigMap name should be set")
+				g.Expect(instruction.Status.ConfigMapName).NotTo(BeEmpty(), "ConfigMap name should be set")
 			}, 1*time.Minute).Should(Succeed())
 
 			By("applying the AgentTool")
@@ -375,27 +383,41 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for Agent to reach Ready condition")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "agent", "template-agent",
-					"-n", namespace, "-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
-				output, err := utils.Run(cmd)
+				agent := &agentv1alpha1.Agent{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "template-agent",
+					Namespace: namespace,
+				}, agent)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"), "Agent should be Ready")
+				
+				// Check for Ready condition
+				ready := false
+				for _, cond := range agent.Status.Conditions {
+					if cond.Type == "Ready" && cond.Status == metav1.ConditionTrue {
+						ready = true
+						break
+					}
+				}
+				g.Expect(ready).To(BeTrue(), "Agent should be Ready")
 			}, 3*time.Minute).Should(Succeed())
 
 			By("verifying Agent pod is running")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods",
-					"-l", "app.kubernetes.io/name=template-agent",
-					"-n", namespace, "-o", "jsonpath={.items[0].status.phase}")
-				output, err := utils.Run(cmd)
+				podList := &corev1.PodList{}
+				err := k8sClient.List(ctx, podList,
+					client.InNamespace(namespace),
+					client.MatchingLabels{"app.kubernetes.io/name": "template-agent"})
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Running"))
+				g.Expect(podList.Items).To(HaveLen(1), "should have one agent pod")
+				g.Expect(podList.Items[0].Status.Phase).To(Equal(corev1.PodRunning))
 			}, 2*time.Minute).Should(Succeed())
 
 			By("verifying Agent service is created")
-			cmd = exec.Command("kubectl", "get", "service", "template-agent",
-				"-n", namespace)
-			_, err = utils.Run(cmd)
+			svc := &corev1.Service{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "template-agent",
+				Namespace: namespace,
+			}, svc)
 			Expect(err).NotTo(HaveOccurred(), "Agent service should exist")
 
 			By("cleaning up test resources")
