@@ -37,7 +37,7 @@ The test verifies:
 test/e2e/
 ├── fixtures/
 │   ├── template_agent.py         # Python SDK agent module
-│   ├── Dockerfile                # Agent container image
+│   ├── Dockerfile                # Agent container image (builds from repo root)
 │   ├── llm_stub.py               # Mock LLM service
 │   ├── Dockerfile.llm-stub       # LLM stub container image
 │   ├── tool_service.py           # Mock tool service
@@ -52,6 +52,8 @@ test/e2e/
     ├── llm-stub.yaml            # LLM stub deployment and service
     └── tool-service.yaml        # Tool service deployment and service
 ```
+
+**Note**: The template agent Dockerfile builds from the repository root to access the SDK source code at `sdk/python`.
 
 ## Running the Test
 

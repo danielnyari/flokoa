@@ -5,11 +5,14 @@ WORKDIR /app
 # Install uv for fast package management
 RUN pip install uv
 
-# Copy agent code
-COPY template_agent.py /app/
+# Copy SDK source code
+COPY sdk/python /sdk
 
-# Install flokoa SDK and pydantic-ai
-RUN uv pip install --system flokoa[pydantic-ai]
+# Install flokoa SDK from local source with pydantic-ai extra
+RUN uv pip install --system /sdk[pydantic-ai]
+
+# Copy agent code
+COPY operator/test/e2e/fixtures/template_agent.py /app/
 
 # Expose port for the agent server
 EXPOSE 8080
