@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ExecutorPlugin
+metadata:
+  name: a2a
+  namespace: argo
+spec:
+  sidecar:
+    container:
+      name: a2a-executor-plugin
+      image: ghcr.io/danielnyari/flokoa-a2a-plugin:latest
+      command:
+        - /a2a-plugin
+      ports:
+        - containerPort: 4355
+          protocol: TCP
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "100m"
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        readOnlyRootFilesystem: true

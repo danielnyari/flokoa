@@ -33,3 +33,4 @@ go.work.sum
 # .idea/
 # .vscode/
 /site
+operator/plugins/a2a/a2a
