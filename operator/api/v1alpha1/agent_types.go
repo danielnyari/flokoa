@@ -301,7 +301,6 @@ type TemplatedAgentConfig struct {
 
 	// OutputSchema defines the JSON Schema for constraining agent response format.
 	OutputSchema *StructuredIOSchema `json:"outputSchema"`
-
 }
 
 // TemplatedRuntimeSpec defines the configuration for a managed agent where the operator

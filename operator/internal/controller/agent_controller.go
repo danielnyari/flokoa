@@ -1023,9 +1023,6 @@ func (r *AgentReconciler) reconciletemplateConfigMap(ctx context.Context, agent 
 		if managed.Config.OutputSchema != nil {
 			config.OutputSchema = managed.Config.OutputSchema
 		}
-		if managed.Config.InputSchema != nil {
-			config.InputSchema = managed.Config.InputSchema
-		}
 	}
 
 	configJSON, err := json.Marshal(config)
