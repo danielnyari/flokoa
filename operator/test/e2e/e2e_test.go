@@ -334,6 +334,11 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(output).To(Equal("Running"))
 			}, 2*time.Minute).Should(Succeed())
 
+			By("creating the API key secret for ModelProvider")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/secret.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
+
 			By("applying the ModelProvider")
 			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/modelprovider.yaml")
 			_, err = utils.Run(cmd)
@@ -403,6 +408,8 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/model.yaml", "--ignore-not-found=true")
 			_, _ = utils.Run(cmd)
 			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/modelprovider.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/secret.yaml", "--ignore-not-found=true")
 			_, _ = utils.Run(cmd)
 			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/tool-service.yaml", "--ignore-not-found=true")
 			_, _ = utils.Run(cmd)

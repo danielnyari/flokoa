@@ -4,6 +4,8 @@ metadata:
   name: mock-provider
   namespace: flokoa-system
 spec:
+  apiKeySecretRef:
+    name: mock-provider-api-key
+    key: api-key
   openai:
-    baseUrl: http://llm-stub:8080/v1
-    timeoutSeconds: 30
+    baseURL: http://llm-stub:8080/v1
