@@ -1,0 +1,73 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: template-agent
+  namespace: flokoa-system
+  labels:
+    app.kubernetes.io/name: template-agent
+    test: e2e
+spec:
+  card:
+    name: "Template Test Agent"
+    description: "E2E test agent with templated instructions"
+    version: "1.0.0"
+    defaultInputModes:
+      - "application/json"
+    defaultOutputModes:
+      - "application/json"
+    capabilities:
+      streaming: false
+      pushNotifications: false
+    skills:
+      - id: "test-skill"
+        name: "Test Skill"
+        description: "Test skill for e2e"
+        tags: ["test"]
+  
+  framework: pydantic-ai
+  
+  model:
+    name: test-model
+  
+  instruction:
+    instructionRef:
+      name: template-instruction
+  
+  tools:
+    - toolRef:
+        name: test-tool
+  
+  runtime:
+    type: standard
+    spec:
+      replicas: 1
+      container:
+        name: agent
+        image: localhost/template-agent:test
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "test"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5

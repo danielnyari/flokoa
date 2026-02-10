@@ -1,0 +1,28 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentTool
+metadata:
+  name: test-tool
+  namespace: flokoa-system
+spec:
+  type: http-api
+  description: "Test tool for e2e testing"
+  httpApi:
+    serviceRef:
+      name: tool-service
+      namespace: flokoa-system
+      port: 8080
+    path: "/execute"
+    method: POST
+    timeoutSeconds: 10
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: "Test query"
+    required: ["query"]
+  outputSchema:
+    type: object
+    properties:
+      result:
+        type: string

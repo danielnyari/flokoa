@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: llm-stub
+  namespace: flokoa-system
+  labels:
+    app: llm-stub
+    test: e2e
+spec:
+  containers:
+  - name: llm-stub
+    image: localhost/llm-stub:test
+    imagePullPolicy: Never
+    ports:
+    - containerPort: 8080
+      name: http
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-stub
+  namespace: flokoa-system
+spec:
+  selector:
+    app: llm-stub
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http

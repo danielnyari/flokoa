@@ -1,0 +1,15 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Copy stub service
+COPY llm_stub.py /app/
+
+# Install dependencies
+RUN pip install fastapi uvicorn pydantic
+
+# Expose port
+EXPOSE 8080
+
+# Run the stub service
+CMD ["python", "llm_stub.py"]

@@ -267,6 +267,149 @@ var _ = Describe("Manager", Ordered, func() {
 		//    strings.ToLower(<Kind>),
 		// ))
 	})
+
+	Context("Template Agent E2E Test", func() {
+		It("should deploy CRs and create a templated agent from Python SDK", func() {
+			By("building the LLM stub image")
+			cmd := exec.Command("docker", "build",
+				"-f", "test/e2e/fixtures/Dockerfile.llm-stub",
+				"-t", "localhost/llm-stub:test",
+				"test/e2e/fixtures")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to build LLM stub image")
+
+			By("loading the LLM stub image into Kind")
+			err = utils.LoadImageToKindClusterWithName("localhost/llm-stub:test")
+			Expect(err).NotTo(HaveOccurred(), "Failed to load LLM stub image")
+
+			By("building the tool service image")
+			cmd = exec.Command("docker", "build",
+				"-f", "test/e2e/fixtures/Dockerfile.tool-service",
+				"-t", "localhost/tool-service:test",
+				"test/e2e/fixtures")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to build tool service image")
+
+			By("loading the tool service image into Kind")
+			err = utils.LoadImageToKindClusterWithName("localhost/tool-service:test")
+			Expect(err).NotTo(HaveOccurred(), "Failed to load tool service image")
+
+			By("building the template agent image")
+			cmd = exec.Command("docker", "build",
+				"-f", "test/e2e/fixtures/Dockerfile",
+				"-t", "localhost/template-agent:test",
+				"test/e2e/fixtures")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to build template agent image")
+
+			By("loading the template agent image into Kind")
+			err = utils.LoadImageToKindClusterWithName("localhost/template-agent:test")
+			Expect(err).NotTo(HaveOccurred(), "Failed to load template agent image")
+
+			By("deploying the LLM stub service")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/llm-stub.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to deploy LLM stub")
+
+			By("waiting for LLM stub to be ready")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pod", "llm-stub",
+					"-n", namespace, "-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Running"))
+			}, 2*time.Minute).Should(Succeed())
+
+			By("deploying the tool service")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/tool-service.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to deploy tool service")
+
+			By("waiting for tool service to be ready")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pod", "tool-service",
+					"-n", namespace, "-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Running"))
+			}, 2*time.Minute).Should(Succeed())
+
+			By("applying the ModelProvider")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/modelprovider.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply ModelProvider")
+
+			By("applying the Model")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/model.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply Model")
+
+			By("applying the Instruction with template")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/instruction.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply Instruction")
+
+			By("verifying Instruction ConfigMap is created")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "instruction", "template-instruction",
+					"-n", namespace, "-o", "jsonpath={.status.configMapName}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "ConfigMap name should be set")
+			}, 1*time.Minute).Should(Succeed())
+
+			By("applying the AgentTool")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/agenttool.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply AgentTool")
+
+			By("applying the Agent with templated instruction")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/agent.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply Agent")
+
+			By("waiting for Agent to reach Ready condition")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "agent", "template-agent",
+					"-n", namespace, "-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"), "Agent should be Ready")
+			}, 3*time.Minute).Should(Succeed())
+
+			By("verifying Agent pod is running")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-l", "app.kubernetes.io/name=template-agent",
+					"-n", namespace, "-o", "jsonpath={.items[0].status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Running"))
+			}, 2*time.Minute).Should(Succeed())
+
+			By("verifying Agent service is created")
+			cmd = exec.Command("kubectl", "get", "service", "template-agent",
+				"-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Agent service should exist")
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/agent.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/agenttool.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/instruction.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/model.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/modelprovider.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/tool-service.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/llm-stub.yaml", "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+		})
+	})
 })
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.

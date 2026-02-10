@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tool-service
+  namespace: flokoa-system
+  labels:
+    app: tool-service
+    test: e2e
+spec:
+  containers:
+  - name: tool-service
+    image: localhost/tool-service:test
+    imagePullPolicy: Never
+    ports:
+    - containerPort: 8080
+      name: http
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-service
+  namespace: flokoa-system
+spec:
+  selector:
+    app: tool-service
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http

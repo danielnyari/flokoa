@@ -1,0 +1,15 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Instruction
+metadata:
+  name: template-instruction
+  namespace: flokoa-system
+spec:
+  content: |
+    You are a ${role} agent helping with ${task_type} tasks.
+    
+    When responding:
+    1. Be ${tone} and professional
+    2. Focus on ${focus_area}
+    3. Provide clear and concise answers
+    
+    Task context: ${context}

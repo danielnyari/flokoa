@@ -1,0 +1,9 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  name: mock-provider
+  namespace: flokoa-system
+spec:
+  openai:
+    baseUrl: http://llm-stub:8080/v1
+    timeoutSeconds: 30

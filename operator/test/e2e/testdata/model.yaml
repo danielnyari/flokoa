@@ -1,0 +1,12 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: test-model
+  namespace: flokoa-system
+spec:
+  model: "gpt-4o"
+  providerRef:
+    name: mock-provider
+  parameters:
+    temperature: "0.7"
+    maxTokens: 1000
