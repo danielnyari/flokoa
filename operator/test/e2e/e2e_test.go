@@ -163,7 +163,7 @@ var _ = Describe("Manager", Ordered, func() {
 						runningPods = append(runningPods, pod)
 					}
 				}
-				
+
 				g.Expect(runningPods).To(HaveLen(1), "expected 1 controller pod running")
 				controllerPodName = runningPods[0].Name
 				g.Expect(controllerPodName).To(ContainSubstring("flokoa-controller"))
@@ -389,7 +389,7 @@ var _ = Describe("Manager", Ordered, func() {
 					Namespace: namespace,
 				}, agent)
 				g.Expect(err).NotTo(HaveOccurred())
-				
+
 				// Check for Ready condition
 				ready := false
 				for _, cond := range agent.Status.Conditions {
