@@ -32,6 +32,8 @@ if TYPE_CHECKING:
     from pydantic_ai.models import Model
     from pydantic_ai.providers import Provider
 
+    PydanticAIAgent = Agent[Any, Any]
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +57,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         FLOKOA_CACHE_ENABLED: Enable/disable caching (default: true)
     """
 
-    def __init__(self, agent: "Agent", cache: ConfigCache | None = None):
+    def __init__(self, agent: "PydanticAIAgent", cache: ConfigCache | None = None):
         """Initialize the executor.
 
         Args:
@@ -78,6 +80,11 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
             sequential=False,
         )
         return tool
+
+    @property
+    @override
+    def agent(self) -> "PydanticAIAgent":
+        return super().agent  # type: ignore[return-value]
 
     def _build_toolset(self) -> FunctionToolset:
         """Build a new toolset from current tool definitions."""
@@ -211,15 +218,21 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         if not self.model_config and not self.model_provider and self.agent.model is None:
             raise ProviderNotConfiguredError("Model provider must be configured to execute agent")
 
-        result = await self.agent.run(
-            request,
-            toolsets=[self._get_toolset()],
-            model=(
+        run_kwargs: dict[str, Any] = {
+            "toolsets": [self._get_toolset()],
+            "model": (
                 self._create_model(self._create_provider(self.model_config.provider.type))
                 if self.model_config
                 else self.agent.model
             ),
-        )
+        }
+
+        # Use operator-mounted instruction if available (overrides agent default)
+        instruction = self.instruction
+        if instruction is not None:
+            run_kwargs["instructions"] = instruction
+
+        result = await self.agent.run(request, **run_kwargs)
         await event_queue.enqueue_event(new_agent_text_message(result.output))
 
     @override

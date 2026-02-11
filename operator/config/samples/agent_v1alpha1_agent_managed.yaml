@@ -48,22 +48,36 @@ spec:
 
   runtime:
     type: managed
-    managed:
-      outputSchema:
-        type: object
-        properties:
-          severity:
-            type: string
-            enum: [P0, P1, P2, P3]
-          team:
-            type: string
-          summary:
-            type: string
-          nextSteps:
-            type: array
-            items:
-              type: string
-        required: [severity, team, summary]
+    template:
+      config:
+        outputSchema:
+          name: TriageResponse
+          description: Response format for support ticket triage
+          jsonSchema:
+            type: object
+            properties:
+              severity:
+                type: string
+                enum: [P0, P1, P2, P3]
+              team:
+                type: string
+              summary:
+                type: string
+              nextSteps:
+                type: array
+                items:
+                  type: string
+            required: [severity, team, summary]
+        inputSchema:
+          name: TriageRequest
+          description: Input format for support ticket triage
+          jsonSchema:
+            type: object
+            properties:
+              ticket:
+                type: string
+                description: The support ticket content to triage
+            required: [ticket]
       replicas: 2
       env:
         - name: LOG_LEVEL

@@ -56,6 +56,14 @@ IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
 SERVER_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-server
 SERVER_IMG ?= $(SERVER_IMAGE_TAG_BASE):$(VERSION)
 
+# A2A plugin image settings
+A2A_PLUGIN_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-a2a-plugin
+A2A_PLUGIN_IMG ?= $(A2A_PLUGIN_IMAGE_TAG_BASE):$(VERSION)
+
+# Flokoa CLI image settings (Python SDK)
+FLOKOA_CLI_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-cli
+FLOKOA_CLI_IMG ?= $(FLOKOA_CLI_IMAGE_TAG_BASE):$(VERSION)
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -277,6 +285,26 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@rm /tmp/openai_provider.json /tmp/anthropic_provider.json /tmp/google_provider.json \
 		/tmp/bedrock_provider.json /tmp/model_parameters.json /tmp/modelconfig_schema.yaml /tmp/modelconfig_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/modelconfig.py"
+	@# Build TemplateConfig schema from Agent CRD templated runtime config
+	@echo "Building TemplateConfig schema..."
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runtime.properties.template.properties.config' \
+		config/crd/bases/agent.flokoa.ai_agents.yaml > /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.title = "templateConfig"' /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.description = "Configuration for a managed agent runtime, mounted from the operator ConfigMap"' /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.properties.outputSchema.title = "OutputSchema"' /tmp/templateConfig_schema.json
+	@yq eval -i -o json '.properties.inputSchema.title = "InputSchema"' /tmp/templateConfig_schema.json
+	@$(DATAMODEL_CODEGEN) \
+		--input /tmp/templateConfig_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+		--allow-population-by-field-name \
+		--use-title-as-name \
+		--class-name templateConfig \
+		--output $(PYTHON_MODELS_DIR)/templateconfig.py
+	@rm /tmp/templateConfig_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/templateconfig.py"
 
 ##@ gRPC Server
 
@@ -315,14 +343,32 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker images for manager and server.
+docker-build: ## Build docker images for manager, server, and A2A plugin.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 	$(CONTAINER_TOOL) build -f server/Dockerfile -t ${SERVER_IMG} .
+	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} .
 
 .PHONY: docker-push
-docker-push: ## Push docker images for manager and server.
+docker-push: ## Push docker images for manager, server, and A2A plugin.
 	$(CONTAINER_TOOL) push ${IMG}
 	$(CONTAINER_TOOL) push ${SERVER_IMG}
+	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
+
+.PHONY: docker-build-plugins
+docker-build-plugins: ## Build docker images for all plugins.
+	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} .
+
+.PHONY: docker-push-plugins
+docker-push-plugins: ## Push docker images for all plugins.
+	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
+
+.PHONY: docker-build-flokoa-cli
+docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
+	$(CONTAINER_TOOL) build -f ../sdk/python/Dockerfile.managed -t ${FLOKOA_CLI_IMG} ../sdk/python
+
+.PHONY: docker-push-flokoa-cli
+docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.
+	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -371,6 +417,49 @@ deploy: manifests kustomize ## Deploy controller and server to the K8s cluster s
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+##@ Argo Workflows
+
+ARGO_WORKFLOWS_VERSION ?= 3.7.9
+
+.PHONY: deploy-argo-workflows
+deploy-argo-workflows: ## Deploy Argo Workflows with executor plugins enabled.
+	@echo "Deploying Argo Workflows $(ARGO_WORKFLOWS_VERSION) with executor plugins enabled..."
+	-$(KUBECTL) create namespace argo
+	$(KUBECTL) apply -n argo -f "https://github.com/argoproj/argo-workflows/releases/download/v$(ARGO_WORKFLOWS_VERSION)/quick-start-minimal.yaml"
+	@echo "Enabling executor plugins on workflow-controller..."
+	$(KUBECTL) -n argo patch deployment workflow-controller --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "ARGO_EXECUTOR_PLUGINS", "value": "true"}}]' || \
+		$(KUBECTL) -n argo set env deployment/workflow-controller ARGO_EXECUTOR_PLUGINS=true
+	@echo "Waiting for workflow-controller to be ready..."
+	$(KUBECTL) -n argo rollout status deployment/workflow-controller --timeout=120s
+	@echo "Argo Workflows deployed successfully with executor plugins enabled"
+
+.PHONY: undeploy-argo-workflows
+undeploy-argo-workflows: ## Undeploy Argo Workflows.
+	$(KUBECTL) delete -n argo -f "https://github.com/argoproj/argo-workflows/releases/download/v$(ARGO_WORKFLOWS_VERSION)/quick-start-minimal.yaml" --ignore-not-found=true
+	-$(KUBECTL) delete namespace argo
+
+.PHONY: deploy-executor-plugins
+deploy-executor-plugins: argo-cli ## Build and deploy executor plugins to Argo.
+	@echo "Building and deploying A2A executor plugin..."
+	cd plugins/a2a/config && $(ARGO) executor-plugin build .
+	$(KUBECTL) -n argo apply -f plugins/a2a/config/a2a-executor-plugin-configmap.yaml
+	@echo "Executor plugins deployed successfully"
+
+.PHONY: undeploy-executor-plugins
+undeploy-executor-plugins: ## Undeploy executor plugins from Argo.
+	$(KUBECTL) -n argo delete configmap a2a-executor-plugin --ignore-not-found=true
+
+.PHONY: deploy-local-test
+deploy-local-test: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy everything for local testing (operator, Argo Workflows, executor plugins).
+	@echo "Local test environment deployed successfully"
+	@echo "  - Flokoa operator: deployed"
+	@echo "  - Argo Workflows: deployed with executor plugins enabled"
+	@echo "  - A2A executor plugin: registered"
+
+.PHONY: undeploy-local-test
+undeploy-local-test: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.
+	@echo "Local test environment undeployed"
+
 ##@ Dependencies
 
 ## Location to install dependencies to
@@ -385,9 +474,11 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+ARGO ?= $(LOCALBIN)/argo
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
+ARGO_CLI_VERSION ?= $(ARGO_WORKFLOWS_VERSION)
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
@@ -422,6 +513,27 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: argo-cli
+argo-cli: $(ARGO) ## Download argo CLI locally if necessary.
+$(ARGO): $(LOCALBIN)
+	$(call install-argo-cli,$(ARGO),$(ARGO_CLI_VERSION))
+
+# install-argo-cli downloads the argo CLI binary
+define install-argo-cli
+@[ -f $(1) ] || { \
+	set -e; \
+	echo "Downloading argo CLI v$(2)..."; \
+	ARGO_OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	ARGO_ARCH=$$(uname -m); \
+	if [ "$$ARGO_ARCH" = "x86_64" ]; then ARGO_ARCH="amd64"; fi; \
+	if [ "$$ARGO_ARCH" = "aarch64" ] || [ "$$ARGO_ARCH" = "arm64" ]; then ARGO_ARCH="arm64"; fi; \
+	curl -sLo $(1).gz "https://github.com/argoproj/argo-workflows/releases/download/v$(2)/argo-$$ARGO_OS-$$ARGO_ARCH.gz"; \
+	gunzip -f $(1).gz; \
+	chmod +x $(1); \
+	echo "argo CLI v$(2) installed to $(1)"; \
+}
+endef
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

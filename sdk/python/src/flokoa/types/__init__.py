@@ -17,6 +17,7 @@ from flokoa.types.modelconfig import (
     OpenAIProviderConfig,
     ProviderType,
 )
+from flokoa.types.templateconfig import TemplateConfig
 
 ProviderConfigType = Annotated[
     AnthropicProviderConfig | OpenAIProviderConfig | GoogleProviderConfig | BedrockProviderConfig,
@@ -81,6 +82,7 @@ __all__ = [
     "ProviderConfigType",
     "ProviderModelParametersType",
     "ProviderType",
+    "TemplateConfig",
     "ToolDefinition",
     "ToolType",
 ]
