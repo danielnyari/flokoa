@@ -7,6 +7,12 @@ metadata:
     app: tool-service
     test: e2e
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: tool-service
     image: localhost/tool-service:test
@@ -14,6 +20,14 @@ spec:
     ports:
     - containerPort: 8080
       name: http
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+        - ALL
     resources:
       requests:
         cpu: "50m"
