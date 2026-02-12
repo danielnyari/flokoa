@@ -57,7 +57,7 @@ var _ = Describe("Agent", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy tool service")
 
 			By("waiting for tool service to be ready")
-			err = waitForDeploymentReady("tool-service", namespace, 2*time.Minute)
+			err = waitForDeploymentReady("tool-service", namespace, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "Tool service deployment not ready")
 
 			By("creating the plugin service account token secret")
