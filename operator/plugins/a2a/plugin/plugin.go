@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,19 +70,39 @@ func (p *Plugin) ExecuteTemplate(ctx context.Context, args executor.ExecuteTempl
 
 // sendTask sends a new task to the A2A agent
 func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoint string) (*executor.ExecuteTemplateReply, error) {
-	// Create A2A client
-	a2aClient, err := p.createClient(ctx, endpoint)
-	if err != nil {
-		return failedReply(fmt.Sprintf("failed to create A2A client: %v", err)), nil
-	}
-
 	// Create and send the message
 	message := a2a.NewMessage(a2a.MessageRoleUser, a2a.TextPart{Text: spec.Message})
 	params := &a2a.MessageSendParams{
 		Message: message,
 	}
 
-	result, err := a2aClient.SendMessage(ctx, params)
+	candidates := endpointCandidates(endpoint)
+	var (
+		result       a2a.SendMessageResult
+		err          error
+		usedEndpoint string
+	)
+
+	for i, candidate := range candidates {
+		log.Printf("Sending A2A message: endpoint=%s attempt=%d/%d", candidate, i+1, len(candidates))
+
+		// Create A2A client
+		a2aClient, clientErr := p.createClient(ctx, candidate)
+		if clientErr != nil {
+			err = clientErr
+			log.Printf("A2A client creation failed: endpoint=%s error=%v", candidate, clientErr)
+			continue
+		}
+
+		result, err = a2aClient.SendMessage(ctx, params)
+		if err == nil {
+			usedEndpoint = candidate
+			break
+		}
+
+		log.Printf("A2A send failed: endpoint=%s error=%v", candidate, err)
+	}
+
 	if err != nil {
 		return failedReply(fmt.Sprintf("failed to send A2A message: %v", err)), nil
 	}
@@ -113,7 +135,7 @@ func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoi
 	progress := &ProgressState{
 		TaskID:    string(taskID),
 		ContextID: contextID,
-		Endpoint:  endpoint,
+		Endpoint:  usedEndpoint,
 		StartTime: time.Now(),
 		Timeout:   spec.GetTimeout(),
 	}
@@ -150,6 +172,7 @@ func (p *Plugin) pollTask(ctx context.Context, key string, spec *A2ASpec, progre
 		ID: a2a.TaskID(progress.TaskID),
 	})
 	if err != nil {
+		log.Printf("A2A get task failed: endpoint=%s taskID=%s error=%v", progress.Endpoint, progress.TaskID, err)
 		return failedReply(fmt.Sprintf("failed to get A2A task: %v", err)), nil
 	}
 
@@ -167,6 +190,33 @@ func (p *Plugin) pollTask(ctx context.Context, key string, spec *A2ASpec, progre
 		},
 		Requeue: &metav1.Duration{Duration: DefaultPollInterval},
 	}, nil
+}
+
+func endpointCandidates(endpoint string) []string {
+	trimmed := strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if trimmed == "" {
+		return []string{endpoint}
+	}
+
+	candidates := []string{trimmed}
+	if strings.HasSuffix(trimmed, "/a2a") {
+		candidates = append(candidates, strings.TrimSuffix(trimmed, "/a2a"))
+	} else {
+		candidates = append(candidates, trimmed+"/a2a")
+	}
+
+	// de-duplicate while preserving order
+	seen := make(map[string]struct{}, len(candidates))
+	unique := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if _, ok := seen[candidate]; ok || candidate == "" {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		unique = append(unique, candidate)
+	}
+
+	return unique
 }
 
 // createClient creates an A2A client for the given endpoint

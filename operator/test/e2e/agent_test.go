@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"os/exec"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -28,12 +27,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
-	"github.com/danielnyari/flokoa/test/utils"
 )
 
 // testManifests lists all the manifest files used in agent tests
 var testManifests = []string{
-	"test/e2e/testdata/llm-stub.yaml",
 	"test/e2e/testdata/tool-service.yaml",
 	"test/e2e/testdata/secret.yaml",
 	"test/e2e/testdata/modelprovider.yaml",
@@ -49,77 +46,27 @@ var _ = Describe("Agent", Ordered, func() {
 
 	Context("Template Agent E2E Test", func() {
 		BeforeAll(func() {
-			By("building the LLM stub image")
-			cmd := exec.Command("docker", "build",
-				"-f", "test/e2e/fixtures/Dockerfile.llm-stub",
-				"-t", "localhost/llm-stub:test",
-				"test/e2e/fixtures")
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to build LLM stub image")
-
-			By("loading the LLM stub image into Kind")
-			err = utils.LoadImageToKindClusterWithName("localhost/llm-stub:test")
-			Expect(err).NotTo(HaveOccurred(), "Failed to load LLM stub image")
-
-			By("building the tool service image")
-			cmd = exec.Command("docker", "build",
-				"-f", "test/e2e/fixtures/Dockerfile.tool-service",
-				"-t", "localhost/tool-service:test",
-				"test/e2e/fixtures")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to build tool service image")
-
-			By("loading the tool service image into Kind")
-			err = utils.LoadImageToKindClusterWithName("localhost/tool-service:test")
-			Expect(err).NotTo(HaveOccurred(), "Failed to load tool service image")
-
-			By("building the template agent image")
-			cmd = exec.Command("docker", "build",
-				"-f", "test/e2e/fixtures/Dockerfile",
-				"-t", "localhost/template-agent:test",
-				"..")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to build template agent image")
-
-			By("loading the template agent image into Kind")
-			err = utils.LoadImageToKindClusterWithName("localhost/template-agent:test")
-			Expect(err).NotTo(HaveOccurred(), "Failed to load template agent image")
+			By("ensuring OPENAI_API_KEY is available for real e2e run")
+			err := ensureOpenAIAPIKeySecret(namespace)
+			Expect(err).NotTo(HaveOccurred(), "Failed to configure openai-api-key secret")
 		})
 
-		It("should deploy CRs and create a templated agent from Python SDK", func() {
-			By("deploying the LLM stub service")
-			err := applyManifestFile("test/e2e/testdata/llm-stub.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to deploy LLM stub")
-
-			By("waiting for LLM stub to be ready")
-			Eventually(func(g Gomega) {
-				pod := &corev1.Pod{}
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "llm-stub",
-					Namespace: namespace,
-				}, pod)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(pod.Status.Phase).To(Equal(corev1.PodRunning))
-			}, 2*time.Minute).Should(Succeed())
-
+		It("should deploy CRs and create a petstore agent from Python SDK", func() {
 			By("deploying the tool service")
-			err = applyManifestFile("test/e2e/testdata/tool-service.yaml")
+			err := applyManifestFile("test/e2e/testdata/tool-service.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy tool service")
 
 			By("waiting for tool service to be ready")
-			Eventually(func(g Gomega) {
-				pod := &corev1.Pod{}
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "tool-service",
-					Namespace: namespace,
-				}, pod)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(pod.Status.Phase).To(Equal(corev1.PodRunning))
-			}, 2*time.Minute).Should(Succeed())
+			err = waitForDeploymentReady("tool-service", namespace, 2*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "Tool service deployment not ready")
 
-			By("creating the API key secret for ModelProvider")
+			By("creating the plugin service account token secret")
 			err = applyManifestFile("test/e2e/testdata/secret.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
+			Expect(err).NotTo(HaveOccurred(), "Failed to create plugin token secret")
+
+			By("creating/updating the OpenAI API key secret")
+			err = ensureOpenAIAPIKeySecret(namespace)
+			Expect(err).NotTo(HaveOccurred(), "Failed to configure openai-api-key secret")
 
 			By("applying the ModelProvider")
 			err = applyManifestFile("test/e2e/testdata/modelprovider.yaml")
@@ -129,7 +76,7 @@ var _ = Describe("Agent", Ordered, func() {
 			err = applyManifestFile("test/e2e/testdata/model.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply Model")
 
-			By("applying the Instruction with template")
+			By("applying the Instruction")
 			err = applyManifestFile("test/e2e/testdata/instruction.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply Instruction")
 
@@ -137,7 +84,7 @@ var _ = Describe("Agent", Ordered, func() {
 			Eventually(func(g Gomega) {
 				instruction := &agentv1alpha1.Instruction{}
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "template-instruction",
+					Name:      "petstore-instruction",
 					Namespace: namespace,
 				}, instruction)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -148,7 +95,7 @@ var _ = Describe("Agent", Ordered, func() {
 			err = applyManifestFile("test/e2e/testdata/agenttool.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply AgentTool")
 
-			By("applying the Agent with templated instruction")
+			By("applying the Agent")
 			err = applyManifestFile("test/e2e/testdata/agent.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply Agent")
 
@@ -156,7 +103,7 @@ var _ = Describe("Agent", Ordered, func() {
 			Eventually(func(g Gomega) {
 				agent := &agentv1alpha1.Agent{}
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "template-agent",
+					Name:      "petstore-agent",
 					Namespace: namespace,
 				}, agent)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -177,7 +124,7 @@ var _ = Describe("Agent", Ordered, func() {
 				podList := &corev1.PodList{}
 				err := k8sClient.List(ctx, podList,
 					client.InNamespace(namespace),
-					client.MatchingLabels{"app.kubernetes.io/name": "template-agent"})
+					client.MatchingLabels{"app.kubernetes.io/name": "petstore-agent"})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(podList.Items).To(HaveLen(1), "should have one agent pod")
 				g.Expect(podList.Items[0].Status.Phase).To(Equal(corev1.PodRunning))
@@ -186,7 +133,7 @@ var _ = Describe("Agent", Ordered, func() {
 			By("verifying Agent service is created")
 			svc := &corev1.Service{}
 			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "template-agent",
+				Name:      "petstore-agent",
 				Namespace: namespace,
 			}, svc)
 			Expect(err).NotTo(HaveOccurred(), "Agent service should exist")

@@ -50,19 +50,22 @@ const (
 )
 
 const (
-	ConditionTypeReady            = "Ready"
-	ConditionTypeToolsReady       = "ToolsReady"
-	ConditionTypeModelReady       = "ModelReady"
-	ConditionTypeInstructionReady = "InstructionReady"
-	ReasonDeploymentReady         = "DeploymentReady"
-	ReasonDeploymentNotReady      = "DeploymentNotReady"
-	ReasonReconcileError          = "ReconcileError"
-	ReasonToolsSynced             = "ToolsSynced"
-	ReasonToolSyncFailed          = "ToolSyncFailed"
-	ReasonModelResolved           = "ModelResolved"
-	ReasonModelResolveFailed      = "ModelResolveFailed"
-	ReasonInstructionResolved     = "InstructionResolved"
-	ReasonInstructionSyncFailed   = "InstructionSyncFailed"
+	ConditionTypeReady             = "Ready"
+	ConditionTypeToolsReady        = "ToolsReady"
+	ConditionTypeModelReady        = "ModelReady"
+	ConditionTypeModelSecretsReady = "ModelSecretsReady"
+	ConditionTypeInstructionReady  = "InstructionReady"
+	ReasonDeploymentReady          = "DeploymentReady"
+	ReasonDeploymentNotReady       = "DeploymentNotReady"
+	ReasonReconcileError           = "ReconcileError"
+	ReasonToolsSynced              = "ToolsSynced"
+	ReasonToolSyncFailed           = "ToolSyncFailed"
+	ReasonModelResolved            = "ModelResolved"
+	ReasonModelSecretsResolved     = "ModelSecretsResolved"
+	ReasonModelSecretsMissing      = "ModelSecretsMissing"
+	ReasonModelResolveFailed       = "ModelResolveFailed"
+	ReasonInstructionResolved      = "InstructionResolved"
+	ReasonInstructionSyncFailed    = "InstructionSyncFailed"
 )
 
 const (
@@ -97,6 +100,7 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -182,11 +186,23 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if err != nil {
 			logger.Error(err, "Failed to reconcile Model")
 			r.setCondition(agent, ConditionTypeModelReady, metav1.ConditionFalse, ReasonModelResolveFailed, err.Error())
+			r.setCondition(agent, ConditionTypeModelSecretsReady, metav1.ConditionFalse, ReasonModelResolveFailed, "Model resolution failed")
 			_ = r.Status().Update(ctx, agent)
 			return ctrl.Result{}, err
 		}
 		r.setCondition(agent, ConditionTypeModelReady, metav1.ConditionTrue, ReasonModelResolved,
 			fmt.Sprintf("Model %s/%s resolved", modelInfo.provider, modelInfo.model))
+		if len(modelInfo.missingSecretRefs) > 0 {
+			r.setCondition(
+				agent,
+				ConditionTypeModelSecretsReady,
+				metav1.ConditionFalse,
+				ReasonModelSecretsMissing,
+				fmt.Sprintf("Missing model secrets: %v", modelInfo.missingSecretRefs),
+			)
+		} else {
+			r.setCondition(agent, ConditionTypeModelSecretsReady, metav1.ConditionTrue, ReasonModelSecretsResolved, "All model secrets are present")
+		}
 	}
 
 	// Reconcile managed config ConfigMap (if managed runtime)
@@ -478,6 +494,10 @@ type resolvedModelInfo struct {
 	envVars []corev1.EnvVar
 	// secretEnvVars are environment variables sourced from secrets
 	secretEnvVars []corev1.EnvVar
+	// secretRefsHash changes when referenced secret resource versions change
+	secretRefsHash string
+	// missingSecretRefs are referenced secrets not found during reconcile
+	missingSecretRefs []string
 }
 
 // reconcileModel resolves the model reference and creates the model ConfigMap.
@@ -542,13 +562,80 @@ func (r *AgentReconciler) reconcileModel(ctx context.Context, agent *agentv1alph
 		return nil, fmt.Errorf("failed to reconcile model ConfigMap: %w", err)
 	}
 
+	secretRefsHash, missingSecrets, err := r.computeSecretRefsHash(ctx, agent.Namespace, resolvedConfig.SecretEnvVars)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve model secrets: %w", err)
+	}
+
 	return &resolvedModelInfo{
-		provider:      resolvedConfig.Provider.Type,
-		model:         resolvedConfig.Model,
-		configMapName: configMapName,
-		envVars:       resolvedConfig.EnvVars,
-		secretEnvVars: resolvedConfig.SecretEnvVars,
+		provider:          resolvedConfig.Provider.Type,
+		model:             resolvedConfig.Model,
+		configMapName:     configMapName,
+		envVars:           resolvedConfig.EnvVars,
+		secretEnvVars:     resolvedConfig.SecretEnvVars,
+		secretRefsHash:    secretRefsHash,
+		missingSecretRefs: missingSecrets,
 	}, nil
+}
+
+func (r *AgentReconciler) computeSecretRefsHash(ctx context.Context, namespace string, secretEnvVars []corev1.EnvVar) (string, []string, error) {
+	if len(secretEnvVars) == 0 {
+		return "", nil, nil
+	}
+
+	secretMap := map[string]string{}
+	missingSecretSet := map[string]struct{}{}
+	for _, envVar := range secretEnvVars {
+		if envVar.ValueFrom == nil || envVar.ValueFrom.SecretKeyRef == nil {
+			continue
+		}
+
+		secretName := envVar.ValueFrom.SecretKeyRef.Name
+		if secretName == "" {
+			continue
+		}
+
+		if _, exists := secretMap[secretName]; exists {
+			continue
+		}
+
+		secret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
+			if apierrors.IsNotFound(err) {
+				secretMap[secretName] = "missing"
+				missingSecretSet[secretName] = struct{}{}
+				continue
+			}
+			return "", nil, err
+		}
+
+		secretMap[secretName] = secret.ResourceVersion
+	}
+
+	if len(secretMap) == 0 {
+		return "", nil, nil
+	}
+
+	secretNames := make([]string, 0, len(secretMap))
+	for name := range secretMap {
+		secretNames = append(secretNames, name)
+	}
+	sort.Strings(secretNames)
+
+	var accumulator string
+	for _, name := range secretNames {
+		accumulator += name + ":" + secretMap[name] + ";"
+	}
+
+	h := sha256.Sum256([]byte(accumulator))
+
+	missingSecrets := make([]string, 0, len(missingSecretSet))
+	for name := range missingSecretSet {
+		missingSecrets = append(missingSecrets, name)
+	}
+	sort.Strings(missingSecrets)
+
+	return hex.EncodeToString(h[:])[:16], missingSecrets, nil
 }
 
 // reconcileModelConfigMap creates or updates the ConfigMap containing the model configuration.
@@ -746,6 +833,13 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 		podAnnotations = map[string]string{
 			"flokoa.ai/tools-hash": hex.EncodeToString(h[:])[:16],
 		}
+	}
+
+	if modelInfo != nil && modelInfo.secretRefsHash != "" {
+		if podAnnotations == nil {
+			podAnnotations = map[string]string{}
+		}
+		podAnnotations["flokoa.ai/model-secrets-hash"] = modelInfo.secretRefsHash
 	}
 
 	return &appsv1.Deployment{
@@ -1238,8 +1332,80 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForConfigMap),
 		).
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForSecret),
+		).
 		Named("agent").
 		Complete(r)
+}
+
+// findAgentsForSecret returns Agents affected by Secret changes through ModelProvider -> Model -> Agent references.
+func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret := obj.(*corev1.Secret)
+
+	providerList := &agentv1alpha1.ModelProviderList{}
+	if err := r.List(ctx, providerList, client.InNamespace(secret.Namespace)); err != nil {
+		return nil
+	}
+
+	affectedProviders := map[string]struct{}{}
+	for _, provider := range providerList.Items {
+		if provider.Spec.APIKeySecretRef != nil && provider.Spec.APIKeySecretRef.Name == secret.Name {
+			affectedProviders[provider.Name] = struct{}{}
+		}
+		if provider.Spec.Google != nil && provider.Spec.Google.ServiceAccountKeySecretRef != nil && provider.Spec.Google.ServiceAccountKeySecretRef.Name == secret.Name {
+			affectedProviders[provider.Name] = struct{}{}
+		}
+	}
+
+	if len(affectedProviders) == 0 {
+		return nil
+	}
+
+	modelList := &agentv1alpha1.ModelList{}
+	if err := r.List(ctx, modelList); err != nil {
+		return nil
+	}
+
+	affectedModels := map[types.NamespacedName]struct{}{}
+	for _, model := range modelList.Items {
+		providerNamespace := model.Spec.ProviderRef.Namespace
+		if providerNamespace == "" {
+			providerNamespace = model.Namespace
+		}
+		if providerNamespace != secret.Namespace {
+			continue
+		}
+		if _, ok := affectedProviders[model.Spec.ProviderRef.Name]; ok {
+			affectedModels[types.NamespacedName{Name: model.Name, Namespace: model.Namespace}] = struct{}{}
+		}
+	}
+
+	if len(affectedModels) == 0 {
+		return nil
+	}
+
+	agentList := &agentv1alpha1.AgentList{}
+	if err := r.List(ctx, agentList); err != nil {
+		return nil
+	}
+
+	requests := []reconcile.Request{}
+	for _, agent := range agentList.Items {
+		if agent.Spec.Model == nil {
+			continue
+		}
+		modelNamespace := agent.Spec.Model.Namespace
+		if modelNamespace == "" {
+			modelNamespace = agent.Namespace
+		}
+		if _, ok := affectedModels[types.NamespacedName{Name: agent.Spec.Model.Name, Namespace: modelNamespace}]; ok {
+			requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Name: agent.Name, Namespace: agent.Namespace}})
+		}
+	}
+
+	return requests
 }
 
 // findAgentsForAgentTool returns the Agents that reference a given AgentTool

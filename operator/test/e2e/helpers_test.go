@@ -20,6 +20,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	crand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,8 +49,14 @@ import (
 	"github.com/danielnyari/flokoa/test/utils"
 )
 
-// namespace where the project is deployed in
-const namespace = "flokoa-system"
+// managerNamespace is where the operator and server are deployed by `make deploy`.
+const managerNamespace = "flokoa-system"
+
+// manifestDefaultNamespace is the namespace value baked into static test manifests.
+const manifestDefaultNamespace = "flokoa-system"
+
+// namespace where the project is deployed for this test run.
+var namespace = manifestDefaultNamespace
 
 // serviceAccountName created for the project
 const serviceAccountName = "flokoa-controller"
@@ -64,6 +72,19 @@ const a2aPluginImage = "localhost/a2a-plugin:test"
 
 // argoNamespace is the namespace where Argo Workflows is deployed
 const argoNamespace = "argo"
+
+func initializeTestNamespace() string {
+	if explicit := os.Getenv("E2E_NAMESPACE"); explicit != "" {
+		return explicit
+	}
+
+	randomBytes := make([]byte, 4)
+	if _, err := crand.Read(randomBytes); err != nil {
+		return fmt.Sprintf("%s-%d", manifestDefaultNamespace, time.Now().UnixNano())
+	}
+
+	return fmt.Sprintf("%s-%s", manifestDefaultNamespace, hex.EncodeToString(randomBytes))
+}
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token.
@@ -81,7 +102,7 @@ func serviceAccountToken() (string, error) {
 
 	var token string
 	verifyTokenCreation := func(g Gomega) {
-		result, err := clientset.CoreV1().ServiceAccounts(namespace).CreateToken(
+		result, err := clientset.CoreV1().ServiceAccounts(managerNamespace).CreateToken(
 			ctx,
 			serviceAccountName,
 			tokenRequest,
@@ -99,13 +120,13 @@ func serviceAccountToken() (string, error) {
 func getMetricsOutput() string {
 	By("getting the curl-metrics logs")
 	pod := &corev1.Pod{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: namespace}, pod)
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: managerNamespace}, pod)
 	Expect(err).NotTo(HaveOccurred(), "Failed to get curl-metrics pod")
 
 	clientset, err := kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	req := clientset.CoreV1().Pods(namespace).GetLogs("curl-metrics", &corev1.PodLogOptions{})
+	req := clientset.CoreV1().Pods(managerNamespace).GetLogs("curl-metrics", &corev1.PodLogOptions{})
 	logs, err := req.Stream(ctx)
 	Expect(err).NotTo(HaveOccurred())
 	defer logs.Close()
@@ -135,6 +156,10 @@ func loadManifestsFromFile(path string) ([]*unstructured.Unstructured, error) {
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", fullPath, err)
+	}
+
+	if namespace != manifestDefaultNamespace {
+		data = bytes.ReplaceAll(data, []byte(manifestDefaultNamespace), []byte(namespace))
 	}
 
 	var objects []*unstructured.Unstructured
@@ -478,4 +503,39 @@ func deletePod(name, ns string) {
 		},
 	}
 	_ = k8sClient.Delete(ctx, pod)
+}
+
+// ensureOpenAIAPIKeySecret creates or updates the openai-api-key secret from OPENAI_API_KEY env var.
+func ensureOpenAIAPIKeySecret(ns string) error {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY is required for this e2e test")
+	}
+
+	nn := types.NamespacedName{Name: "openai-api-key", Namespace: ns}
+	existing := &corev1.Secret{}
+	err := k8sClient.Get(ctx, nn, existing)
+	if apierrors.IsNotFound(err) {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "openai-api-key",
+				Namespace: ns,
+			},
+			Type: corev1.SecretTypeOpaque,
+			StringData: map[string]string{
+				"api-key": apiKey,
+			},
+		}
+		return k8sClient.Create(ctx, secret)
+	}
+	if err != nil {
+		return err
+	}
+
+	existing.StringData = map[string]string{"api-key": apiKey}
+	if existing.Data == nil {
+		existing.Data = map[string][]byte{}
+	}
+	existing.Data["api-key"] = []byte(apiKey)
+	return k8sClient.Update(ctx, existing)
 }

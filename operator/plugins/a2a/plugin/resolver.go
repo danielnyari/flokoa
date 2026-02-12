@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,13 +39,14 @@ func (r *Resolver) Resolve(ctx context.Context, agent, namespace string) (string
 	if r.k8sClient != nil {
 		endpoint, err := r.resolveFromCR(ctx, agent, namespace)
 		if err == nil && endpoint != "" {
+			log.Printf("Resolved agent endpoint from CR: agent=%s namespace=%s endpoint=%s", agent, namespace, endpoint)
 			return endpoint, nil
 		}
-		// Log the error but continue to fallback
-		// In production, consider adding structured logging here
+		log.Printf("Warning: failed to resolve endpoint from CR for agent=%s namespace=%s: %v", agent, namespace, err)
 	}
 
 	// Fallback to convention-based URL
+	log.Printf("Using convention-based endpoint for agent=%s namespace=%s", agent, namespace)
 	return r.conventionBasedURL(agent, namespace), nil
 }
 
@@ -69,5 +71,5 @@ func (r *Resolver) resolveFromCR(ctx context.Context, agent, namespace string) (
 
 // conventionBasedURL returns the convention-based A2A endpoint URL
 func (r *Resolver) conventionBasedURL(agent, namespace string) string {
-	return fmt.Sprintf("http://%s.%s.svc.cluster.local/a2a", agent, namespace)
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local/", agent, namespace)
 }

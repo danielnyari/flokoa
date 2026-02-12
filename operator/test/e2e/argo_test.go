@@ -52,42 +52,6 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 			err = utils.LoadImageToKindClusterWithName(a2aPluginImage)
 			Expect(err).NotTo(HaveOccurred(), "Failed to load A2A plugin image")
 
-			By("building the LLM stub image")
-			cmd = exec.Command("docker", "build",
-				"-f", "test/e2e/fixtures/Dockerfile.llm-stub",
-				"-t", "localhost/llm-stub:test",
-				"test/e2e/fixtures")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to build LLM stub image")
-
-			By("loading the LLM stub image into Kind")
-			err = utils.LoadImageToKindClusterWithName("localhost/llm-stub:test")
-			Expect(err).NotTo(HaveOccurred(), "Failed to load LLM stub image")
-
-			By("building the tool service image")
-			cmd = exec.Command("docker", "build",
-				"-f", "test/e2e/fixtures/Dockerfile.tool-service",
-				"-t", "localhost/tool-service:test",
-				"test/e2e/fixtures")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to build tool service image")
-
-			By("loading the tool service image into Kind")
-			err = utils.LoadImageToKindClusterWithName("localhost/tool-service:test")
-			Expect(err).NotTo(HaveOccurred(), "Failed to load tool service image")
-
-			By("building the template agent image")
-			cmd = exec.Command("docker", "build",
-				"-f", "test/e2e/fixtures/Dockerfile",
-				"-t", "localhost/template-agent:test",
-				"..")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to build template agent image")
-
-			By("loading the template agent image into Kind")
-			err = utils.LoadImageToKindClusterWithName("localhost/template-agent:test")
-			Expect(err).NotTo(HaveOccurred(), "Failed to load template agent image")
-
 			By("installing Argo Workflows")
 			err = utils.InstallArgoWorkflows(ctx, k8sClient)
 			Expect(err).NotTo(HaveOccurred(), "Failed to install Argo Workflows")
@@ -99,28 +63,28 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 			By("applying RBAC for Argo Workflows")
 			err = applyManifestFile("test/e2e/testdata/argo/rbac.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply Argo RBAC")
+
+			By("creating the plugin service account token secret")
+			err = applyManifestFile("test/e2e/testdata/secret.yaml")
+			Expect(err).NotTo(HaveOccurred(), "Failed to create plugin token secret")
+
+			By("applying the A2A workflow template")
+			err = applyManifestFile("test/e2e/testdata/argo/workflow-template.yaml")
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply workflow template")
 		})
 
 		It("should deploy agent and execute workflow with A2A plugin", func() {
-			By("deploying the LLM stub service")
-			err := applyManifestFile("test/e2e/testdata/llm-stub.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to deploy LLM stub")
-
-			By("waiting for LLM stub to be ready")
-			err = waitForPodRunning("llm-stub", namespace, 2*time.Minute)
-			Expect(err).NotTo(HaveOccurred(), "LLM stub pod not running")
-
 			By("deploying the tool service")
-			err = applyManifestFile("test/e2e/testdata/tool-service.yaml")
+			err := applyManifestFile("test/e2e/testdata/tool-service.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy tool service")
 
 			By("waiting for tool service to be ready")
-			err = waitForPodRunning("tool-service", namespace, 2*time.Minute)
-			Expect(err).NotTo(HaveOccurred(), "Tool service pod not running")
+			err = waitForDeploymentReady("tool-service", namespace, 2*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "Tool service deployment not ready")
 
-			By("creating the API key secret for ModelProvider")
-			err = applyManifestFile("test/e2e/testdata/secret.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
+			By("creating/updating the OpenAI API key secret from OPENAI_API_KEY")
+			err = ensureOpenAIAPIKeySecret(namespace)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create OpenAI API key secret")
 
 			By("applying the ModelProvider")
 			err = applyManifestFile("test/e2e/testdata/modelprovider.yaml")
@@ -143,7 +107,7 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply Agent")
 
 			By("waiting for Agent to reach Ready condition")
-			err = waitForAgentReady("template-agent", namespace, 3*time.Minute)
+			err = waitForAgentReady("petstore-agent", namespace, 3*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "Agent not ready")
 
 			By("verifying Agent pod is running")
@@ -151,7 +115,7 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 				podList := &corev1.PodList{}
 				err := k8sClient.List(ctx, podList,
 					client.InNamespace(namespace),
-					client.MatchingLabels{"app.kubernetes.io/name": "template-agent"})
+					client.MatchingLabels{"app.kubernetes.io/name": "petstore-agent"})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(podList.Items).To(HaveLen(1), "should have one agent pod")
 				g.Expect(podList.Items[0].Status.Phase).To(Equal(corev1.PodRunning))
@@ -159,12 +123,22 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 
 			By("verifying Agent service is created")
 			svc := &corev1.Service{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "template-agent", Namespace: namespace}, svc)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: "petstore-agent", Namespace: namespace}, svc)
 			Expect(err).NotTo(HaveOccurred(), "Agent service should exist")
 
-			By("creating the Argo workflow with A2A plugin")
-			workflowName, err = createWorkflow("test/e2e/testdata/argo/workflow.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to create workflow")
+			By("creating the Argo workflow from workflow template")
+			wf := &wfv1.Workflow{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "a2a-e2e-",
+					Namespace:    namespace,
+				},
+				Spec: wfv1.WorkflowSpec{
+					WorkflowTemplateRef: &wfv1.WorkflowTemplateRef{Name: "a2a-agent-test"},
+				},
+			}
+			err = k8sClient.Create(ctx, wf)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create workflow from template")
+			workflowName = wf.Name
 			Expect(workflowName).NotTo(BeEmpty(), "Workflow name should not be empty")
 			_, _ = fmt.Fprintf(GinkgoWriter, "Created workflow: %s\n", workflowName)
 
@@ -173,23 +147,23 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Workflow did not succeed")
 
 			By("verifying workflow outputs")
-			wf, err := getWorkflow(workflowName, namespace)
+			workflowResult, err := getWorkflow(workflowName, namespace)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get workflow")
-			_, _ = fmt.Fprintf(GinkgoWriter, "Workflow phase: %s\n", wf.Status.Phase)
+			_, _ = fmt.Fprintf(GinkgoWriter, "Workflow phase: %s\n", workflowResult.Status.Phase)
 
-			// Check if there are any outputs in the workflow nodes
-			hasOutput := false
-			for _, node := range wf.Status.Nodes {
+			var taskResponse string
+			for _, node := range workflowResult.Status.Nodes {
 				if node.Outputs != nil && len(node.Outputs.Parameters) > 0 {
 					for _, param := range node.Outputs.Parameters {
-						if param.Name == "result" && param.Value != nil {
-							_, _ = fmt.Fprintf(GinkgoWriter, "Workflow result: %s\n", param.Value.String())
-							hasOutput = true
+						if param.Name == "taskResponse" && param.Value != nil {
+							taskResponse = param.Value.String()
+							_, _ = fmt.Fprintf(GinkgoWriter, "Workflow taskResponse: %s\n", taskResponse)
 						}
 					}
 				}
 			}
-			Expect(hasOutput).To(BeTrue(), "Should have result output from agent")
+			Expect(taskResponse).NotTo(BeEmpty(), "Should have taskResponse output from agent")
+			Expect(taskResponse).To(ContainSubstring(`"state":"completed"`), "Workflow response should indicate completed state")
 		})
 
 		AfterAll(func() {
@@ -206,7 +180,7 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 			deleteManifestFile("test/e2e/testdata/modelprovider.yaml")
 			deleteManifestFile("test/e2e/testdata/secret.yaml")
 			deleteManifestFile("test/e2e/testdata/tool-service.yaml")
-			deleteManifestFile("test/e2e/testdata/llm-stub.yaml")
+			deleteManifestFile("test/e2e/testdata/argo/workflow-template.yaml")
 
 			By("cleaning up Argo RBAC")
 			deleteManifestFile("test/e2e/testdata/argo/rbac.yaml")
@@ -229,6 +203,7 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 
 		It("should handle missing agent gracefully", func() {
 			By("creating a workflow targeting a non-existent agent")
+			pluginPayload := fmt.Sprintf(`{"a2a":{"agent":"nonexistent-agent","namespace":"%s","message":"This should fail","timeout":"30s"}}`, namespace)
 			wf := &wfv1.Workflow{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "a2a-fail-test-",
@@ -242,7 +217,7 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 							Name: "call-nonexistent",
 							Plugin: &wfv1.Plugin{
 								Object: wfv1.Object{
-									Value: json.RawMessage(`{"a2a":{"agent":"nonexistent-agent","namespace":"flokoa-system","message":"This should fail","timeout":"30s"}}`),
+									Value: json.RawMessage(pluginPayload),
 								},
 							},
 						},

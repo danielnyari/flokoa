@@ -68,6 +68,12 @@ make setup-test-e2e
 go test ./test/e2e -v -ginkgo.focus="Template Agent E2E Test"
 ```
 
+## Environment Requirements
+
+- `OPENAI_API_KEY` must be set. The e2e suite performs a real model call and fails fast if the variable is missing.
+- The suite uses a randomized namespace per run (for example `flokoa-system-a1b2c3d4`) to avoid collisions with previous failed runs.
+- Optional: set `E2E_NAMESPACE` to force a specific namespace name for debugging.
+
 ## Key Features Tested
 
 1. **Templated Instructions**: The Instruction CRD contains variables like `${role}` and `${task_type}` that can be substituted at runtime

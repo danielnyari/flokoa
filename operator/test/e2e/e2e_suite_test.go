@@ -79,6 +79,9 @@ func TestE2E(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	ctx = context.Background()
+	namespace = initializeTestNamespace()
+	_, _ = fmt.Fprintf(GinkgoWriter, "Using operator namespace: %s\n", managerNamespace)
+	_, _ = fmt.Fprintf(GinkgoWriter, "Using e2e workload namespace: %s\n", namespace)
 
 	By("setting up Kubernetes client")
 	var err error
@@ -136,28 +139,37 @@ var _ = BeforeSuite(func() {
 	}
 
 	// Deploy the operator and server - shared across all tests
-	By("creating manager namespace")
-	// If the namespace exists but is Terminating (from a previous run), wait for it to be fully deleted
-	existingNs := &corev1.Namespace{}
-	if err = k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, existingNs); err == nil {
-		if existingNs.Status.Phase == corev1.NamespaceTerminating {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Namespace %s is Terminating, waiting for deletion...\n", namespace)
-			Eventually(func() error {
-				return k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{})
-			}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(MatchError(ContainSubstring("not found")))
+	ensureNamespaceReady := func(name string) {
+		existingNs := &corev1.Namespace{}
+		if err = k8sClient.Get(ctx, client.ObjectKey{Name: name}, existingNs); err == nil {
+			if existingNs.Status.Phase == corev1.NamespaceTerminating {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Namespace %s is Terminating, waiting for deletion...\n", name)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: name}, &corev1.Namespace{})
+				}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(MatchError(ContainSubstring("not found")))
+			}
 		}
 	}
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
-			Labels: map[string]string{
-				"pod-security.kubernetes.io/enforce": "restricted",
-			},
-		},
+
+	By("creating manager and workload namespaces")
+	namespaces := []string{managerNamespace}
+	if namespace != managerNamespace {
+		namespaces = append(namespaces, namespace)
 	}
-	err = k8sClient.Create(ctx, ns)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create namespace")
+	for _, nsName := range namespaces {
+		ensureNamespaceReady(nsName)
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nsName,
+				Labels: map[string]string{
+					"pod-security.kubernetes.io/enforce": "restricted",
+				},
+			},
+		}
+		err = k8sClient.Create(ctx, ns)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create namespace")
+		}
 	}
 
 	By("installing CRDs")
@@ -181,13 +193,11 @@ var _ = AfterSuite(func() {
 	cmd = exec.Command("make", "uninstall")
 	_, _ = utils.Run(cmd)
 
-	By("removing manager namespace")
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
-		},
+	By("removing test namespaces")
+	for _, nsName := range []string{namespace, managerNamespace} {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
+		_ = k8sClient.Delete(ctx, ns)
 	}
-	_ = k8sClient.Delete(ctx, ns)
 
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
