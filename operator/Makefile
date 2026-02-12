@@ -158,6 +158,20 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+E2E_NAMESPACE ?= flokoa-system
+
+.PHONY: deploy-e2e-testdata
+deploy-e2e-testdata: kustomize ## Create the OpenAI secret from OPENAI_API_KEY and apply e2e testdata.
+ifndef OPENAI_API_KEY
+	$(error OPENAI_API_KEY is not set)
+endif
+	$(KUBECTL) create secret generic openai-api-key \
+		--namespace=$(E2E_NAMESPACE) \
+		--from-literal=api-key=$(OPENAI_API_KEY) \
+		--dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build test/e2e/testdata | $(KUBECTL) apply -f -
+	$(ARGO) submit -n $(E2E_NAMESPACE) test/e2e/testdata/argo/workflow.yaml
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run

@@ -290,7 +290,19 @@ func waitForDeploymentReady(name, ns string, timeout time.Duration) error {
 		if err != nil {
 			return false, nil
 		}
-		return deploy.Status.ReadyReplicas == *deploy.Spec.Replicas, nil
+
+		for _, condition := range deploy.Status.Conditions {
+			if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionTrue {
+				return true, nil
+			}
+		}
+
+		desiredReplicas := int32(1)
+		if deploy.Spec.Replicas != nil {
+			desiredReplicas = *deploy.Spec.Replicas
+		}
+
+		return deploy.Status.ReadyReplicas >= desiredReplicas, nil
 	})
 }
 
