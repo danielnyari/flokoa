@@ -1,4 +1,6 @@
 
+from ..fixtures import *
+
 
 import pytest
 

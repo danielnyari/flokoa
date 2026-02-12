@@ -30,7 +30,7 @@ from ....auth.auth_credential import (
     ServiceAccountCredential,
 )
 from ....auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
-from ..common.common import ApiParameter
+from ..common import ApiParameter
 
 
 class OpenIdConfig(BaseModel):

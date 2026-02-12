@@ -20,6 +20,8 @@ from typing import Any, Dict, List, Optional, Union
 from fastapi.openapi.models import Response, Schema
 from pydantic import BaseModel, Field, model_serializer
 
+from ..utils import _to_snake_case
+
 
 def rename_python_keywords(s: str, prefix: str = "param_") -> str:
     """Renames Python keywords by adding a prefix.
