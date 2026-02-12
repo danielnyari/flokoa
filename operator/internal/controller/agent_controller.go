@@ -1336,8 +1336,42 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForSecret),
 		).
+		Watches(
+			&agentv1alpha1.Model{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForModel),
+		).
 		Named("agent").
 		Complete(r)
+}
+
+// findAgentsForModel returns the Agents that reference a given Model.
+func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
+	model := obj.(*agentv1alpha1.Model)
+
+	var agents agentv1alpha1.AgentList
+	if err := r.List(ctx, &agents, client.InNamespace(model.Namespace)); err != nil {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, agent := range agents.Items {
+		if agent.Spec.Model == nil {
+			continue
+		}
+		modelNs := agent.Spec.Model.Namespace
+		if modelNs == "" {
+			modelNs = agent.Namespace
+		}
+		if agent.Spec.Model.Name == model.Name && modelNs == model.Namespace {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      agent.Name,
+					Namespace: agent.Namespace,
+				},
+			})
+		}
+	}
+	return requests
 }
 
 // findAgentsForSecret returns Agents affected by Secret changes through ModelProvider -> Model -> Agent references.

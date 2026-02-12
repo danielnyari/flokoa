@@ -71,16 +71,18 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 			By("applying the A2A workflow template")
 			err = applyManifestFile("test/e2e/testdata/argo/workflow-template.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply workflow template")
-		})
 
-		It("should deploy agent and execute workflow with A2A plugin", func() {
 			By("deploying the tool service")
-			err := applyManifestFile("test/e2e/testdata/tool-service.yaml")
+			err = applyManifestFile("test/e2e/testdata/tool-service.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy tool service")
 
 			By("waiting for tool service to be ready")
 			err = waitForDeploymentReady("tool-service", namespace, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "Tool service deployment not ready")
+		})
+
+		It("should deploy agent and execute workflow with A2A plugin", func() {
+			var err error
 
 			By("creating/updating the OpenAI API key secret from OPENAI_API_KEY")
 			err = ensureOpenAIAPIKeySecret(namespace)
