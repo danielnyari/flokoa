@@ -1,4 +1,4 @@
-# Copyright 2026 Google LLC
+# Copyright 2026 Flokoa Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,413 +16,249 @@ from __future__ import annotations
 
 import logging
 import ssl
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import httpx
 from fastapi.openapi.models import Operation, Schema
-from google.genai.types import FunctionDeclaration
-from typing_extensions import override
+from pydantic_ai import RunContext, Tool
 
-from ....agents.readonly_context import ReadonlyContext
-from ....features import FeatureName, is_feature_enabled
-from ..._gemini_schema_util import _to_gemini_schema, _to_snake_case
+from ..utils import _to_snake_case
 from ...auth.auth_credential import AuthCredential
 from ...auth.auth_schemes import AuthScheme
-from ...base_tool import BaseTool
-from ...tool_context import ToolContext
-from ..auth.auth_helpers import credential_to_param, dict_to_auth_scheme
-from ..auth.credential_exchangers.auto_auth_credential_exchanger import AutoAuthCredentialExchanger
-from ..common.common import ApiParameter
+from .auth.auth_helpers import credential_to_param
+from .auth.credential_exchangers.auto_auth_credential_exchanger import AutoAuthCredentialExchanger
+from .common import ApiParameter
 from .openapi_spec_parser import OperationEndpoint, ParsedOperation
 from .operation_parser import OperationParser
-from .tool_auth_handler import ToolAuthHandler
 
-logger = logging.getLogger("google_adk." + __name__)
-
-
-def snake_to_lower_camel(snake_case_string: str):
-    """Converts a snake_case string to a lower_camel_case string.
-
-    Args:
-        snake_case_string: The input snake_case string.
-
-    Returns:
-        The lower_camel_case string.
-    """
-    if "_" not in snake_case_string:
-        return snake_case_string
-
-    return "".join([s.lower() if i == 0 else s.capitalize() for i, s in enumerate(snake_case_string.split("_"))])
+logger = logging.getLogger("flokoa." + __name__)
 
 
-AuthPreparationState = Literal["pending", "done"]
+@dataclass
+class OpenAPIDeps:
+    """Dependencies injected at agent.run() time for OpenAPI tools.
 
+    Users compose this into their own Deps dataclass, or use it directly
+    as the agent's deps_type.
 
-class RestApiTool(BaseTool):
-    """A generic tool that interacts with a REST API.
-
-    * Generates request params and body
-    * Attaches auth credentials to API call.
-
-    Example::
-
-      # Each API operation in the spec will be turned into its own tool
-      # Name of the tool is the operationId of that operation, in snake case
-      operations = OperationGenerator().parse(openapi_spec_dict)
-      tool = [RestApiTool.from_parsed_operation(o) for o in operations]
+    Attributes:
+        client: An httpx.AsyncClient for making HTTP requests. Enables
+            connection pooling across tool calls.
+        header_provider: Optional callable that returns dynamic headers.
+            Called on each request to inject headers like correlation IDs
+            or authentication tokens.
     """
 
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        endpoint: Union[OperationEndpoint, str],
-        operation: Union[Operation, str],
-        auth_scheme: Optional[Union[AuthScheme, str]] = None,
-        auth_credential: Optional[Union[AuthCredential, str]] = None,
-        should_parse_operation=True,
-        ssl_verify: Optional[Union[bool, str, ssl.SSLContext]] = None,
-        header_provider: Optional[Callable[[ReadonlyContext], Dict[str, str]]] = None,
-        *,
-        credential_key: Optional[str] = None,
-    ):
-        """Initializes the RestApiTool with the given parameters.
+    client: httpx.AsyncClient
+    header_provider: Callable[[], Dict[str, str]] | None = None
 
-        To generate RestApiTool from OpenAPI Specs, use OperationGenerator.
-        Example::
 
-          # Each API operation in the spec will be turned into its own tool
-          # Name of the tool is the operationId of that operation, in snake case
-          operations = OperationGenerator().parse(openapi_spec_dict)
-          tool = [RestApiTool.from_parsed_operation(o) for o in operations]
+@dataclass
+class RestApiToolConfig:
+    """Static configuration for a single REST API operation.
 
-        Hint: Use google.adk.tools.openapi_tool.auth.auth_helpers to construct
-        auth_scheme and auth_credential.
+    Holds everything needed to build an HTTP request for one OpenAPI operation.
+    Created from a ParsedOperation (parsed from an OpenAPI spec) and used by
+    create_rest_api_tool() to produce a Pydantic AI Tool.
+    """
 
-        Args:
-            name: The name of the tool.
-            description: The description of the tool.
-            endpoint: Include the base_url, path, and method of the tool.
-            operation: Pydantic object or a dict. Representing the OpenAPI Operation
-              object
-              (https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#operation-object)
-            auth_scheme: The auth scheme of the tool. Representing the OpenAPI
-              SecurityScheme object
-              (https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#security-scheme-object)
-            auth_credential: The authentication credential of the tool.
-            should_parse_operation: Whether to parse the operation.
-            ssl_verify: SSL certificate verification option. Can be:
-              - None: Use default verification
-              - True: Verify SSL certificates using system CA
-              - False: Disable SSL verification (insecure, not recommended)
-              - str: Path to a CA bundle file or directory for custom CA
-              - ssl.SSLContext: Custom SSL context for advanced configuration
-            header_provider: A callable that returns a dictionary of headers to be
-              included in API requests. The callable receives the ReadonlyContext as
-              an argument, allowing dynamic header generation based on the current
-              context. Useful for adding custom headers like correlation IDs,
-              authentication tokens, or other request metadata.
-            credential_key: Optional stable key used for interactive auth and
-              credential caching.
-        """
-        # Gemini restrict the length of function name to be less than 64 characters
-        self.name = name[:60]
-        self.description = description
-        self.endpoint = OperationEndpoint.model_validate_json(endpoint) if isinstance(endpoint, str) else endpoint
-        self.operation = Operation.model_validate_json(operation) if isinstance(operation, str) else operation
-        self.auth_credential, self.auth_scheme = None, None
-        self.credential_key = credential_key
-
-        self.configure_auth_credential(auth_credential)
-        self.configure_auth_scheme(auth_scheme)
-
-        # Private properties
-        self.credential_exchanger = AutoAuthCredentialExchanger()
-        self._default_headers: Dict[str, str] = {}
-        self._ssl_verify = ssl_verify
-        self._header_provider = header_provider
-        self._logger = logger
-        if should_parse_operation:
-            self._operation_parser = OperationParser(self.operation)
+    name: str
+    description: str
+    endpoint: OperationEndpoint
+    operation: Operation
+    operation_parser: OperationParser
+    auth_scheme: AuthScheme | None = None
+    auth_credential: AuthCredential | None = None
+    ssl_verify: bool | str | ssl.SSLContext | None = None
+    default_headers: Dict[str, str] = field(default_factory=dict)
+    credential_exchanger: AutoAuthCredentialExchanger = field(
+        default_factory=AutoAuthCredentialExchanger
+    )
 
     @classmethod
     def from_parsed_operation(
         cls,
         parsed: ParsedOperation,
         ssl_verify: Optional[Union[bool, str, ssl.SSLContext]] = None,
-        header_provider: Optional[Callable[[ReadonlyContext], Dict[str, str]]] = None,
-    ) -> RestApiTool:
-        """Initializes the RestApiTool from a ParsedOperation object.
+    ) -> RestApiToolConfig:
+        """Create a RestApiToolConfig from a ParsedOperation.
 
         Args:
-            parsed: A ParsedOperation object.
+            parsed: A ParsedOperation from the OpenAPI spec parser.
             ssl_verify: SSL certificate verification option.
-            header_provider: A callable that returns a dictionary of headers to be
-              included in API requests. The callable receives the ReadonlyContext as
-              an argument, allowing dynamic header generation based on the current
-              context. Useful for adding custom headers like correlation IDs,
-              authentication tokens, or other request metadata.
 
         Returns:
-            A RestApiTool object.
+            A RestApiToolConfig instance.
         """
-        operation_parser = OperationParser.load(parsed.operation, parsed.parameters, parsed.return_value)
+        operation_parser = OperationParser.load(
+            parsed.operation, parsed.parameters, parsed.return_value
+        )
+        tool_name = _to_snake_case(operation_parser.get_function_name())[:60]
 
-        tool_name = _to_snake_case(operation_parser.get_function_name())
-        generated = cls(
+        return cls(
             name=tool_name,
             description=parsed.operation.description or parsed.operation.summary or "",
             endpoint=parsed.endpoint,
             operation=parsed.operation,
+            operation_parser=operation_parser,
             auth_scheme=parsed.auth_scheme,
             auth_credential=parsed.auth_credential,
             ssl_verify=ssl_verify,
-            header_provider=header_provider,
         )
-        generated._operation_parser = operation_parser
-        return generated
 
-    @classmethod
-    def from_parsed_operation_str(cls, parsed_operation_str: str) -> RestApiTool:
-        """Initializes the RestApiTool from a dict.
 
-        Args:
-            parsed: A dict representation of a ParsedOperation object.
+def _prepare_request_params(
+    endpoint: OperationEndpoint,
+    operation: Operation,
+    default_headers: Dict[str, str],
+    tool_name: str,
+    parameters: List[ApiParameter],
+    kwargs: Dict[str, Any],
+    auth_additional_headers: Dict[str, str] | None = None,
+) -> Dict[str, Any]:
+    """Build httpx request parameters from operation config and call arguments.
 
-        Returns:
-            A RestApiTool object.
-        """
-        operation = ParsedOperation.model_validate_json(parsed_operation_str)
-        return RestApiTool.from_parsed_operation(operation)
+    This is a pure function extracted from the original RestApiTool method.
+    It maps OpenAPI parameters to their HTTP locations (path, query, header,
+    cookie) and constructs the request body from the operation's requestBody.
 
-    @override
-    def _get_declaration(self) -> FunctionDeclaration:
-        """Returns the function declaration in the Gemini Schema format."""
-        schema_dict = self._operation_parser.get_json_schema()
-        if is_feature_enabled(FeatureName.JSON_SCHEMA_FOR_FUNC_DECL):
-            function_decl = FunctionDeclaration(
-                name=self.name,
-                description=self.description,
-                parameters_json_schema=schema_dict,
+    Args:
+        endpoint: The operation endpoint (base_url, path, method).
+        operation: The OpenAPI Operation object.
+        default_headers: Headers to include in every request.
+        tool_name: Name of the tool (for User-Agent).
+        parameters: List of ApiParameter objects for this operation.
+        kwargs: Keyword arguments from the tool call.
+        auth_additional_headers: Extra headers from auth credentials.
+
+    Returns:
+        A dict suitable for httpx.AsyncClient.request(**params).
+    """
+    method = endpoint.method.lower()
+    if not method:
+        raise ValueError("Operation method not found.")
+
+    path_params: Dict[str, Any] = {}
+    query_params: Dict[str, Any] = {}
+    header_params: Dict[str, Any] = {}
+    cookie_params: Dict[str, Any] = {}
+
+    header_params["User-Agent"] = f"flokoa (tool: {tool_name})"
+
+    if auth_additional_headers:
+        header_params.update(auth_additional_headers)
+
+    params_map: Dict[str, ApiParameter] = {p.py_name: p for p in parameters}
+
+    for param_k, v in kwargs.items():
+        param_obj = params_map.get(param_k)
+        if not param_obj:
+            continue
+
+        original_k = param_obj.original_name
+        param_location = param_obj.param_location
+
+        if param_location == "path":
+            path_params[original_k] = v
+        elif param_location == "query":
+            if v:
+                query_params[original_k] = v
+        elif param_location == "header":
+            header_params[original_k] = v
+        elif param_location == "cookie":
+            cookie_params[original_k] = v
+
+    # Construct URL
+    base_url = endpoint.base_url or ""
+    base_url = base_url[:-1] if base_url.endswith("/") else base_url
+    url = f"{base_url}{endpoint.path.format(**path_params)}"
+
+    # Construct body
+    body_kwargs: Dict[str, Any] = {}
+    request_body = operation.requestBody
+    if request_body:
+        for mime_type, media_type_object in request_body.content.items():
+            schema = media_type_object.schema_
+            body_data = None
+
+            if schema.type == "object":
+                body_data = {}
+                for param in parameters:
+                    if param.param_location == "body" and param.py_name in kwargs:
+                        body_data[param.original_name] = kwargs[param.py_name]
+
+            elif schema.type == "array":
+                for param in parameters:
+                    if param.param_location == "body" and param.py_name == "array":
+                        body_data = kwargs.get("array")
+                        break
+            else:
+                for param in parameters:
+                    if param.param_location == "body" and not param.original_name:
+                        body_data = kwargs.get(param.py_name) if param.py_name in kwargs else None
+                        break
+
+            if mime_type == "application/json" or mime_type.endswith("+json"):
+                if body_data is not None:
+                    body_kwargs["json"] = body_data
+            elif mime_type == "application/x-www-form-urlencoded":
+                body_kwargs["data"] = body_data
+            elif mime_type == "multipart/form-data":
+                body_kwargs["files"] = body_data
+            elif mime_type in ("application/octet-stream", "text/plain"):
+                body_kwargs["data"] = body_data
+
+            if mime_type:
+                header_params["Content-Type"] = mime_type
+            break  # Process only the first mime_type
+
+    filtered_query_params: Dict[str, Any] = {
+        k: v for k, v in query_params.items() if v is not None
+    }
+
+    for key, value in default_headers.items():
+        header_params.setdefault(key, value)
+
+    return {
+        "method": method,
+        "url": url,
+        "params": filtered_query_params,
+        "headers": header_params,
+        "cookies": cookie_params,
+        **body_kwargs,
+    }
+
+
+def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
+    """Create an async callable that executes a REST API operation.
+
+    The returned callable accepts RunContext[OpenAPIDeps] as its first argument
+    and **kwargs from the tool schema. It handles auth credential exchange,
+    request preparation, and HTTP execution via the deps' httpx client.
+
+    Args:
+        config: Static configuration for the REST API operation.
+
+    Returns:
+        An async function suitable for use with Tool.from_schema(takes_ctx=True).
+    """
+
+    async def rest_api_call(ctx: RunContext[OpenAPIDeps], **kwargs: Any) -> Dict[str, Any]:
+        # Exchange auth credentials (e.g. OAuth2 token refresh, service account)
+        auth_scheme = config.auth_scheme
+        auth_credential = config.auth_credential
+
+        if auth_credential and auth_scheme:
+            auth_credential = config.credential_exchanger.exchange_credential(
+                auth_scheme, auth_credential
             )
-        else:
-            parameters = _to_gemini_schema(schema_dict)
-            function_decl = FunctionDeclaration(name=self.name, description=self.description, parameters=parameters)
-        return function_decl
 
-    def configure_auth_scheme(self, auth_scheme: Union[AuthScheme, Dict[str, Any]]):
-        """Configures the authentication scheme for the API call.
+        # Build parameter list from operation parser
+        api_params = config.operation_parser.get_parameters().copy()
+        api_args = dict(kwargs)
 
-        Args:
-            auth_scheme: AuthScheme|dict -: The authentication scheme. The dict is
-              converted to a AuthScheme object.
-        """
-        if isinstance(auth_scheme, dict):
-            auth_scheme = dict_to_auth_scheme(auth_scheme)
-        self.auth_scheme = auth_scheme
-
-    def configure_auth_credential(self, auth_credential: Optional[Union[AuthCredential, str]] = None):
-        """Configures the authentication credential for the API call.
-
-        Args:
-            auth_credential: AuthCredential|dict - The authentication credential.
-              The dict is converted to an AuthCredential object.
-        """
-        if isinstance(auth_credential, str):
-            auth_credential = AuthCredential.model_validate_json(auth_credential)
-        self.auth_credential = auth_credential
-
-    def configure_credential_key(self, credential_key: Optional[str] = None):
-        """Configures the credential key for interactive auth / caching."""
-        self.credential_key = credential_key
-
-    def configure_ssl_verify(self, ssl_verify: Optional[Union[bool, str, ssl.SSLContext]] = None):
-        """Configures SSL certificate verification for the API call.
-
-        This is useful for enterprise environments where requests go through a
-        TLS-intercepting proxy with a custom CA certificate.
-
-        Args:
-            ssl_verify: SSL certificate verification option. Can be:
-              - None: Use default verification (True)
-              - True: Verify SSL certificates using system CA
-              - False: Disable SSL verification (insecure, not recommended)
-              - str: Path to a CA bundle file or directory for custom CA
-              - ssl.SSLContext: Custom SSL context for advanced configuration
-        """
-        self._ssl_verify = ssl_verify
-
-    def set_default_headers(self, headers: Dict[str, str]):
-        """Sets default headers that are merged into every request."""
-        self._default_headers = headers
-
-    def _prepare_auth_request_params(
-        self,
-        auth_scheme: AuthScheme,
-        auth_credential: AuthCredential,
-    ) -> Tuple[List[ApiParameter], Dict[str, Any]]:
-        # Handle Authentication
-        if not auth_scheme or not auth_credential:
-            return
-
-        return credential_to_param(auth_scheme, auth_credential)
-
-    def _prepare_request_params(self, parameters: List[ApiParameter], kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepares the request parameters for the API call.
-
-        Args:
-            parameters: A list of ApiParameter objects representing the parameters
-              for the API call.
-            kwargs: The keyword arguments passed to the call function from the Tool
-              caller.
-
-        Returns:
-            A dictionary containing the  request parameters for the API call. This
-            initializes an httpx.AsyncClient.request() call.
-
-        Example:
-            self._prepare_request_params({"input_id": "test-id"})
-        """
-
-        method = self.endpoint.method.lower()
-        if not method:
-            raise ValueError("Operation method not found.")
-
-        path_params: Dict[str, Any] = {}
-        query_params: Dict[str, Any] = {}
-        header_params: Dict[str, Any] = {}
-        cookie_params: Dict[str, Any] = {}
-
-        from ....version import __version__ as adk_version
-
-        # Set the custom User-Agent header
-        user_agent = f"google-adk/{adk_version} (tool: {self.name})"
-        header_params["User-Agent"] = user_agent
-
-        if self.auth_credential and self.auth_credential.http and self.auth_credential.http.additional_headers:
-            header_params.update(self.auth_credential.http.additional_headers)
-
-        params_map: Dict[str, ApiParameter] = {p.py_name: p for p in parameters}
-
-        # Fill in path, query, header and cookie parameters to the request
-        for param_k, v in kwargs.items():
-            param_obj = params_map.get(param_k)
-            if not param_obj:
-                continue  # If input arg not in the ApiParameter list, ignore it.
-
-            original_k = param_obj.original_name
-            param_location = param_obj.param_location
-
-            if param_location == "path":
-                path_params[original_k] = v
-            elif param_location == "query":
-                if v:
-                    query_params[original_k] = v
-            elif param_location == "header":
-                header_params[original_k] = v
-            elif param_location == "cookie":
-                cookie_params[original_k] = v
-
-        # Construct URL
-        base_url = self.endpoint.base_url or ""
-        base_url = base_url[:-1] if base_url.endswith("/") else base_url
-        url = f"{base_url}{self.endpoint.path.format(**path_params)}"
-
-        # Construct body
-        body_kwargs: Dict[str, Any] = {}
-        request_body = self.operation.requestBody
-        if request_body:
-            for mime_type, media_type_object in request_body.content.items():
-                schema = media_type_object.schema_
-                body_data = None
-
-                if schema.type == "object":
-                    body_data = {}
-                    for param in parameters:
-                        if param.param_location == "body" and param.py_name in kwargs:
-                            body_data[param.original_name] = kwargs[param.py_name]
-
-                elif schema.type == "array":
-                    for param in parameters:
-                        if param.param_location == "body" and param.py_name == "array":
-                            body_data = kwargs.get("array")
-                            break
-                else:  # like string
-                    for param in parameters:
-                        # original_name = '' indicating this param applies to the full body.
-                        if param.param_location == "body" and not param.original_name:
-                            body_data = kwargs.get(param.py_name) if param.py_name in kwargs else None
-                            break
-
-                if mime_type == "application/json" or mime_type.endswith("+json"):
-                    if body_data is not None:
-                        body_kwargs["json"] = body_data
-                elif mime_type == "application/x-www-form-urlencoded":
-                    body_kwargs["data"] = body_data
-                elif mime_type == "multipart/form-data":
-                    body_kwargs["files"] = body_data
-                elif mime_type == "application/octet-stream" or mime_type == "text/plain":
-                    body_kwargs["data"] = body_data
-
-                if mime_type:
-                    header_params["Content-Type"] = mime_type
-                break  # Process only the first mime_type
-
-        filtered_query_params: Dict[str, Any] = {k: v for k, v in query_params.items() if v is not None}
-
-        for key, value in self._default_headers.items():
-            header_params.setdefault(key, value)
-
-        request_params: Dict[str, Any] = {
-            "method": method,
-            "url": url,
-            "params": filtered_query_params,
-            "headers": header_params,
-            "cookies": cookie_params,
-            **body_kwargs,
-        }
-
-        return request_params
-
-    @override
-    async def run_async(self, *, args: dict[str, Any], tool_context: Optional[ToolContext]) -> Dict[str, Any]:
-        return await self.call(args=args, tool_context=tool_context)
-
-    async def call(self, *, args: dict[str, Any], tool_context: Optional[ToolContext]) -> Dict[str, Any]:
-        """Executes the REST API call.
-
-        Args:
-            args: Keyword arguments representing the operation parameters.
-            tool_context: The tool context (not used here, but required by the
-              interface).
-
-        Returns:
-            The API response as a dictionary.
-        """
-        # Prepare auth credentials for the API call
-        tool_auth_handler = ToolAuthHandler.from_tool_context(
-            tool_context,
-            self.auth_scheme,
-            self.auth_credential,
-            credential_key=self.credential_key,
-        )
-        auth_result = await tool_auth_handler.prepare_auth_credentials()
-        auth_state, auth_scheme, auth_credential = (
-            auth_result.state,
-            auth_result.auth_scheme,
-            auth_result.auth_credential,
-        )
-
-        if auth_state == "pending":
-            return {
-                "pending": True,
-                "message": "Needs your authorization to access your data.",
-            }
-
-        # Attach parameters from auth into main parameters list
-        api_params, api_args = self._operation_parser.get_parameters().copy(), args
-
-        # Add any required arguments that are missing and have defaults:
+        # Fill in missing required args with defaults
         for api_param in api_params:
             if api_param.py_name not in api_args:
                 if (
@@ -432,70 +268,101 @@ class RestApiTool(BaseTool):
                 ):
                     api_args[api_param.py_name] = api_param.param_schema.default
 
-        if auth_credential:
-            # Attach parameters from auth into main parameters list
-            auth_param, auth_args = self._prepare_auth_request_params(auth_scheme, auth_credential)
+        # Collect auth additional headers
+        auth_additional_headers: Dict[str, str] | None = None
+        if auth_credential and auth_credential.http and auth_credential.http.additional_headers:
+            auth_additional_headers = dict(auth_credential.http.additional_headers)
+
+        # Attach auth parameters
+        if auth_credential and auth_scheme:
+            auth_param, auth_args = credential_to_param(auth_scheme, auth_credential)
             if auth_param and auth_args:
                 api_params = [auth_param] + api_params
                 api_args.update(auth_args)
 
-        # Got all parameters. Call the API.
-        request_params = self._prepare_request_params(api_params, api_args)
-        if self._ssl_verify is not None:
-            request_params["verify"] = self._ssl_verify
+        # Build request params
+        request_params = _prepare_request_params(
+            endpoint=config.endpoint,
+            operation=config.operation,
+            default_headers=config.default_headers,
+            tool_name=config.name,
+            parameters=api_params,
+            kwargs=api_args,
+            auth_additional_headers=auth_additional_headers,
+        )
 
-        # Add headers from header_provider if configured
-        if self._header_provider is not None and tool_context is not None:
-            provider_headers = self._header_provider(tool_context)
+        # Apply SSL verification
+        if config.ssl_verify is not None:
+            request_params["verify"] = config.ssl_verify
+
+        # Apply dynamic headers from deps
+        if ctx.deps.header_provider is not None:
+            provider_headers = ctx.deps.header_provider()
             if provider_headers:
                 request_params.setdefault("headers", {}).update(provider_headers)
 
-        response = await _request(**request_params)
+        # Execute request via deps client
+        client = ctx.deps.client
+        verify = request_params.pop("verify", None)
+        if verify is not None:
+            async with httpx.AsyncClient(verify=verify) as ssl_client:
+                response = await ssl_client.request(**request_params)
+        else:
+            response = await client.request(**request_params)
 
-        # Log the API response
-        self._logger.debug(
+        # Log the response
+        logger.debug(
             "API Response: %s %s - Status: %d",
             request_params.get("method", "").upper(),
             request_params.get("url", ""),
             response.status_code,
         )
 
-        # Parse API response
+        # Parse response
         try:
-            response.raise_for_status()  # Raise HTTPStatusError for bad responses
-            return response.json()  # Try to decode JSON
+            response.raise_for_status()
+            return response.json()
         except httpx.HTTPStatusError:
             error_details = response.content.decode("utf-8")
-            self._logger.warning(
+            logger.warning(
                 "API call failed for tool %s: Status %d - %s",
-                self.name,
+                config.name,
                 response.status_code,
                 error_details,
             )
             return {
                 "error": (
-                    f"Tool {self.name} execution failed. Analyze this execution error"
-                    " and your inputs. Retry with adjustments if applicable. But"
-                    " make sure don't retry more than 3 times. Execution Error:"
+                    f"Tool {config.name} execution failed."
                     f" Status Code: {response.status_code}, {error_details}"
                 )
             }
         except ValueError:
-            self._logger.debug("API Response (non-JSON): %s", response.text)
-            return {"text": response.text}  # Return text if not JSON
+            logger.debug("API Response (non-JSON): %s", response.text)
+            return {"text": response.text}
 
-    def __str__(self):
-        return f'RestApiTool(name="{self.name}", description="{self.description}", endpoint="{self.endpoint}")'
-
-    def __repr__(self):
-        return (
-            f'RestApiTool(name="{self.name}", description="{self.description}",'
-            f' endpoint="{self.endpoint}", operation="{self.operation}",'
-            f' auth_scheme="{self.auth_scheme}",'
-            f' auth_credential="{self.auth_credential}")'
-        )
+    return rest_api_call
 
 
-async def _request(**request_params) -> httpx.Response:
-    async with httpx.AsyncClient(verify=request_params.pop("verify", True)) as client:
-        return await client.request(**request_params)
+def create_rest_api_tool(config: RestApiToolConfig) -> Tool:
+    """Create a Pydantic AI Tool from a RestApiToolConfig.
+
+    The tool uses Tool.from_schema with takes_ctx=True so that the callable
+    receives RunContext[OpenAPIDeps] as its first argument. The JSON schema
+    for arguments is derived from the operation parser.
+
+    Args:
+        config: Static configuration for the REST API operation.
+
+    Returns:
+        A Pydantic AI Tool instance.
+    """
+    callable_fn = create_rest_api_callable(config)
+
+    return Tool.from_schema(
+        function=callable_fn,
+        name=config.name,
+        description=config.description,
+        json_schema=config.operation_parser.get_json_schema(),
+        takes_ctx=True,
+        sequential=False,
+    )
