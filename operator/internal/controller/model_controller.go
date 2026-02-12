@@ -27,7 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
@@ -215,6 +217,34 @@ func (r *ModelReconciler) validateProviderParams(model *agentv1alpha1.Model, pro
 func (r *ModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&agentv1alpha1.Model{}).
+		Watches(&agentv1alpha1.ModelProvider{}, handler.EnqueueRequestsFromMapFunc(
+			func(ctx context.Context, obj client.Object) []reconcile.Request {
+				provider := obj.(*agentv1alpha1.ModelProvider)
+
+				// Find all Models in the same namespace that reference this provider
+				var models agentv1alpha1.ModelList
+				if err := r.List(ctx, &models, client.InNamespace(provider.Namespace)); err != nil {
+					return nil
+				}
+
+				var requests []reconcile.Request
+				for _, model := range models.Items {
+					providerNs := model.Spec.ProviderRef.Namespace
+					if providerNs == "" {
+						providerNs = model.Namespace
+					}
+					if model.Spec.ProviderRef.Name == provider.Name && providerNs == provider.Namespace {
+						requests = append(requests, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      model.Name,
+								Namespace: model.Namespace,
+							},
+						})
+					}
+				}
+				return requests
+			},
+		)).
 		Named("model").
 		Complete(r)
 }

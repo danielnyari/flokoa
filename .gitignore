@@ -33,4 +33,6 @@ go.work.sum
 # .idea/
 # .vscode/
 /site
+__pycache__/
 operator/plugins/a2a/a2a
+/.claude/worktrees

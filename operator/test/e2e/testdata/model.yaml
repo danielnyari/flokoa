@@ -1,0 +1,13 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Model
+metadata:
+  name: gpt-5-mini
+  namespace: flokoa-system
+spec:
+  model: "gpt-5-mini"
+  providerRef:
+    name: openai-provider
+  parameters:
+    temperature: "0.2"
+    maxTokens: 1000
+    topP: "1.0"

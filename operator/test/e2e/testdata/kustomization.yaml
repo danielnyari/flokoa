@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - secret.yaml
+  - modelprovider.yaml
+  - model.yaml
+  - instruction.yaml
+  - agenttool.yaml
+  - tool-service.yaml
+  - agent.yaml
+  - argo/rbac.yaml
+  - argo/workflow-template.yaml

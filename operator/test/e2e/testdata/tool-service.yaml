@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tool-service
+  namespace: flokoa-system
+  labels:
+    app: tool-service
+    test: e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tool-service
+  template:
+    metadata:
+      labels:
+        app: tool-service
+        test: e2e
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: tool-service
+        image: swaggerapi/petstore:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-service
+  namespace: flokoa-system
+spec:
+  selector:
+    app: tool-service
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http

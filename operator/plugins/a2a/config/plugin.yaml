@@ -5,6 +5,7 @@ metadata:
   namespace: argo
 spec:
   sidecar:
+    automountServiceAccountToken: true
     container:
       name: a2a-executor-plugin
       image: ghcr.io/danielnyari/flokoa-a2a-plugin:latest
@@ -21,8 +22,7 @@ spec:
           memory: "128Mi"
           cpu: "500m"
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
+        runAsNonRoot: false
         allowPrivilegeEscalation: false
         capabilities:
           drop:

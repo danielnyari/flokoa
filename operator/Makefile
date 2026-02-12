@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.2
+VERSION ?= 0.0.6
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -146,12 +146,31 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
+	@KUBECONFIG_FILE=$$(mktemp); \
+	$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $$KUBECONFIG_FILE; \
+	KIND_CLUSTER=$(KIND_CLUSTER) KUBECONFIG=$$KUBECONFIG_FILE go test ./test/e2e/ -v -ginkgo.v; \
+	STATUS=$$?; \
+	rm -f $$KUBECONFIG_FILE; \
+	exit $$STATUS
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+
+E2E_NAMESPACE ?= flokoa-system
+
+.PHONY: deploy-e2e-testdata
+deploy-e2e-testdata: kustomize ## Create the OpenAI secret from OPENAI_API_KEY and apply e2e testdata.
+ifndef OPENAI_API_KEY
+	$(error OPENAI_API_KEY is not set)
+endif
+	$(KUBECTL) create secret generic openai-api-key \
+		--namespace=$(E2E_NAMESPACE) \
+		--from-literal=api-key=$(OPENAI_API_KEY) \
+		--dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build test/e2e/testdata | $(KUBECTL) apply -f -
+	$(ARGO) submit -n $(E2E_NAMESPACE) test/e2e/testdata/argo/workflow.yaml
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -353,6 +372,8 @@ docker-push: ## Push docker images for manager, server, and A2A plugin.
 	$(CONTAINER_TOOL) push ${IMG}
 	$(CONTAINER_TOOL) push ${SERVER_IMG}
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
+	$(CONTAINER_TOOL) tag ${A2A_PLUGIN_IMG} $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-plugins
 docker-build-plugins: ## Build docker images for all plugins.
@@ -361,6 +382,8 @@ docker-build-plugins: ## Build docker images for all plugins.
 .PHONY: docker-push-plugins
 docker-push-plugins: ## Push docker images for all plugins.
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
+	$(CONTAINER_TOOL) tag ${A2A_PLUGIN_IMG} $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-flokoa-cli
 docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
@@ -369,6 +392,8 @@ docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
 .PHONY: docker-push-flokoa-cli
 docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.
 	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
+	$(CONTAINER_TOOL) tag ${FLOKOA_CLI_IMG} $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -449,15 +474,15 @@ deploy-executor-plugins: argo-cli ## Build and deploy executor plugins to Argo.
 undeploy-executor-plugins: ## Undeploy executor plugins from Argo.
 	$(KUBECTL) -n argo delete configmap a2a-executor-plugin --ignore-not-found=true
 
-.PHONY: deploy-local-test
-deploy-local-test: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy everything for local testing (operator, Argo Workflows, executor plugins).
+.PHONY: deploy-full
+deploy-full: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy everything for local testing (operator, Argo Workflows, executor plugins).
 	@echo "Local test environment deployed successfully"
 	@echo "  - Flokoa operator: deployed"
 	@echo "  - Argo Workflows: deployed with executor plugins enabled"
 	@echo "  - A2A executor plugin: registered"
 
-.PHONY: undeploy-local-test
-undeploy-local-test: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.
+.PHONY: undeploy-full
+undeploy-full: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.
 	@echo "Local test environment undeployed"
 
 ##@ Dependencies

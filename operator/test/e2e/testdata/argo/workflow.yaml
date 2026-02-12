@@ -1,0 +1,18 @@
+# Test workflow that uses the A2A executor plugin to call the petstore-agent
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: a2a-test-
+  namespace: flokoa-system
+spec:
+  entrypoint: call-agent
+  serviceAccountName: argo-workflow
+  automountServiceAccountToken: true
+  templates:
+    - name: call-agent
+      plugin:
+        a2a:
+          agent: petstore-agent
+          namespace: flokoa-system
+          message: "List a few available pets and include their IDs and names."
+          timeout: 2m
