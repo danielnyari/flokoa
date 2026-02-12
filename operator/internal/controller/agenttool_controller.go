@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/jsonschema-go/jsonschema"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -100,14 +99,14 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// Validate schemas
-	if err := r.validateSchemas(ctx, agentTool); err != nil {
-		logger.Error(err, "Schema validation failed")
+	// Validate the OpenAPI tool spec
+	if err := r.validateSpec(ctx, agentTool); err != nil {
+		logger.Error(err, "Spec validation failed")
 		r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionFalse, ReasonValidationFailed, err.Error())
 		_ = r.Status().Update(ctx, agentTool)
 		return ctrl.Result{}, err
 	}
-	r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionTrue, ReasonValidationSuccess, "Schemas are valid")
+	r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionTrue, ReasonValidationSuccess, "Spec is valid")
 
 	// Create or update ConfigMap with spec content
 	if err := r.reconcileConfigMap(ctx, agentTool); err != nil {
@@ -129,73 +128,64 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
-// validateSchemas validates the input and output JSON schemas
-func (r *AgentToolReconciler) validateSchemas(ctx context.Context, agentTool *agentv1alpha1.AgentTool) error {
-	// Validate inputSchema if provided
-	if agentTool.Spec.InputSchema != nil && agentTool.Spec.InputSchema.Raw != nil {
-		var schema jsonschema.Schema
-		if err := json.Unmarshal(agentTool.Spec.InputSchema.Raw, &schema); err != nil {
-			return fmt.Errorf("invalid inputSchema: %w", err)
-		}
-		// Basic validation - ensure it's a valid schema
-		if err := r.validateSchemaStructure(&schema); err != nil {
-			return fmt.Errorf("inputSchema validation failed: %w", err)
-		}
+// validateSpec validates the AgentTool spec including the OpenAPI schema source
+func (r *AgentToolReconciler) validateSpec(ctx context.Context, agentTool *agentv1alpha1.AgentTool) error {
+	if agentTool.Spec.OpenApi == nil {
+		return fmt.Errorf("openApi is required when type is %q", agentTool.Spec.Type)
 	}
 
-	// Validate outputSchema if provided
-	if agentTool.Spec.OutputSchema != nil && agentTool.Spec.OutputSchema.Raw != nil {
-		var schema jsonschema.Schema
-		if err := json.Unmarshal(agentTool.Spec.OutputSchema.Raw, &schema); err != nil {
-			return fmt.Errorf("invalid outputSchema: %w", err)
-		}
-		if err := r.validateSchemaStructure(&schema); err != nil {
-			return fmt.Errorf("outputSchema validation failed: %w", err)
-		}
+	// Validate that exactly one of URL or ServiceRef is specified
+	openApi := agentTool.Spec.OpenApi
+	if openApi.URL == "" && openApi.ServiceRef == nil {
+		return fmt.Errorf("either url or serviceRef must be specified")
+	}
+	if openApi.URL != "" && openApi.ServiceRef != nil {
+		return fmt.Errorf("url and serviceRef are mutually exclusive")
 	}
 
-	// If OpenAPI schema ref is provided, validate the reference
-	if agentTool.Spec.OpenApiSchemaRef != nil {
-		if err := r.validateOpenApiSchemaRef(ctx, agentTool); err != nil {
-			return fmt.Errorf("openApiSchemaRef validation failed: %w", err)
+	// Validate the OpenAPI schema source
+	schema := &openApi.OpenApiSchema
+	sources := 0
+	if schema.Value != nil && schema.Value.Raw != nil {
+		sources++
+	}
+	if schema.ValueFrom != nil {
+		sources++
+	}
+	if schema.EndpointPath != "" {
+		sources++
+	}
+
+	if sources == 0 {
+		return fmt.Errorf("openApiSchema is required: exactly one of value, valueFrom, or endpointPath must be specified")
+	}
+	if sources > 1 {
+		return fmt.Errorf("openApiSchema: only one of value, valueFrom, or endpointPath may be specified")
+	}
+
+	// Validate valueFrom ConfigMap reference if specified
+	if schema.ValueFrom != nil {
+		if err := r.validateConfigMapRef(ctx, agentTool.Namespace, schema.ValueFrom); err != nil {
+			return fmt.Errorf("openApiSchema.valueFrom validation failed: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// validateSchemaStructure performs basic validation on a JSON schema
-func (r *AgentToolReconciler) validateSchemaStructure(schema *jsonschema.Schema) error {
-	// For now, just ensure we can marshal it back (round-trip validation)
-	_, err := json.Marshal(schema)
-	if err != nil {
-		return fmt.Errorf("schema cannot be marshaled: %w", err)
+// validateConfigMapRef validates that the referenced ConfigMap and key exist
+func (r *AgentToolReconciler) validateConfigMapRef(ctx context.Context, namespace string, ref *agentv1alpha1.ConfigMapKeyRef) error {
+	cm := &corev1.ConfigMap{}
+	key := client.ObjectKey{
+		Name:      ref.Name,
+		Namespace: namespace,
 	}
-	return nil
-}
-
-// validateOpenApiSchemaRef validates that the OpenAPI schema reference is accessible
-func (r *AgentToolReconciler) validateOpenApiSchemaRef(ctx context.Context, agentTool *agentv1alpha1.AgentTool) error {
-	ref := agentTool.Spec.OpenApiSchemaRef
-
-	// If ConfigMapRef is provided, validate it exists
-	if ref.ConfigMapRef != nil {
-		cm := &corev1.ConfigMap{}
-		key := client.ObjectKey{
-			Name:      ref.ConfigMapRef.Name,
-			Namespace: agentTool.Namespace,
-		}
-		if err := r.Get(ctx, key, cm); err != nil {
-			return fmt.Errorf("ConfigMap %s not found: %w", ref.ConfigMapRef.Name, err)
-		}
-		if _, ok := cm.Data[ref.ConfigMapRef.Key]; !ok {
-			return fmt.Errorf("key %s not found in ConfigMap %s", ref.ConfigMapRef.Key, ref.ConfigMapRef.Name)
-		}
+	if err := r.Get(ctx, key, cm); err != nil {
+		return fmt.Errorf("ConfigMap %s not found: %w", ref.Name, err)
 	}
-
-	// URL reference validation is deferred to runtime when fetching the spec
-	// since we can't validate external URL availability at reconcile time
-
+	if _, ok := cm.Data[ref.Key]; !ok {
+		return fmt.Errorf("key %s not found in ConfigMap %s", ref.Key, ref.Name)
+	}
 	return nil
 }
 

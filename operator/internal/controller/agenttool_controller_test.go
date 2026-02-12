@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -102,11 +101,13 @@ var _ = Describe("AgentTool Controller", func() {
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Test tool for fetching weather data",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:            "https://api.weather.com/v1/forecast",
-							Method:         agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.weather.com/v1",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 							TimeoutSeconds: &timeoutSeconds,
 						},
 					},
@@ -158,10 +159,10 @@ var _ = Describe("AgentTool Controller", func() {
 				var spec agentv1alpha1.AgentToolSpec
 				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &spec)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(spec.Type).To(Equal(agentv1alpha1.AgentToolTypeHTTPAPI))
+				Expect(spec.Type).To(Equal(agentv1alpha1.AgentToolTypeOpenAPI))
 				Expect(spec.Description).To(Equal("Test tool for fetching weather data"))
-				Expect(spec.HTTPApi.URL).To(Equal("https://api.weather.com/v1/forecast"))
-				Expect(spec.HTTPApi.Method).To(Equal(agentv1alpha1.HTTPMethodGet))
+				Expect(spec.OpenApi.URL).To(Equal("https://api.weather.com/v1"))
+				Expect(spec.OpenApi.OpenApiSchema.EndpointPath).To(Equal("/openapi.json"))
 			})
 
 			It("should handle reconcile request for non-existent AgentTool", func() {
@@ -183,38 +184,23 @@ var _ = Describe("AgentTool Controller", func() {
 			})
 		})
 
-		Context("Schema validation", func() {
-			It("should validate and accept valid inputSchema", func() {
-				By("Creating an AgentTool with valid inputSchema")
-				inputSchema := map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"city": map[string]interface{}{
-							"type":        "string",
-							"description": "The city name",
-						},
-						"country": map[string]interface{}{
-							"type":        "string",
-							"description": "The country code",
-						},
-					},
-					"required": []string{"city"},
-				}
-				inputSchemaBytes, _ := json.Marshal(inputSchema)
-
+		Context("OpenAPI schema source validation", func() {
+			It("should validate and accept endpointPath schema source", func() {
+				By("Creating an AgentTool with endpointPath schema source")
 				agentTool := &agentv1alpha1.AgentTool{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      agentToolName,
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
-						Description: "Weather API with input schema",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.weather.com/v1/forecast",
-							Method: agentv1alpha1.HTTPMethodGet,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
+						Description: "Weather API with endpoint path schema",
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.weather.com/v1",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/docs/openapi.json",
+							},
 						},
-						InputSchema: &runtime.RawExtension{Raw: inputSchemaBytes},
 					},
 				}
 				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
@@ -252,22 +238,17 @@ var _ = Describe("AgentTool Controller", func() {
 				Expect(condition.Reason).To(Equal(ReasonValidationSuccess))
 			})
 
-			It("should validate and accept valid outputSchema", func() {
-				By("Creating an AgentTool with valid outputSchema")
-				outputSchema := map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"temperature": map[string]interface{}{
-							"type":        "number",
-							"description": "Temperature in Celsius",
-						},
-						"humidity": map[string]interface{}{
-							"type":        "number",
-							"description": "Humidity percentage",
-						},
+			It("should validate and accept inline value schema source", func() {
+				By("Creating an AgentTool with inline value schema")
+				openApiSpec := map[string]interface{}{
+					"openapi": "3.0.0",
+					"info": map[string]interface{}{
+						"title":   "Weather API",
+						"version": "1.0",
 					},
+					"paths": map[string]interface{}{},
 				}
-				outputSchemaBytes, _ := json.Marshal(outputSchema)
+				specBytes, _ := json.Marshal(openApiSpec)
 
 				agentTool := &agentv1alpha1.AgentTool{
 					ObjectMeta: metav1.ObjectMeta{
@@ -275,13 +256,14 @@ var _ = Describe("AgentTool Controller", func() {
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
-						Description: "Weather API with output schema",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.weather.com/v1/forecast",
-							Method: agentv1alpha1.HTTPMethodGet,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
+						Description: "Weather API with inline schema",
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.weather.com/v1",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								Value: &runtime.RawExtension{Raw: specBytes},
+							},
 						},
-						OutputSchema: &runtime.RawExtension{Raw: outputSchemaBytes},
 					},
 				}
 				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
@@ -299,7 +281,7 @@ var _ = Describe("AgentTool Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
-				// Second reconcile validates schema
+				// Second reconcile validates and creates ConfigMap
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: typeNamespacedName,
 				})
@@ -316,13 +298,7 @@ var _ = Describe("AgentTool Controller", func() {
 				}, timeout, interval).Should(BeTrue())
 			})
 
-			// Note: Invalid JSON schema validation is handled at the API server level
-			// before the controller sees the resource. Tests for controller-level
-			// validation are covered by OpenAPI ConfigMap reference tests below.
-		})
-
-		Context("OpenAPI schema reference validation", func() {
-			It("should validate OpenAPI schema from existing ConfigMap", func() {
+			It("should validate OpenAPI schema from existing ConfigMap (valueFrom)", func() {
 				By("Creating a ConfigMap with OpenAPI spec")
 				openApiSpec := `openapi: "3.0.0"
 info:
@@ -348,23 +324,22 @@ paths:
 					_ = k8sClient.Delete(ctx, openApiCM)
 				}()
 
-				By("Creating an AgentTool with OpenAPI ConfigMap reference")
+				By("Creating an AgentTool with valueFrom schema source")
 				agentTool := &agentv1alpha1.AgentTool{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      agentToolName,
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Weather API from OpenAPI spec",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.weather.com",
-							Method: agentv1alpha1.HTTPMethodGet,
-						},
-						OpenApiSchemaRef: &agentv1alpha1.OpenApiSchemaRef{
-							ConfigMapRef: &agentv1alpha1.ConfigMapKeyRef{
-								Name: "weather-openapi",
-								Key:  "openapi.yaml",
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.weather.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								ValueFrom: &agentv1alpha1.ConfigMapKeyRef{
+									Name: "weather-openapi",
+									Key:  "openapi.yaml",
+								},
 							},
 						},
 					},
@@ -401,7 +376,7 @@ paths:
 				}, timeout, interval).Should(BeTrue())
 			})
 
-			It("should fail validation when ConfigMap does not exist", func() {
+			It("should fail validation when valueFrom ConfigMap does not exist", func() {
 				By("Creating an AgentTool referencing non-existent ConfigMap")
 				agentTool := &agentv1alpha1.AgentTool{
 					ObjectMeta: metav1.ObjectMeta{
@@ -409,16 +384,15 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Tool with missing ConfigMap",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
-						},
-						OpenApiSchemaRef: &agentv1alpha1.OpenApiSchemaRef{
-							ConfigMapRef: &agentv1alpha1.ConfigMapKeyRef{
-								Name: "non-existent-configmap",
-								Key:  "openapi.yaml",
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								ValueFrom: &agentv1alpha1.ConfigMapKeyRef{
+									Name: "non-existent-configmap",
+									Key:  "openapi.yaml",
+								},
 							},
 						},
 					},
@@ -453,7 +427,7 @@ paths:
 				Expect(condition.Message).To(ContainSubstring("ConfigMap"))
 			})
 
-			It("should fail validation when ConfigMap key does not exist", func() {
+			It("should fail validation when valueFrom ConfigMap key does not exist", func() {
 				By("Creating a ConfigMap without the expected key")
 				cm := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
@@ -477,16 +451,15 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Tool with wrong ConfigMap key",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
-						},
-						OpenApiSchemaRef: &agentv1alpha1.OpenApiSchemaRef{
-							ConfigMapRef: &agentv1alpha1.ConfigMapKeyRef{
-								Name: "wrong-key-configmap",
-								Key:  "openapi.yaml",
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								ValueFrom: &agentv1alpha1.ConfigMapKeyRef{
+									Name: "wrong-key-configmap",
+									Key:  "openapi.yaml",
+								},
 							},
 						},
 					},
@@ -520,57 +493,6 @@ paths:
 				Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 				Expect(condition.Message).To(ContainSubstring("key"))
 			})
-
-			It("should accept OpenAPI URL reference", func() {
-				By("Creating an AgentTool with OpenAPI URL reference")
-				agentTool := &agentv1alpha1.AgentTool{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      agentToolName,
-						Namespace: agentToolNamespace,
-					},
-					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
-						Description: "Tool with OpenAPI URL",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
-						},
-						OpenApiSchemaRef: &agentv1alpha1.OpenApiSchemaRef{
-							URL: "https://api.example.com/openapi.json",
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
-
-				By("Reconciling the AgentTool")
-				controllerReconciler := &AgentToolReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile validates (URL validation is deferred to runtime)
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				By("Verifying Validated condition is True")
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agentTool)
-					if err != nil {
-						return false
-					}
-					condition := meta.FindStatusCondition(agentTool.Status.Conditions, ConditionTypeValidated)
-					return condition != nil && condition.Status == metav1.ConditionTrue
-				}, timeout, interval).Should(BeTrue())
-			})
 		})
 
 		Context("Status updates", func() {
@@ -582,11 +504,13 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Test tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -629,11 +553,13 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Test tool for stored condition",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodPost,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -682,11 +608,13 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Original description",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com/v1",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com/v1",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -727,7 +655,7 @@ paths:
 				err = k8sClient.Get(ctx, typeNamespacedName, agentTool)
 				Expect(err).NotTo(HaveOccurred())
 				agentTool.Spec.Description = "Updated description"
-				agentTool.Spec.HTTPApi.URL = "https://api.example.com/v2"
+				agentTool.Spec.OpenApi.URL = "https://api.example.com/v2"
 				Expect(k8sClient.Update(ctx, agentTool)).To(Succeed())
 
 				By("Reconciling again to update ConfigMap")
@@ -752,7 +680,7 @@ paths:
 				var updatedSpec agentv1alpha1.AgentToolSpec
 				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &updatedSpec)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(updatedSpec.HTTPApi.URL).To(Equal("https://api.example.com/v2"))
+				Expect(updatedSpec.OpenApi.URL).To(Equal("https://api.example.com/v2"))
 			})
 
 			It("should set owner reference on ConfigMap", func() {
@@ -763,11 +691,13 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Test tool for owner reference",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -805,7 +735,7 @@ paths:
 			})
 		})
 
-		Context("HTTP API configurations", func() {
+		Context("OpenAPI tool configurations", func() {
 			It("should handle ServiceRef configuration", func() {
 				By("Creating an AgentTool with ServiceRef")
 				port := int32(8080)
@@ -815,16 +745,17 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Tool with ServiceRef",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
 							ServiceRef: &agentv1alpha1.ServiceRef{
 								Name:      "my-backend-service",
 								Namespace: "backend",
 								Port:      &port,
 							},
-							Path:   "/api/data",
-							Method: agentv1alpha1.HTTPMethodPost,
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/api/openapi.json",
+							},
 						},
 					},
 				}
@@ -859,89 +790,11 @@ paths:
 				var spec agentv1alpha1.AgentToolSpec
 				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &spec)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(spec.HTTPApi.ServiceRef).NotTo(BeNil())
-				Expect(spec.HTTPApi.ServiceRef.Name).To(Equal("my-backend-service"))
-				Expect(spec.HTTPApi.ServiceRef.Namespace).To(Equal("backend"))
-				Expect(*spec.HTTPApi.ServiceRef.Port).To(Equal(int32(8080)))
-				Expect(spec.HTTPApi.Path).To(Equal("/api/data"))
-			})
-
-			It("should handle all HTTP methods", func() {
-				methods := []agentv1alpha1.HTTPMethod{
-					agentv1alpha1.HTTPMethodGet,
-					agentv1alpha1.HTTPMethodPost,
-					agentv1alpha1.HTTPMethodPut,
-					agentv1alpha1.HTTPMethodPatch,
-					agentv1alpha1.HTTPMethodDelete,
-				}
-
-				for _, method := range methods {
-					// Use lowercase method name for valid Kubernetes resource name
-					testName := fmt.Sprintf("test-tool-%s-%d", strings.ToLower(string(method)), time.Now().UnixNano())
-					testNamespacedName := types.NamespacedName{
-						Name:      testName,
-						Namespace: agentToolNamespace,
-					}
-
-					By(fmt.Sprintf("Creating an AgentTool with %s method", method))
-					agentTool := &agentv1alpha1.AgentTool{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      testName,
-							Namespace: agentToolNamespace,
-						},
-						Spec: agentv1alpha1.AgentToolSpec{
-							Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
-							Description: fmt.Sprintf("Tool with %s method", method),
-							HTTPApi: &agentv1alpha1.HTTPApiSpec{
-								URL:    "https://api.example.com/resource",
-								Method: method,
-							},
-						},
-					}
-					Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
-
-					By("Reconciling the AgentTool")
-					controllerReconciler := &AgentToolReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					// First reconcile adds finalizer
-					result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: testNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-					// Second reconcile creates ConfigMap
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: testNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
-
-					By(fmt.Sprintf("Verifying ConfigMap contains %s method", method))
-					cmName := fmt.Sprintf("%s-spec", testName)
-					cm := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: agentToolNamespace}, cm)
-					}, timeout, interval).Should(Succeed())
-
-					var spec agentv1alpha1.AgentToolSpec
-					err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", testName)]), &spec)
-					Expect(err).NotTo(HaveOccurred())
-					Expect(spec.HTTPApi.Method).To(Equal(method))
-
-					// Cleanup
-					if controllerutil.ContainsFinalizer(agentTool, agentToolFinalizer) {
-						err = k8sClient.Get(ctx, testNamespacedName, agentTool)
-						if err == nil {
-							controllerutil.RemoveFinalizer(agentTool, agentToolFinalizer)
-							_ = k8sClient.Update(ctx, agentTool)
-						}
-					}
-					_ = k8sClient.Delete(ctx, agentTool)
-					_ = k8sClient.Delete(ctx, cm)
-				}
+				Expect(spec.OpenApi.ServiceRef).NotTo(BeNil())
+				Expect(spec.OpenApi.ServiceRef.Name).To(Equal("my-backend-service"))
+				Expect(spec.OpenApi.ServiceRef.Namespace).To(Equal("backend"))
+				Expect(*spec.OpenApi.ServiceRef.Port).To(Equal(int32(8080)))
+				Expect(spec.OpenApi.OpenApiSchema.EndpointPath).To(Equal("/api/openapi.json"))
 			})
 
 			It("should handle custom headers and timeout", func() {
@@ -953,11 +806,13 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Tool with custom headers",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:            "https://api.example.com",
-							Method:         agentv1alpha1.HTTPMethodPost,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 							TimeoutSeconds: &timeoutSeconds,
 							Headers: map[string]string{
 								"Content-Type":  "application/json",
@@ -998,11 +853,11 @@ paths:
 				var spec agentv1alpha1.AgentToolSpec
 				err = json.Unmarshal([]byte(cm.Data[fmt.Sprintf("%s-spec.json", agentToolName)]), &spec)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(*spec.HTTPApi.TimeoutSeconds).To(Equal(int32(60)))
-				Expect(spec.HTTPApi.Headers).To(HaveLen(3))
-				Expect(spec.HTTPApi.Headers["Content-Type"]).To(Equal("application/json"))
-				Expect(spec.HTTPApi.Headers["Authorization"]).To(Equal("Bearer ${API_KEY}"))
-				Expect(spec.HTTPApi.Headers["X-Custom"]).To(Equal("custom-value"))
+				Expect(*spec.OpenApi.TimeoutSeconds).To(Equal(int32(60)))
+				Expect(spec.OpenApi.Headers).To(HaveLen(3))
+				Expect(spec.OpenApi.Headers["Content-Type"]).To(Equal("application/json"))
+				Expect(spec.OpenApi.Headers["Authorization"]).To(Equal("Bearer ${API_KEY}"))
+				Expect(spec.OpenApi.Headers["X-Custom"]).To(Equal("custom-value"))
 			})
 		})
 
@@ -1015,11 +870,13 @@ paths:
 						Namespace: agentToolNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Tool for deletion test",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -1070,83 +927,6 @@ paths:
 				Eventually(func() bool {
 					err := k8sClient.Get(ctx, typeNamespacedName, agentTool)
 					return errors.IsNotFound(err)
-				}, timeout, interval).Should(BeTrue())
-			})
-		})
-
-		Context("Combined input and output schemas", func() {
-			It("should accept both input and output schemas together", func() {
-				By("Creating an AgentTool with both schemas")
-				inputSchema := map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"query": map[string]interface{}{
-							"type": "string",
-						},
-					},
-					"required": []string{"query"},
-				}
-				outputSchema := map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"results": map[string]interface{}{
-							"type": "array",
-							"items": map[string]interface{}{
-								"type": "string",
-							},
-						},
-					},
-				}
-				inputSchemaBytes, _ := json.Marshal(inputSchema)
-				outputSchemaBytes, _ := json.Marshal(outputSchema)
-
-				agentTool := &agentv1alpha1.AgentTool{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      agentToolName,
-						Namespace: agentToolNamespace,
-					},
-					Spec: agentv1alpha1.AgentToolSpec{
-						Type:         agentv1alpha1.AgentToolTypeHTTPAPI,
-						Description:  "Search API with both schemas",
-						InputSchema:  &runtime.RawExtension{Raw: inputSchemaBytes},
-						OutputSchema: &runtime.RawExtension{Raw: outputSchemaBytes},
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.search.com/search",
-							Method: agentv1alpha1.HTTPMethodPost,
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
-
-				By("Reconciling the AgentTool")
-				controllerReconciler := &AgentToolReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile validates and stores
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				By("Verifying both conditions are True")
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agentTool)
-					if err != nil {
-						return false
-					}
-					validated := meta.FindStatusCondition(agentTool.Status.Conditions, ConditionTypeValidated)
-					stored := meta.FindStatusCondition(agentTool.Status.Conditions, ConditionTypeStored)
-					return validated != nil && validated.Status == metav1.ConditionTrue &&
-						stored != nil && stored.Status == metav1.ConditionTrue
 				}, timeout, interval).Should(BeTrue())
 			})
 		})

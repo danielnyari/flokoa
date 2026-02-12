@@ -1,78 +1,16 @@
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
-  name: petstore-find-pets-by-status
+  name: petstore-api
   namespace: flokoa-system
 spec:
-  type: http-api
-  description: "Find pets by status"
-  httpApi:
+  type: openapi
+  description: "Petstore API - manage pets"
+  openApi:
     serviceRef:
       name: tool-service
       namespace: flokoa-system
       port: 8080
-    path: "/api/v3/pet/findByStatus"
-    method: GET
+    openApiSchema:
+      endpointPath: "/api/v3/openapi.json"
     timeoutSeconds: 30
-  openApiSchemaRef:
-    url: "https://petstore3.swagger.io/api/v3/openapi.json"
-
----
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: AgentTool
-metadata:
-  name: petstore-get-pet-by-id
-  namespace: flokoa-system
-spec:
-  type: http-api
-  description: "Get pet by ID"
-  httpApi:
-    serviceRef:
-      name: tool-service
-      namespace: flokoa-system
-      port: 8080
-    path: "/api/v3/pet/{petId}"
-    method: GET
-    timeoutSeconds: 30
-  openApiSchemaRef:
-    url: "https://petstore3.swagger.io/api/v3/openapi.json"
-
----
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: AgentTool
-metadata:
-  name: petstore-add-pet
-  namespace: flokoa-system
-spec:
-  type: http-api
-  description: "Add a new pet"
-  httpApi:
-    serviceRef:
-      name: tool-service
-      namespace: flokoa-system
-      port: 8080
-    path: "/api/v3/pet"
-    method: POST
-    timeoutSeconds: 30
-  openApiSchemaRef:
-    url: "https://petstore3.swagger.io/api/v3/openapi.json"
-
----
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: AgentTool
-metadata:
-  name: petstore-update-pet
-  namespace: flokoa-system
-spec:
-  type: http-api
-  description: "Update an existing pet"
-  httpApi:
-    serviceRef:
-      name: tool-service
-      namespace: flokoa-system
-      port: 8080
-    path: "/api/v3/pet"
-    method: PUT
-    timeoutSeconds: 30
-  openApiSchemaRef:
-    url: "https://petstore3.swagger.io/api/v3/openapi.json"

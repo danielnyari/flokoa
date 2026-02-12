@@ -1,5 +1,8 @@
 package converter
 
+// NOTE: This converter requires proto regeneration after the agenttool.proto update.
+// Run `make proto-generate` to regenerate the Go proto types before building.
+
 import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
@@ -29,23 +32,21 @@ func AgentToolSpecToProto(spec *agentv1alpha1.AgentToolSpec) *pb.AgentToolSpec {
 		Description: spec.Description,
 	}
 
-	if spec.HTTPApi != nil {
-		pbSpec.HttpApi = HTTPApiSpecToProto(spec.HTTPApi)
+	if spec.OpenApi != nil {
+		pbSpec.OpenApi = OpenApiToolSpecToProto(spec.OpenApi)
 	}
 
 	return pbSpec
 }
 
-// HTTPApiSpecToProto converts HTTPApiSpec to proto.
-func HTTPApiSpecToProto(spec *agentv1alpha1.HTTPApiSpec) *pb.HTTPApiSpec {
+// OpenApiToolSpecToProto converts OpenApiToolSpec to proto.
+func OpenApiToolSpecToProto(spec *agentv1alpha1.OpenApiToolSpec) *pb.OpenApiToolSpec {
 	if spec == nil {
 		return nil
 	}
 
-	pbSpec := &pb.HTTPApiSpec{
-		Url:    spec.URL,
-		Path:   spec.Path,
-		Method: HTTPMethodToProto(spec.Method),
+	pbSpec := &pb.OpenApiToolSpec{
+		Url: spec.URL,
 	}
 
 	if spec.TimeoutSeconds != nil {
@@ -67,7 +68,32 @@ func HTTPApiSpecToProto(spec *agentv1alpha1.HTTPApiSpec) *pb.HTTPApiSpec {
 		}
 	}
 
+	pbSpec.OpenApiSchema = OpenApiSchemaToProto(&spec.OpenApiSchema)
+
 	return pbSpec
+}
+
+// OpenApiSchemaToProto converts OpenApiSchema to proto.
+func OpenApiSchemaToProto(schema *agentv1alpha1.OpenApiSchema) *pb.OpenApiSchema {
+	if schema == nil {
+		return nil
+	}
+
+	pbSchema := &pb.OpenApiSchema{
+		EndpointPath: schema.EndpointPath,
+	}
+
+	if schema.ValueFrom != nil {
+		pbSchema.ValueFrom = &pb.ConfigMapKeyRef{
+			Name: schema.ValueFrom.Name,
+			Key:  schema.ValueFrom.Key,
+		}
+	}
+
+	// Note: schema.Value (runtime.RawExtension) -> proto Struct conversion
+	// requires JSON parsing. Left as nil for now; implement when needed.
+
+	return pbSchema
 }
 
 // AgentToolStatusToProto converts AgentToolStatus to proto.
@@ -126,23 +152,21 @@ func AgentToolSpecFromProto(proto *pb.AgentToolSpec) *agentv1alpha1.AgentToolSpe
 		Description: proto.Description,
 	}
 
-	if proto.HttpApi != nil {
-		spec.HTTPApi = HTTPApiSpecFromProto(proto.HttpApi)
+	if proto.OpenApi != nil {
+		spec.OpenApi = OpenApiToolSpecFromProto(proto.OpenApi)
 	}
 
 	return spec
 }
 
-// HTTPApiSpecFromProto converts proto HTTPApiSpec to Kubernetes.
-func HTTPApiSpecFromProto(proto *pb.HTTPApiSpec) *agentv1alpha1.HTTPApiSpec {
+// OpenApiToolSpecFromProto converts proto OpenApiToolSpec to Kubernetes.
+func OpenApiToolSpecFromProto(proto *pb.OpenApiToolSpec) *agentv1alpha1.OpenApiToolSpec {
 	if proto == nil {
 		return nil
 	}
 
-	spec := &agentv1alpha1.HTTPApiSpec{
+	spec := &agentv1alpha1.OpenApiToolSpec{
 		URL:     proto.Url,
-		Path:    proto.Path,
-		Method:  HTTPMethodFromProto(proto.Method),
 		Headers: proto.Headers,
 	}
 
@@ -161,14 +185,41 @@ func HTTPApiSpecFromProto(proto *pb.HTTPApiSpec) *agentv1alpha1.HTTPApiSpec {
 		}
 	}
 
+	if proto.OpenApiSchema != nil {
+		spec.OpenApiSchema = *OpenApiSchemaFromProto(proto.OpenApiSchema)
+	}
+
 	return spec
+}
+
+// OpenApiSchemaFromProto converts proto OpenApiSchema to Kubernetes.
+func OpenApiSchemaFromProto(proto *pb.OpenApiSchema) *agentv1alpha1.OpenApiSchema {
+	if proto == nil {
+		return nil
+	}
+
+	schema := &agentv1alpha1.OpenApiSchema{
+		EndpointPath: proto.EndpointPath,
+	}
+
+	if proto.ValueFrom != nil {
+		schema.ValueFrom = &agentv1alpha1.ConfigMapKeyRef{
+			Name: proto.ValueFrom.Name,
+			Key:  proto.ValueFrom.Key,
+		}
+	}
+
+	// Note: proto Struct -> runtime.RawExtension conversion
+	// requires JSON marshaling. Left as nil for now; implement when needed.
+
+	return schema
 }
 
 // AgentToolTypeToProto converts AgentToolType enum to proto.
 func AgentToolTypeToProto(t agentv1alpha1.AgentToolType) pb.AgentToolType {
 	switch t {
-	case agentv1alpha1.AgentToolTypeHTTPAPI:
-		return pb.AgentToolType_AGENT_TOOL_TYPE_HTTP_API
+	case agentv1alpha1.AgentToolTypeOpenAPI:
+		return pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI
 	default:
 		return pb.AgentToolType_AGENT_TOOL_TYPE_UNSPECIFIED
 	}
@@ -177,44 +228,8 @@ func AgentToolTypeToProto(t agentv1alpha1.AgentToolType) pb.AgentToolType {
 // AgentToolTypeFromProto converts proto AgentToolType to Kubernetes.
 func AgentToolTypeFromProto(t pb.AgentToolType) agentv1alpha1.AgentToolType {
 	switch t {
-	case pb.AgentToolType_AGENT_TOOL_TYPE_HTTP_API:
-		return agentv1alpha1.AgentToolTypeHTTPAPI
-	default:
-		return ""
-	}
-}
-
-// HTTPMethodToProto converts HTTPMethod enum to proto.
-func HTTPMethodToProto(m agentv1alpha1.HTTPMethod) pb.HTTPMethod {
-	switch m {
-	case agentv1alpha1.HTTPMethodGet:
-		return pb.HTTPMethod_HTTP_METHOD_GET
-	case agentv1alpha1.HTTPMethodPost:
-		return pb.HTTPMethod_HTTP_METHOD_POST
-	case agentv1alpha1.HTTPMethodPut:
-		return pb.HTTPMethod_HTTP_METHOD_PUT
-	case agentv1alpha1.HTTPMethodPatch:
-		return pb.HTTPMethod_HTTP_METHOD_PATCH
-	case agentv1alpha1.HTTPMethodDelete:
-		return pb.HTTPMethod_HTTP_METHOD_DELETE
-	default:
-		return pb.HTTPMethod_HTTP_METHOD_UNSPECIFIED
-	}
-}
-
-// HTTPMethodFromProto converts proto HTTPMethod to Kubernetes.
-func HTTPMethodFromProto(m pb.HTTPMethod) agentv1alpha1.HTTPMethod {
-	switch m {
-	case pb.HTTPMethod_HTTP_METHOD_GET:
-		return agentv1alpha1.HTTPMethodGet
-	case pb.HTTPMethod_HTTP_METHOD_POST:
-		return agentv1alpha1.HTTPMethodPost
-	case pb.HTTPMethod_HTTP_METHOD_PUT:
-		return agentv1alpha1.HTTPMethodPut
-	case pb.HTTPMethod_HTTP_METHOD_PATCH:
-		return agentv1alpha1.HTTPMethodPatch
-	case pb.HTTPMethod_HTTP_METHOD_DELETE:
-		return agentv1alpha1.HTTPMethodDelete
+	case pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI:
+		return agentv1alpha1.AgentToolTypeOpenAPI
 	default:
 		return ""
 	}
