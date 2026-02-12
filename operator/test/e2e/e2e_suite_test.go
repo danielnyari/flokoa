@@ -144,9 +144,14 @@ var _ = BeforeSuite(func() {
 		if err = k8sClient.Get(ctx, client.ObjectKey{Name: name}, existingNs); err == nil {
 			if existingNs.Status.Phase == corev1.NamespaceTerminating {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Namespace %s is Terminating, waiting for deletion...\n", name)
-				Eventually(func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: name}, &corev1.Namespace{})
-				}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(MatchError(ContainSubstring("not found")))
+				existingNs.Spec.Finalizers = nil
+				if finalizeErr := k8sClient.SubResource("finalize").Update(ctx, existingNs); finalizeErr != nil {
+					_, _ = fmt.Fprintf(GinkgoWriter, "Warning: failed to clear finalizers for namespace %s: %v\n", name, finalizeErr)
+				}
+				Eventually(func() bool {
+					getErr := k8sClient.Get(ctx, client.ObjectKey{Name: name}, &corev1.Namespace{})
+					return apierrors.IsNotFound(getErr)
+				}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(BeTrue())
 			}
 		}
 	}
