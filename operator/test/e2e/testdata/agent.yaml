@@ -1,15 +1,15 @@
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: Agent
 metadata:
-  name: template-agent
+  name: petstore-agent
   namespace: flokoa-system
   labels:
-    app.kubernetes.io/name: template-agent
+    app.kubernetes.io/name: petstore-agent
     test: e2e
 spec:
   card:
-    name: "Template Test Agent"
-    description: "E2E test agent with templated instructions"
+    name: "Petstore Agent"
+    description: "Agent for querying and managing pets via Swagger Petstore APIs"
     version: "1.0.0"
     defaultInputModes:
       - "application/json"
@@ -19,55 +19,58 @@ spec:
       streaming: false
       pushNotifications: false
     skills:
-      - id: "test-skill"
-        name: "Test Skill"
-        description: "Test skill for e2e"
-        tags: ["test"]
-  
+      - id: "petstore-assistant"
+        name: "Petstore Assistant"
+        description: "Find, inspect, and manage pets in the petstore"
+        tags: ["petstore", "api", "inventory"]
+
   framework: pydantic-ai
-  
+
   model:
-    name: test-model
-  
+    name: gpt-5-mini
+
   instruction:
     instructionRef:
-      name: template-instruction
-  
+      name: petstore-instruction
+
   tools:
-    - toolRef:
-        name: test-tool
-  
+    - name: petstore-find-pets-by-status
+      toolRef:
+        name: petstore-find-pets-by-status
+    - name: petstore-get-pet-by-id
+      toolRef:
+        name: petstore-get-pet-by-id
+    - name: petstore-add-pet
+      toolRef:
+        name: petstore-add-pet
+    - name: petstore-update-pet
+      toolRef:
+        name: petstore-update-pet
+
   runtime:
-    type: standard
-    standard:
+    type: template
+    template:
       replicas: 1
-      container:
-        name: agent
-        image: localhost/template-agent:test
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8080
-          name: http
-          protocol: TCP
-        env:
-        - name: ENVIRONMENT
-          value: "test"
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
+      config:
+        outputSchema:
+          name: "petstore-agent-output"
+          description: "Petstore agent response output"
+          jsonSchema:
+            type: object
+            properties:
+              response:
+                type: string
+              usedTools:
+                type: array
+                items:
+                  type: string
+      env:
+      - name: ENVIRONMENT
+        value: "petstore-e2e"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"

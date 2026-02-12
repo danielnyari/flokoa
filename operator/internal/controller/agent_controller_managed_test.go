@@ -39,6 +39,29 @@ import (
 )
 
 var _ = Describe("Agent Controller - Managed Runtime", func() {
+	It("should always set template runtime image in built deployment", func() {
+		agent := &agentv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "template-image-guard",
+				Namespace: "default",
+			},
+			Spec: agentv1alpha1.AgentSpec{
+				CardOverride: minimalCard(),
+				Runtime: agentv1alpha1.RuntimeSpec{
+					Type:     agentv1alpha1.RuntimeTypeTemplate,
+					Template: &agentv1alpha1.TemplatedRuntimeSpec{},
+				},
+			},
+		}
+
+		reconciler := &AgentReconciler{}
+		deployment := reconciler.buildDeployment(agent, nil, "", nil, "", "")
+
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).NotTo(BeEmpty())
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal(defaultTemplateRuntimeImage))
+	})
+
 	Context("When reconciling a managed Agent", func() {
 		const (
 			agentNamespace = "default"
@@ -511,13 +534,13 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			inlineCM := &corev1.ConfigMap{}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{
-					Name:      fmt.Sprintf("%s-managed-config", agentName),
+					Name:      fmt.Sprintf("%s-template-config", agentName),
 					Namespace: agentNamespace,
 				}, inlineCM)
 			}, timeout, interval).Should(Succeed())
 
 			Expect(inlineCM.Data).To(HaveKey(templateConfigConfigMapKey))
-			Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("managed-config"))
+			Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("template-config"))
 
 			By("Verifying the Deployment was created with correct inline configuration")
 			deployment := &appsv1.Deployment{}
@@ -530,7 +553,7 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.Name).To(Equal("agent"))
-			Expect(container.Image).To(Equal(defaultManagedRuntimeImage))
+			Expect(container.Image).To(Equal(defaultTemplateRuntimeImage))
 			Expect(container.Ports).To(HaveLen(1))
 			Expect(container.Ports[0].ContainerPort).To(Equal(int32(8080)))
 
@@ -541,8 +564,8 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 					envMap[env.Name] = env.Value
 				}
 			}
-			Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "managed"))
-			Expect(envMap).To(HaveKeyWithValue("FLOKOA_MANAGED_CONFIG_PATH", templateConfigMountPath))
+			Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "template"))
+			Expect(envMap).To(HaveKeyWithValue("FLOKOA_TEMPLATE_CONFIG_PATH", templateConfigMountPath))
 			Expect(envMap).To(HaveKeyWithValue("CUSTOM_VAR", "custom-value"))
 			Expect(envMap).To(HaveKey("FLOKOA_AGENT_URL"))
 

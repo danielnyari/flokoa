@@ -13,6 +13,7 @@ from a2a.server.tasks import InMemoryTaskStore
 from flokoa.integrations import IntegrationType, get_executor_cls
 from flokoa.utils import load_agent_card, load_templated_config
 from flokoa.utils.agent_card_builder import AgentCardBuilder
+from flokoa.utils.router import router as health_router
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,13 @@ def cli() -> None:
 @click.option("--host", default=None, help="Host to bind the server to.")
 @click.option("--port", default=None, type=int, help="Port to bind the server to.")
 @click.option("--framework", type=click.Choice(IntegrationType, case_sensitive=False))
-def run(module: str | None, templated: bool, host: str | None, port: int | None, framework: str) -> None:
+def run(
+    module: str | None,
+    templated: bool,
+    host: str | None,
+    port: int | None,
+    framework: str,
+) -> None:
     """Run a Flokoa agent server.
 
     \b
@@ -87,7 +94,12 @@ def run(module: str | None, templated: bool, host: str | None, port: int | None,
     if templated:
         _start_templated(host=host or "0.0.0.0", port=port or 8080)  # noqa: S104
     else:
-        _start_integration(module=module, host=host or "localhost", port=port or 10001, framework=framework)
+        _start_integration(
+            module=module,
+            host=host or "localhost",
+            port=port or 10001,
+            framework=framework,
+        )
 
 
 def _start_integration(module: str, host: str, port: int, framework: IntegrationType) -> None:
@@ -158,7 +170,12 @@ def _run_server(agent_executor, agent_card, host: str, port: int) -> None:
     )
 
     logger.info("Starting agent server on %s:%d", host, port)
-    uvicorn.run(server.build(), host=host, port=port)
+
+    app = server.build()
+
+    app.include_router(health_router)
+
+    uvicorn.run(app, host=host, port=port)
 
 
 def main() -> None:

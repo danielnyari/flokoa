@@ -18,7 +18,7 @@ from flokoa.types.agenttool import AgentToolSpec
 TOOLS_PATH = "/etc/flokoa/tools/"
 AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
 MODEL_CONFIG_PATH = "/etc/flokoa/model.json"
-MANAGED_CONFIG_PATH = "/etc/flokoa/managed-config.json"
+TEMPLATE_CONFIG_PATH = "/etc/flokoa/template-config.json"
 INSTRUCTION_PATH = "/etc/flokoa/instruction.txt"
 
 
@@ -279,7 +279,7 @@ def load_templated_config() -> TemplateConfig:
     Returns:
         TemplateConfig if the file exists, None otherwise.
     """
-    path = os.environ.get("FLOKOA_MANAGED_CONFIG_PATH", MANAGED_CONFIG_PATH)
+    path = os.environ.get("FLOKOA_TEMPLATE_CONFIG_PATH", TEMPLATE_CONFIG_PATH)
     if not os.path.exists(path):
         raise FileNotFoundError(f"Templated config file not found at {path}")
 

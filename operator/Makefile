@@ -353,6 +353,8 @@ docker-push: ## Push docker images for manager, server, and A2A plugin.
 	$(CONTAINER_TOOL) push ${IMG}
 	$(CONTAINER_TOOL) push ${SERVER_IMG}
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
+	$(CONTAINER_TOOL) tag ${A2A_PLUGIN_IMG} $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-plugins
 docker-build-plugins: ## Build docker images for all plugins.
@@ -361,6 +363,8 @@ docker-build-plugins: ## Build docker images for all plugins.
 .PHONY: docker-push-plugins
 docker-push-plugins: ## Push docker images for all plugins.
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
+	$(CONTAINER_TOOL) tag ${A2A_PLUGIN_IMG} $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-flokoa-cli
 docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
@@ -369,6 +373,8 @@ docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
 .PHONY: docker-push-flokoa-cli
 docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.
 	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
+	$(CONTAINER_TOOL) tag ${FLOKOA_CLI_IMG} $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -449,15 +455,15 @@ deploy-executor-plugins: argo-cli ## Build and deploy executor plugins to Argo.
 undeploy-executor-plugins: ## Undeploy executor plugins from Argo.
 	$(KUBECTL) -n argo delete configmap a2a-executor-plugin --ignore-not-found=true
 
-.PHONY: deploy-local-test
-deploy-local-test: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy everything for local testing (operator, Argo Workflows, executor plugins).
+.PHONY: deploy-full
+deploy-full: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy everything for local testing (operator, Argo Workflows, executor plugins).
 	@echo "Local test environment deployed successfully"
 	@echo "  - Flokoa operator: deployed"
 	@echo "  - Argo Workflows: deployed with executor plugins enabled"
 	@echo "  - A2A executor plugin: registered"
 
-.PHONY: undeploy-local-test
-undeploy-local-test: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.
+.PHONY: undeploy-full
+undeploy-full: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.
 	@echo "Local test environment undeployed"
 
 ##@ Dependencies

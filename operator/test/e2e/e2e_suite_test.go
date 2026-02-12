@@ -22,9 +22,14 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
+	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -56,6 +61,8 @@ var (
 	k8sClient client.Client
 	// cfg is the rest config for the cluster
 	cfg *rest.Config
+	// testScheme is the scheme used for the test client
+	testScheme *runtime.Scheme
 	// ctx is the context for client operations
 	ctx context.Context
 )
@@ -84,14 +91,16 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load kubeconfig")
 
 	// Add our custom schemes
-	myScheme := runtime.NewScheme()
-	err = scheme.AddToScheme(myScheme)
+	testScheme = runtime.NewScheme()
+	err = scheme.AddToScheme(testScheme)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add core scheme")
-	err = agentv1alpha1.AddToScheme(myScheme)
+	err = agentv1alpha1.AddToScheme(testScheme)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add agent scheme")
+	err = wfv1.AddToScheme(testScheme)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add Argo Workflows scheme")
 
 	// Create the client
-	k8sClient, err = client.New(cfg, client.Options{Scheme: myScheme})
+	k8sClient, err = client.New(cfg, client.Options{Scheme: testScheme})
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create Kubernetes client")
 
 	By("building the manager(Operator) and server images")
@@ -125,9 +134,61 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
 	}
+
+	// Deploy the operator and server - shared across all tests
+	By("creating manager namespace")
+	// If the namespace exists but is Terminating (from a previous run), wait for it to be fully deleted
+	existingNs := &corev1.Namespace{}
+	if err = k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, existingNs); err == nil {
+		if existingNs.Status.Phase == corev1.NamespaceTerminating {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Namespace %s is Terminating, waiting for deletion...\n", namespace)
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{})
+			}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(MatchError(ContainSubstring("not found")))
+		}
+	}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+			Labels: map[string]string{
+				"pod-security.kubernetes.io/enforce": "restricted",
+			},
+		},
+	}
+	err = k8sClient.Create(ctx, ns)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create namespace")
+	}
+
+	By("installing CRDs")
+	cmd = exec.Command("make", "install")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
+
+	By("deploying the controller-manager and server")
+	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage), fmt.Sprintf("SERVER_IMG=%s", serverImage))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager and server")
 })
 
 var _ = AfterSuite(func() {
+	// Clean up the operator deployment
+	By("undeploying the controller-manager")
+	cmd := exec.Command("make", "undeploy")
+	_, _ = utils.Run(cmd)
+
+	By("uninstalling CRDs")
+	cmd = exec.Command("make", "uninstall")
+	_, _ = utils.Run(cmd)
+
+	By("removing manager namespace")
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+		},
+	}
+	_ = k8sClient.Delete(ctx, ns)
+
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")

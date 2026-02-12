@@ -6,8 +6,7 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
-        include: scentry/.*\.ya?ml$
-        exclude: ^docs/
+        exclude: ^(docs/|operator/test/e2e/testdata/.*\.yaml)$
       - id: check-json
         exclude: ^(.devcontainer/devcontainer.json|schemas/.*\.schema\.json)
       - id: pretty-format-json

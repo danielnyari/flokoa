@@ -30,16 +30,16 @@ import (
 const (
 	agentFinalizer = "agent.flokoa.ai/finalizer"
 
-	// defaultManagedRuntimeImage is the default container image for managed agents.
+	// defaultTemplateRuntimeImage is the default container image for template agents.
 	// This image reads configuration from mounted ConfigMaps and runs an A2A server.
-	defaultManagedRuntimeImage = "ghcr.io/flokoa/agent-runtime:latest"
+	defaultTemplateRuntimeImage = "ghcr.io/danielnyari/flokoa-cli:latest"
 
 	// templateConfigVolumeName is the volume name for the managed agent config ConfigMap
-	templateConfigVolumeName = "managed-config"
+	templateConfigVolumeName = "template-config"
 	// templateConfigConfigMapKey is the key in the ConfigMap for the managed config JSON
-	templateConfigConfigMapKey = "managed-config.json"
+	templateConfigConfigMapKey = "template-config.json"
 	// templateConfigMountPath is the file path where the managed config is mounted
-	templateConfigMountPath = "/etc/flokoa/managed-config.json"
+	templateConfigMountPath = "/etc/flokoa/template-config.json"
 )
 
 const (
@@ -630,6 +630,12 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 		Value: agentURL,
 	})
 
+	// Defensive fallback: template runtime must always have a valid runtime image.
+	// This prevents invalid Deployment specs if container image is accidentally cleared.
+	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeTemplate && container.Image == "" {
+		container.Image = defaultTemplateRuntimeImage
+	}
+
 	// Add agent card ConfigMap volume
 	volumes = append(volumes, corev1.Volume{
 		Name: agentCardVolumeName,
@@ -808,14 +814,14 @@ func (r *AgentReconciler) buildStandardContainerSpec(agent *agentv1alpha1.Agent)
 // buildManagedContainerSpec builds the container and volumes for a managed runtime agent.
 // The operator generates the container using a generic runtime image with config mounted from ConfigMaps.
 func (r *AgentReconciler) buildManagedContainerSpec(agent *agentv1alpha1.Agent, templateConfigMapName string) (corev1.Container, []corev1.Volume) {
-	managed := agent.Spec.Runtime.Template
-	if managed == nil {
-		managed = &agentv1alpha1.TemplatedRuntimeSpec{}
+	template := agent.Spec.Runtime.Template
+	if template == nil {
+		template = &agentv1alpha1.TemplatedRuntimeSpec{}
 	}
 
 	container := corev1.Container{
 		Name:  "agent",
-		Image: defaultManagedRuntimeImage,
+		Image: defaultTemplateRuntimeImage,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
@@ -826,17 +832,17 @@ func (r *AgentReconciler) buildManagedContainerSpec(agent *agentv1alpha1.Agent, 
 		Env: append([]corev1.EnvVar{
 			{
 				Name:  "FLOKOA_RUNTIME_MODE",
-				Value: "managed",
+				Value: "template",
 			},
 			{
-				Name:  "FLOKOA_MANAGED_CONFIG_PATH",
+				Name:  "FLOKOA_TEMPLATE_CONFIG_PATH",
 				Value: templateConfigMountPath,
 			},
-		}, managed.Env...),
+		}, template.Env...),
 	}
 
-	if managed.Resources != nil {
-		container.Resources = *managed.Resources
+	if template.Resources != nil {
+		container.Resources = *template.Resources
 	}
 
 	var volumes []corev1.Volume
@@ -1011,7 +1017,7 @@ type templateConfig struct {
 
 // reconciletemplateConfigMap creates or updates the ConfigMap containing the managed agent configuration.
 func (r *AgentReconciler) reconciletemplateConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
-	configMapName := fmt.Sprintf("%s-managed-config", agent.Name)
+	configMapName := fmt.Sprintf("%s-template-config", agent.Name)
 
 	managed := agent.Spec.Runtime.Template
 	if managed == nil {
@@ -1036,7 +1042,7 @@ func (r *AgentReconciler) reconciletemplateConfigMap(ctx context.Context, agent 
 			Namespace: agent.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       agent.Name,
-				"app.kubernetes.io/component":  "managed-config",
+				"app.kubernetes.io/component":  "template-config",
 				"app.kubernetes.io/managed-by": "flokoa-operator",
 				"flokoa.ai/agent":              agent.Name,
 			},

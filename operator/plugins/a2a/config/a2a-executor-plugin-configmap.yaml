@@ -1,7 +1,7 @@
 # This is an auto-generated file. DO NOT EDIT
 apiVersion: v1
 data:
-  sidecar.automountServiceAccountToken: "false"
+  sidecar.automountServiceAccountToken: "true"
   sidecar.container: |
     command:
     - /a2a-plugin
@@ -23,8 +23,7 @@ data:
         drop:
         - ALL
       readOnlyRootFilesystem: true
-      runAsNonRoot: true
-      runAsUser: 65532
+      runAsNonRoot: false
 kind: ConfigMap
 metadata:
   creationTimestamp: null
