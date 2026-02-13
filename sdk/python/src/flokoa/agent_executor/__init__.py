@@ -1,20 +1,17 @@
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from a2a.server.agent_execution import AgentExecutor
 
-from flokoa import tools as flokoa_tools
 from flokoa.cache import (
     CACHE_KEY_MODEL_CONFIG,
     CACHE_KEY_TOOLS,
     ConfigCache,
     get_global_cache,
 )
-from flokoa.tools import TOOL_CALLABLES
 from flokoa.types import (
     ModelConfig,
     ProviderConfigType,
     ProviderModelParametersType,
-    ToolType,
 )
 from flokoa.types import (
     ModelParameters as ModelParameters,
@@ -140,39 +137,3 @@ class FlokoaAgentExecutor(AgentExecutor):
         """Invalidate all caches and force reload on next access."""
         self._cache.invalidate_all()
         self._model_config_loaded = False
-
-    def _get_tool_callable(self, tool_definition: FlokoaToolDefinition) -> Callable[..., Any]:
-        """Create a callable that accepts schema parameters and calls the underlying tool.
-
-        The wrapper function accepts **kwargs matching the tool's input schema,
-        and passes them to the appropriate tool handler with the tool's configuration.
-
-        The returned callable has __name__ and __doc__ set from the tool definition.
-        """
-        callable_fn: Callable[..., Any]
-
-        if tool_definition.type == ToolType.HTTP_API:
-            http_api = tool_definition.spec.http_api
-            if http_api is None:
-                raise ValueError(f"Tool '{tool_definition.name}' has type http-api but no http_api configuration")
-            endpoint = http_api.url or ""
-            method = http_api.method.value
-
-            async def api_tool_wrapper(**kwargs: Any) -> dict[str, Any]:
-                return await flokoa_tools.call_http_api_tool(endpoint=endpoint, method=method, params=kwargs)
-
-            callable_fn = api_tool_wrapper
-        else:
-            # Wrap the shared callable to avoid mutating it
-            base_callable = TOOL_CALLABLES[tool_definition.type]
-
-            async def tool_wrapper(**kwargs: Any) -> Any:
-                return await base_callable(**kwargs)
-
-            callable_fn = tool_wrapper
-
-        # Set name and description from the tool definition
-        callable_fn.__name__ = tool_definition.name
-        callable_fn.__doc__ = tool_definition.description
-
-        return callable_fn

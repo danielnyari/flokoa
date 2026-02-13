@@ -6,6 +6,21 @@ import time
 import pytest
 
 import flokoa.utils as utils_module
+
+MINIMAL_OPENAPI_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Test API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.example.com"}],
+    "paths": {
+        "/test": {
+            "get": {
+                "operationId": "testEndpoint",
+                "summary": "Test tool",
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
 from flokoa.cache import (
     CACHE_KEY_MODEL_CONFIG,
     CACHE_KEY_TOOLS,
@@ -39,11 +54,12 @@ class TestLoadToolsCaching:
         tool_data = {
             "name": "test_tool",
             "spec": {
-                "type": "http-api",
+                "type": "openapi",
                 "description": "Test tool",
-                "inputSchema": {"type": "object"},
-                "outputSchema": {"type": "object"},
-                "httpApi": {"url": "https://api.example.com", "method": "GET"},
+                "openApi": {
+                    "openApiSchema": {"value": MINIMAL_OPENAPI_SPEC},
+                    "url": "https://api.example.com",
+                },
             },
         }
         tool_file = tools_dir / "test_tool.json"
@@ -68,11 +84,12 @@ class TestLoadToolsCaching:
         tool_data = {
             "name": "test_tool",
             "spec": {
-                "type": "http-api",
+                "type": "openapi",
                 "description": "Test tool",
-                "inputSchema": {"type": "object"},
-                "outputSchema": {"type": "object"},
-                "httpApi": {"url": "https://api.example.com", "method": "GET"},
+                "openApi": {
+                    "openApiSchema": {"value": MINIMAL_OPENAPI_SPEC},
+                    "url": "https://api.example.com",
+                },
             },
         }
         tool_file = tools_dir / "test_tool.json"
@@ -101,11 +118,12 @@ class TestLoadToolsCaching:
         tool_data = {
             "name": "test_tool",
             "spec": {
-                "type": "http-api",
+                "type": "openapi",
                 "description": "Test tool",
-                "inputSchema": {"type": "object"},
-                "outputSchema": {"type": "object"},
-                "httpApi": {"url": "https://api.example.com", "method": "GET"},
+                "openApi": {
+                    "openApiSchema": {"value": MINIMAL_OPENAPI_SPEC},
+                    "url": "https://api.example.com",
+                },
             },
         }
         tool_file = tools_dir / "test_tool.json"
@@ -138,11 +156,12 @@ class TestLoadToolsCaching:
         tool_data = {
             "name": "new_tool",
             "spec": {
-                "type": "http-api",
+                "type": "openapi",
                 "description": "New tool",
-                "inputSchema": {"type": "object"},
-                "outputSchema": {"type": "object"},
-                "httpApi": {"url": "https://api.example.com", "method": "GET"},
+                "openApi": {
+                    "openApiSchema": {"value": MINIMAL_OPENAPI_SPEC},
+                    "url": "https://api.example.com",
+                },
             },
         }
         tool_file = tools_dir / "new_tool.json"

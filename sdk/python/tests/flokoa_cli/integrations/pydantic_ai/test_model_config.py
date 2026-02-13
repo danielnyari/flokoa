@@ -254,7 +254,7 @@ class TestFlokoaAgentExecutorModelConfig:
 
     @pytest.fixture
     def executor_with_model_config(
-        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch
     ):
         """Create executor with model config file set up."""
         # Set up model config file
@@ -284,7 +284,7 @@ class TestFlokoaAgentExecutorModelConfig:
         # Same object should be returned (cached)
         assert config1 is config2
 
-    def test_model_config_is_none_when_file_missing(self, pydantic_agent, tmp_path, monkeypatch, mock_http_api):
+    def test_model_config_is_none_when_file_missing(self, pydantic_agent, tmp_path, monkeypatch):
         """Verify model_config returns None when file doesn't exist."""
         nonexistent_path = str(tmp_path / "nonexistent" / "model.json")
         monkeypatch.setattr(utils_module, "MODEL_CONFIG_PATH", nonexistent_path)
@@ -337,7 +337,7 @@ class TestPydanticAIAgentExecutorModelConfig:
 
     @pytest.fixture
     def executor_with_full_config(
-        self, pydantic_agent, openai_model_config_json, multiple_tool_definitions, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, openai_model_config_json, multiple_tool_definitions, tmp_path, monkeypatch
     ):
         """Create executor with both model config and tools set up."""
         # Set up model config file
@@ -397,7 +397,7 @@ class TestEndToEndModelConfigVerification:
 
     @pytest.fixture
     def executor_with_config(
-        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch
     ):
         """Create executor with model config for end-to-end testing."""
         # Set up model config file
@@ -437,7 +437,7 @@ class TestEndToEndModelConfigVerification:
         assert captured_info is not None
 
     async def test_execute_with_model_config_available(
-        self, pydantic_agent, executor_with_config, mock_http_api
+        self, pydantic_agent, executor_with_config
     ):
         """Verify execute method works with model config loaded."""
         test_model = TestModel(custom_output_text="Test response")
@@ -467,7 +467,7 @@ class TestModelConfigWithDifferentProviders:
         return Agent("test", system_prompt="Test agent")
 
     def test_anthropic_config_parameters_accessible(
-        self, pydantic_agent, anthropic_model_config_json, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, anthropic_model_config_json, tmp_path, monkeypatch
     ):
         """Verify Anthropic-specific parameters are accessible."""
         model_config_path = tmp_path / "model.json"
@@ -486,7 +486,7 @@ class TestModelConfigWithDifferentProviders:
         assert config.parameters.anthropic.cache_messages == "5m"
 
     def test_google_config_parameters_accessible(
-        self, pydantic_agent, google_model_config_json, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, google_model_config_json, tmp_path, monkeypatch
     ):
         """Verify Google-specific parameters are accessible."""
         model_config_path = tmp_path / "model.json"
@@ -504,7 +504,7 @@ class TestModelConfigWithDifferentProviders:
         assert config.provider.google.project == "test-project"
 
     def test_bedrock_config_parameters_accessible(
-        self, pydantic_agent, bedrock_model_config_json, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, bedrock_model_config_json, tmp_path, monkeypatch
     ):
         """Verify Bedrock-specific parameters are accessible."""
         model_config_path = tmp_path / "model.json"
@@ -533,7 +533,7 @@ class TestModelConfigCaching:
         return Agent("test", system_prompt="Test agent")
 
     def test_model_config_uses_cache_by_default(
-        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch
     ):
         """Verify model config is cached and reused."""
         model_config_path = tmp_path / "model.json"
@@ -553,7 +553,7 @@ class TestModelConfigCaching:
         assert config2 is config3
 
     def test_model_config_cache_invalidation(
-        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch, mock_http_api
+        self, pydantic_agent, openai_model_config_json, tmp_path, monkeypatch
     ):
         """Verify cache invalidation forces reload."""
         model_config_path = tmp_path / "model.json"

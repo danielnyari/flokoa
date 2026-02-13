@@ -2,7 +2,7 @@
 
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 _MISSING_ADK_MESSAGE = (
     "google-adk is not installed or unavailable at runtime. "
@@ -20,6 +20,7 @@ except (ImportError, AttributeError):
 # In tests, google.adk.tools is a MagicMock, so BaseToolset resolves to a non-type.
 # This also handles any non-class sentinel returned by mocked imports.
 if _BaseToolset is None or not inspect.isclass(_BaseToolset):
+
     class BaseToolset:  # type: ignore[no-redef]
         async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
             """Return tools for the given readonly ADK context."""
@@ -27,10 +28,9 @@ if _BaseToolset is None or not inspect.isclass(_BaseToolset):
 
         async def close(self) -> None:
             raise ImportError(f"Failed to call close: {_MISSING_ADK_MESSAGE}")
+
 else:
     BaseToolset = _BaseToolset
-
-from flokoa.types import ToolDefinition as FlokoaToolDefinition
 
 if TYPE_CHECKING:
     from google.adk.tools import BaseTool
@@ -39,47 +39,29 @@ logger = logging.getLogger(__name__)
 
 
 class FlokoaToolset(BaseToolset):
-    """A toolset that wraps Flokoa tool definitions for use with Google ADK agents.
+    """A toolset that wraps pre-built ADK tools for use with Google ADK agents.
 
-    This implements the BaseToolset interface expected by ADK agents,
-    providing FunctionTool instances from Flokoa's tool definitions.
+    This implements the BaseToolset interface expected by ADK agents.
+    Tools are built externally via the ToolsetFactory and passed in.
 
-    Example:
-        toolset = FlokoaToolset(
-            tool_definitions=[...],
-            get_tool_callable=executor._get_tool_callable,
+    Example::
+
+        tools = default_factory.build(
+            tool_definitions, IntegrationType.GOOGLE_ADK
         )
+        toolset = FlokoaToolset(tools)
         agent.tools.append(toolset)
     """
 
-    def __init__(
-        self,
-        tool_definitions: list[FlokoaToolDefinition],
-        get_tool_callable: Callable[[FlokoaToolDefinition], Callable[..., Any]],
-    ):
-        """Initialize the toolset and create FunctionTool instances.
+    def __init__(self, tools: list[Any]):
+        """Initialize the toolset with pre-built ADK tools.
 
         Args:
-            tool_definitions: List of Flokoa tool definitions to wrap.
-            get_tool_callable: Function to create callables from tool definitions.
+            tools: List of ADK BaseTool instances produced by the factory.
         """
         super().__init__()
-        from google.adk.tools import FunctionTool
-
-        self._tool_definitions = tool_definitions
-        self._get_tool_callable = get_tool_callable
-
-        # Create FunctionTool instances once during init (following ADK pattern)
-        # FunctionTool extracts name from __name__ and description from __doc__,
-        # which are set by _get_tool_callable in the base class
-        self._tools: list[BaseTool] = []
-        for tool_def in tool_definitions:
-            callable_fn = get_tool_callable(tool_def)
-            tool = FunctionTool(func=callable_fn)
-            self._tools.append(tool)
-            logger.info(f"Created Flokoa tool '{tool_def.name}' for ADK.")
-
-        logger.info(f"FlokoaToolset initialized with {len(self._tools)} tools: {[t.name for t in self._tools]}")
+        self._tools: list[BaseTool] = tools
+        logger.info("FlokoaToolset initialized with %d tools", len(self._tools))
 
     async def get_tools(self, readonly_context: Optional[Any] = None) -> list["BaseTool"]:
         """Get the list of tools provided by this toolset.
@@ -88,9 +70,8 @@ class FlokoaToolset(BaseToolset):
             readonly_context: Optional readonly context (for dynamic tool selection).
 
         Returns:
-            List of FunctionTool instances.
+            List of BaseTool instances.
         """
-        logger.debug(f"FlokoaToolset.get_tools() called, returning {len(self._tools)} tools.")
         return self._tools
 
     async def close(self) -> None:

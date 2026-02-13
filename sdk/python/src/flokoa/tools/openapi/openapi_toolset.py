@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import ssl
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
 
 import yaml
 from pydantic_ai import FunctionToolset, Tool
@@ -26,6 +26,9 @@ from ...auth.auth_credential import AuthCredential
 from ...auth.auth_schemes import AuthScheme
 from .openapi_spec_parser import OpenApiSpecParser
 from .rest_api_tool import RestApiToolConfig, create_rest_api_tool
+
+if TYPE_CHECKING:
+    from ...types import ToolDefinition
 
 logger = logging.getLogger("flokoa." + __name__)
 
@@ -89,6 +92,48 @@ class OpenAPIToolset:
         self._configs: List[RestApiToolConfig] = self._parse(
             spec_dict, auth_scheme, auth_credential, ssl_verify
         )
+
+    @classmethod
+    def from_tool_definition(cls, tool_definition: ToolDefinition) -> OpenAPIToolset:
+        """Create an OpenAPIToolset from a Flokoa ToolDefinition.
+
+        Extracts the inline OpenAPI spec from the tool definition's
+        ``openApi.openApiSchema.value`` field. If the tool definition
+        specifies a base URL, it overrides the spec's ``servers`` entry.
+
+        Args:
+            tool_definition: A ToolDefinition with type "openapi".
+
+        Returns:
+            An OpenAPIToolset parsed from the spec.
+
+        Raises:
+            ValueError: If the tool definition lacks required openApi config.
+        """
+        open_api = tool_definition.spec.open_api
+        if open_api is None:
+            raise ValueError(
+                f"Tool '{tool_definition.name}' has type openapi but no openApi configuration"
+            )
+
+        spec_dict = open_api.open_api_schema.value
+        if spec_dict is None:
+            raise ValueError(
+                f"Tool '{tool_definition.name}' has no inline OpenAPI spec (openApiSchema.value)"
+            )
+
+        # Override servers if CRD specifies a base URL
+        if open_api.url:
+            spec_dict = {**spec_dict, "servers": [{"url": open_api.url}]}
+
+        toolset = cls(spec_dict=spec_dict)
+
+        # Apply default headers from CRD
+        if open_api.headers:
+            for config in toolset._configs:
+                config.default_headers.update(open_api.headers)
+
+        return toolset
 
     def get_tools(self) -> List[Tool]:
         """Get all Pydantic AI Tool objects, respecting the tool filter."""

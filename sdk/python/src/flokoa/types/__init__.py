@@ -30,10 +30,17 @@ ProviderModelParametersType = Annotated[
 ]
 
 
+class IntegrationType(StrEnum):
+    """Supported framework integrations."""
+
+    PYDANTIC_AI = "pydantic-ai"
+    GOOGLE_ADK = "google-adk"
+
+
 class ToolType(StrEnum):
     """Tool type enum matching the Kubernetes CRD Type enum."""
 
-    HTTP_API = "http-api"
+    OPENAPI = "openapi"
 
 
 class ToolDefinition(BaseModel):
@@ -53,9 +60,9 @@ class ToolDefinition(BaseModel):
     @property
     def type(self) -> ToolType:
         """Get the tool type from the spec."""
-        if self.spec.type == Type.http_api:
-            return ToolType.HTTP_API
-        return ToolType.HTTP_API  # Default fallback
+        if self.spec.type == Type.openapi:
+            return ToolType.OPENAPI
+        raise ValueError(f"Unsupported tool type: {self.spec.type}")
 
     @computed_field
     @property
@@ -63,20 +70,9 @@ class ToolDefinition(BaseModel):
         """Get the tool description from the spec."""
         return self.spec.description
 
-    @computed_field
-    @property
-    def input_json_schema(self) -> dict[str, Any]:
-        """Get the input JSON schema from the spec."""
-        return self.spec.input_schema or {}
-
-    @computed_field
-    @property
-    def output_json_schema(self) -> dict[str, Any]:
-        """Get the output JSON schema from the spec."""
-        return self.spec.output_schema or {}
-
 
 __all__ = [
+    "IntegrationType",
     "ModelConfig",
     "ModelParameters",
     "ProviderConfigType",

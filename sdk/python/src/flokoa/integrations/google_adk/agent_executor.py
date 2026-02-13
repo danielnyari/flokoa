@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Any, override
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
@@ -8,6 +8,9 @@ from a2a.utils import new_agent_text_message
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.cache import ConfigCache
 from flokoa.exceptions import CancelNotSupportedError
+from flokoa.tools import ToolsetFactory, default_factory
+from flokoa.types import IntegrationType, ToolType
+from flokoa.types import ToolDefinition as FlokoaToolDefinition
 
 from .toolset import FlokoaToolset
 
@@ -15,6 +18,31 @@ if TYPE_CHECKING:
     from google.adk.agents import LlmAgent
 
 logger = logging.getLogger(__name__)
+
+
+def _openapi_adk_builder(tool_definition: FlokoaToolDefinition) -> list[Any]:
+    from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import (
+        OpenAPIToolset,
+    )
+
+    open_api = tool_definition.spec.open_api
+    if open_api is None:
+        raise ValueError(f"Tool '{tool_definition.name}' has type openapi but no openApi configuration")
+
+    spec_dict = open_api.open_api_schema.value
+    if spec_dict is None:
+        raise ValueError(f"Tool '{tool_definition.name}' has no inline OpenAPI spec (openApiSchema.value)")
+
+    # Override servers if CRD specifies a base URL
+    if open_api.url:
+        spec_dict = {**spec_dict, "servers": [{"url": open_api.url}]}
+
+    toolset = OpenAPIToolset(spec_dict=spec_dict)
+    # ADK OpenAPIToolset.get_tools() is sync and returns list[RestApiTool]
+    return toolset.get_tools()
+
+
+default_factory.register(ToolType.OPENAPI, IntegrationType.GOOGLE_ADK, _openapi_adk_builder)
 
 
 class GoogleADKAgentExecutor(FlokoaAgentExecutor):
@@ -33,14 +61,22 @@ class GoogleADKAgentExecutor(FlokoaAgentExecutor):
 
     _agent: "LlmAgent"
 
-    def __init__(self, agent: "LlmAgent", cache: ConfigCache | None = None):
+    def __init__(
+        self,
+        agent: "LlmAgent",
+        cache: ConfigCache | None = None,
+        toolset_factory: ToolsetFactory | None = None,
+    ):
         """Initialize the executor.
 
         Args:
             agent: The Google ADK agent to wrap.
             cache: Optional cache instance. Uses global cache if not provided.
+            toolset_factory: Optional factory for building toolsets. Uses the
+                default factory if not provided.
         """
         super().__init__(agent, cache)  # type: ignore[arg-type]
+        self._toolset_factory = toolset_factory or default_factory
 
     @property
     def agent(self) -> "LlmAgent":  # type: ignore[override]
@@ -52,10 +88,8 @@ class GoogleADKAgentExecutor(FlokoaAgentExecutor):
         Returns:
             FlokoaToolset with all configured tools.
         """
-        return FlokoaToolset(
-            tool_definitions=self.tool_definitions,
-            get_tool_callable=self._get_tool_callable,
-        )
+        tools = self._toolset_factory.build(self.tool_definitions, IntegrationType.GOOGLE_ADK)
+        return FlokoaToolset(tools)
 
     def _inject_tools(self) -> None:
         """Inject Flokoa tools into the agent's tools list."""

@@ -10,8 +10,9 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
 from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
-from flokoa.types import ToolDefinition, ToolType
-from flokoa.types.agenttool import AgentToolSpec, HttpApi, Method, Type
+from flokoa.tools import ToolsetFactory
+from flokoa.types import IntegrationType, ToolDefinition, ToolType
+from flokoa.types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 
 # Block real model requests during testing
 models.ALLOW_MODEL_REQUESTS = False
@@ -19,55 +20,72 @@ models.ALLOW_MODEL_REQUESTS = False
 pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture
-def mock_http_api(monkeypatch):
-    """Mock the HTTP API calls to avoid real network requests.
+WEATHER_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Weather API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.weather.com"}],
+    "paths": {
+        "/current": {
+            "get": {
+                "operationId": "getWeather",
+                "summary": "Get the current weather for a location",
+                "parameters": [
+                    {
+                        "name": "location",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    }
+                ],
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
 
-    The production code uses dynamic lookup via flokoa_tools.call_http_api_tool,
-    so we patch the attribute on the flokoa.tools module.
-
-    Returns a MagicMock that can be used to assert calls.
-    """
-    mock = MagicMock()
-
-    async def mock_call_http_api_tool(endpoint: str, method: str, params: dict):
-        # Track the call (using MagicMock to avoid async coroutine warnings)
-        mock(endpoint=endpoint, method=method, params=params)
-        # Return mock data based on the endpoint
-        if "weather" in endpoint:
-            return {"temperature": 20, "condition": "sunny", "location": params.get("location", "unknown")}
-        elif "email" in endpoint:
-            return {"sent": True, "to": params.get("to"), "subject": params.get("subject")}
-        return {"success": True, "params": params}
-
-    # Patch on the flokoa.tools module where dynamic lookup happens
-    monkeypatch.setattr("flokoa.tools.call_http_api_tool", mock_call_http_api_tool)
-    return mock
+EMAIL_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Email API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.email.com"}],
+    "paths": {
+        "/send": {
+            "post": {
+                "operationId": "sendEmail",
+                "summary": "Send an email to a recipient",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "to": {"type": "string"},
+                                    "subject": {"type": "string"},
+                                    "body": {"type": "string"},
+                                },
+                                "required": ["to", "subject", "body"],
+                            }
+                        }
+                    }
+                },
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
 
 
 @pytest.fixture
 def api_tool_definition():
     """Create a sample API tool definition."""
     return ToolDefinition(
-        name="get_weather",
+        name="weather_api",
         spec=AgentToolSpec(
-            type=Type.http_api,
+            type=Type.openapi,
             description="Get the current weather for a location",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string", "description": "The city name"},
-                },
-                "required": ["location"],
-            },
-            outputSchema={
-                "type": "object",
-                "properties": {
-                    "temperature": {"type": "number"},
-                    "condition": {"type": "string"},
-                },
-            },
-            httpApi=HttpApi(url="https://api.weather.com/current", method=Method.get),
+            openApi=OpenApi(
+                openApiSchema=OpenApiSchema(value=WEATHER_API_SPEC),
+                url="https://api.weather.com",
+            ),
         ),
     )
 
@@ -77,57 +95,75 @@ def multiple_tool_definitions():
     """Create multiple tool definitions for testing."""
     return [
         ToolDefinition(
-            name="get_weather",
+            name="weather_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
+                type=Type.openapi,
                 description="Get the current weather for a location",
-                inputSchema={
-                    "type": "object",
-                    "properties": {"location": {"type": "string"}},
-                    "required": ["location"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.weather.com/current", method=Method.get),
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=WEATHER_API_SPEC),
+                    url="https://api.weather.com",
+                ),
             ),
         ),
         ToolDefinition(
-            name="send_email",
+            name="email_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
+                type=Type.openapi,
                 description="Send an email to a recipient",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "to": {"type": "string"},
-                        "subject": {"type": "string"},
-                        "body": {"type": "string"},
-                    },
-                    "required": ["to", "subject", "body"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.email.com/send", method=Method.post),
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=EMAIL_API_SPEC),
+                    url="https://api.email.com",
+                ),
             ),
         ),
     ]
 
 
 @pytest.fixture
-def tools_file(tmp_path, multiple_tool_definitions, monkeypatch, mock_http_api):
-    """Create a tools configuration file and patch load_tools.
+def mock_toolset_factory():
+    """Factory that produces simple mock PydanticAI tools for testing.
 
-    Depends on mock_http_api to ensure HTTP mocking is set up first.
+    Instead of creating real OpenAPI tools (which require httpx deps),
+    this factory produces simple Tool objects that TestModel can invoke.
     """
+    from pydantic_ai import Tool
+
+    factory = ToolsetFactory()
+
+    def mock_builder(td):
+        tools = []
+        if "weather" in td.name:
+
+            def get_weather(location: str = "test") -> dict:
+                """Get the current weather for a location"""
+                return {"temperature": 20, "condition": "sunny", "location": location}
+
+            tools.append(Tool(get_weather))
+        elif "email" in td.name:
+
+            def send_email(to: str = "", subject: str = "", body: str = "") -> dict:
+                """Send an email to a recipient"""
+                return {"sent": True, "to": to, "subject": subject}
+
+            tools.append(Tool(send_email))
+        return tools
+
+    factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, mock_builder)
+    return factory
+
+
+@pytest.fixture
+def tools_file(tmp_path, multiple_tool_definitions, monkeypatch):
+    """Patch load_tools to return the multiple_tool_definitions fixture."""
     tools_config = [
         {
             "name": td.name,
             "spec": {
                 "type": td.spec.type.value,
                 "description": td.spec.description,
-                "inputSchema": td.spec.input_schema,
-                "outputSchema": td.spec.output_schema,
-                "httpApi": {
-                    "url": td.spec.http_api.url,
-                    "method": td.spec.http_api.method.value,
+                "openApi": {
+                    "openApiSchema": {"value": td.spec.open_api.open_api_schema.value},
+                    "url": td.spec.open_api.url,
                 },
             },
         }
@@ -166,12 +202,9 @@ def pydantic_agent():
 
 
 @pytest.fixture
-def pydantic_agent_executor(pydantic_agent, tools_file):
-    """Create a PydanticAIAgentExecutor with patched tool loading and mocked HTTP.
-
-    HTTP mocking is handled via tools_file -> mock_http_api dependency chain.
-    """
-    return PydanticAIAgentExecutor(pydantic_agent)
+def pydantic_agent_executor(pydantic_agent, tools_file, mock_toolset_factory):
+    """Create a PydanticAIAgentExecutor with patched tool loading and mock factory."""
+    return PydanticAIAgentExecutor(pydantic_agent, toolset_factory=mock_toolset_factory)
 
 
 class TestPydanticAIAgentExecutorInit:
@@ -184,33 +217,8 @@ class TestPydanticAIAgentExecutorInit:
     def test_init_loads_tool_definitions(self, pydantic_agent_executor, multiple_tool_definitions):
         """Verify that tool definitions are loaded from configuration."""
         assert len(pydantic_agent_executor._tool_definitions) == len(multiple_tool_definitions)
-        assert pydantic_agent_executor._tool_definitions[0].name == "get_weather"
-        assert pydantic_agent_executor._tool_definitions[1].name == "send_email"
-
-
-class TestPydanticAIAgentExecutorCreateTool:
-    """Tests for the _create_tool method."""
-
-    def test_create_tool_returns_pydantic_ai_tool(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
-        """Verify that _create_tool creates a valid PydanticAI Tool."""
-        monkeypatch.setattr(pydantic_agent_executor, "_tool_definitions", [api_tool_definition])
-
-        tool = pydantic_agent_executor._create_tool(api_tool_definition)
-
-        assert tool.name == "get_weather"
-        assert tool.description == "Get the current weather for a location"
-
-    def test_create_tool_uses_input_schema(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
-        """Verify that the tool uses the input JSON schema from the definition."""
-        monkeypatch.setattr(pydantic_agent_executor, "_tool_definitions", [api_tool_definition])
-
-        tool = pydantic_agent_executor._create_tool(api_tool_definition)
-
-        # The tool should have the schema from the definition
-        assert tool.name == api_tool_definition.name
-        assert tool.description == api_tool_definition.description
-        # Check schema is applied
-        assert "location" in str(tool.function_schema.json_schema)
+        assert pydantic_agent_executor._tool_definitions[0].name == "weather_api"
+        assert pydantic_agent_executor._tool_definitions[1].name == "email_api"
 
 
 class TestPydanticAIAgentExecutorGetToolset:
@@ -227,7 +235,6 @@ class TestPydanticAIAgentExecutorGetToolset:
     def test_get_toolset_includes_all_tools(self, pydantic_agent_executor, multiple_tool_definitions):
         """Verify that the toolset includes all loaded tools."""
         toolset = pydantic_agent_executor._get_toolset()
-        # toolset.tools is a dict with tool names as keys
         tool_names = list(toolset.tools.keys())
 
         assert "get_weather" in tool_names
@@ -270,15 +277,14 @@ class TestPydanticAIAgentExecutorGetToolset:
 class TestPydanticAIAgentExecutorToolInjectionWithTestModel:
     """Tests for tool injection using TestModel."""
 
-    async def test_all_tools_are_callable_and_called_with_correct_params(
-        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+    async def test_all_tools_are_callable(
+        self, pydantic_agent, pydantic_agent_executor
     ):
         """Verify that both native and injected tools can be called by TestModel.
 
         This is the core test case: users create agents with their own tools,
         and Flokoa injects additional tools that can all be executed.
         """
-        # TestModel calls all tools by default
         test_model = TestModel()
 
         with pydantic_agent.override(model=test_model):
@@ -303,29 +309,8 @@ class TestPydanticAIAgentExecutorToolInjectionWithTestModel:
             # Total: 1 native + 2 injected = 3 tools
             assert len(tool_names) == 3
 
-            # Verify injected tools were called with correct parameters
-            # TestModel generates test data based on schema, so we check the call structure
-            calls = mock_http_api.call_args_list
-            assert len(calls) == 2  # get_weather and send_email were called
-
-            # Find the weather call and email call
-            weather_call = next(c for c in calls if "weather" in c.kwargs["endpoint"])
-            email_call = next(c for c in calls if "email" in c.kwargs["endpoint"])
-
-            # Verify weather tool was called with correct endpoint and method
-            assert weather_call.kwargs["endpoint"] == "https://api.weather.com/current"
-            assert weather_call.kwargs["method"] == "GET"
-            assert "location" in weather_call.kwargs["params"]
-
-            # Verify email tool was called with correct endpoint and method
-            assert email_call.kwargs["endpoint"] == "https://api.email.com/send"
-            assert email_call.kwargs["method"] == "POST"
-            assert "to" in email_call.kwargs["params"]
-            assert "subject" in email_call.kwargs["params"]
-            assert "body" in email_call.kwargs["params"]
-
     async def test_tools_have_correct_schema_in_model_request(
-        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+        self, pydantic_agent, pydantic_agent_executor
     ):
         """Verify that both native and injected tools have correct JSON schema."""
         test_model = TestModel()
@@ -418,10 +403,10 @@ class TestPydanticAIAgentExecutorToolInjectionWithFunctionModel:
 class TestPydanticAIAgentExecutorExecuteMethod:
     """Tests for the execute method with full integration."""
 
-    async def test_execute_calls_all_tools_with_correct_params(
-        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+    async def test_execute_calls_all_tools(
+        self, pydantic_agent, pydantic_agent_executor
     ):
-        """Verify that execute calls both native and injected tools with correct params."""
+        """Verify that execute calls both native and injected tools."""
         test_model = TestModel()
 
         mock_context = MagicMock()
@@ -448,17 +433,8 @@ class TestPydanticAIAgentExecutorExecuteMethod:
             assert "get_weather" in tool_names
             assert "send_email" in tool_names
 
-            # Verify injected tools were called with correct parameters
-            calls = mock_http_api.call_args_list
-            assert len(calls) == 2  # Both injected tools were called
-
-            # Verify each tool was called with correct endpoint and method
-            endpoints_called = {c.kwargs["endpoint"] for c in calls}
-            assert "https://api.weather.com/current" in endpoints_called
-            assert "https://api.email.com/send" in endpoints_called
-
     async def test_execute_enqueues_agent_output(
-        self, pydantic_agent, pydantic_agent_executor, mock_http_api
+        self, pydantic_agent, pydantic_agent_executor
     ):
         """Verify that execute enqueues the agent's output as an event."""
         expected_output = "The weather is sunny!"
@@ -477,38 +453,6 @@ class TestPydanticAIAgentExecutorExecuteMethod:
         mock_event_queue.enqueue_event.assert_called_once()
 
 
-class TestPydanticAIAgentExecutorToolCallableMapping:
-    """Tests for tool callable mapping functionality."""
-
-    def test_get_tool_callable_returns_api_wrapper(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
-        """Verify that API tools return a wrapper that calls the HTTP API handler."""
-        monkeypatch.setattr(pydantic_agent_executor, "_tool_definitions", [api_tool_definition])
-
-        callable_fn = pydantic_agent_executor._get_tool_callable(api_tool_definition)
-
-        assert callable(callable_fn)
-        # The callable has __name__ set from the tool definition
-        assert callable_fn.__name__ == api_tool_definition.name
-
-    def test_tool_callable_is_async(self, pydantic_agent_executor, api_tool_definition, monkeypatch):
-        """Verify that tool callables are async functions."""
-        import inspect
-
-        monkeypatch.setattr(pydantic_agent_executor, "_tool_definitions", [api_tool_definition])
-
-        callable_fn = pydantic_agent_executor._get_tool_callable(api_tool_definition)
-
-        assert inspect.iscoroutinefunction(callable_fn)
-
-    def test_get_tool_callable_for_all_tool_types(self, pydantic_agent_executor, multiple_tool_definitions, monkeypatch):
-        """Verify that all tool types return callables."""
-        monkeypatch.setattr(pydantic_agent_executor, "_tool_definitions", multiple_tool_definitions)
-
-        for tool_def in pydantic_agent_executor._tool_definitions:
-            callable_fn = pydantic_agent_executor._get_tool_callable(tool_def)
-            assert callable(callable_fn)
-
-
 class TestPydanticAIAgentExecutorProperties:
     """Tests for executor properties."""
 
@@ -517,8 +461,8 @@ class TestPydanticAIAgentExecutorProperties:
         definitions = pydantic_agent_executor.tool_definitions
 
         assert len(definitions) == 2
-        assert definitions[0].name == "get_weather"
-        assert definitions[0].type == ToolType.HTTP_API
+        assert definitions[0].name == "weather_api"
+        assert definitions[0].type == ToolType.OPENAPI
 
     def test_agent_property_returns_injected_agent(self, pydantic_agent, pydantic_agent_executor):
         """Verify that agent property returns the injected agent."""
