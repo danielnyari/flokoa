@@ -1,0 +1,30 @@
+{{- if and .Values.argo.enabled .Values.argo.a2aPlugin.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: ExecutorPlugin
+metadata:
+  name: a2a
+  namespace: {{ .Values.argo.a2aPlugin.namespace }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: a2a-plugin
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  sidecar:
+    automountServiceAccountToken: true
+    container:
+      name: a2a-executor-plugin
+      image: {{ include "flokoa.image" (dict "image" .Values.argo.a2aPlugin.image "appVersion" .Chart.AppVersion) }}
+      imagePullPolicy: {{ .Values.images.pullPolicy }}
+      command:
+        - /a2a-plugin
+      ports:
+        - containerPort: 4355
+          protocol: TCP
+      resources:
+        {{- toYaml .Values.argo.a2aPlugin.resources | nindent 8 }}
+      securityContext:
+        {{- toYaml .Values.argo.a2aPlugin.securityContext | nindent 8 }}
+{{- end }}

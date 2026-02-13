@@ -1,0 +1,11 @@
+{{/*
+CRDs are stored in files/crds/ and conditionally rendered here (rather than
+using Helm's built-in crds/ directory) so we can control installation via
+values and add annotations like helm.sh/resource-policy: keep.
+*/}}
+{{- if .Values.crds.install }}
+{{- range $path, $_ := .Files.Glob "files/crds/*.yaml" }}
+---
+{{ $.Files.Get $path }}
+{{- end }}
+{{- end }}
