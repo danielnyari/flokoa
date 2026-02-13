@@ -121,11 +121,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 							{
 								Name: "weather-api",
 								Template: &agentv1alpha1.AgentToolSpec{
-									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+									Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 									Description: "Get weather information",
-									HTTPApi: &agentv1alpha1.HTTPApiSpec{
-										URL:    "https://api.weather.com/v1/weather",
-										Method: agentv1alpha1.HTTPMethodGet,
+									OpenApi: &agentv1alpha1.OpenApiToolSpec{
+										URL: "https://api.weather.com/v1/weather",
+										OpenApiSchema: agentv1alpha1.OpenApiSchema{
+											EndpointPath: "/openapi.json",
+										},
 									},
 								},
 							},
@@ -163,7 +165,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 					}, agentTool)
 				}, timeout, interval).Should(Succeed())
 
-				Expect(agentTool.Spec.Type).To(Equal(agentv1alpha1.AgentToolTypeHTTPAPI))
+				Expect(agentTool.Spec.Type).To(Equal(agentv1alpha1.AgentToolTypeOpenAPI))
 				Expect(agentTool.Spec.Description).To(Equal("Get weather information"))
 				Expect(agentTool.Labels).To(HaveKeyWithValue("flokoa.ai/agent", agentName))
 				Expect(agentTool.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "inline-tool"))
@@ -176,7 +178,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api","description":"Get weather information"}`,
+						"spec.json": `{"type":"openapi","description":"Get weather information"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -255,22 +257,26 @@ var _ = Describe("Agent Controller - Tools", func() {
 							{
 								Name: "tool-one",
 								Template: &agentv1alpha1.AgentToolSpec{
-									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+									Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 									Description: "First tool",
-									HTTPApi: &agentv1alpha1.HTTPApiSpec{
-										URL:    "https://api.example.com/one",
-										Method: agentv1alpha1.HTTPMethodGet,
+									OpenApi: &agentv1alpha1.OpenApiToolSpec{
+										URL: "https://api.example.com/one",
+										OpenApiSchema: agentv1alpha1.OpenApiSchema{
+											EndpointPath: "/openapi.json",
+										},
 									},
 								},
 							},
 							{
 								Name: "tool-two",
 								Template: &agentv1alpha1.AgentToolSpec{
-									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+									Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 									Description: "Second tool",
-									HTTPApi: &agentv1alpha1.HTTPApiSpec{
-										URL:    "https://api.example.com/two",
-										Method: agentv1alpha1.HTTPMethodPost,
+									OpenApi: &agentv1alpha1.OpenApiToolSpec{
+										URL: "https://api.example.com/two",
+										OpenApiSchema: agentv1alpha1.OpenApiSchema{
+											EndpointPath: "/openapi.json",
+										},
 									},
 								},
 							},
@@ -321,7 +327,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Name:      fmt.Sprintf("%s-tool-one-spec", agentName),
 						Namespace: agentNamespace,
 					},
-					Data: map[string]string{"spec.json": `{"type":"http-api"}`},
+					Data: map[string]string{"spec.json": `{"type":"openapi"}`},
 				}
 				Expect(k8sClient.Create(ctx, cm1)).To(Succeed())
 
@@ -330,7 +336,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Name:      fmt.Sprintf("%s-tool-two-spec", agentName),
 						Namespace: agentNamespace,
 					},
-					Data: map[string]string{"spec.json": `{"type":"http-api"}`},
+					Data: map[string]string{"spec.json": `{"type":"openapi"}`},
 				}
 				Expect(k8sClient.Create(ctx, cm2)).To(Succeed())
 
@@ -389,11 +395,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "External weather API tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.weather.com/v2",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.weather.com/v2",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -410,7 +418,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						},
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api","description":"External weather API tool"}`,
+						"spec.json": `{"type":"openapi","description":"External weather API tool"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -561,11 +569,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Some API tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -578,7 +588,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api"}`,
+						"spec.json": `{"type":"openapi"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -678,11 +688,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Referenced tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com/ref",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com/ref",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -695,7 +707,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api"}`,
+						"spec.json": `{"type":"openapi"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -721,11 +733,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 							{
 								Name: "inline-tool",
 								Template: &agentv1alpha1.AgentToolSpec{
-									Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+									Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 									Description: "Inline tool",
-									HTTPApi: &agentv1alpha1.HTTPApiSpec{
-										URL:    "https://api.example.com/inline",
-										Method: agentv1alpha1.HTTPMethodPost,
+									OpenApi: &agentv1alpha1.OpenApiToolSpec{
+										URL: "https://api.example.com/inline",
+										OpenApiSchema: agentv1alpha1.OpenApiSchema{
+											EndpointPath: "/openapi.json",
+										},
 									},
 								},
 							},
@@ -774,7 +788,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Name:      fmt.Sprintf("%s-spec", inlineAgentToolName),
 						Namespace: agentNamespace,
 					},
-					Data: map[string]string{"spec.json": `{"type":"http-api"}`},
+					Data: map[string]string{"spec.json": `{"type":"openapi"}`},
 				}
 				Expect(k8sClient.Create(ctx, inlineConfigMap)).To(Succeed())
 
@@ -838,11 +852,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Test tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -859,7 +875,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						},
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api","description":"Test tool"}`,
+						"spec.json": `{"type":"openapi","description":"Test tool"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -930,11 +946,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Original description",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -951,7 +969,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						},
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api","description":"Original description"}`,
+						"spec.json": `{"type":"openapi","description":"Original description"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -1019,7 +1037,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				}, toolConfigMap)
 				Expect(err).NotTo(HaveOccurred())
 
-				toolConfigMap.Data["spec.json"] = `{"type":"http-api","description":"Updated description"}`
+				toolConfigMap.Data["spec.json"] = `{"type":"openapi","description":"Updated description"}`
 				Expect(k8sClient.Update(ctx, toolConfigMap)).To(Succeed())
 
 				By("Reconciling the Agent again")
@@ -1090,12 +1108,12 @@ var _ = Describe("Agent Controller - Tools", func() {
 			It("should produce same hash for same ConfigMap data", func() {
 				By("Creating two ConfigMaps with identical data")
 				data1 := map[string]string{
-					"spec.json": `{"type":"http-api","description":"Test"}`,
+					"spec.json": `{"type":"openapi","description":"Test"}`,
 					"other.txt": "some content",
 				}
 				data2 := map[string]string{
 					"other.txt": "some content",
-					"spec.json": `{"type":"http-api","description":"Test"}`,
+					"spec.json": `{"type":"openapi","description":"Test"}`,
 				}
 
 				hash1 := hashConfigMapData(data1)
@@ -1108,10 +1126,10 @@ var _ = Describe("Agent Controller - Tools", func() {
 			It("should produce different hash for different ConfigMap data", func() {
 				By("Creating two ConfigMaps with different data")
 				data1 := map[string]string{
-					"spec.json": `{"type":"http-api","description":"Original"}`,
+					"spec.json": `{"type":"openapi","description":"Original"}`,
 				}
 				data2 := map[string]string{
-					"spec.json": `{"type":"http-api","description":"Modified"}`,
+					"spec.json": `{"type":"openapi","description":"Modified"}`,
 				}
 
 				hash1 := hashConfigMapData(data1)
@@ -1174,11 +1192,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Shared tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -1240,11 +1260,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						},
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Inline tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -1271,11 +1293,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Unreferenced tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -1322,11 +1346,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Test tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -1343,7 +1369,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						},
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api"}`,
+						"spec.json": `{"type":"openapi"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -1400,7 +1426,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						},
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api"}`,
+						"spec.json": `{"type":"openapi"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, inlineConfigMap)).To(Succeed())
@@ -1489,11 +1515,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 						Namespace: agentNamespace,
 					},
 					Spec: agentv1alpha1.AgentToolSpec{
-						Type:        agentv1alpha1.AgentToolTypeHTTPAPI,
+						Type:        agentv1alpha1.AgentToolTypeOpenAPI,
 						Description: "Shared tool",
-						HTTPApi: &agentv1alpha1.HTTPApiSpec{
-							URL:    "https://api.example.com",
-							Method: agentv1alpha1.HTTPMethodGet,
+						OpenApi: &agentv1alpha1.OpenApiToolSpec{
+							URL: "https://api.example.com",
+							OpenApiSchema: agentv1alpha1.OpenApiSchema{
+								EndpointPath: "/openapi.json",
+							},
 						},
 					},
 				}
@@ -1510,7 +1538,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 						},
 					},
 					Data: map[string]string{
-						"spec.json": `{"type":"http-api","description":"Original"}`,
+						"spec.json": `{"type":"openapi","description":"Original"}`,
 					},
 				}
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
@@ -1576,7 +1604,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				}, toolConfigMap)
 				Expect(err).NotTo(HaveOccurred())
 
-				toolConfigMap.Data["spec.json"] = `{"type":"http-api","description":"Updated"}`
+				toolConfigMap.Data["spec.json"] = `{"type":"openapi","description":"Updated"}`
 				Expect(k8sClient.Update(ctx, toolConfigMap)).To(Succeed())
 
 				By("Reconciling both agents")

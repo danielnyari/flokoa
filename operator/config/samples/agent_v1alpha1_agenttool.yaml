@@ -4,47 +4,17 @@ metadata:
   labels:
     app.kubernetes.io/name: operator
     app.kubernetes.io/managed-by: kustomize
-  name: agenttool-sample3
+  name: agenttool-sample
 spec:
-  type: http-api
+  type: openapi
   description: "Search for products in the catalog"
 
-  httpApi:
-    url: "https://api.example.com/v2/products"
-    method: GET
+  openApi:
+    url: "https://api.example.com/v2"
     timeoutSeconds: 30
     headers:
       Accept: "application/json"
-  inputSchema:
-    type: object
-    properties:
-      query:
-        type: string
-        description: "Search query string"
-      category:
-        type: string
-        description: "Product category to filter by"
-      limit:
-        type: integer
-        description: "Maximum number of results"
-        default: 10
-    required:
-      - query
 
-  outputSchema:
-    type: object
-    properties:
-      results:
-        type: array
-        items:
-          type: object
-          properties:
-            id:
-              type: string
-            name:
-              type: string
-            price:
-              type: number
-      totalCount:
-        type: integer
-        description: "Total matching products"
+    # The OpenAPI schema is fetched from the service endpoint
+    openApiSchema:
+      endpointPath: "/docs/openapi.json"

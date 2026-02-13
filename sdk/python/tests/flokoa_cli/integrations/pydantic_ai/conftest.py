@@ -1,12 +1,81 @@
 """Pytest fixtures for PydanticAI integration tests."""
 
 import json
-from unittest.mock import MagicMock
 
 import pytest
 
-from flokoa.types import ModelConfig, ToolDefinition
-from flokoa.types.agenttool import AgentToolSpec, HttpApi, Method, Type
+from flokoa.types import ToolDefinition
+from flokoa.types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
+
+
+WEATHER_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Weather API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.weather.com"}],
+    "paths": {
+        "/current": {
+            "get": {
+                "operationId": "getWeather",
+                "summary": "Get the current weather for a location",
+                "parameters": [
+                    {
+                        "name": "location",
+                        "in": "query",
+                        "description": "The city name",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "temperature": {"type": "number"},
+                                        "condition": {"type": "string"},
+                                    },
+                                }
+                            }
+                        },
+                    }
+                },
+            }
+        }
+    },
+}
+
+EMAIL_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Email API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.email.com"}],
+    "paths": {
+        "/send": {
+            "post": {
+                "operationId": "sendEmail",
+                "summary": "Send an email to a recipient",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "to": {"type": "string"},
+                                    "subject": {"type": "string"},
+                                    "body": {"type": "string"},
+                                },
+                                "required": ["to", "subject", "body"],
+                            }
+                        }
+                    }
+                },
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
 
 
 # =============================================================================
@@ -168,27 +237,16 @@ def model_config_with_default_headers_json():
 
 @pytest.fixture
 def api_tool_definition():
-    """Create a sample API tool definition."""
+    """Create a sample API tool definition using OpenAPI spec."""
     return ToolDefinition(
-        name="get_weather",
+        name="weather_api",
         spec=AgentToolSpec(
-            type=Type.http_api,
+            type=Type.openapi,
             description="Get the current weather for a location",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string", "description": "The city name"},
-                },
-                "required": ["location"],
-            },
-            outputSchema={
-                "type": "object",
-                "properties": {
-                    "temperature": {"type": "number"},
-                    "condition": {"type": "string"},
-                },
-            },
-            httpApi=HttpApi(url="https://api.weather.com/current", method=Method.get),
+            openApi=OpenApi(
+                openApiSchema=OpenApiSchema(value=WEATHER_API_SPEC),
+                url="https://api.weather.com",
+            ),
         ),
     )
 
@@ -198,60 +256,28 @@ def multiple_tool_definitions():
     """Create multiple tool definitions for testing."""
     return [
         ToolDefinition(
-            name="get_weather",
+            name="weather_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
+                type=Type.openapi,
                 description="Get the current weather for a location",
-                inputSchema={
-                    "type": "object",
-                    "properties": {"location": {"type": "string"}},
-                    "required": ["location"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.weather.com/current", method=Method.get),
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=WEATHER_API_SPEC),
+                    url="https://api.weather.com",
+                ),
             ),
         ),
         ToolDefinition(
-            name="send_email",
+            name="email_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
+                type=Type.openapi,
                 description="Send an email to a recipient",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "to": {"type": "string"},
-                        "subject": {"type": "string"},
-                        "body": {"type": "string"},
-                    },
-                    "required": ["to", "subject", "body"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.email.com/send", method=Method.post),
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=EMAIL_API_SPEC),
+                    url="https://api.email.com",
+                ),
             ),
         ),
     ]
-
-
-# =============================================================================
-# Mock Fixtures
-# =============================================================================
-
-
-@pytest.fixture
-def mock_http_api(monkeypatch):
-    """Mock the HTTP API calls to avoid real network requests."""
-    mock = MagicMock()
-
-    async def mock_call_http_api_tool(endpoint: str, method: str, params: dict):
-        mock(endpoint=endpoint, method=method, params=params)
-        if "weather" in endpoint:
-            return {"temperature": 20, "condition": "sunny", "location": params.get("location", "unknown")}
-        elif "email" in endpoint:
-            return {"sent": True, "to": params.get("to"), "subject": params.get("subject")}
-        return {"success": True, "params": params}
-
-    monkeypatch.setattr("flokoa.tools.call_http_api_tool", mock_call_http_api_tool)
-    return mock
 
 
 # =============================================================================
@@ -274,7 +300,7 @@ def model_config_file(tmp_path, openai_model_config_json, monkeypatch):
 
 
 @pytest.fixture
-def tools_file(tmp_path, multiple_tool_definitions, monkeypatch, mock_http_api):
+def tools_file(tmp_path, multiple_tool_definitions, monkeypatch):
     """Create tools configuration file and patch load_tools."""
     tools_config = [
         {
@@ -282,11 +308,9 @@ def tools_file(tmp_path, multiple_tool_definitions, monkeypatch, mock_http_api):
             "spec": {
                 "type": td.spec.type.value,
                 "description": td.spec.description,
-                "inputSchema": td.spec.input_schema,
-                "outputSchema": td.spec.output_schema,
-                "httpApi": {
-                    "url": td.spec.http_api.url,
-                    "method": td.spec.http_api.method.value,
+                "openApi": {
+                    "openApiSchema": {"value": td.spec.open_api.open_api_schema.value},
+                    "url": td.spec.open_api.url,
                 },
             },
         }

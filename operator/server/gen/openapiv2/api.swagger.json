@@ -2203,17 +2203,8 @@
         "description": {
           "type": "string"
         },
-        "httpApi": {
-          "$ref": "#/definitions/v1alpha1HTTPApiSpec"
-        },
-        "inputSchema": {
-          "type": "object"
-        },
-        "outputSchema": {
-          "type": "object"
-        },
-        "openApiSchemaRef": {
-          "$ref": "#/definitions/v1alpha1OpenApiSchemaRef"
+        "openApi": {
+          "$ref": "#/definitions/v1alpha1OpenApiToolSpec"
         }
       },
       "description": "AgentToolSpec defines the desired state of AgentTool."
@@ -2239,7 +2230,7 @@
       "type": "string",
       "enum": [
         "AGENT_TOOL_TYPE_UNSPECIFIED",
-        "AGENT_TOOL_TYPE_HTTP_API"
+        "AGENT_TOOL_TYPE_OPENAPI"
       ],
       "default": "AGENT_TOOL_TYPE_UNSPECIFIED",
       "description": "AgentToolType represents the type of tool."
@@ -2445,18 +2436,6 @@
         }
       },
       "description": "ConfigMapEnvSource references a ConfigMap for env vars."
-    },
-    "v1alpha1ConfigMapKeyRef": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "key": {
-          "type": "string"
-        }
-      },
-      "description": "ConfigMapKeyRef references a key in a ConfigMap."
     },
     "v1alpha1ConfigMapKeySelector": {
       "type": "object",
@@ -2859,34 +2838,6 @@
       "default": "GOOGLE_THINKING_LEVEL_UNSPECIFIED",
       "description": "GoogleThinkingLevel for Google models."
     },
-    "v1alpha1HTTPApiSpec": {
-      "type": "object",
-      "properties": {
-        "url": {
-          "type": "string"
-        },
-        "serviceRef": {
-          "$ref": "#/definitions/v1alpha1ServiceRef"
-        },
-        "path": {
-          "type": "string"
-        },
-        "method": {
-          "$ref": "#/definitions/v1alpha1HTTPMethod"
-        },
-        "timeoutSeconds": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "headers": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      },
-      "description": "HTTPApiSpec defines configuration for HTTP API tools."
-    },
     "v1alpha1HTTPGetAction": {
       "type": "object",
       "properties": {
@@ -2924,19 +2875,6 @@
         }
       },
       "description": "HTTPHeader represents an HTTP header."
-    },
-    "v1alpha1HTTPMethod": {
-      "type": "string",
-      "enum": [
-        "HTTP_METHOD_UNSPECIFIED",
-        "HTTP_METHOD_GET",
-        "HTTP_METHOD_POST",
-        "HTTP_METHOD_PUT",
-        "HTTP_METHOD_PATCH",
-        "HTTP_METHOD_DELETE"
-      ],
-      "default": "HTTP_METHOD_UNSPECIFIED",
-      "description": "HTTPMethod represents HTTP methods."
     },
     "v1alpha1HostPathVolumeSource": {
       "type": "object",
@@ -3488,17 +3426,48 @@
       },
       "description": "OpenAIProviderSpec defines OpenAI provider configuration."
     },
-    "v1alpha1OpenApiSchemaRef": {
+    "v1alpha1OpenApiSchema": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "object",
+          "description": "Inline OpenAPI specification."
+        },
+        "valueFrom": {
+          "$ref": "#/definitions/v1alpha1ConfigMapKeySelector",
+          "description": "Reference to a ConfigMap containing the OpenAPI specification."
+        },
+        "endpointPath": {
+          "type": "string",
+          "description": "Path on the target service/URL where the OpenAPI spec is served."
+        }
+      },
+      "description": "OpenApiSchema defines where the OpenAPI specification is sourced from.\nExactly one of value, value_from, or endpoint_path must be specified."
+    },
+    "v1alpha1OpenApiToolSpec": {
       "type": "object",
       "properties": {
         "url": {
           "type": "string"
         },
-        "configMapRef": {
-          "$ref": "#/definitions/v1alpha1ConfigMapKeyRef"
+        "serviceRef": {
+          "$ref": "#/definitions/v1alpha1ServiceRef"
+        },
+        "openApiSchema": {
+          "$ref": "#/definitions/v1alpha1OpenApiSchema"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
-      "description": "OpenApiSchemaRef references an OpenAPI specification."
+      "description": "OpenApiToolSpec defines configuration for OpenAPI-based tools."
     },
     "v1alpha1OwnerReference": {
       "type": "object",

@@ -6,7 +6,7 @@ from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
 from pydantic import BaseModel
-from pydantic_ai import FunctionToolset, Tool
+from pydantic_ai import FunctionToolset
 from pydantic_ai.providers import infer_provider_class
 from pydantic_ai.settings import ModelSettings, merge_model_settings
 
@@ -17,8 +17,11 @@ from flokoa.exceptions import (
     ModelNotConfiguredError,
     ProviderNotConfiguredError,
 )
+from flokoa.tools import ToolsetFactory, default_factory
 from flokoa.types import (
+    IntegrationType,
     ModelParameters,
+    ToolType,
 )
 from flokoa.types import (
     ToolDefinition as FlokoaToolDefinition,
@@ -26,6 +29,15 @@ from flokoa.types import (
 from flokoa.types.modelconfig import ProviderType
 
 from .models import PROVIDER_MODEL_MAP
+
+
+def _openapi_builder(tool_definition: FlokoaToolDefinition) -> list[Any]:
+    from flokoa.tools.openapi import OpenAPIToolset
+
+    return OpenAPIToolset.from_tool_definition(tool_definition).get_tools()
+
+
+default_factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, _openapi_builder)
 
 if TYPE_CHECKING:
     from pydantic_ai import Agent
@@ -57,29 +69,24 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         FLOKOA_CACHE_ENABLED: Enable/disable caching (default: true)
     """
 
-    def __init__(self, agent: "PydanticAIAgent", cache: ConfigCache | None = None):
+    def __init__(
+        self,
+        agent: "PydanticAIAgent",
+        cache: ConfigCache | None = None,
+        toolset_factory: ToolsetFactory | None = None,
+    ):
         """Initialize the executor.
 
         Args:
             agent: The PydanticAI agent to wrap.
             cache: Optional cache instance. Uses global cache if not provided.
+            toolset_factory: Optional factory for building toolsets. Uses the
+                default factory (with OpenAPI support) if not provided.
         """
         super().__init__(agent, cache)
+        self._toolset_factory = toolset_factory or default_factory
         self._cached_toolset: FunctionToolset | None = None
         self._cached_tool_definitions: list[FlokoaToolDefinition] | None = None
-
-    def _create_tool(self, tool_definition: FlokoaToolDefinition) -> Tool:
-        tool_callable = self._get_tool_callable(tool_definition)
-
-        tool = Tool.from_schema(
-            function=tool_callable,
-            name=tool_definition.name,
-            description=tool_definition.description,
-            json_schema=tool_definition.input_json_schema,
-            takes_ctx=False,
-            sequential=False,
-        )
-        return tool
 
     @property
     @override
@@ -87,12 +94,11 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         return super().agent  # type: ignore[return-value]
 
     def _build_toolset(self) -> FunctionToolset:
-        """Build a new toolset from current tool definitions."""
+        """Build a new toolset from current tool definitions via the factory."""
+        tools = self._toolset_factory.build(self.tool_definitions, IntegrationType.PYDANTIC_AI)
         toolset = FunctionToolset()
-        for tool_definition in self.tool_definitions:
-            tool = self._create_tool(tool_definition)
+        for tool in tools:
             toolset.add_tool(tool)
-            logger.info(f"Added tool '{tool_definition.name}' to agent toolset.")
         return toolset
 
     def _get_toolset(self) -> FunctionToolset:

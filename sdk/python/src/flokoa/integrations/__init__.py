@@ -1,12 +1,5 @@
-from enum import StrEnum
-
 from flokoa.agent_executor import FlokoaAgentExecutor
-
-
-class IntegrationType(StrEnum):
-    PYDANTIC_AI = "pydantic-ai"
-    GOOGLE_ADK = "google-adk"
-
+from flokoa.types import IntegrationType
 
 _EXTRA_NAMES: dict[IntegrationType, str] = {
     IntegrationType.PYDANTIC_AI: "pydantic-ai",

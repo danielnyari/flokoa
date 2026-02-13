@@ -288,6 +288,7 @@ type StandardRuntimeSpec struct {
 }
 
 type StructuredIOSchema struct {
+
 	JSONSchema *apiextensionsv1.JSON `json:"jsonSchema"`
 
 	Name string `json:"name"`

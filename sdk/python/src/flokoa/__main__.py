@@ -9,6 +9,7 @@ import uvicorn
 from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
+from fastapi import FastAPI
 
 from flokoa.integrations import IntegrationType, get_executor_cls
 from flokoa.utils import load_agent_card, load_templated_config
@@ -129,7 +130,8 @@ def _start_integration(module: str, host: str, port: int, framework: Integration
         builder = AgentCardBuilder(agent=agent_obj, rpc_url=f"http://{host}:{port}/")
         agent_card = asyncio.run(builder.build())
 
-    _run_server(agent_executor=agent_executor, agent_card=agent_card, host=host, port=port)
+    app = _get_app(agent_executor=agent_executor, agent_card=agent_card)
+    _run_server(app=app, host=host, port=port)
 
 
 def _start_templated(host: str, port: int) -> None:
@@ -153,11 +155,11 @@ def _start_templated(host: str, port: int) -> None:
     if agent_card is None:
         card_builder = AgentCardBuilder(agent=executor.agent, rpc_url=f"http://{host}:{port}/")
         agent_card = asyncio.run(card_builder.build())
+    app = _get_app(agent_executor=executor, agent_card=agent_card)
+    _run_server(app=app, host=host, port=port)
 
-    _run_server(agent_executor=executor, agent_card=agent_card, host=host, port=port)
 
-
-def _run_server(agent_executor, agent_card, host: str, port: int) -> None:
+def _get_app(agent_executor, agent_card) -> FastAPI:
     """Create and run the A2A server."""
     request_handler = DefaultRequestHandler(
         agent_executor=agent_executor,
@@ -169,12 +171,14 @@ def _run_server(agent_executor, agent_card, host: str, port: int) -> None:
         http_handler=request_handler,
     )
 
-    logger.info("Starting agent server on %s:%d", host, port)
-
     app = server.build()
 
     app.include_router(health_router)
+    return app
 
+
+def _run_server(app: FastAPI, host: str, port: int) -> None:
+    """Run the FastAPI app with Uvicorn."""
     uvicorn.run(app, host=host, port=port)
 
 

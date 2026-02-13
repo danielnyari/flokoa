@@ -5,10 +5,64 @@ These tests verify that canonical_tools() returns our injected Flokoa tools.
 
 import pytest
 
-from flokoa.types import ToolDefinition
-from flokoa.types.agenttool import AgentToolSpec, HttpApi, Method, Type
+from flokoa.tools import ToolsetFactory
+from flokoa.types import IntegrationType, ToolDefinition, ToolType
+from flokoa.types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 
 pytestmark = pytest.mark.anyio
+
+
+WEATHER_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Weather API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.weather.com"}],
+    "paths": {
+        "/current": {
+            "get": {
+                "operationId": "getWeather",
+                "summary": "Get the current weather for a location",
+                "parameters": [
+                    {
+                        "name": "location",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    }
+                ],
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
+
+EMAIL_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Email API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.email.com"}],
+    "paths": {
+        "/send": {
+            "post": {
+                "operationId": "sendEmail",
+                "summary": "Send an email",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "to": {"type": "string"},
+                                    "body": {"type": "string"},
+                                },
+                                "required": ["to", "body"],
+                            }
+                        }
+                    }
+                },
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
 
 
 @pytest.fixture
@@ -16,46 +70,63 @@ def flokoa_tool_definitions():
     """Create Flokoa tool definitions for injection."""
     return [
         ToolDefinition(
-            name="get_weather",
+            name="weather_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
+                type=Type.openapi,
                 description="Get the current weather for a location",
-                inputSchema={
-                    "type": "object",
-                    "properties": {"location": {"type": "string"}},
-                    "required": ["location"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(
-                    url="https://api.weather.com/current", method=Method.get
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=WEATHER_API_SPEC),
+                    url="https://api.weather.com",
                 ),
             ),
         ),
         ToolDefinition(
-            name="send_email",
+            name="email_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
+                type=Type.openapi,
                 description="Send an email",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "to": {"type": "string"},
-                        "body": {"type": "string"},
-                    },
-                    "required": ["to", "body"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.email.com/send", method=Method.post),
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=EMAIL_API_SPEC),
+                    url="https://api.email.com",
+                ),
             ),
         ),
     ]
+
+
+@pytest.fixture
+def mock_toolset_factory():
+    """Factory that produces mock ADK FunctionTools for integration testing."""
+    factory = ToolsetFactory()
+
+    def adk_builder(td):
+        from google.adk.tools import FunctionTool
+
+        if "weather" in td.name:
+
+            def get_weather(location: str = "test") -> dict:
+                """Get the current weather for a location"""
+                return {"temperature": 20}
+
+            return [FunctionTool(func=get_weather)]
+        elif "email" in td.name:
+
+            def send_email(to: str = "", body: str = "") -> dict:
+                """Send an email"""
+                return {"sent": True}
+
+            return [FunctionTool(func=send_email)]
+        return []
+
+    factory.register(ToolType.OPENAPI, IntegrationType.GOOGLE_ADK, adk_builder)
+    return factory
 
 
 class TestCanonicalToolsWithInjection:
     """Tests that canonical_tools() includes injected Flokoa tools."""
 
     async def test_canonical_tools_returns_injected_flokoa_tools(
-        self, flokoa_tool_definitions, monkeypatch
+        self, flokoa_tool_definitions, monkeypatch, mock_toolset_factory
     ):
         """Test that canonical_tools() returns injected Flokoa tools alongside existing agent tools."""
         from google.adk.agents import LlmAgent
@@ -87,7 +158,7 @@ class TestCanonicalToolsWithInjection:
         )
 
         # Create executor and inject Flokoa tools
-        executor = GoogleADKAgentExecutor(agent=agent)
+        executor = GoogleADKAgentExecutor(agent=agent, toolset_factory=mock_toolset_factory)
         executor._inject_tools()
 
         # Verify agent.tools now contains both original tool and FlokoaToolset
@@ -110,7 +181,7 @@ class TestCanonicalToolsWithInjection:
         assert "send_email" in tool_names
 
     async def test_canonical_tools_with_agent_without_existing_tools(
-        self, flokoa_tool_definitions, monkeypatch
+        self, flokoa_tool_definitions, monkeypatch, mock_toolset_factory
     ):
         """Test canonical_tools() when agent has no existing tools."""
         from google.adk.agents import LlmAgent
@@ -133,7 +204,7 @@ class TestCanonicalToolsWithInjection:
         )
 
         # Create executor and inject Flokoa tools
-        executor = GoogleADKAgentExecutor(agent=agent)
+        executor = GoogleADKAgentExecutor(agent=agent, toolset_factory=mock_toolset_factory)
         executor._inject_tools()
 
         # Call canonical_tools()
@@ -146,7 +217,7 @@ class TestCanonicalToolsWithInjection:
         assert "send_email" in tool_names
 
     async def test_canonical_tools_with_multiple_toolsets(
-        self, flokoa_tool_definitions, monkeypatch
+        self, flokoa_tool_definitions, monkeypatch, mock_toolset_factory
     ):
         """Test canonical_tools() when agent has multiple toolsets."""
         from google.adk.agents import LlmAgent
@@ -180,7 +251,7 @@ class TestCanonicalToolsWithInjection:
         )
 
         # Create executor and inject Flokoa tools
-        executor = GoogleADKAgentExecutor(agent=agent)
+        executor = GoogleADKAgentExecutor(agent=agent, toolset_factory=mock_toolset_factory)
         executor._inject_tools()
 
         # Call canonical_tools()

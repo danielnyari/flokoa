@@ -6,10 +6,64 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from flokoa.exceptions import CancelNotSupportedError
-from flokoa.types import ToolDefinition
-from flokoa.types.agenttool import AgentToolSpec, HttpApi, Method, Type
+from flokoa.tools import ToolsetFactory
+from flokoa.types import IntegrationType, ToolDefinition, ToolType
+from flokoa.types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 
 pytestmark = pytest.mark.anyio
+
+
+WEATHER_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Weather API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.weather.com"}],
+    "paths": {
+        "/current": {
+            "get": {
+                "operationId": "getWeather",
+                "summary": "Get the current weather for a location",
+                "parameters": [
+                    {
+                        "name": "location",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    }
+                ],
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
+
+EMAIL_API_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Email API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.email.com"}],
+    "paths": {
+        "/send": {
+            "post": {
+                "operationId": "sendEmail",
+                "summary": "Send an email",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "to": {"type": "string"},
+                                    "body": {"type": "string"},
+                                },
+                                "required": ["to", "body"],
+                            }
+                        }
+                    }
+                },
+                "responses": {"200": {"description": "OK"}},
+            }
+        }
+    },
+}
 
 
 # Mock google.adk modules before importing the executor
@@ -41,6 +95,14 @@ def mock_adk_modules(monkeypatch):
     mock_tools = MagicMock()
     mock_adk.tools = mock_tools
 
+    # Mock openapi_tool submodules for the builder import
+    mock_openapi_tool = MagicMock()
+    mock_openapi_spec_parser = MagicMock()
+    mock_openapi_toolset = MagicMock()
+    mock_adk.tools.openapi_tool = mock_openapi_tool
+    mock_openapi_tool.openapi_spec_parser = mock_openapi_spec_parser
+    mock_openapi_spec_parser.openapi_toolset = mock_openapi_toolset
+
     # Mock FunctionTool class
     mock_function_tool_cls = MagicMock()
     mock_tools.FunctionTool = mock_function_tool_cls
@@ -61,6 +123,9 @@ def mock_adk_modules(monkeypatch):
     sys.modules["google.adk.sessions"] = mock_sessions
     sys.modules["google.adk.memory"] = mock_memory
     sys.modules["google.adk.tools"] = mock_tools
+    sys.modules["google.adk.tools.openapi_tool"] = mock_openapi_tool
+    sys.modules["google.adk.tools.openapi_tool.openapi_spec_parser"] = mock_openapi_spec_parser
+    sys.modules["google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset"] = mock_openapi_toolset
     sys.modules["google.genai"] = mock_genai
     sys.modules["google.genai.types"] = mock_types
 
@@ -72,6 +137,7 @@ def mock_adk_modules(monkeypatch):
         "memory": mock_memory,
         "tools": mock_tools,
         "types": mock_types,
+        "openapi_toolset": mock_openapi_toolset,
     }
 
     # Cleanup
@@ -84,6 +150,9 @@ def mock_adk_modules(monkeypatch):
         "google.adk.sessions",
         "google.adk.memory",
         "google.adk.tools",
+        "google.adk.tools.openapi_tool",
+        "google.adk.tools.openapi_tool.openapi_spec_parser",
+        "google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset",
         "google.genai",
         "google.genai.types",
     ]:
@@ -111,71 +180,46 @@ def mock_adk_agent():
 
 
 @pytest.fixture
-def api_tool_definition():
-    """Create a sample API tool definition."""
-    return ToolDefinition(
-        name="get_weather",
-        spec=AgentToolSpec(
-            type=Type.http_api,
-            description="Get the current weather for a location",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string", "description": "The city name"},
-                },
-                "required": ["location"],
-            },
-            outputSchema={
-                "type": "object",
-                "properties": {
-                    "temperature": {"type": "number"},
-                    "condition": {"type": "string"},
-                },
-            },
-            httpApi=HttpApi(url="https://api.weather.com/current", method=Method.get),
-        ),
-    )
-
-
-@pytest.fixture
 def multiple_tool_definitions():
     """Create multiple tool definitions for testing."""
     return [
         ToolDefinition(
-            name="get_weather",
+            name="weather_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
+                type=Type.openapi,
                 description="Get the current weather for a location",
-                inputSchema={
-                    "type": "object",
-                    "properties": {"location": {"type": "string"}},
-                    "required": ["location"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(
-                    url="https://api.weather.com/current", method=Method.get
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=WEATHER_API_SPEC),
+                    url="https://api.weather.com",
                 ),
             ),
         ),
         ToolDefinition(
-            name="send_email",
+            name="email_api",
             spec=AgentToolSpec(
-                type=Type.http_api,
-                description="Send an email to a recipient",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "to": {"type": "string"},
-                        "subject": {"type": "string"},
-                        "body": {"type": "string"},
-                    },
-                    "required": ["to", "subject", "body"],
-                },
-                outputSchema={"type": "object"},
-                httpApi=HttpApi(url="https://api.email.com/send", method=Method.post),
+                type=Type.openapi,
+                description="Send an email",
+                openApi=OpenApi(
+                    openApiSchema=OpenApiSchema(value=EMAIL_API_SPEC),
+                    url="https://api.email.com",
+                ),
             ),
         ),
     ]
+
+
+@pytest.fixture
+def mock_toolset_factory():
+    """Factory that produces mock ADK tools for testing."""
+    factory = ToolsetFactory()
+
+    def mock_builder(td):
+        mock_tool = MagicMock()
+        mock_tool.name = td.name
+        return [mock_tool]
+
+    factory.register(ToolType.OPENAPI, IntegrationType.GOOGLE_ADK, mock_builder)
+    return factory
 
 
 @pytest.fixture
@@ -385,7 +429,7 @@ class TestGoogleADKAgentExecutorToolInjection:
     """Tests for GoogleADKAgentExecutor tool injection."""
 
     def test_get_toolset_returns_flokoa_toolset(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent
+        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
     ):
         """Test _get_toolset returns a FlokoaToolset instance."""
         from flokoa.integrations.google_adk.agent_executor import (
@@ -393,13 +437,13 @@ class TestGoogleADKAgentExecutorToolInjection:
         )
         from flokoa.integrations.google_adk.toolset import FlokoaToolset
 
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
+        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
         toolset = executor._get_toolset()
 
         assert isinstance(toolset, FlokoaToolset)
 
     def test_inject_tools_adds_toolset_to_agent(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent
+        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
     ):
         """Test _inject_tools adds the toolset to agent.tools."""
         from flokoa.integrations.google_adk.agent_executor import (
@@ -407,7 +451,7 @@ class TestGoogleADKAgentExecutorToolInjection:
         )
         from flokoa.integrations.google_adk.toolset import FlokoaToolset
 
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
+        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
         assert len(mock_adk_agent.tools) == 0
 
         executor._inject_tools()
@@ -416,14 +460,14 @@ class TestGoogleADKAgentExecutorToolInjection:
         assert isinstance(mock_adk_agent.tools[0], FlokoaToolset)
 
     def test_inject_tools_does_not_duplicate(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent
+        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
     ):
         """Test _inject_tools doesn't add duplicate toolsets."""
         from flokoa.integrations.google_adk.agent_executor import (
             GoogleADKAgentExecutor,
         )
 
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
+        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
 
         # Inject tools twice
         executor._inject_tools()
@@ -447,7 +491,7 @@ class TestGoogleADKAgentExecutorToolInjection:
         assert len(mock_adk_agent.tools) == 0
 
     def test_inject_tools_handles_none_tools_list(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent
+        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
     ):
         """Test _inject_tools handles agent with None tools list."""
         from flokoa.integrations.google_adk.agent_executor import (
@@ -456,7 +500,7 @@ class TestGoogleADKAgentExecutorToolInjection:
         from flokoa.integrations.google_adk.toolset import FlokoaToolset
 
         mock_adk_agent.tools = None
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
+        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
         executor._inject_tools()
 
         assert mock_adk_agent.tools is not None
@@ -467,61 +511,38 @@ class TestGoogleADKAgentExecutorToolInjection:
 class TestFlokoaToolset:
     """Tests for FlokoaToolset class."""
 
-    async def test_get_tools_returns_function_tools(
-        self, mock_adk_modules, multiple_tool_definitions
-    ):
-        """Test get_tools returns FunctionTool instances."""
+    async def test_get_tools_returns_pre_built_tools(self, mock_adk_modules):
+        """Test get_tools returns the pre-built tools passed to constructor."""
         from flokoa.integrations.google_adk.toolset import FlokoaToolset
 
-        def mock_get_callable(tool_def):
-            async def callable_fn(**kwargs):
-                return {"result": "ok"}
+        mock_tool_1 = MagicMock()
+        mock_tool_1.name = "tool1"
+        mock_tool_2 = MagicMock()
+        mock_tool_2.name = "tool2"
 
-            return callable_fn
-
-        toolset = FlokoaToolset(
-            tool_definitions=multiple_tool_definitions,
-            get_tool_callable=mock_get_callable,
-        )
-
+        toolset = FlokoaToolset(tools=[mock_tool_1, mock_tool_2])
         tools = await toolset.get_tools()
 
-        # Should have created FunctionTool for each definition
-        mock_adk_modules["tools"].FunctionTool.assert_called()
-        assert mock_adk_modules["tools"].FunctionTool.call_count == 2
+        assert len(tools) == 2
+        assert tools[0] is mock_tool_1
+        assert tools[1] is mock_tool_2
 
-    async def test_get_tools_caches_result(
-        self, mock_adk_modules, multiple_tool_definitions
-    ):
-        """Test get_tools caches the tools on first call."""
+    async def test_get_tools_returns_same_list(self, mock_adk_modules):
+        """Test get_tools returns the same list on subsequent calls."""
         from flokoa.integrations.google_adk.toolset import FlokoaToolset
 
-        def mock_get_callable(tool_def):
-            async def callable_fn(**kwargs):
-                return {"result": "ok"}
+        toolset = FlokoaToolset(tools=[MagicMock(), MagicMock()])
 
-            return callable_fn
-
-        toolset = FlokoaToolset(
-            tool_definitions=multiple_tool_definitions,
-            get_tool_callable=mock_get_callable,
-        )
-
-        # Call get_tools twice
         tools1 = await toolset.get_tools()
         tools2 = await toolset.get_tools()
 
-        # Should return the same cached list
         assert tools1 is tools2
 
-    async def test_close_is_noop(self, mock_adk_modules, multiple_tool_definitions):
+    async def test_close_is_noop(self, mock_adk_modules):
         """Test close method completes without error."""
         from flokoa.integrations.google_adk.toolset import FlokoaToolset
 
-        toolset = FlokoaToolset(
-            tool_definitions=multiple_tool_definitions,
-            get_tool_callable=lambda x: lambda: None,
-        )
+        toolset = FlokoaToolset(tools=[])
 
         # Should not raise
         await toolset.close()

@@ -10,17 +10,7 @@ option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1
 // AgentToolType represents the type of tool.
 enum AgentToolType {
   AGENT_TOOL_TYPE_UNSPECIFIED = 0;
-  AGENT_TOOL_TYPE_HTTP_API = 1;
-}
-
-// HTTPMethod represents HTTP methods.
-enum HTTPMethod {
-  HTTP_METHOD_UNSPECIFIED = 0;
-  HTTP_METHOD_GET = 1;
-  HTTP_METHOD_POST = 2;
-  HTTP_METHOD_PUT = 3;
-  HTTP_METHOD_PATCH = 4;
-  HTTP_METHOD_DELETE = 5;
+  AGENT_TOOL_TYPE_OPENAPI = 1;
 }
 
 // ServiceRef references a Kubernetes service.
@@ -31,36 +21,38 @@ message ServiceRef {
   string port_name = 4;
 }
 
-// HTTPApiSpec defines configuration for HTTP API tools.
-message HTTPApiSpec {
-  string url = 1;
-  ServiceRef service_ref = 2;
-  string path = 3;
-  HTTPMethod method = 4;
-  int32 timeout_seconds = 5;
-  map<string, string> headers = 6;
-}
-
-// ConfigMapKeyRef references a key in a ConfigMap.
-message ConfigMapKeyRef {
+// ConfigMapKeySelector references a key in a ConfigMap.
+message ConfigMapKeySelector {
   string name = 1;
   string key = 2;
+  bool optional = 3;
 }
 
-// OpenApiSchemaRef references an OpenAPI specification.
-message OpenApiSchemaRef {
+// OpenApiSchema defines where the OpenAPI specification is sourced from.
+// Exactly one of value, value_from, or endpoint_path must be specified.
+message OpenApiSchema {
+  // Inline OpenAPI specification.
+  google.protobuf.Struct value = 1;
+  // Reference to a ConfigMap containing the OpenAPI specification.
+  ConfigMapKeySelector value_from = 2;
+  // Path on the target service/URL where the OpenAPI spec is served.
+  string endpoint_path = 3;
+}
+
+// OpenApiToolSpec defines configuration for OpenAPI-based tools.
+message OpenApiToolSpec {
   string url = 1;
-  ConfigMapKeyRef config_map_ref = 2;
+  ServiceRef service_ref = 2;
+  OpenApiSchema open_api_schema = 3;
+  int32 timeout_seconds = 4;
+  map<string, string> headers = 5;
 }
 
 // AgentToolSpec defines the desired state of AgentTool.
 message AgentToolSpec {
   AgentToolType type = 1;
   string description = 2;
-  HTTPApiSpec http_api = 3;
-  google.protobuf.Struct input_schema = 4;
-  google.protobuf.Struct output_schema = 5;
-  OpenApiSchemaRef open_api_schema_ref = 6;
+  OpenApiToolSpec open_api = 3;
 }
 
 // AgentToolStatus defines the observed state of AgentTool.
