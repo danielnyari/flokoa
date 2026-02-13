@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -88,7 +89,7 @@ type OpenApiSchema struct {
 
 	// ValueFrom references a ConfigMap containing the OpenAPI specification.
 	// +optional
-	ValueFrom *ConfigMapKeyRef `json:"valueFrom,omitempty"`
+	ValueFrom *corev1.ConfigMapKeySelector `json:"valueFrom,omitempty"`
 
 	// EndpointPath is a path on the target service/URL where the OpenAPI spec is served
 	// (e.g., "/openapi.json", "/docs/openapi.json", "/swagger.json").
@@ -119,19 +120,6 @@ type ServiceRef struct {
 	// Mutually exclusive with Port.
 	// +optional
 	PortName string `json:"portName,omitempty"`
-}
-
-// ConfigMapKeyRef references a key in a ConfigMap.
-type ConfigMapKeyRef struct {
-	// Name is the ConfigMap name.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-
-	// Key is the key in the ConfigMap containing the data.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Key string `json:"key"`
 }
 
 // AgentToolStatus defines the observed state of AgentTool.

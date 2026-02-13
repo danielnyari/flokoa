@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package flokoa.agent.v1alpha1;
 
-import "flokoa/agent/v1alpha1/common.proto";
 import "flokoa/agent/v1alpha1/agenttool.proto";
+import "flokoa/agent/v1alpha1/common.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -189,13 +189,6 @@ message ConfigMapEnvSource {
 message SecretEnvSource {
   string name = 1;
   bool optional = 2;
-}
-
-// ConfigMapKeySelector references a key in a ConfigMap.
-message ConfigMapKeySelector {
-  string name = 1;
-  string key = 2;
-  bool optional = 3;
 }
 
 // ObjectFieldSelector selects an APIVersioned field of an object.

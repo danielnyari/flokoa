@@ -27,18 +27,18 @@ type AgentToolType int32
 
 const (
 	AgentToolType_AGENT_TOOL_TYPE_UNSPECIFIED AgentToolType = 0
-	AgentToolType_AGENT_TOOL_TYPE_HTTP_API    AgentToolType = 1
+	AgentToolType_AGENT_TOOL_TYPE_OPENAPI     AgentToolType = 1
 )
 
 // Enum value maps for AgentToolType.
 var (
 	AgentToolType_name = map[int32]string{
 		0: "AGENT_TOOL_TYPE_UNSPECIFIED",
-		1: "AGENT_TOOL_TYPE_HTTP_API",
+		1: "AGENT_TOOL_TYPE_OPENAPI",
 	}
 	AgentToolType_value = map[string]int32{
 		"AGENT_TOOL_TYPE_UNSPECIFIED": 0,
-		"AGENT_TOOL_TYPE_HTTP_API":    1,
+		"AGENT_TOOL_TYPE_OPENAPI":     1,
 	}
 )
 
@@ -67,65 +67,6 @@ func (x AgentToolType) Number() protoreflect.EnumNumber {
 // Deprecated: Use AgentToolType.Descriptor instead.
 func (AgentToolType) EnumDescriptor() ([]byte, []int) {
 	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP(), []int{0}
-}
-
-// HTTPMethod represents HTTP methods.
-type HTTPMethod int32
-
-const (
-	HTTPMethod_HTTP_METHOD_UNSPECIFIED HTTPMethod = 0
-	HTTPMethod_HTTP_METHOD_GET         HTTPMethod = 1
-	HTTPMethod_HTTP_METHOD_POST        HTTPMethod = 2
-	HTTPMethod_HTTP_METHOD_PUT         HTTPMethod = 3
-	HTTPMethod_HTTP_METHOD_PATCH       HTTPMethod = 4
-	HTTPMethod_HTTP_METHOD_DELETE      HTTPMethod = 5
-)
-
-// Enum value maps for HTTPMethod.
-var (
-	HTTPMethod_name = map[int32]string{
-		0: "HTTP_METHOD_UNSPECIFIED",
-		1: "HTTP_METHOD_GET",
-		2: "HTTP_METHOD_POST",
-		3: "HTTP_METHOD_PUT",
-		4: "HTTP_METHOD_PATCH",
-		5: "HTTP_METHOD_DELETE",
-	}
-	HTTPMethod_value = map[string]int32{
-		"HTTP_METHOD_UNSPECIFIED": 0,
-		"HTTP_METHOD_GET":         1,
-		"HTTP_METHOD_POST":        2,
-		"HTTP_METHOD_PUT":         3,
-		"HTTP_METHOD_PATCH":       4,
-		"HTTP_METHOD_DELETE":      5,
-	}
-)
-
-func (x HTTPMethod) Enum() *HTTPMethod {
-	p := new(HTTPMethod)
-	*p = x
-	return p
-}
-
-func (x HTTPMethod) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (HTTPMethod) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agenttool_proto_enumTypes[1].Descriptor()
-}
-
-func (HTTPMethod) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agenttool_proto_enumTypes[1]
-}
-
-func (x HTTPMethod) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use HTTPMethod.Descriptor instead.
-func (HTTPMethod) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP(), []int{1}
 }
 
 // ServiceRef references a Kubernetes service.
@@ -197,115 +138,31 @@ func (x *ServiceRef) GetPortName() string {
 	return ""
 }
 
-// HTTPApiSpec defines configuration for HTTP API tools.
-type HTTPApiSpec struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Url            string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	ServiceRef     *ServiceRef            `protobuf:"bytes,2,opt,name=service_ref,json=serviceRef,proto3" json:"service_ref,omitempty"`
-	Path           string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
-	Method         HTTPMethod             `protobuf:"varint,4,opt,name=method,proto3,enum=flokoa.agent.v1alpha1.HTTPMethod" json:"method,omitempty"`
-	TimeoutSeconds int32                  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	Headers        map[string]string      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *HTTPApiSpec) Reset() {
-	*x = HTTPApiSpec{}
-	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HTTPApiSpec) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HTTPApiSpec) ProtoMessage() {}
-
-func (x *HTTPApiSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HTTPApiSpec.ProtoReflect.Descriptor instead.
-func (*HTTPApiSpec) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *HTTPApiSpec) GetUrl() string {
-	if x != nil {
-		return x.Url
-	}
-	return ""
-}
-
-func (x *HTTPApiSpec) GetServiceRef() *ServiceRef {
-	if x != nil {
-		return x.ServiceRef
-	}
-	return nil
-}
-
-func (x *HTTPApiSpec) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *HTTPApiSpec) GetMethod() HTTPMethod {
-	if x != nil {
-		return x.Method
-	}
-	return HTTPMethod_HTTP_METHOD_UNSPECIFIED
-}
-
-func (x *HTTPApiSpec) GetTimeoutSeconds() int32 {
-	if x != nil {
-		return x.TimeoutSeconds
-	}
-	return 0
-}
-
-func (x *HTTPApiSpec) GetHeaders() map[string]string {
-	if x != nil {
-		return x.Headers
-	}
-	return nil
-}
-
-// ConfigMapKeyRef references a key in a ConfigMap.
-type ConfigMapKeyRef struct {
+// ConfigMapKeySelector references a key in a ConfigMap.
+type ConfigMapKeySelector struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Optional      bool                   `protobuf:"varint,3,opt,name=optional,proto3" json:"optional,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ConfigMapKeyRef) Reset() {
-	*x = ConfigMapKeyRef{}
-	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[2]
+func (x *ConfigMapKeySelector) Reset() {
+	*x = ConfigMapKeySelector{}
+	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConfigMapKeyRef) String() string {
+func (x *ConfigMapKeySelector) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConfigMapKeyRef) ProtoMessage() {}
+func (*ConfigMapKeySelector) ProtoMessage() {}
 
-func (x *ConfigMapKeyRef) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[2]
+func (x *ConfigMapKeySelector) ProtoReflect() protoreflect.Message {
+	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -316,48 +173,123 @@ func (x *ConfigMapKeyRef) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConfigMapKeyRef.ProtoReflect.Descriptor instead.
-func (*ConfigMapKeyRef) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use ConfigMapKeySelector.ProtoReflect.Descriptor instead.
+func (*ConfigMapKeySelector) Descriptor() ([]byte, []int) {
+	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ConfigMapKeyRef) GetName() string {
+func (x *ConfigMapKeySelector) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *ConfigMapKeyRef) GetKey() string {
+func (x *ConfigMapKeySelector) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-// OpenApiSchemaRef references an OpenAPI specification.
-type OpenApiSchemaRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	ConfigMapRef  *ConfigMapKeyRef       `protobuf:"bytes,2,opt,name=config_map_ref,json=configMapRef,proto3" json:"config_map_ref,omitempty"`
+func (x *ConfigMapKeySelector) GetOptional() bool {
+	if x != nil {
+		return x.Optional
+	}
+	return false
+}
+
+// OpenApiSchema defines where the OpenAPI specification is sourced from.
+// Exactly one of value, value_from, or endpoint_path must be specified.
+type OpenApiSchema struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Inline OpenAPI specification.
+	Value *structpb.Struct `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	// Reference to a ConfigMap containing the OpenAPI specification.
+	ValueFrom *ConfigMapKeySelector `protobuf:"bytes,2,opt,name=value_from,json=valueFrom,proto3" json:"value_from,omitempty"`
+	// Path on the target service/URL where the OpenAPI spec is served.
+	EndpointPath  string `protobuf:"bytes,3,opt,name=endpoint_path,json=endpointPath,proto3" json:"endpoint_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *OpenApiSchemaRef) Reset() {
-	*x = OpenApiSchemaRef{}
+func (x *OpenApiSchema) Reset() {
+	*x = OpenApiSchema{}
+	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenApiSchema) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenApiSchema) ProtoMessage() {}
+
+func (x *OpenApiSchema) ProtoReflect() protoreflect.Message {
+	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenApiSchema.ProtoReflect.Descriptor instead.
+func (*OpenApiSchema) Descriptor() ([]byte, []int) {
+	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *OpenApiSchema) GetValue() *structpb.Struct {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *OpenApiSchema) GetValueFrom() *ConfigMapKeySelector {
+	if x != nil {
+		return x.ValueFrom
+	}
+	return nil
+}
+
+func (x *OpenApiSchema) GetEndpointPath() string {
+	if x != nil {
+		return x.EndpointPath
+	}
+	return ""
+}
+
+// OpenApiToolSpec defines configuration for OpenAPI-based tools.
+type OpenApiToolSpec struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Url            string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	ServiceRef     *ServiceRef            `protobuf:"bytes,2,opt,name=service_ref,json=serviceRef,proto3" json:"service_ref,omitempty"`
+	OpenApiSchema  *OpenApiSchema         `protobuf:"bytes,3,opt,name=open_api_schema,json=openApiSchema,proto3" json:"open_api_schema,omitempty"`
+	TimeoutSeconds int32                  `protobuf:"varint,4,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	Headers        map[string]string      `protobuf:"bytes,5,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *OpenApiToolSpec) Reset() {
+	*x = OpenApiToolSpec{}
 	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *OpenApiSchemaRef) String() string {
+func (x *OpenApiToolSpec) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*OpenApiSchemaRef) ProtoMessage() {}
+func (*OpenApiToolSpec) ProtoMessage() {}
 
-func (x *OpenApiSchemaRef) ProtoReflect() protoreflect.Message {
+func (x *OpenApiToolSpec) ProtoReflect() protoreflect.Message {
 	mi := &file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -369,36 +301,54 @@ func (x *OpenApiSchemaRef) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OpenApiSchemaRef.ProtoReflect.Descriptor instead.
-func (*OpenApiSchemaRef) Descriptor() ([]byte, []int) {
+// Deprecated: Use OpenApiToolSpec.ProtoReflect.Descriptor instead.
+func (*OpenApiToolSpec) Descriptor() ([]byte, []int) {
 	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *OpenApiSchemaRef) GetUrl() string {
+func (x *OpenApiToolSpec) GetUrl() string {
 	if x != nil {
 		return x.Url
 	}
 	return ""
 }
 
-func (x *OpenApiSchemaRef) GetConfigMapRef() *ConfigMapKeyRef {
+func (x *OpenApiToolSpec) GetServiceRef() *ServiceRef {
 	if x != nil {
-		return x.ConfigMapRef
+		return x.ServiceRef
+	}
+	return nil
+}
+
+func (x *OpenApiToolSpec) GetOpenApiSchema() *OpenApiSchema {
+	if x != nil {
+		return x.OpenApiSchema
+	}
+	return nil
+}
+
+func (x *OpenApiToolSpec) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+func (x *OpenApiToolSpec) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
 	}
 	return nil
 }
 
 // AgentToolSpec defines the desired state of AgentTool.
 type AgentToolSpec struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Type             AgentToolType          `protobuf:"varint,1,opt,name=type,proto3,enum=flokoa.agent.v1alpha1.AgentToolType" json:"type,omitempty"`
-	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	HttpApi          *HTTPApiSpec           `protobuf:"bytes,3,opt,name=http_api,json=httpApi,proto3" json:"http_api,omitempty"`
-	InputSchema      *structpb.Struct       `protobuf:"bytes,4,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
-	OutputSchema     *structpb.Struct       `protobuf:"bytes,5,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
-	OpenApiSchemaRef *OpenApiSchemaRef      `protobuf:"bytes,6,opt,name=open_api_schema_ref,json=openApiSchemaRef,proto3" json:"open_api_schema_ref,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          AgentToolType          `protobuf:"varint,1,opt,name=type,proto3,enum=flokoa.agent.v1alpha1.AgentToolType" json:"type,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	OpenApi       *OpenApiToolSpec       `protobuf:"bytes,3,opt,name=open_api,json=openApi,proto3" json:"open_api,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AgentToolSpec) Reset() {
@@ -445,30 +395,9 @@ func (x *AgentToolSpec) GetDescription() string {
 	return ""
 }
 
-func (x *AgentToolSpec) GetHttpApi() *HTTPApiSpec {
+func (x *AgentToolSpec) GetOpenApi() *OpenApiToolSpec {
 	if x != nil {
-		return x.HttpApi
-	}
-	return nil
-}
-
-func (x *AgentToolSpec) GetInputSchema() *structpb.Struct {
-	if x != nil {
-		return x.InputSchema
-	}
-	return nil
-}
-
-func (x *AgentToolSpec) GetOutputSchema() *structpb.Struct {
-	if x != nil {
-		return x.OutputSchema
-	}
-	return nil
-}
-
-func (x *AgentToolSpec) GetOpenApiSchemaRef() *OpenApiSchemaRef {
-	if x != nil {
-		return x.OpenApiSchemaRef
+		return x.OpenApi
 	}
 	return nil
 }
@@ -650,31 +579,30 @@ const file_flokoa_agent_v1alpha1_agenttool_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x12\n" +
 	"\x04port\x18\x03 \x01(\x05R\x04port\x12\x1b\n" +
-	"\tport_name\x18\x04 \x01(\tR\bportName\"\xe2\x02\n" +
-	"\vHTTPApiSpec\x12\x10\n" +
+	"\tport_name\x18\x04 \x01(\tR\bportName\"X\n" +
+	"\x14ConfigMapKeySelector\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1a\n" +
+	"\boptional\x18\x03 \x01(\bR\boptional\"\xaf\x01\n" +
+	"\rOpenApiSchema\x12-\n" +
+	"\x05value\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x05value\x12J\n" +
+	"\n" +
+	"value_from\x18\x02 \x01(\v2+.flokoa.agent.v1alpha1.ConfigMapKeySelectorR\tvalueFrom\x12#\n" +
+	"\rendpoint_path\x18\x03 \x01(\tR\fendpointPath\"\xe9\x02\n" +
+	"\x0fOpenApiToolSpec\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12B\n" +
 	"\vservice_ref\x18\x02 \x01(\v2!.flokoa.agent.v1alpha1.ServiceRefR\n" +
-	"serviceRef\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\x129\n" +
-	"\x06method\x18\x04 \x01(\x0e2!.flokoa.agent.v1alpha1.HTTPMethodR\x06method\x12'\n" +
-	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\x12I\n" +
-	"\aheaders\x18\x06 \x03(\v2/.flokoa.agent.v1alpha1.HTTPApiSpec.HeadersEntryR\aheaders\x1a:\n" +
+	"serviceRef\x12L\n" +
+	"\x0fopen_api_schema\x18\x03 \x01(\v2$.flokoa.agent.v1alpha1.OpenApiSchemaR\ropenApiSchema\x12'\n" +
+	"\x0ftimeout_seconds\x18\x04 \x01(\x05R\x0etimeoutSeconds\x12M\n" +
+	"\aheaders\x18\x05 \x03(\v23.flokoa.agent.v1alpha1.OpenApiToolSpec.HeadersEntryR\aheaders\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"7\n" +
-	"\x0fConfigMapKeyRef\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\"r\n" +
-	"\x10OpenApiSchemaRef\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\x12L\n" +
-	"\x0econfig_map_ref\x18\x02 \x01(\v2&.flokoa.agent.v1alpha1.ConfigMapKeyRefR\fconfigMapRef\"\xfc\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xae\x01\n" +
 	"\rAgentToolSpec\x128\n" +
 	"\x04type\x18\x01 \x01(\x0e2$.flokoa.agent.v1alpha1.AgentToolTypeR\x04type\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x12=\n" +
-	"\bhttp_api\x18\x03 \x01(\v2\".flokoa.agent.v1alpha1.HTTPApiSpecR\ahttpApi\x12:\n" +
-	"\finput_schema\x18\x04 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12<\n" +
-	"\routput_schema\x18\x05 \x01(\v2\x17.google.protobuf.StructR\foutputSchema\x12V\n" +
-	"\x13open_api_schema_ref\x18\x06 \x01(\v2'.flokoa.agent.v1alpha1.OpenApiSchemaRefR\x10openApiSchemaRef\"\x84\x01\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12A\n" +
+	"\bopen_api\x18\x03 \x01(\v2&.flokoa.agent.v1alpha1.OpenApiToolSpecR\aopenApi\"\x84\x01\n" +
 	"\x0fAgentToolStatus\x12@\n" +
 	"\n" +
 	"conditions\x18\x01 \x03(\v2 .flokoa.agent.v1alpha1.ConditionR\n" +
@@ -686,18 +614,10 @@ const file_flokoa_agent_v1alpha1_agenttool_proto_rawDesc = "" +
 	"\x06status\x18\x03 \x01(\v2&.flokoa.agent.v1alpha1.AgentToolStatusR\x06status\"\x84\x01\n" +
 	"\rAgentToolList\x12;\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1f.flokoa.agent.v1alpha1.ListMetaR\bmetadata\x126\n" +
-	"\x05items\x18\x02 \x03(\v2 .flokoa.agent.v1alpha1.AgentToolR\x05items*N\n" +
+	"\x05items\x18\x02 \x03(\v2 .flokoa.agent.v1alpha1.AgentToolR\x05items*M\n" +
 	"\rAgentToolType\x12\x1f\n" +
-	"\x1bAGENT_TOOL_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18AGENT_TOOL_TYPE_HTTP_API\x10\x01*\x98\x01\n" +
-	"\n" +
-	"HTTPMethod\x12\x1b\n" +
-	"\x17HTTP_METHOD_UNSPECIFIED\x10\x00\x12\x13\n" +
-	"\x0fHTTP_METHOD_GET\x10\x01\x12\x14\n" +
-	"\x10HTTP_METHOD_POST\x10\x02\x12\x13\n" +
-	"\x0fHTTP_METHOD_PUT\x10\x03\x12\x15\n" +
-	"\x11HTTP_METHOD_PATCH\x10\x04\x12\x16\n" +
-	"\x12HTTP_METHOD_DELETE\x10\x05B\xf2\x01\n" +
+	"\x1bAGENT_TOOL_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17AGENT_TOOL_TYPE_OPENAPI\x10\x01B\xf2\x01\n" +
 	"\x19com.flokoa.agent.v1alpha1B\x0eAgenttoolProtoP\x01ZOgithub.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1\xa2\x02\x03FAX\xaa\x02\x15Flokoa.Agent.V1alpha1\xca\x02\x15Flokoa\\Agent\\V1alpha1\xe2\x02!Flokoa\\Agent\\V1alpha1\\GPBMetadata\xea\x02\x17Flokoa::Agent::V1alpha1b\x06proto3"
 
 var (
@@ -712,46 +632,43 @@ func file_flokoa_agent_v1alpha1_agenttool_proto_rawDescGZIP() []byte {
 	return file_flokoa_agent_v1alpha1_agenttool_proto_rawDescData
 }
 
-var file_flokoa_agent_v1alpha1_agenttool_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_flokoa_agent_v1alpha1_agenttool_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_flokoa_agent_v1alpha1_agenttool_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_flokoa_agent_v1alpha1_agenttool_proto_goTypes = []any{
-	(AgentToolType)(0),       // 0: flokoa.agent.v1alpha1.AgentToolType
-	(HTTPMethod)(0),          // 1: flokoa.agent.v1alpha1.HTTPMethod
-	(*ServiceRef)(nil),       // 2: flokoa.agent.v1alpha1.ServiceRef
-	(*HTTPApiSpec)(nil),      // 3: flokoa.agent.v1alpha1.HTTPApiSpec
-	(*ConfigMapKeyRef)(nil),  // 4: flokoa.agent.v1alpha1.ConfigMapKeyRef
-	(*OpenApiSchemaRef)(nil), // 5: flokoa.agent.v1alpha1.OpenApiSchemaRef
-	(*AgentToolSpec)(nil),    // 6: flokoa.agent.v1alpha1.AgentToolSpec
-	(*AgentToolStatus)(nil),  // 7: flokoa.agent.v1alpha1.AgentToolStatus
-	(*AgentTool)(nil),        // 8: flokoa.agent.v1alpha1.AgentTool
-	(*AgentToolList)(nil),    // 9: flokoa.agent.v1alpha1.AgentToolList
-	nil,                      // 10: flokoa.agent.v1alpha1.HTTPApiSpec.HeadersEntry
-	(*structpb.Struct)(nil),  // 11: google.protobuf.Struct
-	(*Condition)(nil),        // 12: flokoa.agent.v1alpha1.Condition
-	(*ObjectMeta)(nil),       // 13: flokoa.agent.v1alpha1.ObjectMeta
-	(*ListMeta)(nil),         // 14: flokoa.agent.v1alpha1.ListMeta
+	(AgentToolType)(0),           // 0: flokoa.agent.v1alpha1.AgentToolType
+	(*ServiceRef)(nil),           // 1: flokoa.agent.v1alpha1.ServiceRef
+	(*ConfigMapKeySelector)(nil), // 2: flokoa.agent.v1alpha1.ConfigMapKeySelector
+	(*OpenApiSchema)(nil),        // 3: flokoa.agent.v1alpha1.OpenApiSchema
+	(*OpenApiToolSpec)(nil),      // 4: flokoa.agent.v1alpha1.OpenApiToolSpec
+	(*AgentToolSpec)(nil),        // 5: flokoa.agent.v1alpha1.AgentToolSpec
+	(*AgentToolStatus)(nil),      // 6: flokoa.agent.v1alpha1.AgentToolStatus
+	(*AgentTool)(nil),            // 7: flokoa.agent.v1alpha1.AgentTool
+	(*AgentToolList)(nil),        // 8: flokoa.agent.v1alpha1.AgentToolList
+	nil,                          // 9: flokoa.agent.v1alpha1.OpenApiToolSpec.HeadersEntry
+	(*structpb.Struct)(nil),      // 10: google.protobuf.Struct
+	(*Condition)(nil),            // 11: flokoa.agent.v1alpha1.Condition
+	(*ObjectMeta)(nil),           // 12: flokoa.agent.v1alpha1.ObjectMeta
+	(*ListMeta)(nil),             // 13: flokoa.agent.v1alpha1.ListMeta
 }
 var file_flokoa_agent_v1alpha1_agenttool_proto_depIdxs = []int32{
-	2,  // 0: flokoa.agent.v1alpha1.HTTPApiSpec.service_ref:type_name -> flokoa.agent.v1alpha1.ServiceRef
-	1,  // 1: flokoa.agent.v1alpha1.HTTPApiSpec.method:type_name -> flokoa.agent.v1alpha1.HTTPMethod
-	10, // 2: flokoa.agent.v1alpha1.HTTPApiSpec.headers:type_name -> flokoa.agent.v1alpha1.HTTPApiSpec.HeadersEntry
-	4,  // 3: flokoa.agent.v1alpha1.OpenApiSchemaRef.config_map_ref:type_name -> flokoa.agent.v1alpha1.ConfigMapKeyRef
-	0,  // 4: flokoa.agent.v1alpha1.AgentToolSpec.type:type_name -> flokoa.agent.v1alpha1.AgentToolType
-	3,  // 5: flokoa.agent.v1alpha1.AgentToolSpec.http_api:type_name -> flokoa.agent.v1alpha1.HTTPApiSpec
-	11, // 6: flokoa.agent.v1alpha1.AgentToolSpec.input_schema:type_name -> google.protobuf.Struct
-	11, // 7: flokoa.agent.v1alpha1.AgentToolSpec.output_schema:type_name -> google.protobuf.Struct
-	5,  // 8: flokoa.agent.v1alpha1.AgentToolSpec.open_api_schema_ref:type_name -> flokoa.agent.v1alpha1.OpenApiSchemaRef
-	12, // 9: flokoa.agent.v1alpha1.AgentToolStatus.conditions:type_name -> flokoa.agent.v1alpha1.Condition
-	13, // 10: flokoa.agent.v1alpha1.AgentTool.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
-	6,  // 11: flokoa.agent.v1alpha1.AgentTool.spec:type_name -> flokoa.agent.v1alpha1.AgentToolSpec
-	7,  // 12: flokoa.agent.v1alpha1.AgentTool.status:type_name -> flokoa.agent.v1alpha1.AgentToolStatus
-	14, // 13: flokoa.agent.v1alpha1.AgentToolList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
-	8,  // 14: flokoa.agent.v1alpha1.AgentToolList.items:type_name -> flokoa.agent.v1alpha1.AgentTool
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	10, // 0: flokoa.agent.v1alpha1.OpenApiSchema.value:type_name -> google.protobuf.Struct
+	2,  // 1: flokoa.agent.v1alpha1.OpenApiSchema.value_from:type_name -> flokoa.agent.v1alpha1.ConfigMapKeySelector
+	1,  // 2: flokoa.agent.v1alpha1.OpenApiToolSpec.service_ref:type_name -> flokoa.agent.v1alpha1.ServiceRef
+	3,  // 3: flokoa.agent.v1alpha1.OpenApiToolSpec.open_api_schema:type_name -> flokoa.agent.v1alpha1.OpenApiSchema
+	9,  // 4: flokoa.agent.v1alpha1.OpenApiToolSpec.headers:type_name -> flokoa.agent.v1alpha1.OpenApiToolSpec.HeadersEntry
+	0,  // 5: flokoa.agent.v1alpha1.AgentToolSpec.type:type_name -> flokoa.agent.v1alpha1.AgentToolType
+	4,  // 6: flokoa.agent.v1alpha1.AgentToolSpec.open_api:type_name -> flokoa.agent.v1alpha1.OpenApiToolSpec
+	11, // 7: flokoa.agent.v1alpha1.AgentToolStatus.conditions:type_name -> flokoa.agent.v1alpha1.Condition
+	12, // 8: flokoa.agent.v1alpha1.AgentTool.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
+	5,  // 9: flokoa.agent.v1alpha1.AgentTool.spec:type_name -> flokoa.agent.v1alpha1.AgentToolSpec
+	6,  // 10: flokoa.agent.v1alpha1.AgentTool.status:type_name -> flokoa.agent.v1alpha1.AgentToolStatus
+	13, // 11: flokoa.agent.v1alpha1.AgentToolList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
+	7,  // 12: flokoa.agent.v1alpha1.AgentToolList.items:type_name -> flokoa.agent.v1alpha1.AgentTool
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_flokoa_agent_v1alpha1_agenttool_proto_init() }
@@ -765,7 +682,7 @@ func file_flokoa_agent_v1alpha1_agenttool_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_flokoa_agent_v1alpha1_agenttool_proto_rawDesc), len(file_flokoa_agent_v1alpha1_agenttool_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      1,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,

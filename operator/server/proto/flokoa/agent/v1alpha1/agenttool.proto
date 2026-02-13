@@ -21,10 +21,11 @@ message ServiceRef {
   string port_name = 4;
 }
 
-// ConfigMapKeyRef references a key in a ConfigMap.
-message ConfigMapKeyRef {
+// ConfigMapKeySelector references a key in a ConfigMap.
+message ConfigMapKeySelector {
   string name = 1;
   string key = 2;
+  bool optional = 3;
 }
 
 // OpenApiSchema defines where the OpenAPI specification is sourced from.
@@ -33,7 +34,7 @@ message OpenApiSchema {
   // Inline OpenAPI specification.
   google.protobuf.Struct value = 1;
   // Reference to a ConfigMap containing the OpenAPI specification.
-  ConfigMapKeyRef value_from = 2;
+  ConfigMapKeySelector value_from = 2;
   // Path on the target service/URL where the OpenAPI spec is served.
   string endpoint_path = 3;
 }

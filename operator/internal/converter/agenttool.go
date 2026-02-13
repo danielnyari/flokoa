@@ -1,11 +1,13 @@
 package converter
 
-// NOTE: This converter requires proto regeneration after the agenttool.proto update.
-// Run `make proto-generate` to regenerate the Go proto types before building.
-
 import (
+	"encoding/json"
+
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
+	"google.golang.org/protobuf/types/known/structpb"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // AgentToolToProto converts a Kubernetes AgentTool to proto.
@@ -84,14 +86,23 @@ func OpenApiSchemaToProto(schema *agentv1alpha1.OpenApiSchema) *pb.OpenApiSchema
 	}
 
 	if schema.ValueFrom != nil {
-		pbSchema.ValueFrom = &pb.ConfigMapKeyRef{
+		pbSchema.ValueFrom = &pb.ConfigMapKeySelector{
 			Name: schema.ValueFrom.Name,
 			Key:  schema.ValueFrom.Key,
 		}
+		if schema.ValueFrom.Optional != nil {
+			pbSchema.ValueFrom.Optional = *schema.ValueFrom.Optional
+		}
 	}
 
-	// Note: schema.Value (runtime.RawExtension) -> proto Struct conversion
-	// requires JSON parsing. Left as nil for now; implement when needed.
+	if schema.Value != nil && len(schema.Value.Raw) > 0 {
+		var value map[string]any
+		if err := json.Unmarshal(schema.Value.Raw, &value); err == nil {
+			if protoValue, err := structpb.NewStruct(value); err == nil {
+				pbSchema.Value = protoValue
+			}
+		}
+	}
 
 	return pbSchema
 }
@@ -203,14 +214,19 @@ func OpenApiSchemaFromProto(proto *pb.OpenApiSchema) *agentv1alpha1.OpenApiSchem
 	}
 
 	if proto.ValueFrom != nil {
-		schema.ValueFrom = &agentv1alpha1.ConfigMapKeyRef{
-			Name: proto.ValueFrom.Name,
-			Key:  proto.ValueFrom.Key,
+		schema.ValueFrom = &corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: proto.ValueFrom.Name},
+			Key:                  proto.ValueFrom.Key,
 		}
+		optional := proto.ValueFrom.Optional
+		schema.ValueFrom.Optional = &optional
 	}
 
-	// Note: proto Struct -> runtime.RawExtension conversion
-	// requires JSON marshaling. Left as nil for now; implement when needed.
+	if proto.Value != nil {
+		if raw, err := proto.Value.MarshalJSON(); err == nil {
+			schema.Value = &runtime.RawExtension{Raw: raw}
+		}
+	}
 
 	return schema
 }

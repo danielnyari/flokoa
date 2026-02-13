@@ -174,7 +174,7 @@ func (r *AgentToolReconciler) validateSpec(ctx context.Context, agentTool *agent
 }
 
 // validateConfigMapRef validates that the referenced ConfigMap and key exist
-func (r *AgentToolReconciler) validateConfigMapRef(ctx context.Context, namespace string, ref *agentv1alpha1.ConfigMapKeyRef) error {
+func (r *AgentToolReconciler) validateConfigMapRef(ctx context.Context, namespace string, ref *corev1.ConfigMapKeySelector) error {
 	cm := &corev1.ConfigMap{}
 	key := client.ObjectKey{
 		Name:      ref.Name,

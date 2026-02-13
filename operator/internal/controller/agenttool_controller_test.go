@@ -336,9 +336,9 @@ paths:
 						OpenApi: &agentv1alpha1.OpenApiToolSpec{
 							URL: "https://api.weather.com",
 							OpenApiSchema: agentv1alpha1.OpenApiSchema{
-								ValueFrom: &agentv1alpha1.ConfigMapKeyRef{
-									Name: "weather-openapi",
-									Key:  "openapi.yaml",
+								ValueFrom: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "weather-openapi"},
+									Key:                  "openapi.yaml",
 								},
 							},
 						},
@@ -389,9 +389,9 @@ paths:
 						OpenApi: &agentv1alpha1.OpenApiToolSpec{
 							URL: "https://api.example.com",
 							OpenApiSchema: agentv1alpha1.OpenApiSchema{
-								ValueFrom: &agentv1alpha1.ConfigMapKeyRef{
-									Name: "non-existent-configmap",
-									Key:  "openapi.yaml",
+								ValueFrom: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "non-existent-configmap"},
+									Key:                  "openapi.yaml",
 								},
 							},
 						},
@@ -456,9 +456,9 @@ paths:
 						OpenApi: &agentv1alpha1.OpenApiToolSpec{
 							URL: "https://api.example.com",
 							OpenApiSchema: agentv1alpha1.OpenApiSchema{
-								ValueFrom: &agentv1alpha1.ConfigMapKeyRef{
-									Name: "wrong-key-configmap",
-									Key:  "openapi.yaml",
+								ValueFrom: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "wrong-key-configmap"},
+									Key:                  "openapi.yaml",
 								},
 							},
 						},
