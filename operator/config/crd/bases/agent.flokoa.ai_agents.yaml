@@ -6185,34 +6185,54 @@ spec:
                             for the LLM to understand the tool's purpose.
                           minLength: 1
                           type: string
-                        httpApi:
+                        openApi:
                           description: |-
-                            HTTPApi contains HTTP API-specific configuration.
-                            Required when Type is "http-api".
+                            OpenApi contains OpenAPI tool configuration.
+                            Required when Type is "openapi".
                           properties:
                             headers:
                               additionalProperties:
                                 type: string
                               description: Headers are additional HTTP headers to
-                                include in the request.
+                                include in API requests.
                               type: object
-                            method:
-                              description: Method is the HTTP method to use for the
-                                request.
-                              enum:
-                              - GET
-                              - POST
-                              - PUT
-                              - PATCH
-                              - DELETE
-                              type: string
-                            path:
-                              description: Path is appended to the URL or service
-                                endpoint.
-                              type: string
+                            openApiSchema:
+                              description: |-
+                                OpenApiSchema specifies the source of the OpenAPI specification.
+                                Exactly one of Value, ValueFrom, or EndpointPath must be specified.
+                              properties:
+                                endpointPath:
+                                  description: |-
+                                    EndpointPath is a path on the target service/URL where the OpenAPI spec is served
+                                    (e.g., "/openapi.json", "/docs/openapi.json", "/swagger.json").
+                                    The operator or runtime will fetch the spec from this path on the target.
+                                  type: string
+                                value:
+                                  description: Value contains the OpenAPI specification
+                                    inline.
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                valueFrom:
+                                  description: ValueFrom references a ConfigMap containing
+                                    the OpenAPI specification.
+                                  properties:
+                                    key:
+                                      description: Key is the key in the ConfigMap
+                                        containing the data.
+                                      minLength: 1
+                                      type: string
+                                    name:
+                                      description: Name is the ConfigMap name.
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              type: object
                             serviceRef:
                               description: |-
-                                ServiceRef references a Kubernetes service as the target endpoint.
+                                ServiceRef references a Kubernetes service as the target API.
                                 Mutually exclusive with URL.
                               properties:
                                 name:
@@ -6242,63 +6262,23 @@ spec:
                             timeoutSeconds:
                               default: 30
                               description: TimeoutSeconds is the request timeout in
-                                seconds.
+                                seconds for API calls.
                               format: int32
                               maximum: 300
                               minimum: 1
                               type: integer
                             url:
                               description: |-
-                                URL is the external API endpoint to call.
+                                URL is the base URL of the external API.
                                 Mutually exclusive with ServiceRef.
                               type: string
                           required:
-                          - method
+                          - openApiSchema
                           type: object
-                        inputSchema:
-                          description: |-
-                            InputSchema is a JSON Schema defining the input the agent provides to the tool.
-                            For GET requests: becomes query parameters.
-                            For POST/PUT/PATCH requests: becomes the JSON body.
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        openApiSchemaRef:
-                          description: OpenApiSchemaRef references an OpenAPI spec
-                            as an alternative to InputSchema/OutputSchema.
-                          properties:
-                            configMapRef:
-                              description: |-
-                                ConfigMapRef references a ConfigMap containing the OpenAPI spec.
-                                Mutually exclusive with URL.
-                              properties:
-                                key:
-                                  description: Key is the key in the ConfigMap containing
-                                    the data.
-                                  minLength: 1
-                                  type: string
-                                name:
-                                  description: Name is the ConfigMap name.
-                                  minLength: 1
-                                  type: string
-                              required:
-                              - key
-                              - name
-                              type: object
-                            url:
-                              description: |-
-                                URL is the endpoint to fetch the OpenAPI spec from.
-                                Mutually exclusive with ConfigMapRef.
-                              type: string
-                          type: object
-                        outputSchema:
-                          description: OutputSchema is a JSON Schema defining what
-                            the tool returns.
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
                         type:
-                          description: Type specifies the kind of tool (e.g., http-api).
+                          description: Type specifies the kind of tool (e.g., openapi).
                           enum:
-                          - http-api
+                          - openapi
                           type: string
                       required:
                       - description
