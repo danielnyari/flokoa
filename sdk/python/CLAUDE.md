@@ -36,7 +36,11 @@ sdk/python/
 │   │   └── pydantic_ai/       # Pydantic AI integration
 │   ├── tools/                 # Tool implementations
 │   │   └── http_api.py        # HTTP API tools
-│   ├── types/                 # Type definitions
+│   ├── types/                 # Generated type definitions (DO NOT EDIT)
+│   │   ├── agenttool.py       # AgentToolSpec Pydantic models
+│   │   ├── agentcard.py       # AgentCard Pydantic models
+│   │   ├── modelconfig.py     # ModelConfig Pydantic models
+│   │   └── templateconfig.py  # TemplateConfig Pydantic models
 │   └── utils/                 # Utility functions
 ├── tests/
 │   └── flokoa_cli/
@@ -45,6 +49,7 @@ sdk/python/
 │       └── fixtures/          # Test fixtures
 ├── pyproject.toml             # Project configuration
 ├── Makefile                   # Development commands
+├── Dockerfile.managed         # Container image for managed runtime
 ├── tox.ini                    # Multi-version testing
 └── uv.lock                    # Dependency lock file
 ```
@@ -60,6 +65,32 @@ make test       # Run pytest with coverage
 make build      # Build wheel file
 make clean-build # Remove build artifacts
 ```
+
+## Generated Types (from Operator CRDs)
+
+Files in `src/flokoa/types/` are **auto-generated** from the Kubernetes Operator CRD schemas. Do not edit them manually.
+
+To regenerate, run from the `operator/` directory:
+```bash
+make generate-python-models
+```
+
+This uses `datamodel-codegen` to extract JSON schemas from CRD YAML files and produce Pydantic v2 BaseModel classes:
+
+| Generated File | Source CRD | Class |
+|---------------|-----------|-------|
+| `agenttool.py` | `agent.flokoa.ai_agenttools` | `AgentToolSpec` |
+| `agentcard.py` | `agent.flokoa.ai_agents` (card field) | `AgentCard` |
+| `modelconfig.py` | Combined from `Models` + `ModelProviders` | `ModelConfig` |
+| `templateconfig.py` | `agent.flokoa.ai_agents` (runtime.template.config) | `TemplateConfig` |
+
+The generation pipeline:
+1. `make manifests` in operator/ generates CRD YAML from Go types
+2. `yq` extracts specific JSON schemas from CRD YAML
+3. `datamodel-codegen` converts JSON schemas to Pydantic v2 models
+4. Output goes to `sdk/python/src/flokoa/types/`
+
+**If you change Go types in `operator/api/v1alpha1/`**, run `make manifests generate generate-python-models` from the operator directory to keep the SDK types in sync.
 
 ## CLI Usage
 
@@ -203,3 +234,11 @@ _try_load(
     "MyFrameworkExecutor",
 )
 ```
+
+## CI/CD
+
+GitHub Actions workflow `.github/workflows/test-python.yml`:
+- Triggered by changes to `sdk/python/**`
+- Uses `astral-sh/setup-uv` for package management
+- Runs `uv sync --all-extras` + `pytest`
+- Uploads coverage to Codecov

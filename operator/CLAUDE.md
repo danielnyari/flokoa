@@ -18,6 +18,7 @@ The Flokoa Operator is a Kubernetes Operator for managing AI Agents through Cust
 | Operator SDK | v1.42.0 |
 | controller-runtime | v0.21.0 |
 | Kubernetes API | v0.33.0 |
+| Argo Workflows | 3.7.9 |
 
 **Testing**: Ginkgo v2 + Gomega (BDD-style testing)
 **Linting**: golangci-lint v2.1.0
@@ -29,21 +30,41 @@ The Flokoa Operator is a Kubernetes Operator for managing AI Agents through Cust
 operator/
 ├── api/v1alpha1/              # CRD type definitions
 │   ├── agent_types.go         # Agent CRD schema
+│   ├── agenttool_types.go     # AgentTool CRD schema
+│   ├── model_types.go         # Model CRD schema (multi-provider)
+│   ├── modelprovider_types.go # ModelProvider CRD schema
+│   ├── instruction_types.go   # Instruction CRD schema
 │   ├── groupversion_info.go   # API group registration
 │   └── zz_generated.deepcopy.go  # Generated (DO NOT EDIT)
 ├── cmd/
-│   └── main.go                # Operator entrypoint
+│   ├── main.go                # Operator entrypoint
+│   └── server/main.go         # gRPC server entrypoint
 ├── internal/controller/       # Reconciliation logic
 │   ├── agent_controller.go    # Agent reconciler
-│   ├── agent_controller_test.go
-│   └── suite_test.go          # Test suite setup
+│   ├── modelprovider_controller.go
+│   ├── provider_openai.go     # Provider implementation
+│   └── *_test.go              # Tests
+├── server/                    # gRPC server
+│   └── proto/                 # Protocol buffer definitions
+├── plugins/
+│   └── a2a/                   # Argo A2A executor plugin
+│       ├── main.go            # Plugin HTTP server
+│       ├── plugin/            # Plugin logic
+│       │   ├── plugin.go      # ExecuteTemplate handler
+│       │   ├── resolver.go    # Agent endpoint resolution
+│       │   └── types.go       # A2ASpec, ProgressState
+│       ├── config/            # Plugin deployment config
+│       │   └── plugin.yaml    # ExecutorPlugin CR
+│       └── Dockerfile         # Plugin image build
 ├── config/                    # Kubernetes manifests
-│   ├── crd/                   # CRD definitions
+│   ├── crd/bases/             # Generated CRD YAML files
 │   ├── rbac/                  # RBAC roles
 │   ├── manager/               # Operator deployment
+│   ├── server/                # gRPC server deployment
 │   └── samples/               # Example CRs
 ├── test/
 │   ├── e2e/                   # End-to-end tests
+│   │   └── testdata/argo/     # Argo workflow test fixtures
 │   └── utils/                 # Test utilities
 ├── hack/                      # Build scripts
 ├── Makefile                   # Build targets
@@ -51,50 +72,58 @@ operator/
 └── go.mod                     # Go dependencies
 ```
 
-## Core API: Agent CRD
+## Core CRDs
 
-The `Agent` resource (`agent.flokoa.ai/v1alpha1`) manages AI agents with these key fields:
+The operator manages five CRDs under `agent.flokoa.ai/v1alpha1`:
 
-### AgentSpec (Desired State)
-- **Runtime**: Container image, entrypoint (lambda-style: `module.handler`), framework detection
-- **Tools**: References to Tool CRDs for agent capabilities
-- **MCPServers**: MCP (Model Context Protocol) server connections
-- **Resources**: CPU/memory limits + agent-specific limits (tokens, cost, tool calls, duration)
-- **Scaling**: Knative-style autoscaling (min/max replicas, concurrency, scale-to-zero)
-- **StateBackend**: Persistence (redis, s3, postgres, memory)
-- **HealthCheck**: HTTP health check configuration
+### Agent
+Manages AI agents. Key spec fields: `framework`, `runtime` (standard/template), `model`, `instruction`, `tools`, `card` (A2A protocol metadata with skills).
 
-### AgentStatus (Observed State)
-- **Phase**: Pending, Running, Failed
-- **Backend**: Backend implementation in use
-- **URL**: Agent invocation endpoint
-- **Replicas**: Current/available replica counts
-- **DetectedFramework**: Auto-detected framework (pydantic-ai, langchain, crewai, marvin, autogen, custom)
+### AgentTool
+Tool definitions. Currently supports `openapi` type with URL or Kubernetes ServiceRef sources, inline or ConfigMap schemas, headers, and timeout.
+
+### Model
+LLM model configuration. Supports provider-specific parameters for OpenAI, Anthropic, Google, and Bedrock (temperature, maxTokens, reasoning effort, extended thinking, safety settings, guardrails, etc.).
+
+### ModelProvider
+Provider connection config. Supports OpenAI, Anthropic, Google, Bedrock with API key secret references, custom base URLs, and TLS configuration.
+
+### Instruction
+System prompt management. Content field holds the prompt text; controller creates a ConfigMap.
 
 ## Development Commands
 
 All commands run from the `operator/` directory:
 
-### Build & Run
+### Code Generation (IMPORTANT - run after any type changes)
 ```bash
-make build              # Build manager binary
-make run                # Run controller locally
-make docker-build IMG=<tag>  # Build Docker image
+make generate           # Generate DeepCopy methods from api/v1alpha1/*_types.go
+make manifests          # Generate CRDs, RBAC, webhooks from kubebuilder markers
+make generate-python-models  # Generate Pydantic v2 models for Python SDK from CRD schemas
+make buf-generate       # Generate gRPC code from proto files
 ```
 
-### Code Generation
+**After modifying any `*_types.go` file, always run `make manifests generate`.**
+
+### Build & Run
 ```bash
-make manifests          # Generate CRDs, RBAC, webhooks
-make generate           # Generate DeepCopy methods
-make fmt                # Format code
-make vet                # Run go vet
+make build              # Build manager and server binaries (runs manifests, generate, buf-generate, fmt, vet)
+make run                # Run controller locally
+make docker-build       # Build Docker images (operator, server, A2A plugin)
+make docker-push        # Push all images to ghcr.io
+make docker-build-plugins  # Build plugin images only
+make docker-push-plugins   # Push plugin images only
+make docker-build-flokoa-cli  # Build Python SDK CLI image
+make docker-push-flokoa-cli   # Push CLI image
 ```
 
 ### Testing
 ```bash
-make test               # Run unit tests with envtest
+make test               # Run unit tests with envtest (runs manifests, generate, fmt, vet first)
 make test-e2e           # Run e2e tests in Kind cluster
-make setup-envtest      # Download envtest binaries
+make setup-test-e2e     # Create Kind cluster if not exists
+make cleanup-test-e2e   # Delete Kind cluster
+make deploy-e2e-testdata  # Deploy test fixtures (requires OPENAI_API_KEY)
 ```
 
 ### Linting
@@ -110,7 +139,28 @@ make install            # Install CRDs to cluster
 make deploy IMG=<tag>   # Deploy operator to cluster
 make uninstall          # Remove CRDs
 make undeploy           # Remove operator
+make deploy-full        # Deploy everything (operator + Argo Workflows + plugins)
+make undeploy-full      # Remove everything
 ```
+
+### Argo Workflows
+```bash
+make deploy-argo-workflows     # Deploy Argo Workflows with executor plugins enabled
+make undeploy-argo-workflows   # Remove Argo Workflows
+make deploy-executor-plugins   # Build and deploy A2A executor plugin
+make undeploy-executor-plugins # Remove executor plugins
+```
+
+### Docker Images
+
+| Image | Make Target | Registry |
+|-------|------------|----------|
+| Operator | `docker-build` / `docker-push` | `ghcr.io/danielnyari/flokoa-operator` |
+| Server | `docker-build` / `docker-push` | `ghcr.io/danielnyari/flokoa-server` |
+| A2A Plugin | `docker-build-plugins` / `docker-push-plugins` | `ghcr.io/danielnyari/flokoa-a2a-plugin` |
+| Flokoa CLI | `docker-build-flokoa-cli` / `docker-push-flokoa-cli` | `ghcr.io/danielnyari/flokoa-cli` |
+
+Version is controlled by `VERSION` in the Makefile (currently `0.0.6`).
 
 ## Testing Conventions
 
@@ -167,6 +217,145 @@ Standard Go import grouping:
 - Never edit these files manually
 - Regenerate with `make generate`
 
+## Argo Workflows Executor Plugins
+
+The operator includes an A2A (Agent-to-Agent) executor plugin for Argo Workflows. This allows Argo workflows to call Flokoa agents.
+
+### Architecture
+- **Plugin type**: Sidecar executor plugin (HTTP server on port 4355)
+- **API endpoint**: `POST /api/v1/template.execute`
+- **Auth**: Bearer token from `/var/run/argo/token`
+- **Protocol**: A2A (Agent-to-Agent) via `a2a-go` client library
+
+### How It Works
+1. Argo injects the plugin as a sidecar container into workflow pods
+2. When a template has a `plugin.a2a` spec, Argo calls the plugin's HTTP API
+3. The plugin resolves the agent endpoint (via Agent CR or convention-based naming)
+4. Sends an A2A message and polls for task completion with requeue
+5. Returns outputs: `result` (text) and `taskResponse` (full JSON)
+
+### Plugin Spec (A2ASpec)
+```yaml
+plugin:
+  a2a:
+    agent: my-agent         # Agent CR name (required)
+    namespace: default      # Agent namespace (optional, defaults to workflow namespace)
+    message: "Do something" # Message to send (required)
+    timeout: 5m             # Task timeout (optional, default 5m)
+```
+
+### Workflow Examples
+
+Simple workflow:
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: a2a-test-
+spec:
+  entrypoint: call-agent
+  serviceAccountName: argo-workflow
+  automountServiceAccountToken: true
+  templates:
+    - name: call-agent
+      plugin:
+        a2a:
+          agent: my-agent
+          message: "What are the benefits of Kubernetes?"
+          timeout: 2m
+```
+
+Parameterized WorkflowTemplate:
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: a2a-agent-template
+spec:
+  entrypoint: call-agent
+  serviceAccountName: argo-workflow
+  automountServiceAccountToken: true
+  arguments:
+    parameters:
+      - name: agent-name
+      - name: agent-namespace
+      - name: message
+      - name: timeout
+        value: "2m"
+  templates:
+    - name: call-agent
+      plugin:
+        a2a:
+          agent: "{{workflow.parameters.agent-name}}"
+          namespace: "{{workflow.parameters.agent-namespace}}"
+          message: "{{workflow.parameters.message}}"
+          timeout: "{{workflow.parameters.timeout}}"
+```
+
+### Writing a New Executor Plugin
+
+To create a new Argo executor plugin for Flokoa:
+
+1. **Create plugin directory**: `plugins/<name>/`
+2. **Implement HTTP server** listening on port 4355:
+   - `POST /api/v1/template.execute` - Main execution endpoint
+   - `GET /healthz` - Health check
+3. **Handle authorization**: Read token from `/var/run/argo/token`, validate `Authorization: Bearer <token>` header
+4. **Define plugin spec type** (the YAML under `plugin.<name>` in workflow templates)
+5. **Return proper responses**:
+   - Empty `{}` for templates this plugin doesn't handle
+   - `ExecuteTemplateReply` with `Node.Phase` and optional `Node.Outputs`
+   - Use `Requeue` with a `metav1.Duration` for long-running tasks
+6. **Create `config/plugin.yaml`** (ExecutorPlugin CR):
+   ```yaml
+   apiVersion: argoproj.io/v1alpha1
+   kind: ExecutorPlugin
+   metadata:
+     name: <plugin-name>
+   spec:
+     sidecar:
+       automountServiceAccountToken: true
+       container:
+         name: <plugin-name>-executor-plugin
+         image: ghcr.io/danielnyari/flokoa-<plugin-name>-plugin:latest
+         command: ["/plugin-binary"]
+         ports:
+           - containerPort: 4355
+         resources:
+           requests: { memory: "64Mi", cpu: "100m" }
+           limits: { memory: "128Mi", cpu: "500m" }
+         securityContext:
+           runAsNonRoot: false
+           allowPrivilegeEscalation: false
+           capabilities: { drop: [ALL] }
+           readOnlyRootFilesystem: true
+   ```
+7. **Build and deploy**:
+   ```bash
+   cd plugins/<name>/config && argo executor-plugin build .
+   kubectl -n argo apply -f <name>-executor-plugin-configmap.yaml
+   ```
+
+### Plugin Response Lifecycle
+- **Synchronous**: Return `NodeSucceeded`/`NodeFailed` immediately
+- **Asynchronous**: Return `NodeRunning` with `Requeue` duration; Argo calls back after the interval. Track state via in-memory map keyed by workflow UID + template name.
+
+## Python Model Generation
+
+The operator generates Pydantic v2 models from CRD schemas for the Python SDK:
+
+```bash
+make generate-python-models
+```
+
+This extracts JSON schemas from generated CRDs and uses `datamodel-codegen` to produce:
+- `sdk/python/src/flokoa/types/agenttool.py` - AgentToolSpec
+- `sdk/python/src/flokoa/types/agentcard.py` - AgentCard
+- `sdk/python/src/flokoa/types/modelconfig.py` - ModelConfig (combined provider + model params)
+- `sdk/python/src/flokoa/types/templateconfig.py` - TemplateConfig (managed runtime config)
+
+**Prerequisite**: Requires `yq` installed on the system. The target automatically creates a Python venv with `datamodel-code-generator`.
+
 ## Linting Rules
 
 Key enabled linters (`.golangci.yml`):
@@ -186,27 +375,41 @@ GitHub Actions workflows in `.github/workflows/`:
 
 | Workflow | Trigger | Actions |
 |----------|---------|---------|
-| `test.yml` | Push/PR | `go mod tidy`, `make test` |
+| `test.yml` | Push/PR | `go mod tidy`, `make test`, Docker build+push on main |
 | `lint.yml` | Push/PR | golangci-lint checks |
 | `test-e2e.yml` | Push/PR | Kind cluster + e2e tests |
 
 ## Working with the Codebase
 
-### Adding a New Field to Agent CRD
-1. Edit `api/v1alpha1/agent_types.go`
+### Adding a New Field to an Existing CRD
+1. Edit the appropriate `api/v1alpha1/*_types.go` file
 2. Add kubebuilder markers for validation
 3. Run `make manifests generate`
 4. Update controller logic in `internal/controller/`
-5. Add tests
+5. Run `make generate-python-models` if the change affects Python SDK types
+6. Add tests
+7. Run `make test`
+
+### Adding a New CRD
+1. Create `api/v1alpha1/<name>_types.go` with type definitions
+2. Add kubebuilder markers (rbac, validation, subresource, printcolumn)
+3. Register types in `groupversion_info.go`
+4. Run `make manifests generate`
+5. Create controller in `internal/controller/`
+6. Add RBAC markers to the controller
+7. Register controller in `cmd/main.go`
+8. Add sample CR in `config/samples/`
+9. Add tests
+10. Run `make generate-python-models` if Python SDK needs the new types
 
 ### Implementing Controller Logic
-The reconciler is in `internal/controller/agent_controller.go`:
+The reconciler pattern:
 
 ```go
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
     log := logf.FromContext(ctx)
 
-    // 1. Fetch the Agent resource
+    // 1. Fetch the resource
     var agent agentv1alpha1.Agent
     if err := r.Get(ctx, req.NamespacedName, &agent); err != nil {
         return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -269,6 +472,9 @@ Run `make setup-envtest` to download required binaries.
 
 ### Lint failures on generated code
 Generated code is excluded from linting. If you see lint errors in `zz_generated.*` files, regenerate with `make generate`.
+
+### Python model generation fails
+Ensure `yq` is installed (`brew install yq` on macOS). The Makefile creates a Python venv automatically.
 
 ## Status
 
