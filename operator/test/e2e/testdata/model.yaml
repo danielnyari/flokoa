@@ -9,5 +9,6 @@ spec:
     name: openai-provider
   parameters:
     temperature: "0.2"
-    maxTokens: 1000
-    topP: "1.0"
+    maxTokens: 3000
+    openai:
+      previousResponseID: "auto"

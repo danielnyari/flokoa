@@ -57,6 +57,9 @@ var (
 	// with the code source changes to be tested.
 	serverImage = "example.com/server:v0.0.1"
 
+	// toolServiceImage is required by e2e tool-service deployment.
+	toolServiceImage = "swaggerapi/petstore:latest"
+
 	// k8sClient is the Kubernetes client for interacting with the cluster
 	k8sClient client.Client
 	// cfg is the rest config for the cluster
@@ -122,6 +125,13 @@ var _ = BeforeSuite(func() {
 	By("loading the server image on Kind")
 	err = utils.LoadImageToKindClusterWithName(serverImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the server image into Kind")
+
+	By("pulling and loading tool service image on Kind")
+	cmd = exec.Command("docker", "pull", toolServiceImage)
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to pull tool service image")
+	err = utils.LoadImageToKindClusterWithName(toolServiceImage)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load tool service image into Kind")
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,
