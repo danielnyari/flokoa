@@ -327,6 +327,7 @@ def _build_llm_agent_description_with_instructions(agent: Any) -> str:
 
 def _replace_pronouns(text: str) -> str:
     """Replace pronouns and conjugate common verbs for agent description."""
+
     def _replacement(match: re.Match[str]) -> str:
         replacement = _PRONOUN_MAP[match.group(1).lower()]
         if match.group(0)[0].isupper():
@@ -466,14 +467,10 @@ def _convert_example_tool_examples(tool: Any) -> List[Dict]:
     """Convert ExampleTool examples to the expected format."""
     examples = []
     for example in getattr(tool, "examples", []):
-        examples.append(
-            {
-                "input": example.input.model_dump() if hasattr(example.input, "model_dump") else example.input,
-                "output": [
-                    output.model_dump() if hasattr(output, "model_dump") else output for output in example.output
-                ],
-            }
-        )
+        examples.append({
+            "input": example.input.model_dump() if hasattr(example.input, "model_dump") else example.input,
+            "output": [output.model_dump() if hasattr(output, "model_dump") else output for output in example.output],
+        })
     return examples
 
 
