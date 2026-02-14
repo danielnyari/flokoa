@@ -1,0 +1,230 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: agenttools.agent.flokoa.ai
+spec:
+  group: agent.flokoa.ai
+  names:
+    kind: AgentTool
+    listKind: AgentToolList
+    plural: agenttools
+    singular: agenttool
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AgentTool is the Schema for the agenttools API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentToolSpec defines the desired state of AgentTool.
+            properties:
+              description:
+                description: Description is a human-readable description for the LLM
+                  to understand the tool's purpose.
+                minLength: 1
+                type: string
+              openApi:
+                description: |-
+                  OpenApi contains OpenAPI tool configuration.
+                  Required when Type is "openapi".
+                properties:
+                  headers:
+                    additionalProperties:
+                      type: string
+                    description: Headers are additional HTTP headers to include in
+                      API requests.
+                    type: object
+                  openApiSchema:
+                    description: |-
+                      OpenApiSchema specifies the source of the OpenAPI specification.
+                      Exactly one of Value, ValueFrom, or EndpointPath must be specified.
+                    properties:
+                      endpointPath:
+                        description: |-
+                          EndpointPath is a path on the target service/URL where the OpenAPI spec is served
+                          (e.g., "/openapi.json", "/docs/openapi.json", "/swagger.json").
+                          The operator or runtime will fetch the spec from this path on the target.
+                        type: string
+                      value:
+                        description: Value contains the OpenAPI specification inline.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      valueFrom:
+                        description: ValueFrom references a ConfigMap containing the
+                          OpenAPI specification.
+                        properties:
+                          key:
+                            description: The key to select.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the ConfigMap or its key
+                              must be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    type: object
+                  serviceRef:
+                    description: |-
+                      ServiceRef references a Kubernetes service as the target API.
+                      Mutually exclusive with URL.
+                    properties:
+                      name:
+                        description: Name is the service name.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace is the service namespace. Defaults
+                          to the AgentTool's namespace.
+                        type: string
+                      port:
+                        description: |-
+                          Port is the service port number.
+                          Mutually exclusive with PortName.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      portName:
+                        description: |-
+                          PortName is the service port name.
+                          Mutually exclusive with Port.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  timeoutSeconds:
+                    default: 30
+                    description: TimeoutSeconds is the request timeout in seconds
+                      for API calls.
+                    format: int32
+                    maximum: 300
+                    minimum: 1
+                    type: integer
+                  url:
+                    description: |-
+                      URL is the base URL of the external API.
+                      Mutually exclusive with ServiceRef.
+                    type: string
+                required:
+                - openApiSchema
+                type: object
+              type:
+                description: Type specifies the kind of tool (e.g., openapi).
+                enum:
+                - openapi
+                type: string
+            required:
+            - description
+            - type
+            type: object
+          status:
+            description: AgentToolStatus defines the observed state of AgentTool.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the tool's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

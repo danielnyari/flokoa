@@ -1,0 +1,22 @@
+{{- if .Values.controller.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}-metrics
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.controller.metrics.service.type }}
+  ports:
+    - name: https
+      port: {{ .Values.controller.metrics.service.port }}
+      protocol: TCP
+      targetPort: {{ .Values.controller.metrics.service.port }}
+  selector:
+    {{- include "flokoa.controller.selectorLabels" . | nindent 4 }}
+{{- end }}

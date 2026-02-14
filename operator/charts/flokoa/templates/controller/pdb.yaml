@@ -1,0 +1,19 @@
+{{- if .Values.controller.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.controller.pdb.minAvailable }}
+  minAvailable: {{ .Values.controller.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.controller.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.controller.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "flokoa.controller.selectorLabels" . | nindent 6 }}
+{{- end }}

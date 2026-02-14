@@ -1,0 +1,35 @@
+Flokoa has been installed.
+
+Chart version: {{ .Chart.Version }}
+App version:   {{ .Chart.AppVersion }}
+
+Components deployed:
+  - Controller (operator): {{ include "flokoa.controller.fullname" . }}
+{{- if .Values.server.enabled }}
+  - Server (gRPC + HTTP): {{ include "flokoa.server.fullname" . }}
+{{- end }}
+{{- if and .Values.argo.enabled .Values.argo.a2aPlugin.enabled }}
+  - Argo A2A Plugin:       a2a (namespace: {{ .Values.argo.a2aPlugin.namespace }})
+{{- end }}
+
+{{- if .Values.server.enabled }}
+
+Server access:
+  gRPC: {{ include "flokoa.server.fullname" . }}.{{ include "flokoa.namespace" . }}.svc:{{ .Values.server.service.grpcPort }}
+  HTTP: {{ include "flokoa.server.fullname" . }}.{{ include "flokoa.namespace" . }}.svc:{{ .Values.server.service.httpPort }}
+{{- if .Values.server.ingress.enabled }}
+  Ingress is enabled.
+{{- end }}
+{{- end }}
+
+{{- if .Values.crds.install }}
+
+CRDs installed:
+  - agents.agent.flokoa.ai
+  - agenttools.agent.flokoa.ai
+  - instructions.agent.flokoa.ai
+  - models.agent.flokoa.ai
+  - modelproviders.agent.flokoa.ai
+{{- end }}
+
+For more information, visit: https://flokoa.ai

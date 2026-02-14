@@ -1,0 +1,25 @@
+{{- if and .Values.controller.metrics.enabled .Values.controller.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+    {{- with .Values.controller.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  endpoints:
+    - path: /metrics
+      port: https
+      scheme: {{ .Values.controller.metrics.serviceMonitor.scheme }}
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      {{- with .Values.controller.metrics.serviceMonitor.tlsConfig }}
+      tlsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  selector:
+    matchLabels:
+      {{- include "flokoa.controller.selectorLabels" . | nindent 6 }}
+{{- end }}
