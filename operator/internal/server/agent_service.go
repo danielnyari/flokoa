@@ -26,17 +26,17 @@ func NewAgentService(c client.Client) *AgentService {
 
 // GetAgent retrieves an Agent by name and namespace.
 func (s *AgentService) GetAgent(ctx context.Context, req *pb.GetAgentRequest) (*pb.Agent, error) {
-	if req.Name == "" || req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "name and namespace are required")
+	if req.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
 	var agent agentv1alpha1.Agent
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &agent); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "agent not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent")
 	}
 
 	return converter.AgentToProto(&agent), nil
@@ -55,11 +55,11 @@ func (s *AgentService) ListAgents(ctx context.Context, req *pb.ListAgentsRequest
 		if req.Options.LabelSelector != "" {
 			selector, err := metav1.ParseToLabelSelector(req.Options.LabelSelector)
 			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, "invalid label selector")
+				return nil, status.Errorf(codes.InvalidArgument, "invalid label selector: %s", err.Error())
 			}
 			labelSelector, err := metav1.LabelSelectorAsSelector(selector)
 			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, "invalid label selector")
+				return nil, status.Errorf(codes.InvalidArgument, "invalid label selector: %s", err.Error())
 			}
 			opts = append(opts, client.MatchingLabelsSelector{Selector: labelSelector})
 		}
@@ -74,15 +74,13 @@ func (s *AgentService) ListAgents(ctx context.Context, req *pb.ListAgentsRequest
 	}
 
 	if err := s.client.List(ctx, &agentList, opts...); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent")
 	}
 
 	return converter.AgentListToProto(&agentList), nil
 }
 
 // WatchAgents watches for changes to Agents.
-func (s *AgentService) WatchAgents(req *pb.WatchAgentsRequest, stream pb.AgentService_WatchAgentsServer) error {
-	// Watch implementation requires informer setup
-	// This is a placeholder that returns unimplemented for now
-	return status.Error(codes.Unimplemented, "watch not yet implemented")
+func (s *AgentService) WatchAgents(_ *pb.WatchAgentsRequest, _ pb.AgentService_WatchAgentsServer) error {
+	return status.Error(codes.Unimplemented, "watch not yet implemented: requires informer-based streaming")
 }
