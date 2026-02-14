@@ -1,0 +1,22 @@
+# Allow Ingress from Flokoa Server for gRPC/HTTP API Access
+#
+# The Flokoa server proxies API requests to agent pods. This policy allows
+# ingress from the server component.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flokoa-agent-allow-ingress-server
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: server
+              app.kubernetes.io/managed-by: Helm
+              app.kubernetes.io/part-of: flokoa

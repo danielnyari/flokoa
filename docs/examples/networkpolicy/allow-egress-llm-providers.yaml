@@ -1,0 +1,33 @@
+# Allow Egress to LLM Provider APIs for Flokoa Agent Pods
+#
+# This policy allows agent pods to reach common LLM provider APIs over HTTPS.
+# Because Kubernetes NetworkPolicy does not support hostname-based rules,
+# this uses CIDR-based egress on port 443. You must resolve and maintain the
+# IP ranges for your specific providers.
+#
+# Alternatively, use a service mesh or DNS-aware policy engine (e.g., Cilium
+# CiliumNetworkPolicy with FQDN rules) for hostname-based filtering.
+#
+# Common LLM provider domains:
+#   - api.openai.com
+#   - api.anthropic.com
+#   - generativelanguage.googleapis.com
+#   - bedrock-runtime.*.amazonaws.com
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flokoa-agent-allow-llm-providers
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    # Allow all HTTPS egress. For tighter control, replace with specific CIDRs.
+    # See the Helm chart networkPolicy.agent.egress.llmProviders for a
+    # parameterized version with per-provider CIDR blocks.
+    - ports:
+        - port: 443
+          protocol: TCP

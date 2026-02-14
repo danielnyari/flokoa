@@ -1,0 +1,28 @@
+# Allow Egress to Kubernetes API Server for Flokoa Agent Pods
+#
+# Some agents need access to the Kubernetes API (e.g., for service discovery
+# or reading ConfigMaps). This policy allows egress to the API server.
+#
+# The default API server address is 10.96.0.1/32 (kubeadm default).
+# Adjust the CIDR to match your cluster's API server address:
+#   kubectl get endpoints kubernetes -o jsonpath='{.subsets[0].addresses[0].ip}'
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flokoa-agent-allow-kube-apiserver
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.96.0.1/32
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP

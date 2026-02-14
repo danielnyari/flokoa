@@ -272,6 +272,88 @@ argo:
       readOnlyRootFilesystem: true
 
 # =============================================================================
+# Network Policies (Agent Pods)
+# =============================================================================
+# -- Network policies for agent pods created by the operator.
+# When enabled, a default-deny policy is applied to all flokoa-operator-managed
+# pods, with specific allow rules layered on top.
+networkPolicy:
+  agent:
+    # -- Enable NetworkPolicies for agent pods
+    enabled: false
+
+    ingress:
+      # -- Allow ingress from the Flokoa controller (health checks)
+      operator: true
+      # -- Allow ingress from the Flokoa server (API access)
+      server: true
+      # -- Allow ingress from Argo Workflows namespace (requires argo.enabled)
+      argo: true
+      # -- Extra ingress rules appended as raw NetworkPolicy ingress blocks
+      extra: []
+      #  - from:
+      #      - namespaceSelector:
+      #          matchLabels:
+      #            app: monitoring
+      #    ports:
+      #      - port: 9090
+      #        protocol: TCP
+
+    egress:
+      llmProviders:
+        # -- Allow egress to LLM provider APIs over HTTPS (port 443)
+        enabled: true
+        # -- Restrict to specific CIDRs. If empty, all HTTPS egress is allowed.
+        # Resolve provider IPs and list them here for tighter control:
+        #   nslookup api.openai.com | grep Address
+        cidrs: []
+        #  - 104.18.0.0/16   # Example: Cloudflare range for api.openai.com
+        #  - 160.79.104.0/23 # Example: Anthropic API
+
+      kubeApiServer:
+        # -- Allow egress to the Kubernetes API server
+        enabled: false
+        # -- API server CIDR (find with: kubectl get endpoints kubernetes)
+        cidr: "10.96.0.1/32"
+
+      stateBackends:
+        # -- Allow egress to state backend services
+        enabled: false
+        redis:
+          # -- Enable Redis egress rule
+          enabled: true
+          # -- Port for Redis
+          port: 6379
+          # -- Pod selector labels for in-cluster Redis
+          podSelector:
+            app.kubernetes.io/name: redis
+          # -- Namespace selector for cross-namespace Redis (optional)
+          namespaceSelector: {}
+          # -- CIDR for external Redis (optional, use instead of podSelector)
+          cidr: ""
+        postgresql:
+          # -- Enable PostgreSQL egress rule
+          enabled: true
+          # -- Port for PostgreSQL
+          port: 5432
+          # -- Pod selector labels for in-cluster PostgreSQL
+          podSelector:
+            app.kubernetes.io/name: postgresql
+          # -- Namespace selector for cross-namespace PostgreSQL (optional)
+          namespaceSelector: {}
+          # -- CIDR for external PostgreSQL (optional, use instead of podSelector)
+          cidr: ""
+
+      # -- Extra egress rules appended as raw NetworkPolicy egress blocks
+      extra: []
+      #  - to:
+      #      - ipBlock:
+      #          cidr: 10.0.0.0/8
+      #    ports:
+      #      - port: 8080
+      #        protocol: TCP
+
+# =============================================================================
 # Extra manifests
 # =============================================================================
 # -- Extra Kubernetes manifests to deploy alongside the chart.
