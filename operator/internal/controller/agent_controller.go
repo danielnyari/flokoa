@@ -842,6 +842,12 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 		podAnnotations["flokoa.ai/model-secrets-hash"] = modelInfo.secretRefsHash
 	}
 
+	// Default to restricted PSS-compliant pod security context if none provided via overrides
+	podSecurityContext := overrides.SecurityContext
+	if podSecurityContext == nil {
+		podSecurityContext = restrictedPodSecurityContext()
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      agent.Name,
@@ -863,7 +869,7 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 					Volumes:            volumes,
 					ImagePullSecrets:   overrides.ImagePullSecrets,
 					ServiceAccountName: overrides.ServiceAccountName,
-					SecurityContext:    overrides.SecurityContext,
+					SecurityContext:    podSecurityContext,
 					NodeSelector:       overrides.NodeSelector,
 					Tolerations:        overrides.Tolerations,
 					Affinity:           overrides.Affinity,
@@ -871,6 +877,36 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 			},
 		},
 	}
+}
+
+// restrictedContainerSecurityContext returns a container-level security context
+// that complies with the Kubernetes restricted Pod Security Standard.
+func restrictedContainerSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		AllowPrivilegeEscalation: boolPtr(false),
+		RunAsNonRoot:             boolPtr(true),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
+
+// restrictedPodSecurityContext returns a pod-level security context
+// that complies with the Kubernetes restricted Pod Security Standard.
+func restrictedPodSecurityContext() *corev1.PodSecurityContext {
+	return &corev1.PodSecurityContext{
+		RunAsNonRoot: boolPtr(true),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 // getDeploymentOverrides extracts the shared DeploymentOverrides from the agent's runtime spec.
@@ -933,6 +969,7 @@ func (r *AgentReconciler) buildManagedContainerSpec(agent *agentv1alpha1.Agent, 
 				Value: templateConfigMountPath,
 			},
 		}, template.Env...),
+		SecurityContext: restrictedContainerSecurityContext(),
 	}
 
 	if template.Resources != nil {

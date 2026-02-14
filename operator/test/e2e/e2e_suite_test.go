@@ -57,6 +57,12 @@ var (
 	// with the code source changes to be tested.
 	serverImage = "example.com/server:v0.0.1"
 
+	// petstoreImage is the non-root petstore image built from test/e2e/testdata/petstore.Dockerfile
+	petstoreImage = "localhost/petstore:test"
+
+	// cliImage is the flokoa-cli image used by template runtime agents
+	cliImage = "ghcr.io/danielnyari/flokoa-cli:latest"
+
 	// k8sClient is the Kubernetes client for interacting with the cluster
 	k8sClient client.Client
 	// cfg is the rest config for the cluster
@@ -123,6 +129,28 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(serverImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the server image into Kind")
 
+	By("building the non-root petstore image for e2e tests")
+	cmd = exec.Command("docker", "build",
+		"-f", "test/e2e/testdata/petstore.Dockerfile",
+		"-t", petstoreImage,
+		"test/e2e/testdata/")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the petstore image")
+
+	By("loading the petstore image on Kind")
+	err = utils.LoadImageToKindClusterWithName(petstoreImage)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the petstore image into Kind")
+
+	By("building the flokoa-cli image for template runtime agents")
+	cmd = exec.Command("make", "docker-build-flokoa-cli",
+		fmt.Sprintf("FLOKOA_CLI_IMG=%s", cliImage))
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the flokoa-cli image")
+
+	By("loading the flokoa-cli image on Kind")
+	err = utils.LoadImageToKindClusterWithName(cliImage)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the flokoa-cli image into Kind")
+
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,
 	// we check for its presence before execution.
@@ -157,17 +185,23 @@ var _ = BeforeSuite(func() {
 	}
 
 	By("creating manager and workload namespaces")
-	namespaces := []string{managerNamespace}
-	if namespace != managerNamespace {
-		namespaces = append(namespaces, namespace)
+	// Manager namespace uses "restricted" PSS - operator-managed pods comply with restricted PSS.
+	// Workload namespace uses "baseline" PSS - Argo workflow pods (third-party) don't comply with restricted.
+	type nsSpec struct {
+		name string
+		pss  string
 	}
-	for _, nsName := range namespaces {
-		ensureNamespaceReady(nsName)
+	namespaceDefs := []nsSpec{{name: managerNamespace, pss: "restricted"}}
+	if namespace != managerNamespace {
+		namespaceDefs = append(namespaceDefs, nsSpec{name: namespace, pss: "baseline"})
+	}
+	for _, nsDef := range namespaceDefs {
+		ensureNamespaceReady(nsDef.name)
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: nsName,
+				Name: nsDef.name,
 				Labels: map[string]string{
-					"pod-security.kubernetes.io/enforce": "restricted",
+					"pod-security.kubernetes.io/enforce": nsDef.pss,
 				},
 			},
 		}

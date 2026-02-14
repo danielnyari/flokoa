@@ -216,7 +216,7 @@ func GetProjectDir() (string, error) {
 }
 
 // InstallArgoWorkflows installs Argo Workflows with executor plugins enabled
-func InstallArgoWorkflows(ctx context.Context, k8sClient client.Client) error {
+func InstallArgoWorkflows(ctx context.Context, k8sClient client.Client, managedNamespaces ...string) error {
 	// Create argo namespace using client-go
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -236,30 +236,60 @@ func InstallArgoWorkflows(ctx context.Context, k8sClient client.Client) error {
 	}
 
 	// Patch workflow-controller deployment to enable executor plugins
-	deploy := &appsv1.Deployment{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: "workflow-controller", Namespace: argoNamespace}, deploy); err != nil {
-		return fmt.Errorf("failed to get workflow-controller deployment: %w", err)
-	}
-
-	// Add ARGO_EXECUTOR_PLUGINS env var
-	container := &deploy.Spec.Template.Spec.Containers[0]
-	envExists := false
-	for i, env := range container.Env {
-		if env.Name == "ARGO_EXECUTOR_PLUGINS" {
-			container.Env[i].Value = "true"
-			envExists = true
-			break
+	// and optionally configure additional managed namespaces.
+	// Use retry to handle optimistic concurrency conflicts.
+	patchErr := wait.PollUntilContextTimeout(ctx, time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
+		deploy := &appsv1.Deployment{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: "workflow-controller", Namespace: argoNamespace}, deploy); err != nil {
+			return false, fmt.Errorf("failed to get workflow-controller deployment: %w", err)
 		}
-	}
-	if !envExists {
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  "ARGO_EXECUTOR_PLUGINS",
-			Value: "true",
-		})
-	}
 
-	if err := k8sClient.Update(ctx, deploy); err != nil {
-		return fmt.Errorf("failed to update workflow-controller deployment: %w", err)
+		container := &deploy.Spec.Template.Spec.Containers[0]
+
+		// Add ARGO_EXECUTOR_PLUGINS env var
+		envExists := false
+		for i, env := range container.Env {
+			if env.Name == "ARGO_EXECUTOR_PLUGINS" {
+				container.Env[i].Value = "true"
+				envExists = true
+				break
+			}
+		}
+		if !envExists {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "ARGO_EXECUTOR_PLUGINS",
+				Value: "true",
+			})
+		}
+
+		// If additional namespaces are specified, remove --namespaced flag
+		// and add --managed-namespace for each namespace so the controller
+		// watches workflows outside the argo namespace.
+		if len(managedNamespaces) > 0 {
+			var filteredArgs []string
+			for _, arg := range container.Args {
+				if arg != "--namespaced" {
+					filteredArgs = append(filteredArgs, arg)
+				}
+			}
+			// Always include the argo namespace since we removed --namespaced
+			filteredArgs = append(filteredArgs, fmt.Sprintf("--managed-namespace=%s", argoNamespace))
+			for _, managedNs := range managedNamespaces {
+				filteredArgs = append(filteredArgs, fmt.Sprintf("--managed-namespace=%s", managedNs))
+			}
+			container.Args = filteredArgs
+		}
+
+		if err := k8sClient.Update(ctx, deploy); err != nil {
+			if apierrors.IsConflict(err) {
+				return false, nil // retry on conflict
+			}
+			return false, fmt.Errorf("failed to update workflow-controller deployment: %w", err)
+		}
+		return true, nil
+	})
+	if patchErr != nil {
+		return fmt.Errorf("failed to patch workflow-controller: %w", patchErr)
 	}
 
 	// Wait for workflow-controller to be ready (5 minutes to allow for image pulls)
