@@ -1,8 +1,8 @@
 // Package ui provides the embedded UI static files for the Flokoa server.
 //
-// The dist/ directory should contain the built Nuxt output (from `nuxt generate`).
-// During development, run `cd ui && pnpm build` then copy `.output/public/` to `operator/ui/dist/`.
-// In CI, this is handled by the build pipeline.
+// The dist/ directory should contain the built Nuxt output (from `nuxt build`).
+// During development, run `cd ui/src && pnpm build` then copy `.output/public/` to `ui/dist/`.
+// In CI/Docker, this is handled by the multi-stage build.
 package ui
 
 import "embed"

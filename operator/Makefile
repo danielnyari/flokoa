@@ -349,7 +349,7 @@ buf-dep-update: ## Update buf dependencies.
 
 ##@ UI
 
-UI_DIR ?= ../ui
+UI_DIR ?= ui/src
 
 .PHONY: ui-install
 ui-install: ## Install UI dependencies.
