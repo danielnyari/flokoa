@@ -34,18 +34,9 @@ spec:
       name: petstore-instruction
 
   tools:
-    - name: petstore-find-pets-by-status
+    - name: petstore-api
       toolRef:
-        name: petstore-find-pets-by-status
-    - name: petstore-get-pet-by-id
-      toolRef:
-        name: petstore-get-pet-by-id
-    - name: petstore-add-pet
-      toolRef:
-        name: petstore-add-pet
-    - name: petstore-update-pet
-      toolRef:
-        name: petstore-update-pet
+        name: petstore-api
 
   runtime:
     type: template

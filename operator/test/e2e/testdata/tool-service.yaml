@@ -18,11 +18,15 @@ spec:
         test: e2e
     spec:
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
       - name: tool-service
-        image: swaggerapi/petstore:latest
+        image: localhost/petstore:test
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -30,9 +34,15 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
+          runAsNonRoot: true
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: petstore-log
+          mountPath: /var/log
+        - name: petstore-tmp
+          mountPath: /tmp
         resources:
           requests:
             cpu: "100m"
@@ -40,6 +50,11 @@ spec:
           limits:
             cpu: "500m"
             memory: "1Gi"
+      volumes:
+      - name: petstore-log
+        emptyDir: {}
+      - name: petstore-tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

@@ -53,7 +53,7 @@ var _ = Describe("Argo Workflows with A2A Plugin", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to load A2A plugin image")
 
 			By("installing Argo Workflows")
-			err = utils.InstallArgoWorkflows(ctx, k8sClient)
+			err = utils.InstallArgoWorkflows(ctx, k8sClient, namespace)
 			Expect(err).NotTo(HaveOccurred(), "Failed to install Argo Workflows")
 
 			By("installing the A2A executor plugin")
