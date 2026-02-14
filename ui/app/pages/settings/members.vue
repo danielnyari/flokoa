@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { Member } from '~/types'
-
-const { data: members } = await useFetch<Member[]>('/api/members', { default: () => [] })
+const members = ref([
+  { name: 'Admin', username: 'admin', role: 'owner' as const },
+  { name: 'Operator', username: 'operator', role: 'member' as const }
+])
 
 const q = ref('')
 
@@ -16,7 +17,7 @@ const filteredMembers = computed(() => {
   <div>
     <UPageCard
       title="Members"
-      description="Invite new members by email address."
+      description="Manage team members and their roles."
       variant="naked"
       orientation="horizontal"
       class="mb-4"
@@ -39,7 +40,24 @@ const filteredMembers = computed(() => {
         />
       </template>
 
-      <SettingsMembersList :members="filteredMembers" />
+      <div class="divide-y divide-default">
+        <div v-for="member in filteredMembers" :key="member.username" class="flex items-center justify-between p-4">
+          <div class="flex items-center gap-3">
+            <UAvatar :alt="member.name" size="sm" />
+            <div>
+              <p class="text-sm font-medium text-highlighted">
+                {{ member.name }}
+              </p>
+              <p class="text-xs text-muted">
+                @{{ member.username }}
+              </p>
+            </div>
+          </div>
+          <UBadge :color="member.role === 'owner' ? 'primary' : 'neutral'" variant="subtle" class="capitalize">
+            {{ member.role }}
+          </UBadge>
+        </div>
+      </div>
     </UPageCard>
   </div>
 </template>

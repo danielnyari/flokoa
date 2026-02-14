@@ -347,12 +347,33 @@ buf-breaking: ## Check for breaking proto changes.
 buf-dep-update: ## Update buf dependencies.
 	cd server && buf dep update
 
+##@ UI
+
+UI_DIR ?= ../ui
+
+.PHONY: ui-install
+ui-install: ## Install UI dependencies.
+	cd $(UI_DIR) && pnpm install
+
+.PHONY: ui-build
+ui-build: ui-install ## Build the UI and copy to operator/ui/dist for embedding.
+	cd $(UI_DIR) && pnpm build
+	rm -rf ui/dist/*
+	cp -r $(UI_DIR)/.output/public/* ui/dist/
+
+.PHONY: ui-dev
+ui-dev: ## Run the UI in development mode with API proxy.
+	cd $(UI_DIR) && pnpm dev
+
 ##@ Build
 
 .PHONY: build
 build: manifests generate buf-generate fmt vet ## Build manager and server binaries.
 	go build -o bin/manager cmd/main.go
 	go build -o bin/server cmd/server/main.go
+
+.PHONY: build-server-with-ui
+build-server-with-ui: ui-build build ## Build server binary with embedded UI.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.

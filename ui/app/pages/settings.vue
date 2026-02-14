@@ -21,7 +21,7 @@ const links = [[{
 }], [{
   label: 'Documentation',
   icon: 'i-lucide-book-open',
-  to: 'https://ui.nuxt.com/docs/getting-started/installation/nuxt',
+  to: 'https://flokoa.ai',
   target: '_blank'
 }]] satisfies NavigationMenuItem[][]
 </script>

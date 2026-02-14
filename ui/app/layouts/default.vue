@@ -2,7 +2,6 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
-const toast = useToast()
 
 const open = ref(false)
 
@@ -14,17 +13,30 @@ const links = [[{
     open.value = false
   }
 }, {
-  label: 'Inbox',
-  icon: 'i-lucide-inbox',
-  to: '/inbox',
-  badge: '4',
+  label: 'Agents',
+  icon: 'i-lucide-bot',
+  to: '/agents',
   onSelect: () => {
     open.value = false
   }
 }, {
-  label: 'Customers',
-  icon: 'i-lucide-users',
-  to: '/customers',
+  label: 'Models',
+  icon: 'i-lucide-brain',
+  to: '/models',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Providers',
+  icon: 'i-lucide-cloud',
+  to: '/providers',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Tools',
+  icon: 'i-lucide-wrench',
+  to: '/tools',
   onSelect: () => {
     open.value = false
   }
@@ -61,14 +73,14 @@ const links = [[{
     }
   }]
 }], [{
-  label: 'Feedback',
-  icon: 'i-lucide-message-circle',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
+  label: 'Documentation',
+  icon: 'i-lucide-book-open',
+  to: 'https://flokoa.ai',
   target: '_blank'
 }, {
-  label: 'Help & Support',
-  icon: 'i-lucide-info',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
+  label: 'GitHub',
+  icon: 'i-simple-icons-github',
+  to: 'https://github.com/danielnyari/flokoa',
   target: '_blank'
 }]] satisfies NavigationMenuItem[][]
 
@@ -83,35 +95,10 @@ const groups = computed(() => [{
     id: 'source',
     label: 'View page source',
     icon: 'i-simple-icons-github',
-    to: `https://github.com/nuxt-ui-templates/dashboard/blob/main/app/pages${route.path === '/' ? '/index' : route.path}.vue`,
+    to: `https://github.com/danielnyari/flokoa/blob/main/ui/app/pages${route.path === '/' ? '/index' : route.path}.vue`,
     target: '_blank'
   }]
 }])
-
-onMounted(async () => {
-  const cookie = useCookie('cookie-consent')
-  if (cookie.value === 'accepted') {
-    return
-  }
-
-  toast.add({
-    title: 'We use first-party cookies to enhance your experience on our website.',
-    duration: 0,
-    close: false,
-    actions: [{
-      label: 'Accept',
-      color: 'neutral',
-      variant: 'outline',
-      onClick: () => {
-        cookie.value = 'accepted'
-      }
-    }, {
-      label: 'Opt out',
-      color: 'neutral',
-      variant: 'ghost'
-    }]
-  })
-})
 </script>
 
 <template>
@@ -125,7 +112,10 @@ onMounted(async () => {
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <TeamsMenu :collapsed="collapsed" />
+        <div :class="['flex items-center gap-2 px-2 py-1', collapsed && 'justify-center']">
+          <UIcon name="i-lucide-hexagon" class="size-6 text-primary shrink-0" />
+          <span v-if="!collapsed" class="font-semibold text-highlighted">Flokoa</span>
+        </div>
       </template>
 
       <template #default="{ collapsed }">
@@ -156,7 +146,5 @@ onMounted(async () => {
     <UDashboardSearch :groups="groups" />
 
     <slot />
-
-    <NotificationsSlideover />
   </UDashboardGroup>
 </template>

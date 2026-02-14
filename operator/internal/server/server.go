@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -17,6 +19,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
+	uiFS "github.com/danielnyari/flokoa/ui"
 )
 
 // Server wraps the gRPC server and its configuration.
@@ -111,7 +114,21 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// startHTTPGateway starts the HTTP/REST gateway with Swagger UI.
+// hasUIFiles checks whether the embedded UI dist directory contains actual built files.
+func hasUIFiles() bool {
+	entries, err := fs.ReadDir(uiFS.DistFS, "dist")
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.Name() != ".gitkeep" {
+			return true
+		}
+	}
+	return false
+}
+
+// startHTTPGateway starts the HTTP/REST gateway with embedded UI.
 func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// Create gRPC-Gateway mux
 	gwMux := runtime.NewServeMux(
@@ -157,21 +174,52 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		}
 	})
 
-	// Root redirect to Swagger UI
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			http.Redirect(w, r, "/swagger/", http.StatusMovedPermanently)
-			return
+	// Serve embedded UI or fallback to Swagger UI redirect
+	if hasUIFiles() {
+		s.log.Info("Serving embedded UI")
+		distSubFS, err := fs.Sub(uiFS.DistFS, "dist")
+		if err != nil {
+			return fmt.Errorf("failed to create sub filesystem for UI: %w", err)
 		}
-		http.NotFound(w, r)
-	})
+		fileServer := http.FileServer(http.FS(distSubFS))
+
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// Let /api/, /swagger/, /healthz be handled by their own handlers
+			path := r.URL.Path
+			if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/swagger/") || path == "/healthz" {
+				http.NotFound(w, r)
+				return
+			}
+
+			// Try to serve the file directly
+			// For SPA routing, serve index.html for paths that don't match a static file
+			f, err := distSubFS.Open(strings.TrimPrefix(path, "/"))
+			if err != nil {
+				// File not found - serve index.html for SPA client-side routing
+				r.URL.Path = "/"
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			f.Close()
+			fileServer.ServeHTTP(w, r)
+		})
+	} else {
+		s.log.Info("No embedded UI found, redirecting to Swagger UI")
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				http.Redirect(w, r, "/swagger/", http.StatusMovedPermanently)
+				return
+			}
+			http.NotFound(w, r)
+		})
+	}
 
 	s.httpServer = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.httpPort),
 		Handler: corsMiddleware(mux),
 	}
 
-	s.log.Info("Starting HTTP gateway with Swagger UI", "port", s.httpPort, "swagger-ui", fmt.Sprintf("http://localhost:%d/swagger/", s.httpPort))
+	s.log.Info("Starting HTTP gateway", "port", s.httpPort, "swagger-ui", fmt.Sprintf("http://localhost:%d/swagger/", s.httpPort))
 
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
