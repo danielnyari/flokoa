@@ -26,17 +26,17 @@ func NewModelService(c client.Client) *ModelService {
 
 // GetModel retrieves a Model by name and namespace.
 func (s *ModelService) GetModel(ctx context.Context, req *pb.GetModelRequest) (*pb.Model, error) {
-	if req.Name == "" || req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "name and namespace are required")
+	if req.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
 	var model agentv1alpha1.Model
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &model); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "model not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
 	return converter.ModelToProto(&model), nil
@@ -55,11 +55,11 @@ func (s *ModelService) ListModels(ctx context.Context, req *pb.ListModelsRequest
 		if req.Options.LabelSelector != "" {
 			selector, err := metav1.ParseToLabelSelector(req.Options.LabelSelector)
 			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, "invalid label selector")
+				return nil, status.Errorf(codes.InvalidArgument, "invalid label selector: %s", err.Error())
 			}
 			labelSelector, err := metav1.LabelSelectorAsSelector(selector)
 			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, "invalid label selector")
+				return nil, status.Errorf(codes.InvalidArgument, "invalid label selector: %s", err.Error())
 			}
 			opts = append(opts, client.MatchingLabelsSelector{Selector: labelSelector})
 		}
@@ -74,7 +74,7 @@ func (s *ModelService) ListModels(ctx context.Context, req *pb.ListModelsRequest
 	}
 
 	if err := s.client.List(ctx, &modelList, opts...); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
 	return converter.ModelListToProto(&modelList), nil
@@ -85,14 +85,29 @@ func (s *ModelService) CreateModel(ctx context.Context, req *pb.CreateModelReque
 	if req.Model == nil {
 		return nil, status.Error(codes.InvalidArgument, "model is required")
 	}
+	if req.Model.Metadata == nil || req.Model.Metadata.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "model metadata.name is required")
+	}
+	if req.Model.Spec == nil {
+		return nil, status.Error(codes.InvalidArgument, "model spec is required")
+	}
+	if req.Model.Spec.Model == "" {
+		return nil, status.Error(codes.InvalidArgument, "model spec.model is required")
+	}
+	if req.Model.Spec.ProviderRef == nil || req.Model.Spec.ProviderRef.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "model spec.provider_ref.name is required")
+	}
 
 	model := converter.ModelFromProto(req.Model)
 	if req.Namespace != "" {
 		model.Namespace = req.Namespace
 	}
+	if model.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required (via request namespace or model metadata)")
+	}
 
 	if err := s.client.Create(ctx, model); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
 	return converter.ModelToProto(model), nil
@@ -103,26 +118,27 @@ func (s *ModelService) UpdateModel(ctx context.Context, req *pb.UpdateModelReque
 	if req.Model == nil {
 		return nil, status.Error(codes.InvalidArgument, "model is required")
 	}
+	if req.Model.Metadata == nil {
+		return nil, status.Error(codes.InvalidArgument, "model metadata is required")
+	}
+	if req.Model.Metadata.Name == "" || req.Model.Metadata.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "model metadata.name and metadata.namespace are required")
+	}
 
-	// Get existing model
 	var existing agentv1alpha1.Model
 	key := client.ObjectKey{
 		Namespace: req.Model.Metadata.Namespace,
 		Name:      req.Model.Metadata.Name,
 	}
 	if err := s.client.Get(ctx, key, &existing); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "model not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
-	// Apply update
 	updated := converter.ModelFromProto(req.Model)
 	updated.ResourceVersion = existing.ResourceVersion
 
 	if err := s.client.Update(ctx, updated); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
 	return converter.ModelToProto(updated), nil
@@ -130,8 +146,11 @@ func (s *ModelService) UpdateModel(ctx context.Context, req *pb.UpdateModelReque
 
 // DeleteModel deletes a Model.
 func (s *ModelService) DeleteModel(ctx context.Context, req *pb.DeleteModelRequest) (*pb.DeleteModelResponse, error) {
-	if req.Name == "" || req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "name and namespace are required")
+	if req.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
 	model := &agentv1alpha1.Model{}
@@ -139,43 +158,50 @@ func (s *ModelService) DeleteModel(ctx context.Context, req *pb.DeleteModelReque
 	model.Namespace = req.Namespace
 
 	if err := s.client.Delete(ctx, model); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "model not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
 	return &pb.DeleteModelResponse{}, nil
 }
 
 // WatchModels watches for changes to Models.
-func (s *ModelService) WatchModels(req *pb.WatchModelsRequest, stream pb.ModelService_WatchModelsServer) error {
-	return status.Error(codes.Unimplemented, "watch not yet implemented")
+func (s *ModelService) WatchModels(_ *pb.WatchModelsRequest, _ pb.ModelService_WatchModelsServer) error {
+	return status.Error(codes.Unimplemented, "watch not yet implemented: requires informer-based streaming")
 }
 
 // UpdateModelStatus updates only the status subresource.
 func (s *ModelService) UpdateModelStatus(ctx context.Context, req *pb.UpdateModelStatusRequest) (*pb.Model, error) {
-	if req.Name == "" || req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "name and namespace are required")
+	if req.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	if req.Status == nil {
+		return nil, status.Error(codes.InvalidArgument, "status is required")
 	}
 
 	var model agentv1alpha1.Model
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &model); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "model not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
-	// Update status fields
-	if req.Status != nil {
-		model.Status.Ready = req.Status.Ready
-		model.Status.ObservedGeneration = req.Status.ObservedGeneration
+	model.Status.Ready = req.Status.Ready
+	model.Status.ObservedGeneration = req.Status.ObservedGeneration
+	if req.Status.ResolvedProvider != nil {
+		model.Status.ResolvedProvider = &agentv1alpha1.ResolvedProviderInfo{
+			Provider:  converter.ProviderTypeFromProto(req.Status.ResolvedProvider.Provider),
+			Namespace: req.Status.ResolvedProvider.Namespace,
+			Name:      req.Status.ResolvedProvider.Name,
+		}
+	}
+	if req.Status.Conditions != nil {
+		model.Status.Conditions = converter.ConditionsFromProto(req.Status.Conditions)
 	}
 
 	if err := s.client.Status().Update(ctx, &model); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "model")
 	}
 
 	return converter.ModelToProto(&model), nil

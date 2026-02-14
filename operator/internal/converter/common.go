@@ -101,6 +101,36 @@ func ConditionsToProto(conditions []metav1.Condition) []*pb.Condition {
 	return result
 }
 
+// ConditionFromProto converts proto Condition to Kubernetes.
+func ConditionFromProto(proto *pb.Condition) metav1.Condition {
+	cond := metav1.Condition{
+		Type:               proto.Type,
+		Status:             metav1.ConditionStatus(proto.Status),
+		ObservedGeneration: proto.ObservedGeneration,
+		Reason:             proto.Reason,
+		Message:            proto.Message,
+	}
+
+	if proto.LastTransitionTime != nil {
+		cond.LastTransitionTime = metav1.NewTime(proto.LastTransitionTime.AsTime())
+	}
+
+	return cond
+}
+
+// ConditionsFromProto converts a slice of proto Conditions to Kubernetes.
+func ConditionsFromProto(conditions []*pb.Condition) []metav1.Condition {
+	if conditions == nil {
+		return nil
+	}
+
+	result := make([]metav1.Condition, len(conditions))
+	for i := range conditions {
+		result[i] = ConditionFromProto(conditions[i])
+	}
+	return result
+}
+
 // ListMetaToProto converts Kubernetes ListMeta to proto.
 func ListMetaToProto(meta *metav1.ListMeta) *pb.ListMeta {
 	if meta == nil {

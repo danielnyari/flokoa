@@ -1,0 +1,106 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-agent
+  failurePolicy: Fail
+  name: vagent-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - agents
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-agenttool
+  failurePolicy: Fail
+  name: vagenttool-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - agenttools
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-instruction
+  failurePolicy: Fail
+  name: vinstruction-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - instructions
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-model
+  failurePolicy: Fail
+  name: vmodel-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - models
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-modelprovider
+  failurePolicy: Fail
+  name: vmodelprovider-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - modelproviders
+  sideEffects: None
