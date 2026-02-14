@@ -26,17 +26,17 @@ func NewAgentToolService(c client.Client) *AgentToolService {
 
 // GetAgentTool retrieves an AgentTool by name and namespace.
 func (s *AgentToolService) GetAgentTool(ctx context.Context, req *pb.GetAgentToolRequest) (*pb.AgentTool, error) {
-	if req.Name == "" || req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "name and namespace are required")
+	if req.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
 	var tool agentv1alpha1.AgentTool
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &tool); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "agent tool not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(&tool), nil
@@ -55,11 +55,11 @@ func (s *AgentToolService) ListAgentTools(ctx context.Context, req *pb.ListAgent
 		if req.Options.LabelSelector != "" {
 			selector, err := metav1.ParseToLabelSelector(req.Options.LabelSelector)
 			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, "invalid label selector")
+				return nil, status.Errorf(codes.InvalidArgument, "invalid label selector: %s", err.Error())
 			}
 			labelSelector, err := metav1.LabelSelectorAsSelector(selector)
 			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, "invalid label selector")
+				return nil, status.Errorf(codes.InvalidArgument, "invalid label selector: %s", err.Error())
 			}
 			opts = append(opts, client.MatchingLabelsSelector{Selector: labelSelector})
 		}
@@ -74,7 +74,7 @@ func (s *AgentToolService) ListAgentTools(ctx context.Context, req *pb.ListAgent
 	}
 
 	if err := s.client.List(ctx, &toolList, opts...); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
 	return converter.AgentToolListToProto(&toolList), nil
@@ -85,14 +85,23 @@ func (s *AgentToolService) CreateAgentTool(ctx context.Context, req *pb.CreateAg
 	if req.AgentTool == nil {
 		return nil, status.Error(codes.InvalidArgument, "agent_tool is required")
 	}
+	if req.AgentTool.Metadata == nil || req.AgentTool.Metadata.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "agent_tool metadata.name is required")
+	}
+	if req.AgentTool.Spec == nil {
+		return nil, status.Error(codes.InvalidArgument, "agent_tool spec is required")
+	}
 
 	tool := converter.AgentToolFromProto(req.AgentTool)
 	if req.Namespace != "" {
 		tool.Namespace = req.Namespace
 	}
+	if tool.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required (via request namespace or agent_tool metadata)")
+	}
 
 	if err := s.client.Create(ctx, tool); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(tool), nil
@@ -103,26 +112,27 @@ func (s *AgentToolService) UpdateAgentTool(ctx context.Context, req *pb.UpdateAg
 	if req.AgentTool == nil {
 		return nil, status.Error(codes.InvalidArgument, "agent_tool is required")
 	}
+	if req.AgentTool.Metadata == nil {
+		return nil, status.Error(codes.InvalidArgument, "agent_tool metadata is required")
+	}
+	if req.AgentTool.Metadata.Name == "" || req.AgentTool.Metadata.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "agent_tool metadata.name and metadata.namespace are required")
+	}
 
-	// Get existing tool
 	var existing agentv1alpha1.AgentTool
 	key := client.ObjectKey{
 		Namespace: req.AgentTool.Metadata.Namespace,
 		Name:      req.AgentTool.Metadata.Name,
 	}
 	if err := s.client.Get(ctx, key, &existing); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "agent tool not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
-	// Apply update
 	updated := converter.AgentToolFromProto(req.AgentTool)
 	updated.ResourceVersion = existing.ResourceVersion
 
 	if err := s.client.Update(ctx, updated); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(updated), nil
@@ -130,8 +140,11 @@ func (s *AgentToolService) UpdateAgentTool(ctx context.Context, req *pb.UpdateAg
 
 // DeleteAgentTool deletes an AgentTool.
 func (s *AgentToolService) DeleteAgentTool(ctx context.Context, req *pb.DeleteAgentToolRequest) (*pb.DeleteAgentToolResponse, error) {
-	if req.Name == "" || req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "name and namespace are required")
+	if req.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
 	tool := &agentv1alpha1.AgentTool{}
@@ -139,42 +152,42 @@ func (s *AgentToolService) DeleteAgentTool(ctx context.Context, req *pb.DeleteAg
 	tool.Namespace = req.Namespace
 
 	if err := s.client.Delete(ctx, tool); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "agent tool not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
 	return &pb.DeleteAgentToolResponse{}, nil
 }
 
 // WatchAgentTools watches for changes to AgentTools.
-func (s *AgentToolService) WatchAgentTools(req *pb.WatchAgentToolsRequest, stream pb.AgentToolService_WatchAgentToolsServer) error {
-	return status.Error(codes.Unimplemented, "watch not yet implemented")
+func (s *AgentToolService) WatchAgentTools(_ *pb.WatchAgentToolsRequest, _ pb.AgentToolService_WatchAgentToolsServer) error {
+	return status.Error(codes.Unimplemented, "watch not yet implemented: requires informer-based streaming")
 }
 
 // UpdateAgentToolStatus updates only the status subresource.
 func (s *AgentToolService) UpdateAgentToolStatus(ctx context.Context, req *pb.UpdateAgentToolStatusRequest) (*pb.AgentTool, error) {
-	if req.Name == "" || req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "name and namespace are required")
+	if req.Namespace == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	if req.Status == nil {
+		return nil, status.Error(codes.InvalidArgument, "status is required")
 	}
 
 	var tool agentv1alpha1.AgentTool
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &tool); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, status.Error(codes.NotFound, "agent tool not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
-	// Update status fields
-	if req.Status != nil {
-		tool.Status.ObservedGeneration = req.Status.ObservedGeneration
+	tool.Status.ObservedGeneration = req.Status.ObservedGeneration
+	if req.Status.Conditions != nil {
+		tool.Status.Conditions = converter.ConditionsFromProto(req.Status.Conditions)
 	}
 
 	if err := s.client.Status().Update(ctx, &tool); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapKubernetesError(err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(&tool), nil
