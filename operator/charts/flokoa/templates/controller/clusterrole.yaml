@@ -1,0 +1,83 @@
+{{- if .Values.controller.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}-manager
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+rules:
+  # Core resources
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  # Flokoa CRD resources
+  - apiGroups:
+      - agent.flokoa.ai
+    resources:
+      - agents
+      - agenttools
+      - instructions
+      - modelproviders
+      - models
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - agent.flokoa.ai
+    resources:
+      - agents/finalizers
+      - agenttools/finalizers
+      - instructions/finalizers
+      - modelproviders/finalizers
+      - models/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - agent.flokoa.ai
+    resources:
+      - agents/status
+      - agenttools/status
+      - instructions/status
+      - modelproviders/status
+      - models/status
+    verbs:
+      - get
+      - patch
+      - update
+  # Deployments for agent runtimes
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+{{- end }}

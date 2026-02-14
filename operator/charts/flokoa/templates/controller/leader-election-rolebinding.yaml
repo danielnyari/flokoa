@@ -1,0 +1,17 @@
+{{- if and .Values.controller.rbac.create .Values.controller.leaderElection.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}-leader-election
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "flokoa.controller.fullname" . }}-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flokoa.controller.serviceAccountName" . }}
+    namespace: {{ include "flokoa.namespace" . }}
+{{- end }}

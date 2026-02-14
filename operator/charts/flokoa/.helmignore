@@ -1,0 +1,23 @@
+# Patterns to ignore when building packages.
+.DS_Store
+# Version control
+.git
+.gitignore
+.bzr
+.bzrignore
+.hg
+.hgignore
+.svn
+# IDE
+.idea
+*.swp
+*.swo
+*~
+.vscode
+# CI
+.github
+.circleci
+.travis.yml
+# Testing
+tests/
+ci/

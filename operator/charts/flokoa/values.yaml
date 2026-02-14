@@ -1,0 +1,285 @@
+# -- Global image settings
+images:
+  # -- Global image pull policy
+  pullPolicy: IfNotPresent
+  # -- Global image pull secrets
+  pullSecrets: []
+
+# -- Override the release name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+# -- Common labels applied to all resources
+commonLabels: {}
+# -- Common annotations applied to all resources
+commonAnnotations: {}
+
+# -- CRD configuration
+crds:
+  # -- Install CRDs with the chart. CRDs are rendered from files/crds/ as raw YAML.
+  # To keep CRDs on uninstall, annotate them post-install:
+  #   kubectl annotate crd agents.agent.flokoa.ai helm.sh/resource-policy=keep
+  install: true
+
+# =============================================================================
+# Controller (Operator)
+# =============================================================================
+controller:
+  image:
+    # -- Controller image registry
+    registry: ghcr.io
+    # -- Controller image repository
+    repository: danielnyari/flokoa-operator
+    # -- Controller image tag (defaults to appVersion)
+    tag: ""
+
+  # -- Number of controller replicas
+  replicas: 1
+
+  # -- Controller resource requests and limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+  # -- Controller pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  # -- Controller container security context
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  serviceAccount:
+    # -- Create a service account for the controller
+    create: true
+    # -- Service account name (generated if not set)
+    name: ""
+    # -- Extra annotations on the service account
+    annotations: {}
+
+  rbac:
+    # -- Create RBAC resources for the controller
+    create: true
+
+  # -- Leader election configuration
+  leaderElection:
+    enabled: true
+
+  # -- Metrics bind address (set to ":8443" for HTTPS metrics, "0" to disable)
+  metricsBindAddress: ":8443"
+
+  # -- Health probe bind address
+  healthProbeBindAddress: ":8081"
+
+  # -- Extra args passed to the controller binary
+  extraArgs: []
+
+  # -- Extra environment variables for the controller
+  extraEnv: []
+
+  # -- Node selector for controller pods
+  nodeSelector: {}
+  # -- Tolerations for controller pods
+  tolerations: []
+  # -- Affinity rules for controller pods
+  affinity: {}
+  # -- Topology spread constraints for controller pods
+  topologySpreadConstraints: []
+
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Pod labels
+  podLabels: {}
+
+  metrics:
+    # -- Enable metrics service
+    enabled: true
+    service:
+      # -- Metrics service port
+      port: 8443
+      # -- Metrics service type
+      type: ClusterIP
+
+    serviceMonitor:
+      # -- Create a Prometheus ServiceMonitor
+      enabled: false
+      # -- Extra labels on the ServiceMonitor
+      labels: {}
+      # -- Metrics endpoint scheme
+      scheme: https
+      # -- TLS config for the metrics endpoint
+      tlsConfig:
+        insecureSkipVerify: true
+
+    networkPolicy:
+      # -- Create a NetworkPolicy for metrics traffic
+      enabled: false
+
+  # -- Pod disruption budget
+  pdb:
+    enabled: false
+    minAvailable: 1
+    # maxUnavailable: 1
+
+# =============================================================================
+# Server (gRPC + HTTP API)
+# =============================================================================
+server:
+  # -- Enable the server component
+  enabled: true
+
+  image:
+    # -- Server image registry
+    registry: ghcr.io
+    # -- Server image repository
+    repository: danielnyari/flokoa-server
+    # -- Server image tag (defaults to appVersion)
+    tag: ""
+
+  # -- Number of server replicas
+  replicas: 1
+
+  # -- Server resource requests and limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # -- Server pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  # -- Server container security context
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+
+  service:
+    # -- Server service type
+    type: ClusterIP
+    # -- gRPC service port
+    grpcPort: 50051
+    # -- HTTP service port
+    httpPort: 8080
+
+  ingress:
+    # -- Enable ingress for the server
+    enabled: false
+    # -- Ingress class name
+    className: ""
+    # -- Ingress annotations
+    annotations: {}
+    # -- Ingress hosts
+    hosts: []
+    #  - host: flokoa.example.com
+    #    paths:
+    #      - path: /
+    #        pathType: Prefix
+    # -- Ingress TLS configuration
+    tls: []
+
+  autoscaling:
+    # -- Enable horizontal pod autoscaler
+    enabled: false
+    # -- Minimum replicas
+    minReplicas: 1
+    # -- Maximum replicas
+    maxReplicas: 5
+    # -- Target CPU utilization percentage
+    targetCPUUtilizationPercentage: 80
+    # -- Target memory utilization percentage
+    # targetMemoryUtilizationPercentage: 80
+
+  # -- Extra environment variables for the server
+  extraEnv: []
+
+  # -- Node selector for server pods
+  nodeSelector: {}
+  # -- Tolerations for server pods
+  tolerations: []
+  # -- Affinity rules for server pods
+  affinity: {}
+  # -- Topology spread constraints for server pods
+  topologySpreadConstraints: []
+
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Pod labels
+  podLabels: {}
+
+  # -- Pod disruption budget
+  pdb:
+    enabled: false
+    minAvailable: 1
+    # maxUnavailable: 1
+
+# =============================================================================
+# Argo Workflows Integration (optional)
+# =============================================================================
+argo:
+  # -- Enable Argo Workflows integration
+  enabled: false
+
+  a2aPlugin:
+    # -- Deploy the A2A executor plugin
+    enabled: true
+
+    image:
+      # -- A2A plugin image registry
+      registry: ghcr.io
+      # -- A2A plugin image repository
+      repository: danielnyari/flokoa-a2a-plugin
+      # -- A2A plugin image tag (defaults to appVersion)
+      tag: ""
+
+    # -- Namespace where the Argo executor plugin will be created
+    namespace: argo
+
+    # -- Plugin resource requests and limits
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+
+    # -- Plugin container security context
+    securityContext:
+      runAsNonRoot: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+
+# =============================================================================
+# Extra manifests
+# =============================================================================
+# -- Extra Kubernetes manifests to deploy alongside the chart.
+# Each entry can be a string (rendered as template) or a map.
+extraObjects: []
+#  - apiVersion: v1
+#    kind: ConfigMap
+#    metadata:
+#      name: my-extra-config
+#    data:
+#      key: value
