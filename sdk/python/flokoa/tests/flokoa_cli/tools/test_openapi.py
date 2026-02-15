@@ -17,12 +17,6 @@ import pytest
 import yaml
 from pydantic_ai import FunctionToolset, RunContext, Tool
 
-from flokoa.auth.auth_credential import (
-    AuthCredential,
-    AuthCredentialTypes,
-    HttpAuth,
-    HttpCredentials,
-)
 from flokoa.tools.openapi import (
     OpenAPIDeps,
     OpenAPIToolset,

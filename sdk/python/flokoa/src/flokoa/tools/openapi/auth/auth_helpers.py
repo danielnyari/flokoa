@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import httpx
@@ -32,6 +33,8 @@ from ....auth.auth_credential import (
 from ....auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
 from ..common import ApiParameter
 
+logger = logging.getLogger("flokoa." + __name__)
+
 
 class OpenIdConfig(BaseModel):
     """Represents OpenID Connect configuration.
@@ -41,6 +44,7 @@ class OpenIdConfig(BaseModel):
         auth_uri: The authorization URI.
         token_uri: The token URI.
         client_secret: The client secret.
+        redirect_uri: The redirect URI.
 
     Example:
         config = OpenIdConfig(
@@ -48,7 +52,7 @@ class OpenIdConfig(BaseModel):
             auth_uri="https://accounts.google.com/o/oauth2/auth",
             token_uri="https://oauth2.googleapis.com/token",
             client_secret="your_client_secret",
-            redirect
+            redirect_uri="http://localhost:8080/callback",
         )
     """
 
@@ -56,7 +60,7 @@ class OpenIdConfig(BaseModel):
     auth_uri: str
     token_uri: str
     client_secret: str
-    redirect_uri: Optional[str]
+    redirect_uri: Optional[str] = None
 
 
 def token_to_scheme_credential(
@@ -283,18 +287,34 @@ def openid_url_to_scheme_credential(
 INTERNAL_AUTH_PREFIX = "_auth_prefix_vaf_"
 
 
+def _bearer_param_and_kwargs(
+    token: str,
+    description: str = "Bearer token",
+) -> Tuple[ApiParameter, Dict[str, Any]]:
+    """Creates a Bearer Authorization header parameter and matching kwargs."""
+    param = ApiParameter(
+        original_name="Authorization",
+        param_location="header",
+        param_schema=Schema(type="string"),
+        description=description,
+        py_name=INTERNAL_AUTH_PREFIX + "Authorization",
+    )
+    kwargs = {param.py_name: f"Bearer {token}"}
+    return param, kwargs
+
+
 def credential_to_param(
     auth_scheme: AuthScheme,
     auth_credential: AuthCredential,
 ) -> Tuple[Optional[ApiParameter], Optional[Dict[str, Any]]]:
     """Converts AuthCredential and AuthScheme to a Parameter and a dictionary for additional kwargs.
 
-    This function now supports all credential types returned by the exchangers:
+    This function supports all credential types returned by the exchangers:
     - API Key
-    - HTTP Bearer (for Bearer tokens, OAuth2, Service Account, OpenID Connect)
-    - OAuth2 and OpenID Connect (returns None, None, as the token is now a Bearer
-    token)
-    - Service Account (returns None, None, as the token is now a Bearer token)
+    - HTTP Bearer (native HTTPBearer scheme)
+    - OpenID Connect (bearer token from OIDC exchange)
+    - OAuth2 (bearer token from OAuth2 exchange)
+    - Service Account (bearer token from service account exchange)
 
     Args:
         auth_scheme: The AuthScheme object.
@@ -306,7 +326,8 @@ def credential_to_param(
     if not auth_credential:
         return None, None
 
-    if auth_scheme.type_ == AuthSchemeType.apiKey and auth_credential and auth_credential.api_key:
+    # --- API Key ---
+    if auth_scheme.type_ == AuthSchemeType.apiKey and auth_credential.api_key:
         param_name = auth_scheme.name or ""
         python_name = INTERNAL_AUTH_PREFIX + param_name
         if auth_scheme.in_ == APIKeyIn.header:
@@ -328,64 +349,132 @@ def credential_to_param(
         kwargs = {param.py_name: auth_credential.api_key}
         return param, kwargs
 
-    # TODO(cheliu): Split handling for OpenIDConnect scheme and native HTTPBearer
-    # Scheme
-    elif auth_credential and auth_credential.auth_type == AuthCredentialTypes.HTTP:
+    # --- OpenID Connect scheme ---
+    # OpenID Connect credentials are exchanged into HTTP bearer tokens by
+    # OAuth2CredentialExchanger.  If the credential has already been exchanged
+    # (auth_type == HTTP with a bearer token), emit the Authorization header.
+    # If it still carries raw OAuth2 data (pre-exchange), return None so the
+    # caller can trigger exchange first.
+    if auth_scheme.type_ == AuthSchemeType.openIdConnect:
         if (
-            auth_credential
+            auth_credential.auth_type == AuthCredentialTypes.HTTP
             and auth_credential.http
             and auth_credential.http.credentials
             and auth_credential.http.credentials.token
         ):
-            param = ApiParameter(
-                original_name="Authorization",
-                param_location="header",
-                param_schema=Schema(type="string"),
-                description=auth_scheme.description or "Bearer token",
-                py_name=INTERNAL_AUTH_PREFIX + "Authorization",
+            return _bearer_param_and_kwargs(
+                auth_credential.http.credentials.token,
+                description=auth_scheme.description or "OpenID Connect bearer token",
             )
-            kwargs = {param.py_name: f"Bearer {auth_credential.http.credentials.token}"}
-            return param, kwargs
-        elif (
-            auth_credential
+        # Credential has not been exchanged yet
+        return None, None
+
+    # --- OAuth2 scheme ---
+    if auth_scheme.type_ == AuthSchemeType.oauth2:
+        if (
+            auth_credential.auth_type == AuthCredentialTypes.HTTP
             and auth_credential.http
+            and auth_credential.http.credentials
+            and auth_credential.http.credentials.token
+        ):
+            return _bearer_param_and_kwargs(
+                auth_credential.http.credentials.token,
+                description=auth_scheme.description or "OAuth2 bearer token",
+            )
+        return None, None
+
+    # --- Native HTTP scheme (Bearer / other) ---
+    if auth_credential.auth_type == AuthCredentialTypes.HTTP:
+        if (
+            auth_credential.http
+            and auth_credential.http.credentials
+            and auth_credential.http.credentials.token
+        ):
+            return _bearer_param_and_kwargs(
+                auth_credential.http.credentials.token,
+                description=auth_scheme.description or "Bearer token",
+            )
+        if (
+            auth_credential.http
             and auth_credential.http.credentials
             and (auth_credential.http.credentials.username or auth_credential.http.credentials.password)
         ):
-            # Basic Auth is explicitly NOT supported
             raise NotImplementedError("Basic Authentication is not supported.")
-        else:
-            raise ValueError("Invalid HTTP auth credentials")
+        raise ValueError("Invalid HTTP auth credentials")
 
-    # Service Account tokens, OAuth2 Tokens and OpenID Tokens are now handled as
-    # Bearer tokens.
-    elif (auth_scheme.type_ == AuthSchemeType.oauth2 and auth_credential) or (
-        auth_scheme.type_ == AuthSchemeType.openIdConnect and auth_credential
-    ):
-        if auth_credential.http and auth_credential.http.credentials and auth_credential.http.credentials.token:
-            param = ApiParameter(
-                original_name="Authorization",
-                param_location="header",
-                param_schema=Schema(type="string"),
-                description=auth_scheme.description or "Bearer token",
-                py_name=INTERNAL_AUTH_PREFIX + "Authorization",
-            )
-            kwargs = {param.py_name: f"Bearer {auth_credential.http.credentials.token}"}
-            return param, kwargs
-        return None, None
-    else:
-        raise ValueError("Invalid security scheme and credential combination")
+    raise ValueError("Invalid security scheme and credential combination")
+
+
+def resolve_openid_connect_scheme(
+    openid_connect_url: str,
+) -> OpenIdConnectWithConfig:
+    """Fetches the OpenID Connect discovery document and returns a fully resolved scheme.
+
+    Retrieves the ``/.well-known/openid-configuration`` document from the
+    provider and maps the standard discovery fields to an
+    ``OpenIdConnectWithConfig`` instance.
+
+    Args:
+        openid_connect_url: The OpenID Connect discovery URL
+            (e.g. ``https://accounts.google.com/.well-known/openid-configuration``).
+
+    Returns:
+        An ``OpenIdConnectWithConfig`` with endpoints populated from the
+        discovery document.
+
+    Raises:
+        ValueError: If the URL cannot be fetched, returns invalid JSON, or
+            is missing the required ``authorization_endpoint`` and
+            ``token_endpoint`` fields.
+    """
+    try:
+        response = httpx.get(openid_connect_url, timeout=10)
+        response.raise_for_status()
+        config = response.json()
+    except httpx.RequestError as e:
+        raise ValueError(
+            f"Failed to fetch OpenID Connect discovery document from {openid_connect_url}: {e}"
+        ) from e
+    except ValueError as e:
+        raise ValueError(
+            f"Invalid JSON in OpenID Connect discovery document from {openid_connect_url}: {e}"
+        ) from e
+
+    authorization_endpoint = config.get("authorization_endpoint")
+    token_endpoint = config.get("token_endpoint")
+    if not authorization_endpoint or not token_endpoint:
+        raise ValueError(
+            f"OpenID Connect discovery document at {openid_connect_url} is missing "
+            "required 'authorization_endpoint' and/or 'token_endpoint' fields."
+        )
+
+    return OpenIdConnectWithConfig(
+        openIdConnectUrl=openid_connect_url,
+        authorization_endpoint=authorization_endpoint,
+        token_endpoint=token_endpoint,
+        userinfo_endpoint=config.get("userinfo_endpoint"),
+        revocation_endpoint=config.get("revocation_endpoint"),
+        token_endpoint_auth_methods_supported=config.get("token_endpoint_auth_methods_supported"),
+        grant_types_supported=config.get("grant_types_supported"),
+        scopes=config.get("scopes_supported"),
+    )
 
 
 def dict_to_auth_scheme(data: Dict[str, Any]) -> AuthScheme:
     """Converts a dictionary to a FastAPI AuthScheme object.
 
+    For ``openIdConnect`` schemes that include an ``openIdConnectUrl``, this
+    function fetches the discovery document and returns a fully resolved
+    ``OpenIdConnectWithConfig`` instead of a bare ``OpenIdConnect`` stub.
+    If the discovery fetch fails, it falls back to the basic
+    ``OpenIdConnect`` model.
+
     Args:
         data: The dictionary representing the security scheme.
 
     Returns:
-        A AuthScheme object (APIKey, HTTPBase, OAuth2, OpenIdConnect, or
-        HTTPBearer).
+        A AuthScheme object (APIKey, HTTPBase, OAuth2, OpenIdConnectWithConfig,
+        OpenIdConnect, or HTTPBearer).
 
     Raises:
         ValueError: If the 'type' field is missing or invalid, or if the
@@ -443,6 +532,23 @@ def dict_to_auth_scheme(data: Dict[str, Any]) -> AuthScheme:
         elif security_type == "oauth2":
             return OAuth2.model_validate(data)
         elif security_type == "openIdConnect":
+            # If the dict already contains endpoint fields, build
+            # OpenIdConnectWithConfig directly (user-provided config).
+            if "authorization_endpoint" in data and "token_endpoint" in data:
+                return OpenIdConnectWithConfig.model_validate(data)
+
+            # Attempt to fetch and resolve the discovery document.
+            openid_url = data.get("openIdConnectUrl")
+            if openid_url:
+                try:
+                    return resolve_openid_connect_scheme(openid_url)
+                except ValueError:
+                    logger.warning(
+                        "Failed to resolve OpenID Connect discovery for %s; "
+                        "falling back to basic OpenIdConnect scheme.",
+                        openid_url,
+                    )
+
             return OpenIdConnect.model_validate(data)
         else:
             raise ValueError(f"Invalid security scheme type: {security_type}")

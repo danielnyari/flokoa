@@ -23,9 +23,9 @@ import httpx
 from fastapi.openapi.models import Operation, Schema
 from pydantic_ai import RunContext, Tool
 
-from ..utils import _to_snake_case
 from ...auth.auth_credential import AuthCredential
 from ...auth.auth_schemes import AuthScheme
+from ..utils import _to_snake_case
 from .auth.auth_helpers import credential_to_param
 from .auth.credential_exchangers.auto_auth_credential_exchanger import AutoAuthCredentialExchanger
 from .common import ApiParameter
@@ -321,7 +321,6 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
         # Parse response
         try:
             response.raise_for_status()
-            return response.json()
         except httpx.HTTPStatusError:
             error_details = response.content.decode("utf-8")
             logger.warning(
@@ -336,9 +335,30 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
                     f" Status Code: {response.status_code}, {error_details}"
                 )
             }
-        except ValueError:
-            logger.debug("API Response (non-JSON): %s", response.text)
+
+        # Route based on Content-Type header
+        content_type = response.headers.get("content-type", "")
+        mime = content_type.split(";")[0].strip().lower()
+
+        if mime == "application/json" or mime.endswith("+json"):
+            try:
+                return response.json()
+            except ValueError:
+                logger.debug("Content-Type indicated JSON but parsing failed: %s", response.text)
+                return {"text": response.text}
+        elif mime.startswith("text/"):
             return {"text": response.text}
+        elif mime in ("application/xml", "application/xhtml+xml") or mime.endswith("+xml"):
+            return {"text": response.text, "content_type": mime}
+        elif mime == "application/octet-stream":
+            return {"binary_length": len(response.content), "content_type": mime}
+        else:
+            # Fallback: try JSON first, then text
+            try:
+                return response.json()
+            except ValueError:
+                logger.debug("API Response (non-JSON): %s", response.text)
+                return {"text": response.text}
 
     return rest_api_call
 
