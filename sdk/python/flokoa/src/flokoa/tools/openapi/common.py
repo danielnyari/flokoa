@@ -206,8 +206,28 @@ class PydocHelper:
         return param_doc
 
     @staticmethod
+    def _format_schema_doc(schema: Schema, description: str) -> str:
+        """Formats a single schema into a return-value documentation fragment."""
+        dummy_param = ApiParameter(original_name="", param_location="", param_schema=schema)
+        doc = f"Returns ({dummy_param.type_hint}): {description}"
+
+        if (schema.type or "Any") == "object" and schema.properties:
+            doc += " Object properties:\n"
+            for prop_name, prop_details in schema.properties.items():
+                prop_desc = prop_details.description or ""
+                prop_type = TypeHintHelper.get_type_hint(prop_details)
+                doc += f"        {prop_name} ({prop_type}): {prop_desc}\n"
+
+        return doc
+
+    @staticmethod
     def generate_return_doc(responses: Dict[str, Response]) -> str:
         """Generates a return value documentation string.
+
+        When the response declares multiple content types with different
+        schemas, each content type and its schema are documented so callers
+        can see the full range of possible return shapes.  When all content
+        types share the same schema, only a single entry is produced.
 
         Args:
           responses: Dict[str, TypedDict[Response]] - Response in an OpenAPI
@@ -216,8 +236,6 @@ class PydocHelper:
         Returns:
           str: The generated return value Python documentation string.
         """
-        return_doc = ""
-
         # Only consider 2xx responses for return type hinting.
         # Returns the 2xx response with the smallest status code number and with
         # content defined.
@@ -236,26 +254,28 @@ class PydocHelper:
         description = (response_details.description or "").strip()
         content = response_details.content or {}
 
-        # Generate return type hint and properties for the first response type.
-        # TODO(cheliu): Handle multiple content types.
-        for _, schema_details in content.items():
-            schema = schema_details.schema_ or {}
+        content_items = list(content.items())
 
-            # Use a dummy Parameter object for return type hinting.
-            dummy_param = ApiParameter(original_name="", param_location="", param_schema=schema)
-            return_doc = f"Returns ({dummy_param.type_hint}): {description}"
+        if len(content_items) <= 1:
+            # Single (or zero) content type — keep the compact format.
+            for _mime, schema_details in content_items:
+                schema = schema_details.schema_ or Schema()
+                return PydocHelper._format_schema_doc(schema, description)
+            return ""
 
-            response_type = schema.type or "Any"
-            if response_type != "object":
-                break
-            properties = schema.properties
-            if not properties:
-                break
-            return_doc += " Object properties:\n"
-            for prop_name, prop_details in properties.items():
-                prop_desc = prop_details.description or ""
-                prop_type = TypeHintHelper.get_type_hint(prop_details)
-                return_doc += f"        {prop_name} ({prop_type}): {prop_desc}\n"
-            break
+        # Multiple content types — check whether schemas are identical.
+        schemas = [sd.schema_ or Schema() for _, sd in content_items]
+        first_dump = schemas[0].model_dump(exclude_none=True)
+        all_same = all(s.model_dump(exclude_none=True) == first_dump for s in schemas[1:])
 
-        return return_doc
+        if all_same:
+            return PydocHelper._format_schema_doc(schemas[0], description)
+
+        # Schemas differ — document each content type separately.
+        parts: List[str] = []
+        for mime_type, schema_details in content_items:
+            schema = schema_details.schema_ or Schema()
+            part = PydocHelper._format_schema_doc(schema, description)
+            parts.append(f"    Content-Type: {mime_type}\n    {part}")
+
+        return "Multiple response content types:\n" + "\n".join(parts)
