@@ -39,7 +39,14 @@ class WorkflowStep(BaseModel):
     """Step name (derived from the node class name)."""
 
     node_class: str | None = Field(default=None, alias="nodeClass")
-    """Fully-qualified class path for single-node steps."""
+    """Fully-qualified class path for single-node steps (image mode)."""
+
+    source: str | None = None
+    """Inline Python source containing all node class definitions.
+
+    When set, the operator can embed this directly in an Argo
+    ``script.source`` field — no user code in the container image needed.
+    """
 
     bundle: WorkflowBundle | None = None
     """Present when this step wraps a cyclic subgraph."""

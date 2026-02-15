@@ -149,3 +149,59 @@ class TestCompileCyclicGraph:
         m = compile_graph(cyclic_graph, name="t", image="img:1")
         bundle_step = next(s for s in m.spec.steps if s.bundle)
         assert bundle_step.end is True
+
+
+# -- Inline mode -----------------------------------------------------------
+
+
+class TestInlineLinearGraph:
+    def test_source_is_none_by_default(self):
+        m = compile_graph(linear_graph, name="t", image="img:1")
+        for step in m.spec.steps:
+            assert step.source is None
+
+    def test_source_is_set_when_inline(self):
+        m = compile_graph(linear_graph, name="t", image="img:1", inline=True)
+        for step in m.spec.steps:
+            assert step.source is not None
+            assert len(step.source) > 0
+
+    def test_source_contains_all_node_classes(self):
+        m = compile_graph(linear_graph, name="t", image="img:1", inline=True)
+        source = m.spec.steps[0].source
+        assert "class FetchData" in source
+        assert "class ProcessData" in source
+
+    def test_all_steps_share_same_source(self):
+        m = compile_graph(linear_graph, name="t", image="img:1", inline=True)
+        sources = [s.source for s in m.spec.steps]
+        assert all(s == sources[0] for s in sources)
+
+    def test_node_class_still_set(self):
+        m = compile_graph(linear_graph, name="t", image="img:1", inline=True)
+        for step in m.spec.steps:
+            assert step.node_class is not None
+
+    def test_source_in_yaml_output(self):
+        m = compile_graph(linear_graph, name="t", image="img:1", inline=True)
+        yaml_str = m.to_yaml()
+        assert "source:" in yaml_str
+        assert "class FetchData" in yaml_str
+
+
+class TestInlineBranchingGraph:
+    def test_source_contains_all_branches(self):
+        m = compile_graph(branching_graph, name="t", image="img:1", inline=True)
+        source = m.spec.steps[0].source
+        assert "class StepA" in source
+        assert "class StepB" in source
+        assert "class StepC" in source
+
+
+class TestInlineCyclicGraph:
+    def test_bundle_step_has_source(self):
+        m = compile_graph(cyclic_graph, name="t", image="img:1", inline=True)
+        bundle_step = next(s for s in m.spec.steps if s.bundle)
+        assert bundle_step.source is not None
+        assert "class Research" in bundle_step.source
+        assert "class Review" in bundle_step.source

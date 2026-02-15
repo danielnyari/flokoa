@@ -10,6 +10,8 @@ The compiler:
 
 from __future__ import annotations
 
+import inspect
+import textwrap
 from typing import Any
 
 from flokoa.workflow._manifest import (
@@ -33,6 +35,7 @@ def compile_graph(
     namespace: str = "default",
     entrypoint: str | None = None,
     labels: dict[str, str] | None = None,
+    inline: bool = False,
 ) -> AgentWorkflowManifest:
     """Compile a ``pydantic_graph.Graph`` into an ``AgentWorkflowManifest``.
 
@@ -40,11 +43,16 @@ def compile_graph(
         graph: A ``pydantic_graph.Graph`` instance.
         name: Kubernetes resource name for the AgentWorkflow.
         image: Container image containing the user code, flokoa SDK,
-            and pydantic-graph.
+            and pydantic-graph.  For ``inline=True`` a generic
+            ``python:3.13-slim`` image is sufficient.
         namespace: Kubernetes namespace.
         entrypoint: Node name to start from.  Defaults to the first
             node in the graph.
         labels: Optional Kubernetes labels for the manifest metadata.
+        inline: If ``True``, extract node class source code via
+            ``inspect.getsource()`` and embed it in each step's
+            ``source`` field.  The container image then only needs
+            ``pydantic-graph`` installed — no user code required.
 
     Returns:
         An ``AgentWorkflowManifest`` that can be serialized to YAML/JSON
@@ -53,6 +61,7 @@ def compile_graph(
     topology = extract_topology(graph)
     dag_nodes, bundled_sccs = classify_for_compilation(topology)
     node_classes = _resolve_node_classes(graph)
+    all_sources = _extract_all_node_sources(graph) if inline else None
 
     # Build a lookup: node_id -> bundle index (if cyclic)
     node_to_bundle: dict[str, int] = {}
@@ -70,6 +79,7 @@ def compile_graph(
             node_classes=node_classes,
             node_to_bundle=node_to_bundle,
             bundled_sccs=bundled_sccs,
+            source=all_sources,
         )
         steps.append(step)
 
@@ -81,6 +91,7 @@ def compile_graph(
             node_classes=node_classes,
             node_to_bundle=node_to_bundle,
             bundled_sccs=bundled_sccs,
+            source=all_sources,
         )
         steps.append(step)
 
@@ -192,6 +203,7 @@ def _build_single_step(
     node_classes: dict[str, str],
     node_to_bundle: dict[str, int],
     bundled_sccs: list[list[str]],
+    source: str | None = None,
 ) -> WorkflowStep:
     """Build a WorkflowStep for a single acyclic node."""
     next_steps, can_end = _outgoing_next(
@@ -200,6 +212,7 @@ def _build_single_step(
     return WorkflowStep(
         name=node_id,
         node_class=node_classes.get(node_id, node_id),
+        source=source,
         next=next_steps,
         end=can_end,
     )
@@ -211,6 +224,7 @@ def _build_bundle_step(
     node_classes: dict[str, str],
     node_to_bundle: dict[str, int],
     bundled_sccs: list[list[str]],
+    source: str | None = None,
 ) -> WorkflowStep:
     """Build a WorkflowStep for a bundled SCC."""
     step_name = _bundle_name(scc)
@@ -233,6 +247,69 @@ def _build_bundle_step(
             node_classes=[node_classes.get(n, n) for n in scc],
             entrypoint=scc[0],
         ),
+        source=source,
         next=all_next,
         end=any_end,
     )
+
+
+def _get_node_class_objects(graph: Any) -> dict[str, type]:
+    """Extract actual class objects from the graph."""
+    classes: dict[str, type] = {}
+
+    for node_id, node_def in graph.node_defs.items():
+        cls = getattr(node_def, "node", None) or getattr(node_def, "node_cls", None)
+        if cls is not None:
+            classes[node_id] = cls
+
+    if classes:
+        return classes
+
+    node_types = getattr(graph, "node_types", None) or getattr(graph, "_node_types", None)
+    if node_types:
+        if isinstance(node_types, dict):
+            return dict(node_types)
+        return {cls.__name__: cls for cls in node_types}
+
+    return {}
+
+
+def _extract_all_node_sources(graph: Any) -> str:
+    """Extract Python source for every node class in the graph.
+
+    Every step gets the *full* set of class sources because return-type
+    annotations reference sibling node classes
+    (e.g. ``FetchData.run() -> ProcessData``).
+
+    Raises ``TypeError`` if source cannot be retrieved for a node
+    (e.g. defined interactively or in a C extension).
+    """
+    classes = _get_node_class_objects(graph)
+    if not classes:
+        msg = (
+            "Cannot extract inline source: unable to resolve node "
+            "class objects from the graph.  Make sure you are using "
+            "a pydantic-graph version that exposes node classes on NodeDef."
+        )
+        raise TypeError(msg)
+
+    sources: list[str] = []
+    seen: set[type] = set()
+
+    for node_id in graph.node_defs:
+        cls = classes.get(node_id)
+        if cls is None or cls in seen:
+            continue
+        seen.add(cls)
+        try:
+            src = textwrap.dedent(inspect.getsource(cls))
+        except OSError as exc:
+            msg = (
+                f"Cannot retrieve source for {node_id!r} "
+                f"({cls.__module__}.{cls.__qualname__}).  "
+                f"Inline mode requires node classes defined in .py files."
+            )
+            raise TypeError(msg) from exc
+        sources.append(src)
+
+    return "\n\n".join(sources)
