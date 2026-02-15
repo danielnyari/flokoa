@@ -33,14 +33,15 @@ jobs:
           python-version-file: sdk/python/.python-version
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --all-packages --all-extras
 
-      - name: Run tests
+      - name: Run flokoa tests
+        working-directory: sdk/python/flokoa
         run: uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: sdk/python/coverage.xml
+          files: sdk/python/flokoa/coverage.xml
           flags: python-sdk
           name: python-sdk-coverage

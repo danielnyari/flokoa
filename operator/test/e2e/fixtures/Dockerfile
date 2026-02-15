@@ -5,14 +5,14 @@ WORKDIR /app
 # Install uv for fast package management
 RUN pip install uv
 
-# Copy SDK source code
+# Copy SDK workspace source code
 COPY sdk/python /sdk
 
-# Install flokoa SDK from local source with pydantic-ai extra
-RUN uv pip install --system /sdk[pydantic-ai]
+# Install flokoa-managed-agent from local workspace source
+RUN uv pip install --system /sdk/flokoa-managed-agent
 
 # Expose port for the agent server
 EXPOSE 8080
 
-# Run as a templated agent - operator mounts instruction, model, tools config
-CMD ["flokoa", "run", "--templated", "--host", "0.0.0.0", "--port", "8080"]
+# Run managed agent - operator mounts instruction, model, tools config
+CMD ["python", "-m", "flokoa_managed_agent"]

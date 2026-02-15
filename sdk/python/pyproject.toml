@@ -1,7 +1,11 @@
 [project]
 name = "flokoa-workspace"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+version = "0.0.0"
 requires-python = ">=3.13"
-dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "flokoa",
+    "flokoa-managed-agent",
+    "flokoa-managed-task",
+]

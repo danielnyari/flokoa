@@ -4,14 +4,13 @@ COPY --from=ghcr.io/astral-sh/uv:0.10.2 /uv /uvx /bin/
 
 WORKDIR /app
 
-# Install dependencies first (cached layer)
-COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --locked --no-install-project --no-editable --extra pydantic-ai
+# Copy workspace root + both packages needed
+COPY pyproject.toml uv.lock ./
+COPY flokoa/ ./flokoa/
+COPY flokoa-managed-agent/ ./flokoa-managed-agent/
 
-# Copy source, build wheel, and install into venv
-COPY src/ src/
-RUN uv build --wheel --out-dir /dist . && \
-    uv pip install --no-cache /dist/*.whl
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --project flokoa-managed-agent --no-dev
 
 # --- Runtime stage ---
 FROM python:3.13-slim
@@ -25,9 +24,10 @@ COPY --from=builder /app/.venv /app/.venv
 RUN mkdir -p /etc/flokoa/tools && chown -R nonroot:nonroot /etc/flokoa
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV FLOKOA_CONFIG_PATH=/etc/flokoa/config.yaml
 
 USER 65532:65532
 
 EXPOSE 8080
 
-ENTRYPOINT ["flokoa", "run", "--templated"]
+CMD ["python", "-m", "flokoa_managed_agent"]

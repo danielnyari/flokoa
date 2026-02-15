@@ -409,7 +409,7 @@ docker-push-plugins: ## Push docker images for all plugins.
 
 .PHONY: docker-build-flokoa-cli
 docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
-	$(CONTAINER_TOOL) build -f ../sdk/python/Dockerfile.managed -t ${FLOKOA_CLI_IMG} ../sdk/python
+	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} ../sdk/python
 
 .PHONY: docker-push-flokoa-cli
 docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.

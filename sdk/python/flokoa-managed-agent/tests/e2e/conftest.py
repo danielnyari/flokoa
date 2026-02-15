@@ -1,20 +1,23 @@
-"""E2E test fixtures for the Flokoa Python SDK.
+"""E2E test fixtures for the flokoa-managed-agent runtime.
 
-Provides fixtures to build a full FastAPI app (via _get_app) backed by a
+Provides fixtures to build a full FastAPI app backed by a
 TemplatedPydanticAIAgentExecutor with mocked LLM calls (TestModel).
 """
 
 import json
 
 import pytest
+from a2a.server.apps import A2AFastAPIApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 from httpx import ASGITransport, AsyncClient
 from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
 
 import flokoa.utils as utils_module
-from flokoa.__main__ import _get_app
-from flokoa.templated.agent_executor import TemplatedPydanticAIAgentExecutor
+from flokoa.utils.router import router as health_router
+from flokoa_managed_agent.agent_executor import TemplatedPydanticAIAgentExecutor
 from flokoa.types.templateconfig import OutputSchema, TemplateConfig
 
 models.ALLOW_MODEL_REQUESTS = False
@@ -161,8 +164,18 @@ def agent_executor(template_config, tools_dir, model_config_file, instruction_fi
 
 @pytest.fixture
 def app(agent_executor, agent_card):
-    """Build the full FastAPI app via _get_app."""
-    return _get_app(agent_executor=agent_executor, agent_card=agent_card)
+    """Build the full FastAPI app."""
+    request_handler = DefaultRequestHandler(
+        agent_executor=agent_executor,
+        task_store=InMemoryTaskStore(),
+    )
+    server = A2AFastAPIApplication(
+        agent_card=agent_card,
+        http_handler=request_handler,
+    )
+    app = server.build()
+    app.include_router(health_router)
+    return app
 
 
 @pytest.fixture

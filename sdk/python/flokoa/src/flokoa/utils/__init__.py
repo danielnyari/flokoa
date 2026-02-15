@@ -11,14 +11,13 @@ from flokoa.cache import (
     ConfigCache,
     get_global_cache,
 )
-from flokoa.types import ModelConfig, TemplateConfig, ToolDefinition
+from flokoa.types import ModelConfig, ToolDefinition
 from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
 from flokoa.types.agenttool import AgentToolSpec
 
 TOOLS_PATH = "/etc/flokoa/tools/"
 AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
 MODEL_CONFIG_PATH = "/etc/flokoa/model.json"
-TEMPLATE_CONFIG_PATH = "/etc/flokoa/template-config.json"
 INSTRUCTION_PATH = "/etc/flokoa/instruction.txt"
 
 
@@ -271,22 +270,6 @@ def load_model_config(
     cache.set(CACHE_KEY_MODEL_CONFIG, result, file_paths=[MODEL_CONFIG_PATH])
 
     return result
-
-
-def load_templated_config() -> TemplateConfig:
-    """Load templated agent configuration from /etc/flokoa/managed-config.json.
-
-    Returns:
-        TemplateConfig if the file exists, None otherwise.
-    """
-    path = os.environ.get("FLOKOA_TEMPLATE_CONFIG_PATH", TEMPLATE_CONFIG_PATH)
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Templated config file not found at {path}")
-
-    with open(path) as f:
-        config_data = json.load(f)
-
-    return TemplateConfig.model_validate(config_data)
 
 
 def load_instruction() -> str | None:
