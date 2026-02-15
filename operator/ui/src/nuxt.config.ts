@@ -24,6 +24,12 @@ export default defineNuxtConfig({
   // Generate as SPA for embedding in the Go binary
   ssr: false,
 
+  // Use static preset so `nuxt build` produces a self-contained SPA with index.html
+  // (the default node-server preset renders the HTML shell at runtime via Nitro)
+  nitro: {
+    preset: 'static'
+  },
+
   compatibilityDate: '2024-07-11',
 
   eslint: {

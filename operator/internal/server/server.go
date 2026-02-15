@@ -12,15 +12,25 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/cors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/danielnyari/flokoa/internal/config"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
 	uiFS "github.com/danielnyari/flokoa/ui"
 )
+
+// PublicGRPCMethods lists gRPC methods that skip authentication.
+var PublicGRPCMethods = []string{
+	"/grpc.health.v1.Health/Check",
+	"/grpc.health.v1.Health/Watch",
+	"/grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+	"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
+}
 
 // Server wraps the gRPC server and its configuration.
 type Server struct {
@@ -29,29 +39,42 @@ type Server struct {
 	healthServer *health.Server
 	port         int
 	httpPort     int
+	authCfg      config.AuthConfig
 	log          logr.Logger
 }
 
 // NewServer creates a new gRPC server with reflection enabled.
+// If authInterceptor is non-nil, it is added to the interceptor chain.
 func NewServer(
 	port int,
 	httpPort int,
+	authCfg config.AuthConfig,
 	log logr.Logger,
+	authInterceptor *AuthInterceptor,
 	agentService pb.AgentServiceServer,
 	modelService pb.ModelServiceServer,
 	modelProviderService pb.ModelProviderServiceServer,
 	agentToolService pb.AgentToolServiceServer,
 ) *Server {
+	// Build interceptor chains
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
+		LoggingUnaryInterceptor(log),
+		RecoveryUnaryInterceptor(log),
+	}
+	streamInterceptors := []grpc.StreamServerInterceptor{
+		LoggingStreamInterceptor(log),
+		RecoveryStreamInterceptor(log),
+	}
+
+	if authInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, authInterceptor.UnaryInterceptor())
+		streamInterceptors = append(streamInterceptors, authInterceptor.StreamInterceptor())
+	}
+
 	// Create gRPC server with interceptors
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			LoggingUnaryInterceptor(log),
-			RecoveryUnaryInterceptor(log),
-		),
-		grpc.ChainStreamInterceptor(
-			LoggingStreamInterceptor(log),
-			RecoveryStreamInterceptor(log),
-		),
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
 	)
 
 	// Register services
@@ -72,6 +95,7 @@ func NewServer(
 		healthServer: healthServer,
 		port:         port,
 		httpPort:     httpPort,
+		authCfg:      authCfg,
 		log:          log,
 	}
 }
@@ -128,6 +152,13 @@ func hasUIFiles() bool {
 	return false
 }
 
+// authConfigResponse is the JSON response for the /api/v1alpha1/auth/config endpoint.
+type authConfigResponse struct {
+	Enabled   bool   `json:"enabled"`
+	IssuerURL string `json:"issuerUrl,omitempty"`
+	ClientID  string `json:"clientId,omitempty"`
+}
+
 // startHTTPGateway starts the HTTP/REST gateway with embedded UI.
 func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// Create gRPC-Gateway mux
@@ -162,6 +193,19 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		swaggerDir = "server/gen/openapiv2"
 	}
 	mux.Handle("/swagger/", http.StripPrefix("/swagger/", http.FileServer(http.Dir(swaggerDir))))
+
+	// Auth configuration endpoint (public — the SPA needs this before it has a token)
+	mux.HandleFunc("/api/v1alpha1/auth/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := authConfigResponse{
+			Enabled:   s.authCfg.Enabled,
+			IssuerURL: s.authCfg.IssuerURL,
+			ClientID:  s.authCfg.ClientID,
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			s.log.Error(err, "Failed to encode auth config response")
+		}
+	})
 
 	// Handle API requests with gateway
 	mux.Handle("/api/", gwMux)
@@ -214,9 +258,17 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		})
 	}
 
+	// CORS middleware
+	c := cors.New(cors.Options{
+		AllowedOrigins:   s.authCfg.AllowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
+	})
+
 	s.httpServer = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.httpPort),
-		Handler: corsMiddleware(mux),
+		Handler: c.Handler(mux),
 	}
 
 	s.log.Info("Starting HTTP gateway", "port", s.httpPort, "swagger-ui", fmt.Sprintf("http://localhost:%d/swagger/", s.httpPort))
@@ -228,22 +280,6 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	}()
 
 	return nil
-}
-
-// corsMiddleware adds CORS headers for development.
-func corsMiddleware(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		h.ServeHTTP(w, r)
-	})
 }
 
 // Stop gracefully stops the server.

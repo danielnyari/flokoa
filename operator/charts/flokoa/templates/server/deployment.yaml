@@ -54,6 +54,14 @@ spec:
               value: {{ .Values.server.service.httpPort | quote }}
             - name: SWAGGER_DIR
               value: "/swagger"
+            {{- if .Values.dex.enabled }}
+            - name: AUTH_ENABLED
+              value: "true"
+            - name: AUTH_OIDC_ISSUER_URL
+              value: {{ .Values.dex.issuer | quote }}
+            - name: AUTH_OIDC_CLIENT_ID
+              value: {{ .Values.dex.clientID | quote }}
+            {{- end }}
             {{- with .Values.server.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

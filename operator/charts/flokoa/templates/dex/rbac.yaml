@@ -1,0 +1,30 @@
+{{- if .Values.dex.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "flokoa.dex.fullname" . }}
+  labels:
+    {{- include "flokoa.dex.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["dex.coreos.com"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "flokoa.dex.fullname" . }}
+  labels:
+    {{- include "flokoa.dex.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "flokoa.dex.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flokoa.dex.fullname" . }}
+    namespace: {{ include "flokoa.namespace" . }}
+{{- end }}

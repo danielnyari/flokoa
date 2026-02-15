@@ -1,0 +1,22 @@
+{{- if .Values.dex.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flokoa.dex.fullname" . }}
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.dex.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 5556
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "flokoa.dex.selectorLabels" . | nindent 4 }}
+{{- end }}
