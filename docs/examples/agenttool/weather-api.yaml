@@ -1,45 +1,18 @@
-# Simple GET request tool
+# Simple external API tool
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
   name: weather-api
   labels:
-    type: http-api
     category: weather
 spec:
-  type: http-api
+  type: openapi
   description: "Get current weather information for a location"
-  
-  httpApi:
-    url: "https://api.weather.com/v1/current"
-    method: GET
+
+  openApi:
+    url: "https://api.weather.com/v1"
     timeoutSeconds: 30
-    
     headers:
       Accept: "application/json"
-  
-  inputSchema:
-    type: object
-    properties:
-      location:
-        type: string
-        description: "City name or coordinates"
-      units:
-        type: string
-        enum: ["metric", "imperial"]
-        default: "metric"
-    required:
-      - location
-  
-  outputSchema:
-    type: object
-    properties:
-      temperature:
-        type: number
-        description: "Current temperature"
-      conditions:
-        type: string
-        description: "Weather conditions"
-      humidity:
-        type: number
-        description: "Humidity percentage"
+    openApiSchema:
+      endpointPath: "/openapi.json"

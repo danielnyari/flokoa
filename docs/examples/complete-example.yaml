@@ -39,37 +39,16 @@ metadata:
   name: search-knowledge-base
   namespace: customer-service
 spec:
-  type: http-api
+  type: openapi
   description: "Search the knowledge base for answers to customer questions"
-  httpApi:
+  openApi:
     serviceRef:
       name: kb-service
       namespace: backend
       port: 8080
-    path: "/search"
-    method: GET
     timeoutSeconds: 10
-  inputSchema:
-    type: object
-    properties:
-      query:
-        type: string
-        description: "Search query"
-      limit:
-        type: integer
-        default: 5
-    required: ["query"]
-  outputSchema:
-    type: object
-    properties:
-      results:
-        type: array
-        items:
-          type: object
-          properties:
-            title: {type: string}
-            content: {type: string}
-            url: {type: string}
+    openApiSchema:
+      endpointPath: "/openapi.json"
 
 ---
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -78,31 +57,16 @@ metadata:
   name: create-support-ticket
   namespace: customer-service
 spec:
-  type: http-api
+  type: openapi
   description: "Create a support ticket when the agent cannot resolve the issue"
-  httpApi:
+  openApi:
     serviceRef:
       name: ticket-service
       namespace: backend
       port: 8080
-    path: "/tickets"
-    method: POST
     timeoutSeconds: 15
-  inputSchema:
-    type: object
-    properties:
-      title: {type: string}
-      description: {type: string}
-      priority:
-        type: string
-        enum: ["low", "medium", "high", "urgent"]
-      customerEmail: {type: string, format: email}
-    required: ["title", "description", "customerEmail"]
-  outputSchema:
-    type: object
-    properties:
-      ticketId: {type: string}
-      status: {type: string}
+    openApiSchema:
+      endpointPath: "/openapi.json"
 
 ---
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -111,30 +75,16 @@ metadata:
   name: check-order-status
   namespace: customer-service
 spec:
-  type: http-api
+  type: openapi
   description: "Check the status of a customer order"
-  httpApi:
+  openApi:
     serviceRef:
       name: order-service
       namespace: backend
       port: 8080
-    path: "/orders"
-    method: GET
     timeoutSeconds: 10
-  inputSchema:
-    type: object
-    properties:
-      orderId:
-        type: string
-        description: "Order ID to check"
-    required: ["orderId"]
-  outputSchema:
-    type: object
-    properties:
-      orderId: {type: string}
-      status: {type: string}
-      trackingNumber: {type: string}
-      estimatedDelivery: {type: string}
+    openApiSchema:
+      endpointPath: "/openapi.json"
 
 ---
 # Step 4: Create Agent with all components

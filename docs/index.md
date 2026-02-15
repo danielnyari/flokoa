@@ -103,12 +103,13 @@ spec:
     - toolRef:
         name: weather-api
     - name: inline-tool
-      inline:
-        type: http-api
-        description: "..."
-        httpApi:
+      template:
+        type: openapi
+        description: "Call the example API"
+        openApi:
           url: "https://api.example.com"
-          method: GET
+          openApiSchema:
+            endpointPath: "/openapi.json"
 ```
 
 ## Common Patterns

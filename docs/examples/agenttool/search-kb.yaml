@@ -1,75 +1,19 @@
-# Search tool
+# Knowledge base search tool
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
   name: search-knowledge-base
   labels:
-    type: http-api
     category: search
 spec:
-  type: http-api
+  type: openapi
   description: "Search the internal knowledge base for documentation and FAQs"
-  
-  httpApi:
+
+  openApi:
     serviceRef:
       name: search-service
       namespace: knowledge
       port: 8080
-    path: "/api/v1/search"
-    method: GET
     timeoutSeconds: 15
-  
-  inputSchema:
-    type: object
-    properties:
-      query:
-        type: string
-        minLength: 2
-        maxLength: 200
-        description: "Search query"
-      category:
-        type: string
-        enum: ["all", "documentation", "faq", "tutorials", "api-reference"]
-        default: "all"
-        description: "Filter by category"
-      limit:
-        type: integer
-        minimum: 1
-        maximum: 50
-        default: 10
-        description: "Maximum number of results"
-      includeContent:
-        type: boolean
-        default: true
-        description: "Include full content in results"
-    required:
-      - query
-  
-  outputSchema:
-    type: object
-    properties:
-      results:
-        type: array
-        items:
-          type: object
-          properties:
-            id:
-              type: string
-            title:
-              type: string
-            excerpt:
-              type: string
-            content:
-              type: string
-            url:
-              type: string
-            category:
-              type: string
-            relevanceScore:
-              type: number
-      totalResults:
-        type: integer
-        description: "Total matching documents"
-      searchTime:
-        type: number
-        description: "Search execution time in ms"
+    openApiSchema:
+      endpointPath: "/api/openapi.json"
