@@ -1,0 +1,33 @@
+# Allow Egress to State Backends for Flokoa Agent Pods
+#
+# Agents that use external state storage (Redis, PostgreSQL) need egress
+# access to those services. Adjust the selectors or CIDRs to match your
+# backend deployments.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flokoa-agent-allow-state-backends
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    # Redis (in-cluster)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+    # PostgreSQL (in-cluster)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+          protocol: TCP

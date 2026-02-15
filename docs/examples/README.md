@@ -101,6 +101,16 @@ The operator updates these status fields automatically:
 - `status.conditions` - Standard Kubernetes conditions
 - `status.observedGeneration` - Last observed spec generation
 
+## Network Policies
+
+See [`networkpolicy/`](networkpolicy/) for NetworkPolicy examples that secure agent pod traffic using a default-deny + allow-list strategy. Covers:
+
+- Default deny all ingress/egress
+- DNS resolution, LLM provider APIs, state backends, Kubernetes API server
+- Ingress from the operator, server, and Argo Workflows
+
+The Flokoa Helm chart also includes parameterized NetworkPolicy templates -- see `networkPolicy.agent` in `values.yaml`.
+
 ## Tips
 
 1. **Start Simple**: Begin with `minimal-agent.yaml` and add fields as needed
@@ -108,3 +118,4 @@ The operator updates these status fields automatically:
 3. **Use Health Checks**: Liveness and readiness probes ensure reliable deployments
 4. **Security First**: Use `securityContext` to run containers as non-root with read-only filesystems
 5. **High Availability**: Use `replicas > 1` with anti-affinity rules for production
+6. **Network Security**: Apply NetworkPolicies to restrict agent pod traffic in production

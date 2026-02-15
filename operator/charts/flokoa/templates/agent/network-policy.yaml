@@ -1,0 +1,280 @@
+{{- if .Values.networkPolicy.agent.enabled }}
+---
+# Default deny all traffic to agent pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-default-deny
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow DNS resolution for agent pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-allow-dns
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{{- if .Values.networkPolicy.agent.ingress.operator }}
+---
+# Allow ingress from the Flokoa controller for health checks
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-allow-operator
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "flokoa.controller.selectorLabels" . | nindent 14 }}
+{{- end }}
+{{- if and .Values.server.enabled .Values.networkPolicy.agent.ingress.server }}
+---
+# Allow ingress from the Flokoa server for gRPC/HTTP API access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-allow-server
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "flokoa.server.selectorLabels" . | nindent 14 }}
+{{- end }}
+{{- if and .Values.argo.enabled .Values.networkPolicy.agent.ingress.argo }}
+---
+# Allow ingress from Argo Workflows namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-allow-argo
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.argo.a2aPlugin.namespace }}
+{{- end }}
+{{- with .Values.networkPolicy.agent.ingress.extra }}
+---
+# Extra ingress rules
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" $ }}-agent-extra-ingress
+  namespace: {{ include "flokoa.namespace" $ }}
+  labels:
+    {{- include "flokoa.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.networkPolicy.agent.egress.llmProviders.enabled }}
+---
+# Allow egress to LLM provider APIs (HTTPS)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-allow-llm
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.networkPolicy.agent.egress.llmProviders.cidrs }}
+    {{- range .Values.networkPolicy.agent.egress.llmProviders.cidrs }}
+    - to:
+        - ipBlock:
+            cidr: {{ . }}
+      ports:
+        - port: 443
+          protocol: TCP
+    {{- end }}
+    {{- else }}
+    # No specific CIDRs configured -- allow all HTTPS egress.
+    # For tighter control, set networkPolicy.agent.egress.llmProviders.cidrs.
+    - ports:
+        - port: 443
+          protocol: TCP
+    {{- end }}
+{{- end }}
+{{- if .Values.networkPolicy.agent.egress.kubeApiServer.enabled }}
+---
+# Allow egress to Kubernetes API server
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-allow-kube-api
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.agent.egress.kubeApiServer.cidr }}
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+{{- end }}
+{{- if .Values.networkPolicy.agent.egress.stateBackends.enabled }}
+---
+# Allow egress to state backends (Redis, PostgreSQL)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" . }}-agent-allow-state
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    {{- with .Values.networkPolicy.agent.egress.stateBackends.redis }}
+    {{- if .enabled }}
+    - to:
+        {{- if .podSelector }}
+        - podSelector:
+            matchLabels:
+              {{- toYaml .podSelector | nindent 14 }}
+        {{- end }}
+        {{- if .namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml .namespaceSelector | nindent 14 }}
+        {{- end }}
+        {{- if .cidr }}
+        - ipBlock:
+            cidr: {{ .cidr }}
+        {{- end }}
+      ports:
+        - port: {{ default 6379 .port }}
+          protocol: TCP
+    {{- end }}
+    {{- end }}
+    {{- with .Values.networkPolicy.agent.egress.stateBackends.postgresql }}
+    {{- if .enabled }}
+    - to:
+        {{- if .podSelector }}
+        - podSelector:
+            matchLabels:
+              {{- toYaml .podSelector | nindent 14 }}
+        {{- end }}
+        {{- if .namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml .namespaceSelector | nindent 14 }}
+        {{- end }}
+        {{- if .cidr }}
+        - ipBlock:
+            cidr: {{ .cidr }}
+        {{- end }}
+      ports:
+        - port: {{ default 5432 .port }}
+          protocol: TCP
+    {{- end }}
+    {{- end }}
+{{- end }}
+{{- with .Values.networkPolicy.agent.egress.extra }}
+---
+# Extra egress rules
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.fullname" $ }}-agent-extra-egress
+  namespace: {{ include "flokoa.namespace" $ }}
+  labels:
+    {{- include "flokoa.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Egress
+  egress:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+{{- end }}

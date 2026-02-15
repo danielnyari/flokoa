@@ -1,0 +1,22 @@
+# Allow Ingress from Argo Workflows for Workflow Orchestration
+#
+# When using Argo Workflows with the A2A executor plugin, workflow pods need
+# to reach agent pods. This policy allows ingress from the Argo namespace.
+#
+# Adjust the namespaceSelector label to match your Argo installation.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flokoa-agent-allow-ingress-argo
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: flokoa-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo
