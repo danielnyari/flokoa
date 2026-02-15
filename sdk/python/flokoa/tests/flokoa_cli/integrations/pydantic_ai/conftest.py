@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from flokoa.types import ToolDefinition
-from flokoa.types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
+from flokoa_types import ToolDefinition
+from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 
 
 WEATHER_API_SPEC = {

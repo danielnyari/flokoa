@@ -187,8 +187,8 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 ##@ Python SDK
 
-PYTHON_SDK_DIR ?= ../sdk/python/src/
-PYTHON_MODELS_DIR ?= $(PYTHON_SDK_DIR)/flokoa/types
+PYTHON_SDK_DIR ?= ../sdk/python
+PYTHON_MODELS_DIR ?= $(PYTHON_SDK_DIR)/flokoa-types/src/flokoa_types
 PYTHON_VENV ?= $(LOCALBIN)/venv
 DATAMODEL_CODEGEN ?= $(PYTHON_VENV)/bin/datamodel-codegen
 

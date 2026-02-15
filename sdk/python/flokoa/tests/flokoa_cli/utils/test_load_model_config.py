@@ -9,8 +9,8 @@ import json
 import pytest
 
 import flokoa.utils as utils_module
-from flokoa.types import ModelConfig
-from flokoa.types.modelconfig import ProviderType
+from flokoa_types import ModelConfig
+from flokoa_types.modelconfig import ProviderType
 from flokoa.utils import load_model_config
 
 

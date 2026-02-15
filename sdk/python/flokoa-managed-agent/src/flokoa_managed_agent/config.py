@@ -1,7 +1,7 @@
 import json
 import os
 
-from flokoa.types import TemplateConfig
+from flokoa_types import TemplateConfig
 
 TEMPLATE_CONFIG_PATH = "/etc/flokoa/template-config.json"
 

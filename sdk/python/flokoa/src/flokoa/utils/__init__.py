@@ -11,9 +11,9 @@ from flokoa.cache import (
     ConfigCache,
     get_global_cache,
 )
-from flokoa.types import ModelConfig, ToolDefinition
-from flokoa.types.agentcard import AgentCard as FlokoaAgentCard
-from flokoa.types.agenttool import AgentToolSpec
+from flokoa_types import ModelConfig, ToolDefinition
+from flokoa_types.agentcard import AgentCard as FlokoaAgentCard
+from flokoa_types.agenttool import AgentToolSpec
 
 TOOLS_PATH = "/etc/flokoa/tools/"
 AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"

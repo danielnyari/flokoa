@@ -21,6 +21,7 @@ package = true
 
 [tool.uv.sources]
 flokoa = { workspace = true }
+flokoa-types = { workspace = true }
 
 [dependency-groups]
 dev = [

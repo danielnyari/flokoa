@@ -18,7 +18,7 @@ from pydantic_ai.models.test import TestModel
 import flokoa.utils as utils_module
 from flokoa.utils.router import router as health_router
 from flokoa_managed_agent.agent_executor import TemplatedPydanticAIAgentExecutor
-from flokoa.types.templateconfig import OutputSchema, TemplateConfig
+from flokoa_types.templateconfig import OutputSchema, TemplateConfig
 
 models.ALLOW_MODEL_REQUESTS = False
 

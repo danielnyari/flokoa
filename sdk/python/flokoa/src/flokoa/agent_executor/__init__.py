@@ -8,18 +8,18 @@ from flokoa.cache import (
     ConfigCache,
     get_global_cache,
 )
-from flokoa.types import (
+from flokoa_types import (
     ModelConfig,
     ProviderConfigType,
     ProviderModelParametersType,
 )
-from flokoa.types import (
+from flokoa_types import (
     ModelParameters as ModelParameters,
 )
-from flokoa.types import (
+from flokoa_types import (
     ToolDefinition as FlokoaToolDefinition,
 )
-from flokoa.types.modelconfig import ProviderType
+from flokoa_types.modelconfig import ProviderType
 from flokoa.utils import load_instruction, load_model_config, load_tools
 
 if TYPE_CHECKING:

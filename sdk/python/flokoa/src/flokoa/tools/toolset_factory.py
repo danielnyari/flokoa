@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import Callable, Generic, Protocol, TypeVar, TypedDict, cast
 
-from ..types import IntegrationType, ToolDefinition, ToolType
+from flokoa_types import IntegrationType, ToolDefinition, ToolType
 
 logger = logging.getLogger("flokoa." + __name__)
 
@@ -52,7 +52,7 @@ class ToolsetFactory(Generic[ToolObjectT]):
     Usage::
 
         from flokoa.tools import default_factory
-        from flokoa.types import IntegrationType, ToolType
+        from flokoa_types import IntegrationType, ToolType
 
         default_factory.register(
             ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, my_builder

@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from flokoa.types import ToolDefinition, ToolType
-from flokoa.types.agenttool import AgentToolSpec
+from flokoa_types import ToolDefinition, ToolType
+from flokoa_types.agenttool import AgentToolSpec
 
 
 MINIMAL_OPENAPI_SPEC = {

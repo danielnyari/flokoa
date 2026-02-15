@@ -9,8 +9,8 @@ from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.cache import ConfigCache
 from flokoa.exceptions import CancelNotSupportedError
 from flokoa.tools import ToolsetFactory, default_factory
-from flokoa.types import IntegrationType, ToolType
-from flokoa.types import ToolDefinition as FlokoaToolDefinition
+from flokoa_types import IntegrationType, ToolType
+from flokoa_types import ToolDefinition as FlokoaToolDefinition
 
 from .toolset import FlokoaToolset
 

@@ -25,6 +25,7 @@ flokoa/
 │       ├── pyproject.toml         # Workspace root
 │       ├── flokoa/                # Public SDK package
 │       │   └── CLAUDE.md          # SDK-specific guidance
+│       ├── flokoa-types/          # Auto-generated Pydantic models from CRD schemas
 │       ├── flokoa-managed-agent/  # Operator-deployed pydantic-ai agent runtime
 │       └── flokoa-managed-task/   # Operator-deployed Marvin task runtime (scaffold)
 ├── docs/                  # Documentation

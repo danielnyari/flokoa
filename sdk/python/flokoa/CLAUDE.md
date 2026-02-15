@@ -12,7 +12,7 @@ The Flokoa Python SDK provides a CLI and library for building and running AI age
 
 ## Workspace Structure
 
-The SDK is organized as a **uv workspace** with three packages:
+The SDK is organized as a **uv workspace** with four packages:
 
 ```
 sdk/python/                          # Workspace root
@@ -26,9 +26,16 @@ sdk/python/                          # Workspace root
 │   │   ├── agent_executor/         # Base executor interface
 │   │   ├── integrations/           # Framework integrations (pydantic-ai, google-adk)
 │   │   ├── tools/                  # Tool implementations (OpenAPI, etc.)
-│   │   ├── types/                  # Generated type definitions (DO NOT EDIT)
 │   │   └── utils/                  # Config loaders, agent card builder
 │   └── tests/
+├── flokoa-types/                    # Auto-generated Pydantic models from CRD schemas (DO NOT EDIT)
+│   ├── pyproject.toml
+│   └── src/flokoa_types/
+│       ├── __init__.py             # Re-exports + IntegrationType, ToolType, ToolDefinition
+│       ├── agentcard.py            # Generated: AgentCard
+│       ├── agenttool.py            # Generated: AgentToolSpec
+│       ├── modelconfig.py          # Generated: ModelConfig, ProviderType, etc.
+│       └── templateconfig.py       # Generated: TemplateConfig
 ├── flokoa-managed-agent/           # Operator-deployed pydantic-ai agent runtime
 │   ├── pyproject.toml              # Depends on flokoa[pydantic-ai]
 │   ├── Dockerfile
@@ -49,7 +56,8 @@ sdk/python/                          # Workspace root
 
 ### Package Relationships
 
-- `flokoa` — the public SDK, installable via `pip install flokoa`. Core dependencies: a2a-sdk, click, fastapi, pydantic. Optional extras: `pydantic-ai`, `google-adk`.
+- `flokoa` — the public SDK, installable via `pip install flokoa`. Core dependencies: a2a-sdk, click, fastapi, flokoa-types, pydantic. Optional extras: `pydantic-ai`, `google-adk`.
+- `flokoa-types` — auto-generated Pydantic v2 models from Kubernetes CRD schemas. Shared dependency for all packages that need CRD types. Import as `flokoa_types`.
 - `flokoa-managed-agent` — internal package, never published to PyPI. Built into a container image by the operator. Depends on `flokoa[pydantic-ai]`.
 - `flokoa-managed-task` — internal package, scaffold only. Will depend on `marvin`.
 
@@ -86,7 +94,7 @@ uv lock                   # Update the shared lockfile
 
 ## Generated Types (from Operator CRDs)
 
-Files in `src/flokoa/types/` are **auto-generated** from the Kubernetes Operator CRD schemas. Do not edit them manually.
+The `flokoa-types` package (`sdk/python/flokoa-types/`) contains **auto-generated** Pydantic v2 models from the Kubernetes Operator CRD schemas. Do not edit the generated files manually.
 
 To regenerate, run from the `operator/` directory:
 ```bash
@@ -106,7 +114,9 @@ The generation pipeline:
 1. `make manifests` in operator/ generates CRD YAML from Go types
 2. `yq` extracts specific JSON schemas from CRD YAML
 3. `datamodel-codegen` converts JSON schemas to Pydantic v2 models
-4. Output goes to `sdk/python/flokoa/src/flokoa/types/`
+4. Output goes to `sdk/python/flokoa-types/src/flokoa_types/`
+
+Import types using `from flokoa_types import ...` (not `from flokoa.types`).
 
 **If you change Go types in `operator/api/v1alpha1/`**, run `make manifests generate generate-python-models` from the operator directory to keep the SDK types in sync.
 

@@ -11,7 +11,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 from typing_extensions import TypedDict
 
-from flokoa.types.modelconfig import ProviderType
+from flokoa_types.modelconfig import ProviderType
 
 
 class ProviderModelMapEntry(TypedDict):

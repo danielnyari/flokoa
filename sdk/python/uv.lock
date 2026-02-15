@@ -11,6 +11,7 @@ members = [
     "flokoa",
     "flokoa-managed-agent",
     "flokoa-managed-task",
+    "flokoa-types",
     "flokoa-workspace",
 ]
 
@@ -794,6 +795,7 @@ dependencies = [
     { name = "a2a-sdk" },
     { name = "click" },
     { name = "fastapi" },
+    { name = "flokoa-types" },
     { name = "pydantic" },
 ]
 
@@ -825,6 +827,7 @@ requires-dist = [
     { name = "a2a-sdk", specifier = ">=0.3.22" },
     { name = "click", specifier = ">=8.3.1" },
     { name = "fastapi", specifier = ">=0.128.0" },
+    { name = "flokoa-types", editable = "flokoa-types" },
     { name = "google-adk", marker = "extra == 'google-adk'", specifier = ">=1.14.1" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-ai", marker = "extra == 'pydantic-ai'", specifier = ">=1.44.0" },
@@ -885,6 +888,17 @@ requires-dist = [
     { name = "marvin", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
+
+[[package]]
+name = "flokoa-types"
+version = "0.0.5"
+source = { editable = "flokoa-types" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.12.5" }]
 
 [[package]]
 name = "flokoa-workspace"

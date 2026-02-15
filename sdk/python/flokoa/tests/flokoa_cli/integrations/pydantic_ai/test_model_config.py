@@ -19,8 +19,8 @@ from pydantic_ai.models.test import TestModel
 import flokoa.utils as utils_module
 from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
 from flokoa.integrations.pydantic_ai.models import PROVIDER_MODEL_MAP
-from flokoa.types import ModelConfig
-from flokoa.types.modelconfig import ProviderType
+from flokoa_types import ModelConfig
+from flokoa_types.modelconfig import ProviderType
 from flokoa.utils import load_model_config
 
 # Block real model requests during testing
