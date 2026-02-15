@@ -24,6 +24,7 @@ import (
 
 	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -62,7 +63,7 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow) (*wfv1.Workflow, er
 			Namespace:    awf.Namespace,
 			Labels: map[string]string{
 				"agent.flokoa.ai/agentworkflow-name": awf.Name,
-				"app.kubernetes.io/managed-by":        "flokoa-operator",
+				"app.kubernetes.io/managed-by":       "flokoa-operator",
 			},
 		},
 		Spec: wfv1.WorkflowSpec{
@@ -221,6 +222,18 @@ func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) err
 	return nil
 }
 
+// rawJSONMapToAny converts a map of apiextensionsv1.JSON values to map[string]interface{}.
+func rawJSONMapToAny(m map[string]apiextensionsv1.JSON) map[string]interface{} {
+	result := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		var val interface{}
+		if err := json.Unmarshal(v.Raw, &val); err == nil {
+			result[k] = val
+		}
+	}
+	return result
+}
+
 // buildPluginMessage converts the CRD AgentMessage to a plugin-compatible message structure.
 func buildPluginMessage(msg *agentv1alpha1.AgentMessage) map[string]interface{} {
 	result := map[string]interface{}{}
@@ -235,14 +248,14 @@ func buildPluginMessage(msg *agentv1alpha1.AgentMessage) map[string]interface{} 
 		if p.Text != nil {
 			textPart := map[string]interface{}{"text": p.Text.Text}
 			if len(p.Text.Metadata) > 0 {
-				textPart["metadata"] = p.Text.Metadata
+				textPart["metadata"] = rawJSONMapToAny(p.Text.Metadata)
 			}
 			part["text"] = textPart
 		}
 		if p.Data != nil {
 			dataPart := map[string]interface{}{"data": p.Data.Data.Raw}
 			if len(p.Data.Metadata) > 0 {
-				dataPart["metadata"] = p.Data.Metadata
+				dataPart["metadata"] = rawJSONMapToAny(p.Data.Metadata)
 			}
 			part["data"] = dataPart
 		}
@@ -256,7 +269,7 @@ func buildPluginMessage(msg *agentv1alpha1.AgentMessage) map[string]interface{} 
 				},
 			}
 			if len(p.File.Metadata) > 0 {
-				filePart["metadata"] = p.File.Metadata
+				filePart["metadata"] = rawJSONMapToAny(p.File.Metadata)
 			}
 			part["file"] = filePart
 		}
@@ -273,8 +286,11 @@ func buildPluginMessage(msg *agentv1alpha1.AgentMessage) map[string]interface{} 
 	if len(msg.Extensions) > 0 {
 		result["extensions"] = msg.Extensions
 	}
+	if msg.TaskID != "" {
+		result["taskId"] = msg.TaskID
+	}
 	if len(msg.Metadata) > 0 {
-		result["metadata"] = msg.Metadata
+		result["metadata"] = rawJSONMapToAny(msg.Metadata)
 	}
 
 	return result
@@ -291,6 +307,24 @@ func buildPluginSendConfig(cfg *agentv1alpha1.MessageSendConfig) map[string]inte
 	}
 	if cfg.HistoryLength != nil {
 		result["historyLength"] = *cfg.HistoryLength
+	}
+	if cfg.PushNotificationConfig != nil {
+		pushCfg := map[string]interface{}{
+			"url": cfg.PushNotificationConfig.URL,
+		}
+		if cfg.PushNotificationConfig.ID != "" {
+			pushCfg["id"] = cfg.PushNotificationConfig.ID
+		}
+		if cfg.PushNotificationConfig.Token != "" {
+			pushCfg["token"] = cfg.PushNotificationConfig.Token
+		}
+		if cfg.PushNotificationConfig.Authentication != nil {
+			pushCfg["authentication"] = map[string]interface{}{
+				"schemes":     cfg.PushNotificationConfig.Authentication.Schemes,
+				"credentials": cfg.PushNotificationConfig.Authentication.Credentials,
+			}
+		}
+		result["pushNotificationConfig"] = pushCfg
 	}
 	return result
 }

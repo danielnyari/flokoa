@@ -126,6 +126,9 @@ func buildA2AMessage(msg *A2AMessage) *a2a.Message {
 	}
 
 	message := a2a.NewMessage(role, parts...)
+	if msg.TaskID != "" {
+		message.TaskID = a2a.TaskID(msg.TaskID)
+	}
 	if msg.ContextID != "" {
 		message.ContextID = msg.ContextID
 	}
@@ -160,6 +163,24 @@ func buildA2ASendConfig(cfg *A2ASendConfig) *a2a.MessageSendConfig {
 	}
 	if cfg.HistoryLength != nil {
 		result.HistoryLength = cfg.HistoryLength
+	}
+	if cfg.PushNotificationConfig != nil {
+		pushCfg := &a2a.PushConfig{
+			URL: cfg.PushNotificationConfig.URL,
+		}
+		if cfg.PushNotificationConfig.ID != "" {
+			pushCfg.ID = cfg.PushNotificationConfig.ID
+		}
+		if cfg.PushNotificationConfig.Token != "" {
+			pushCfg.Token = cfg.PushNotificationConfig.Token
+		}
+		if cfg.PushNotificationConfig.Authentication != nil {
+			pushCfg.Auth = &a2a.PushAuthInfo{
+				Schemes:     cfg.PushNotificationConfig.Authentication.Schemes,
+				Credentials: cfg.PushNotificationConfig.Authentication.Credentials,
+			}
+		}
+		result.PushConfig = pushCfg
 	}
 	return result
 }

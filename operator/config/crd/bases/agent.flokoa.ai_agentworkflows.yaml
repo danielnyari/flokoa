@@ -130,6 +130,45 @@ spec:
                                 returned with the response.
                               format: int32
                               type: integer
+                            pushNotificationConfig:
+                              description: |-
+                                PushNotificationConfig configures push notifications for async task updates.
+                                Aligns with a2a.MessageSendConfig.PushNotificationConfig.
+                              properties:
+                                authentication:
+                                  description: Authentication configures authentication
+                                    for push notification delivery.
+                                  properties:
+                                    credentials:
+                                      description: Credentials is the authentication
+                                        credential (e.g., a bearer token).
+                                      type: string
+                                    schemes:
+                                      description: Schemes lists the authentication
+                                        schemes supported (e.g., "Bearer").
+                                      items:
+                                        type: string
+                                      minItems: 1
+                                      type: array
+                                  required:
+                                  - schemes
+                                  type: object
+                                id:
+                                  description: ID is an optional identifier for this
+                                    push notification configuration.
+                                  type: string
+                                token:
+                                  description: Token is an opaque token the agent
+                                    includes in push notifications for verification.
+                                  type: string
+                                url:
+                                  description: URL is the webhook endpoint to receive
+                                    push notifications.
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - url
+                              type: object
                           type: object
                         message:
                           description: Message is the A2A message to send to the agent.
@@ -148,7 +187,7 @@ spec:
                               type: array
                             metadata:
                               additionalProperties:
-                                type: string
+                                x-kubernetes-preserve-unknown-fields: true
                               description: |-
                                 Metadata is arbitrary key-value metadata attached to the message.
                                 Aligns with a2a.Message.Metadata.
@@ -171,7 +210,7 @@ spec:
                                         x-kubernetes-preserve-unknown-fields: true
                                       metadata:
                                         additionalProperties:
-                                          type: string
+                                          x-kubernetes-preserve-unknown-fields: true
                                         description: Metadata for this part.
                                         type: object
                                     required:
@@ -203,7 +242,7 @@ spec:
                                         type: object
                                       metadata:
                                         additionalProperties:
-                                          type: string
+                                          x-kubernetes-preserve-unknown-fields: true
                                         description: Metadata for this part.
                                         type: object
                                     required:
@@ -214,7 +253,7 @@ spec:
                                     properties:
                                       metadata:
                                         additionalProperties:
-                                          type: string
+                                          x-kubernetes-preserve-unknown-fields: true
                                         description: Metadata for this part.
                                         type: object
                                       text:
@@ -240,6 +279,11 @@ spec:
                               enum:
                               - user
                               - agent
+                              type: string
+                            taskId:
+                              description: |-
+                                TaskID continues an existing A2A task instead of creating a new one.
+                                Aligns with a2a.Message.TaskID.
                               type: string
                           required:
                           - parts

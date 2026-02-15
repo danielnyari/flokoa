@@ -50,6 +50,9 @@ type A2AMessage struct {
 	// Extensions lists A2A extension URIs to activate
 	Extensions []string `json:"extensions,omitempty"`
 
+	// TaskID continues an existing A2A task instead of creating a new one
+	TaskID string `json:"taskId,omitempty"`
+
 	// Metadata is arbitrary key-value metadata
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
@@ -90,9 +93,24 @@ type A2AFileContent struct {
 
 // A2ASendConfig configures message sending. Aligns with a2a.MessageSendConfig.
 type A2ASendConfig struct {
-	AcceptedOutputModes []string `json:"acceptedOutputModes,omitempty"`
-	Blocking            *bool    `json:"blocking,omitempty"`
-	HistoryLength       *int     `json:"historyLength,omitempty"`
+	AcceptedOutputModes    []string                    `json:"acceptedOutputModes,omitempty"`
+	Blocking               *bool                       `json:"blocking,omitempty"`
+	HistoryLength          *int                        `json:"historyLength,omitempty"`
+	PushNotificationConfig *A2APushNotificationConfig  `json:"pushNotificationConfig,omitempty"`
+}
+
+// A2APushNotificationConfig configures push notifications. Aligns with a2a.PushNotificationConfig.
+type A2APushNotificationConfig struct {
+	URL            string              `json:"url"`
+	ID             string              `json:"id,omitempty"`
+	Token          string              `json:"token,omitempty"`
+	Authentication *A2APushNotificationAuth `json:"authentication,omitempty"`
+}
+
+// A2APushNotificationAuth configures push notification authentication. Aligns with a2a.PushNotificationAuthInfo.
+type A2APushNotificationAuth struct {
+	Schemes     []string `json:"schemes"`
+	Credentials string   `json:"credentials,omitempty"`
 }
 
 // GetTimeout returns the timeout duration, defaulting to DefaultTimeout if not set

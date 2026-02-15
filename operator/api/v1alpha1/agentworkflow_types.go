@@ -171,10 +171,15 @@ type AgentMessage struct {
 	// +optional
 	Extensions []string `json:"extensions,omitempty"`
 
+	// TaskID continues an existing A2A task instead of creating a new one.
+	// Aligns with a2a.Message.TaskID.
+	// +optional
+	TaskID string `json:"taskId,omitempty"`
+
 	// Metadata is arbitrary key-value metadata attached to the message.
 	// Aligns with a2a.Message.Metadata.
 	// +optional
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Metadata map[string]apiextensionsv1.JSON `json:"metadata,omitempty"`
 }
 
 // MessagePart represents a content part in an A2A message.
@@ -203,7 +208,7 @@ type TextPart struct {
 
 	// Metadata for this part.
 	// +optional
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Metadata map[string]apiextensionsv1.JSON `json:"metadata,omitempty"`
 }
 
 // DataPart contains structured JSON data.
@@ -215,7 +220,7 @@ type DataPart struct {
 
 	// Metadata for this part.
 	// +optional
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Metadata map[string]apiextensionsv1.JSON `json:"metadata,omitempty"`
 }
 
 // FilePart contains file content.
@@ -227,7 +232,7 @@ type FilePart struct {
 
 	// Metadata for this part.
 	// +optional
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Metadata map[string]apiextensionsv1.JSON `json:"metadata,omitempty"`
 }
 
 // FileContent represents file data, either as inline base64 bytes or a URI reference.
@@ -266,6 +271,45 @@ type MessageSendConfig struct {
 	// HistoryLength limits the conversation history returned with the response.
 	// +optional
 	HistoryLength *int32 `json:"historyLength,omitempty"`
+
+	// PushNotificationConfig configures push notifications for async task updates.
+	// Aligns with a2a.MessageSendConfig.PushNotificationConfig.
+	// +optional
+	PushNotificationConfig *PushNotificationConfig `json:"pushNotificationConfig,omitempty"`
+}
+
+// PushNotificationConfig configures push notifications for A2A task updates.
+// Aligns with a2a.PushNotificationConfig from github.com/a2aproject/a2a-go.
+type PushNotificationConfig struct {
+	// URL is the webhook endpoint to receive push notifications.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	URL string `json:"url"`
+
+	// ID is an optional identifier for this push notification configuration.
+	// +optional
+	ID string `json:"id,omitempty"`
+
+	// Token is an opaque token the agent includes in push notifications for verification.
+	// +optional
+	Token string `json:"token,omitempty"`
+
+	// Authentication configures authentication for push notification delivery.
+	// +optional
+	Authentication *PushNotificationAuth `json:"authentication,omitempty"`
+}
+
+// PushNotificationAuth configures authentication for push notification delivery.
+// Aligns with a2a.PushNotificationAuthInfo from github.com/a2aproject/a2a-go.
+type PushNotificationAuth struct {
+	// Schemes lists the authentication schemes supported (e.g., "Bearer").
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Schemes []string `json:"schemes"`
+
+	// Credentials is the authentication credential (e.g., a bearer token).
+	// +optional
+	Credentials string `json:"credentials,omitempty"`
 }
 
 // EphemeralAgentTask defines a task that runs agent code in a short-lived container.

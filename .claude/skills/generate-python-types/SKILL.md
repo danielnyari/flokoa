@@ -26,6 +26,7 @@ This three-step process ensures:
 | `sdk/python/src/flokoa/types/agentcard.py` | `agent.flokoa.ai_agents` (card) | `AgentCard` | A2A protocol card (skills, capabilities) |
 | `sdk/python/src/flokoa/types/modelconfig.py` | Combined Models + Providers | `ModelConfig` | Full model config (provider + parameters) |
 | `sdk/python/src/flokoa/types/templateconfig.py` | `agent.flokoa.ai_agents` (template) | `TemplateConfig` | Managed runtime configuration |
+| `sdk/python/src/flokoa/types/agentworkflow.py` | `agent.flokoa.ai_agentworkflows` | `AgentWorkflowSpec` | Workflow DSL (tasks, agents, params, retry) |
 
 ## How It Works
 

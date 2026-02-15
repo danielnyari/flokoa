@@ -347,6 +347,38 @@ func waitForAgentReady(name, ns string, timeout time.Duration) error {
 	})
 }
 
+// findCondition returns the condition with the given type, or nil if not found.
+func findCondition(conditions []metav1.Condition, condType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == condType {
+			return &conditions[i]
+		}
+	}
+	return nil
+}
+
+// waitForAgentWorkflowPhase waits for an AgentWorkflow to reach a specific phase.
+// It fast-fails if the workflow reaches a different terminal phase.
+func waitForAgentWorkflowPhase(name, ns string, targetPhase agentv1alpha1.WorkflowPhase, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
+		awf := &agentv1alpha1.AgentWorkflow{}
+		err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, awf)
+		if err != nil {
+			return false, nil
+		}
+		if awf.Status.Phase == targetPhase {
+			return true, nil
+		}
+		// Fast-fail if workflow reached a terminal phase different from target
+		switch awf.Status.Phase {
+		case agentv1alpha1.WorkflowPhaseSucceeded, agentv1alpha1.WorkflowPhaseFailed, agentv1alpha1.WorkflowPhaseError:
+			return false, fmt.Errorf("AgentWorkflow %s/%s reached terminal phase %q instead of %q",
+				ns, name, awf.Status.Phase, targetPhase)
+		}
+		return false, nil
+	})
+}
+
 // waitForWorkflowPhase waits for a workflow to reach a specific phase
 func waitForWorkflowPhase(name, ns string, phase wfv1.WorkflowPhase, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {

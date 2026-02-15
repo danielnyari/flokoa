@@ -43,14 +43,14 @@ const (
 	ConditionTypeWorkflowReady     = "Ready"
 
 	// Reasons
-	ReasonCompiled           = "Compiled"
-	ReasonCompileFailed      = "CompileFailed"
-	ReasonSubmitted          = "Submitted"
-	ReasonSubmitFailed       = "SubmitFailed"
-	ReasonWorkflowRunning    = "WorkflowRunning"
-	ReasonWorkflowComplete   = "WorkflowComplete"
-	ReasonWorkflowFailed     = "WorkflowFailed"
-	ReasonWorkflowError = "WorkflowError"
+	ReasonCompiled         = "Compiled"
+	ReasonCompileFailed    = "CompileFailed"
+	ReasonSubmitted        = "Submitted"
+	ReasonSubmitFailed     = "SubmitFailed"
+	ReasonWorkflowRunning  = "WorkflowRunning"
+	ReasonWorkflowComplete = "WorkflowComplete"
+	ReasonWorkflowFailed   = "WorkflowFailed"
+	ReasonWorkflowError    = "WorkflowError"
 
 	// Requeue interval for monitoring running workflows
 	workflowPollInterval = 15 * time.Second
