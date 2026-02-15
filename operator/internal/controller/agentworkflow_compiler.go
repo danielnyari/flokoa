@@ -191,10 +191,13 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) error {
 	a2aSpec := map[string]interface{}{
 		"agent":   agent.Name,
-		"message": agent.Message,
+		"message": buildPluginMessage(&agent.Message),
 	}
 	if agent.Namespace != "" {
 		a2aSpec["namespace"] = agent.Namespace
+	}
+	if agent.Config != nil {
+		a2aSpec["config"] = buildPluginSendConfig(agent.Config)
 	}
 
 	pluginData := map[string]interface{}{
@@ -218,6 +221,80 @@ func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) err
 	}
 
 	return nil
+}
+
+// buildPluginMessage converts the CRD AgentMessage to a plugin-compatible message structure.
+func buildPluginMessage(msg *agentv1alpha1.AgentMessage) map[string]interface{} {
+	result := map[string]interface{}{}
+
+	if msg.Role != "" {
+		result["role"] = string(msg.Role)
+	}
+
+	parts := make([]map[string]interface{}, 0, len(msg.Parts))
+	for _, p := range msg.Parts {
+		part := map[string]interface{}{}
+		if p.Text != nil {
+			textPart := map[string]interface{}{"text": p.Text.Text}
+			if len(p.Text.Metadata) > 0 {
+				textPart["metadata"] = p.Text.Metadata
+			}
+			part["text"] = textPart
+		}
+		if p.Data != nil {
+			dataPart := map[string]interface{}{"data": p.Data.Data.Raw}
+			if len(p.Data.Metadata) > 0 {
+				dataPart["metadata"] = p.Data.Metadata
+			}
+			part["data"] = dataPart
+		}
+		if p.File != nil {
+			filePart := map[string]interface{}{
+				"file": map[string]interface{}{
+					"name":     p.File.File.Name,
+					"mimeType": p.File.File.MimeType,
+					"bytes":    p.File.File.Bytes,
+					"uri":      p.File.File.URI,
+				},
+			}
+			if len(p.File.Metadata) > 0 {
+				filePart["metadata"] = p.File.Metadata
+			}
+			part["file"] = filePart
+		}
+		parts = append(parts, part)
+	}
+	result["parts"] = parts
+
+	if msg.ContextID != "" {
+		result["contextId"] = msg.ContextID
+	}
+	if len(msg.ReferenceTaskIDs) > 0 {
+		result["referenceTaskIds"] = msg.ReferenceTaskIDs
+	}
+	if len(msg.Extensions) > 0 {
+		result["extensions"] = msg.Extensions
+	}
+	if len(msg.Metadata) > 0 {
+		result["metadata"] = msg.Metadata
+	}
+
+	return result
+}
+
+// buildPluginSendConfig converts the CRD MessageSendConfig to a plugin-compatible config structure.
+func buildPluginSendConfig(cfg *agentv1alpha1.MessageSendConfig) map[string]interface{} {
+	result := map[string]interface{}{}
+	if len(cfg.AcceptedOutputModes) > 0 {
+		result["acceptedOutputModes"] = cfg.AcceptedOutputModes
+	}
+	if cfg.Blocking != nil {
+		result["blocking"] = *cfg.Blocking
+	}
+	if cfg.HistoryLength != nil {
+		result["historyLength"] = *cfg.HistoryLength
+	}
+	return result
 }
 
 // buildEphemeralAgentTemplate populates a template with a container spec for ephemeral agent execution.

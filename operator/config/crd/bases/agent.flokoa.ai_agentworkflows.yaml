@@ -123,12 +123,139 @@ spec:
                     agent:
                       description: Agent calls a deployed Agent CR via the A2A protocol.
                       properties:
+                        config:
+                          description: Config configures how the message is sent to
+                            the agent.
+                          properties:
+                            acceptedOutputModes:
+                              description: AcceptedOutputModes restricts the agent's
+                                output format.
+                              items:
+                                type: string
+                              type: array
+                            blocking:
+                              description: Blocking indicates whether to wait synchronously
+                                for task completion.
+                              type: boolean
+                            historyLength:
+                              description: HistoryLength limits the conversation history
+                                returned with the response.
+                              format: int32
+                              type: integer
+                          type: object
                         message:
-                          description: |-
-                            Message is the message to send to the agent.
-                            Supports expressions like {{params.topic}} or {{tasks.prev.output}}.
-                          minLength: 1
-                          type: string
+                          description: Message is the A2A message to send to the agent.
+                          properties:
+                            contextId:
+                              description: |-
+                                ContextID for conversation threading across agent interactions.
+                                Aligns with a2a.Message.ContextID.
+                              type: string
+                            extensions:
+                              description: |-
+                                Extensions lists A2A extension URIs to activate for this message.
+                                Aligns with a2a.Message.Extensions.
+                              items:
+                                type: string
+                              type: array
+                            metadata:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                Metadata is arbitrary key-value metadata attached to the message.
+                                Aligns with a2a.Message.Metadata.
+                              type: object
+                            parts:
+                              description: Parts is the content of the message. At
+                                least one part is required.
+                              items:
+                                description: |-
+                                  MessagePart represents a content part in an A2A message.
+                                  Exactly one of Text, Data, or File must be set.
+                                  Aligns with a2a.Part (TextPart, DataPart, FilePart) from github.com/a2aproject/a2a-go.
+                                properties:
+                                  data:
+                                    description: Data content part (structured JSON).
+                                    properties:
+                                      data:
+                                        description: Data is arbitrary JSON data to
+                                          send to the agent.
+                                        x-kubernetes-preserve-unknown-fields: true
+                                      metadata:
+                                        additionalProperties:
+                                          type: string
+                                        description: Metadata for this part.
+                                        type: object
+                                    required:
+                                    - data
+                                    type: object
+                                  file:
+                                    description: File content part.
+                                    properties:
+                                      file:
+                                        description: File content (either inline bytes
+                                          or a URI reference).
+                                        properties:
+                                          bytes:
+                                            description: |-
+                                              Bytes is the base64-encoded file content.
+                                              Exactly one of Bytes or URI must be set.
+                                            type: string
+                                          mimeType:
+                                            description: MimeType of the file content.
+                                            type: string
+                                          name:
+                                            description: Name of the file.
+                                            type: string
+                                          uri:
+                                            description: |-
+                                              URI is a reference to the file location.
+                                              Exactly one of Bytes or URI must be set.
+                                            type: string
+                                        type: object
+                                      metadata:
+                                        additionalProperties:
+                                          type: string
+                                        description: Metadata for this part.
+                                        type: object
+                                    required:
+                                    - file
+                                    type: object
+                                  text:
+                                    description: Text content part.
+                                    properties:
+                                      metadata:
+                                        additionalProperties:
+                                          type: string
+                                        description: Metadata for this part.
+                                        type: object
+                                      text:
+                                        description: Text content. Supports expressions
+                                          like {{params.topic}} or {{tasks.prev.output}}.
+                                        type: string
+                                    required:
+                                    - text
+                                    type: object
+                                type: object
+                              minItems: 1
+                              type: array
+                            referenceTaskIds:
+                              description: |-
+                                ReferenceTaskIDs links this message to previous A2A task IDs.
+                                Aligns with a2a.Message.ReferenceTasks.
+                              items:
+                                type: string
+                              type: array
+                            role:
+                              default: user
+                              description: Role of the message sender.
+                              enum:
+                              - user
+                              - agent
+                              type: string
+                          required:
+                          - parts
+                          type: object
                         name:
                           description: Name is the name of the Agent CR to call.
                           minLength: 1

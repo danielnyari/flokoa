@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -150,11 +151,148 @@ type AgentCall struct {
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 
-	// Message is the message to send to the agent.
-	// Supports expressions like {{params.topic}} or {{tasks.prev.output}}.
+	// Message is the A2A message to send to the agent.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Message string `json:"message"`
+	Message AgentMessage `json:"message"`
+
+	// Config configures how the message is sent to the agent.
+	// +optional
+	Config *MessageSendConfig `json:"config,omitempty"`
+}
+
+// MessageRole represents the role of a message sender.
+// Aligns with a2a.MessageRole from github.com/a2aproject/a2a-go.
+// +kubebuilder:validation:Enum=user;agent
+type MessageRole string
+
+const (
+	MessageRoleUser  MessageRole = "user"
+	MessageRoleAgent MessageRole = "agent"
+)
+
+// AgentMessage represents an A2A protocol message.
+// Aligns with a2a.Message from github.com/a2aproject/a2a-go.
+type AgentMessage struct {
+	// Role of the message sender.
+	// +optional
+	// +kubebuilder:default=user
+	Role MessageRole `json:"role,omitempty"`
+
+	// Parts is the content of the message. At least one part is required.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Parts []MessagePart `json:"parts"`
+
+	// ContextID for conversation threading across agent interactions.
+	// Aligns with a2a.Message.ContextID.
+	// +optional
+	ContextID string `json:"contextId,omitempty"`
+
+	// ReferenceTaskIDs links this message to previous A2A task IDs.
+	// Aligns with a2a.Message.ReferenceTasks.
+	// +optional
+	ReferenceTaskIDs []string `json:"referenceTaskIds,omitempty"`
+
+	// Extensions lists A2A extension URIs to activate for this message.
+	// Aligns with a2a.Message.Extensions.
+	// +optional
+	Extensions []string `json:"extensions,omitempty"`
+
+	// Metadata is arbitrary key-value metadata attached to the message.
+	// Aligns with a2a.Message.Metadata.
+	// +optional
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// MessagePart represents a content part in an A2A message.
+// Exactly one of Text, Data, or File must be set.
+// Aligns with a2a.Part (TextPart, DataPart, FilePart) from github.com/a2aproject/a2a-go.
+type MessagePart struct {
+	// Text content part.
+	// +optional
+	Text *TextPart `json:"text,omitempty"`
+
+	// Data content part (structured JSON).
+	// +optional
+	Data *DataPart `json:"data,omitempty"`
+
+	// File content part.
+	// +optional
+	File *FilePart `json:"file,omitempty"`
+}
+
+// TextPart contains text content. Supports DSL expressions.
+// Aligns with a2a.TextPart from github.com/a2aproject/a2a-go.
+type TextPart struct {
+	// Text content. Supports expressions like {{params.topic}} or {{tasks.prev.output}}.
+	// +kubebuilder:validation:Required
+	Text string `json:"text"`
+
+	// Metadata for this part.
+	// +optional
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// DataPart contains structured JSON data.
+// Aligns with a2a.DataPart from github.com/a2aproject/a2a-go.
+type DataPart struct {
+	// Data is arbitrary JSON data to send to the agent.
+	// +kubebuilder:validation:Required
+	Data apiextensionsv1.JSON `json:"data"`
+
+	// Metadata for this part.
+	// +optional
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// FilePart contains file content.
+// Aligns with a2a.FilePart from github.com/a2aproject/a2a-go.
+type FilePart struct {
+	// File content (either inline bytes or a URI reference).
+	// +kubebuilder:validation:Required
+	File FileContent `json:"file"`
+
+	// Metadata for this part.
+	// +optional
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// FileContent represents file data, either as inline base64 bytes or a URI reference.
+// Aligns with a2a.FileBytes / a2a.FileURI / a2a.FileMeta from github.com/a2aproject/a2a-go.
+type FileContent struct {
+	// Name of the file.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// MimeType of the file content.
+	// +optional
+	MimeType string `json:"mimeType,omitempty"`
+
+	// Bytes is the base64-encoded file content.
+	// Exactly one of Bytes or URI must be set.
+	// +optional
+	Bytes string `json:"bytes,omitempty"`
+
+	// URI is a reference to the file location.
+	// Exactly one of Bytes or URI must be set.
+	// +optional
+	URI string `json:"uri,omitempty"`
+}
+
+// MessageSendConfig configures how a message is sent to an A2A agent.
+// Aligns with a2a.MessageSendConfig from github.com/a2aproject/a2a-go.
+type MessageSendConfig struct {
+	// AcceptedOutputModes restricts the agent's output format.
+	// +optional
+	AcceptedOutputModes []string `json:"acceptedOutputModes,omitempty"`
+
+	// Blocking indicates whether to wait synchronously for task completion.
+	// +optional
+	Blocking *bool `json:"blocking,omitempty"`
+
+	// HistoryLength limits the conversation history returned with the response.
+	// +optional
+	HistoryLength *int32 `json:"historyLength,omitempty"`
 }
 
 // EphemeralAgentTask defines a task that runs agent code in a short-lived container.

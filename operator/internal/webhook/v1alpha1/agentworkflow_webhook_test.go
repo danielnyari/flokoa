@@ -24,6 +24,15 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
+// textMessage creates an AgentMessage with a single text part.
+func textMessage(text string) agentv1alpha1.AgentMessage {
+	return agentv1alpha1.AgentMessage{
+		Parts: []agentv1alpha1.MessagePart{
+			{Text: &agentv1alpha1.TextPart{Text: text}},
+		},
+	}
+}
+
 func TestValidateAgentWorkflow_Valid(t *testing.T) {
 	wf := &agentv1alpha1.AgentWorkflow{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
@@ -37,14 +46,14 @@ func TestValidateAgentWorkflow_Valid(t *testing.T) {
 					Name: "research",
 					Agent: &agentv1alpha1.AgentCall{
 						Name:    "researcher-agent",
-						Message: "Research {{params.topic}}",
+						Message: textMessage("Research {{params.topic}}"),
 					},
 				},
 				{
 					Name: "summarize",
 					Agent: &agentv1alpha1.AgentCall{
 						Name:    "summarizer-agent",
-						Message: "Summarize: {{tasks.research.output}}",
+						Message: textMessage("Summarize: {{tasks.research.output}}"),
 					},
 					DependsOn: []string{"research"},
 				},
@@ -62,8 +71,8 @@ func TestValidateAgentWorkflow_DuplicateTaskNames(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"}},
-				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent2", Message: "world"}},
+				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")}},
+				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent2", Message: textMessage("world")}},
 			},
 		},
 	}
@@ -95,7 +104,7 @@ func TestValidateAgentWorkflow_MultipleTaskTypes(t *testing.T) {
 			Tasks: []agentv1alpha1.WorkflowTask{
 				{
 					Name:      "multi",
-					Agent:     &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"},
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")},
 					AgentTask: &agentv1alpha1.EphemeralAgentTask{Entrypoint: "run.py"},
 				},
 			},
@@ -112,9 +121,9 @@ func TestValidateAgentWorkflow_DAGCycle(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "a", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"}, DependsOn: []string{"c"}},
-				{Name: "b", Agent: &agentv1alpha1.AgentCall{Name: "agent2", Message: "hello"}, DependsOn: []string{"a"}},
-				{Name: "c", Agent: &agentv1alpha1.AgentCall{Name: "agent3", Message: "hello"}, DependsOn: []string{"b"}},
+				{Name: "a", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")}, DependsOn: []string{"c"}},
+				{Name: "b", Agent: &agentv1alpha1.AgentCall{Name: "agent2", Message: textMessage("hello")}, DependsOn: []string{"a"}},
+				{Name: "c", Agent: &agentv1alpha1.AgentCall{Name: "agent3", Message: textMessage("hello")}, DependsOn: []string{"b"}},
 			},
 		},
 	}
@@ -129,7 +138,7 @@ func TestValidateAgentWorkflow_InvalidDependsOn(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"}, DependsOn: []string{"nonexistent"}},
+				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")}, DependsOn: []string{"nonexistent"}},
 			},
 		},
 	}
@@ -144,7 +153,7 @@ func TestValidateAgentWorkflow_SelfDependency(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"}, DependsOn: []string{"task1"}},
+				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")}, DependsOn: []string{"task1"}},
 			},
 		},
 	}
@@ -178,7 +187,7 @@ func TestValidateAgentWorkflow_LoopOnArgo(t *testing.T) {
 			Tasks: []agentv1alpha1.WorkflowTask{
 				{
 					Name:  "loopy",
-					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"},
+					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")},
 					Loop:  &agentv1alpha1.LoopSpec{Until: "{{tasks.loopy.output.done}} == true", MaxIterations: 5},
 				},
 			},
@@ -211,7 +220,7 @@ func TestValidateAgentWorkflow_InvalidExpressionReference(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "Data: {{tasks.nonexistent.output}}"}},
+				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("Data: {{tasks.nonexistent.output}}")}},
 			},
 		},
 	}
@@ -226,7 +235,7 @@ func TestValidateAgentWorkflow_InvalidParamReference(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "Topic: {{params.undefined}}"}},
+				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("Topic: {{params.undefined}}")}},
 			},
 		},
 	}
@@ -257,14 +266,14 @@ func TestValidateAgentWorkflow_FanOutFanIn(t *testing.T) {
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Params: []agentv1alpha1.WorkflowParam{{Name: "proposal", Value: "Migrate to microservices"}},
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "technical", Agent: &agentv1alpha1.AgentCall{Name: "tech-advisor", Message: "Review: {{params.proposal}}"}},
-				{Name: "cost", Agent: &agentv1alpha1.AgentCall{Name: "cost-analyst", Message: "Costs: {{params.proposal}}"}},
-				{Name: "risk", Agent: &agentv1alpha1.AgentCall{Name: "risk-assessor", Message: "Risks: {{params.proposal}}"}},
+				{Name: "technical", Agent: &agentv1alpha1.AgentCall{Name: "tech-advisor", Message: textMessage("Review: {{params.proposal}}")}},
+				{Name: "cost", Agent: &agentv1alpha1.AgentCall{Name: "cost-analyst", Message: textMessage("Costs: {{params.proposal}}")}},
+				{Name: "risk", Agent: &agentv1alpha1.AgentCall{Name: "risk-assessor", Message: textMessage("Risks: {{params.proposal}}")}},
 				{
 					Name: "synthesize",
 					Agent: &agentv1alpha1.AgentCall{
 						Name:    "summarizer",
-						Message: "Tech: {{tasks.technical.output}} Cost: {{tasks.cost.output}} Risk: {{tasks.risk.output}}",
+						Message: textMessage("Tech: {{tasks.technical.output}} Cost: {{tasks.cost.output}} Risk: {{tasks.risk.output}}"),
 					},
 					DependsOn: []string{"technical", "cost", "risk"},
 				},
@@ -274,5 +283,114 @@ func TestValidateAgentWorkflow_FanOutFanIn(t *testing.T) {
 
 	if err := ValidateAgentWorkflow(wf); err != nil {
 		t.Errorf("expected valid fan-out/fan-in workflow, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_MultiPartMessage(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "query"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "analyze",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "analyzer",
+						Message: agentv1alpha1.AgentMessage{
+							Parts: []agentv1alpha1.MessagePart{
+								{Text: &agentv1alpha1.TextPart{Text: "Analyze: {{params.query}}"}},
+								{File: &agentv1alpha1.FilePart{
+									File: agentv1alpha1.FileContent{URI: "s3://bucket/data.csv"},
+								}},
+							},
+							ContextID: "ctx-1",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid multi-part message workflow, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_InvalidPartNoType(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "agent1",
+						Message: agentv1alpha1.AgentMessage{
+							Parts: []agentv1alpha1.MessagePart{
+								{}, // empty part — no text, data, or file
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for message part with no type set")
+	}
+}
+
+func TestValidateAgentWorkflow_InvalidPartMultipleTypes(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "agent1",
+						Message: agentv1alpha1.AgentMessage{
+							Parts: []agentv1alpha1.MessagePart{
+								{
+									Text: &agentv1alpha1.TextPart{Text: "hello"},
+									File: &agentv1alpha1.FilePart{File: agentv1alpha1.FileContent{URI: "s3://x"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for message part with multiple types set")
+	}
+}
+
+func TestValidateAgentWorkflow_ExpressionInMultiPart(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "agent1",
+						Message: agentv1alpha1.AgentMessage{
+							Parts: []agentv1alpha1.MessagePart{
+								{Text: &agentv1alpha1.TextPart{Text: "Valid plain text"}},
+								{Text: &agentv1alpha1.TextPart{Text: "Bad ref: {{tasks.nonexistent.output}}"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for invalid expression in second text part")
 	}
 }

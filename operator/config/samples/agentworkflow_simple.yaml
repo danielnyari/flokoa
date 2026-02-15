@@ -11,11 +11,17 @@ spec:
     - name: research
       agent:
         name: researcher-agent
-        message: "Find recent papers on {{params.topic}}"
+        message:
+          parts:
+            - text:
+                text: "Find recent papers on {{params.topic}}"
       timeout: 10m
 
     - name: summarize
       agent:
         name: summarizer-agent
-        message: "Summarize these findings: {{tasks.research.output}}"
+        message:
+          parts:
+            - text:
+                text: "Summarize these findings: {{tasks.research.output}}"
       dependsOn: [research]

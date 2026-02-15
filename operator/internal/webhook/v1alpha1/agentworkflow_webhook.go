@@ -151,6 +151,31 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 			}
 		}
 
+		// W5b: Validate message parts — exactly one of text/data/file per part
+		if task.Agent != nil {
+			for j, part := range task.Agent.Message.Parts {
+				partPath := taskPath.Child("agent", "message", "parts").Index(j)
+				partTypeCount := 0
+				if part.Text != nil {
+					partTypeCount++
+				}
+				if part.Data != nil {
+					partTypeCount++
+				}
+				if part.File != nil {
+					partTypeCount++
+				}
+				if partTypeCount == 0 {
+					allErrs = append(allErrs, field.Required(partPath,
+						"exactly one of text, data, or file must be set"))
+				}
+				if partTypeCount > 1 {
+					allErrs = append(allErrs, field.Forbidden(partPath,
+						"only one of text, data, or file may be set per part"))
+				}
+			}
+		}
+
 		// W6: Valid dependsOn references
 		for j, dep := range task.DependsOn {
 			if _, ok := taskNames[dep]; !ok {
@@ -209,7 +234,15 @@ func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, 
 	var fields []exprField
 
 	if task.Agent != nil {
-		fields = append(fields, exprField{taskPath.Child("agent", "message"), task.Agent.Message})
+		// Scan all text parts for expressions
+		for i, part := range task.Agent.Message.Parts {
+			if part.Text != nil {
+				fields = append(fields, exprField{
+					taskPath.Child("agent", "message", "parts").Index(i).Child("text", "text"),
+					part.Text.Text,
+				})
+			}
+		}
 	}
 	if task.AgentTask != nil {
 		fields = append(fields, exprField{taskPath.Child("agentTask", "input"), task.AgentTask.Input})

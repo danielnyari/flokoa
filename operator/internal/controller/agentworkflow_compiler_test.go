@@ -26,6 +26,15 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
+// textMessage creates an AgentMessage with a single text part.
+func textMessage(text string) agentv1alpha1.AgentMessage {
+	return agentv1alpha1.AgentMessage{
+		Parts: []agentv1alpha1.MessagePart{
+			{Text: &agentv1alpha1.TextPart{Text: text}},
+		},
+	}
+}
+
 func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 	timeout := metav1.Duration{Duration: 10 * time.Minute}
 	awf := &agentv1alpha1.AgentWorkflow{
@@ -42,7 +51,7 @@ func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 					Name: "research",
 					Agent: &agentv1alpha1.AgentCall{
 						Name:    "researcher-agent",
-						Message: "Find papers on {{params.topic}}",
+						Message: textMessage("Find papers on {{params.topic}}"),
 					},
 					Timeout: &timeout,
 				},
@@ -50,7 +59,7 @@ func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 					Name: "summarize",
 					Agent: &agentv1alpha1.AgentCall{
 						Name:    "summarizer-agent",
-						Message: "Summarize: {{tasks.research.output}}",
+						Message: textMessage("Summarize: {{tasks.research.output}}"),
 					},
 					DependsOn: []string{"research"},
 				},
@@ -113,7 +122,7 @@ func TestCompileToArgoWorkflow_AgentTemplate(t *testing.T) {
 					Agent: &agentv1alpha1.AgentCall{
 						Name:      "my-agent",
 						Namespace: "agents",
-						Message:   "Hello agent",
+						Message:   textMessage("Hello agent"),
 					},
 				},
 			},
@@ -147,13 +156,110 @@ func TestCompileToArgoWorkflow_AgentTemplate(t *testing.T) {
 			if a2aSpec["namespace"] != "agents" {
 				t.Errorf("expected namespace 'agents', got %v", a2aSpec["namespace"])
 			}
-			if a2aSpec["message"] != "Hello agent" {
-				t.Errorf("expected message 'Hello agent', got %v", a2aSpec["message"])
+			// Verify structured message
+			msg, ok := a2aSpec["message"].(map[string]interface{})
+			if !ok {
+				t.Fatal("expected message to be a structured object")
+			}
+			parts, ok := msg["parts"].([]interface{})
+			if !ok || len(parts) != 1 {
+				t.Fatalf("expected 1 message part, got %v", msg["parts"])
+			}
+			part := parts[0].(map[string]interface{})
+			textPart := part["text"].(map[string]interface{})
+			if textPart["text"] != "Hello agent" {
+				t.Errorf("expected text 'Hello agent', got %v", textPart["text"])
 			}
 		}
 	}
 	if !found {
 		t.Error("agent template with plugin spec not found")
+	}
+}
+
+func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "multi-part",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "my-agent",
+						Message: agentv1alpha1.AgentMessage{
+							Role: agentv1alpha1.MessageRoleUser,
+							Parts: []agentv1alpha1.MessagePart{
+								{Text: &agentv1alpha1.TextPart{Text: "Analyze this data"}},
+								{File: &agentv1alpha1.FilePart{
+									File: agentv1alpha1.FileContent{
+										URI:      "s3://bucket/data.csv",
+										MimeType: "text/csv",
+										Name:     "data.csv",
+									},
+								}},
+							},
+							ContextID: "ctx-123",
+						},
+						Config: &agentv1alpha1.MessageSendConfig{
+							AcceptedOutputModes: []string{"text", "application/json"},
+							Blocking:            boolPtr(true),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	wf, err := compileToArgoWorkflow(awf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, tmpl := range wf.Spec.Templates {
+		if tmpl.Name == "multi-part" && tmpl.Plugin != nil {
+			var pluginData map[string]json.RawMessage
+			if err := json.Unmarshal(tmpl.Plugin.Value, &pluginData); err != nil {
+				t.Fatalf("failed to unmarshal plugin: %v", err)
+			}
+			var a2aSpec map[string]interface{}
+			if err := json.Unmarshal(pluginData["a2a"], &a2aSpec); err != nil {
+				t.Fatalf("failed to unmarshal a2a spec: %v", err)
+			}
+
+			// Verify structured message with multiple parts
+			msg := a2aSpec["message"].(map[string]interface{})
+			parts := msg["parts"].([]interface{})
+			if len(parts) != 2 {
+				t.Fatalf("expected 2 message parts, got %d", len(parts))
+			}
+
+			// First part: text
+			part0 := parts[0].(map[string]interface{})
+			if part0["text"] == nil {
+				t.Error("expected first part to be text")
+			}
+
+			// Second part: file
+			part1 := parts[1].(map[string]interface{})
+			if part1["file"] == nil {
+				t.Error("expected second part to be file")
+			}
+
+			// Verify contextId
+			if msg["contextId"] != "ctx-123" {
+				t.Errorf("expected contextId 'ctx-123', got %v", msg["contextId"])
+			}
+
+			// Verify config
+			cfg := a2aSpec["config"].(map[string]interface{})
+			if cfg["blocking"] != true {
+				t.Errorf("expected blocking true, got %v", cfg["blocking"])
+			}
+			modes := cfg["acceptedOutputModes"].([]interface{})
+			if len(modes) != 2 {
+				t.Errorf("expected 2 accepted output modes, got %d", len(modes))
+			}
+		}
 	}
 }
 
@@ -225,7 +331,7 @@ func TestCompileToArgoWorkflow_RetryStrategy(t *testing.T) {
 			Tasks: []agentv1alpha1.WorkflowTask{
 				{
 					Name:  "task1",
-					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"},
+					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")},
 				},
 			},
 		},
@@ -261,7 +367,7 @@ func TestCompileToArgoWorkflow_WorkflowTimeout(t *testing.T) {
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Timeout: &timeout,
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: "hello"}},
+				{Name: "task1", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")}},
 			},
 		},
 	}
@@ -281,12 +387,12 @@ func TestCompileToArgoWorkflow_FanOutFanIn(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "fan-out", Namespace: "default"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "a", Agent: &agentv1alpha1.AgentCall{Name: "agent-a", Message: "task a"}},
-				{Name: "b", Agent: &agentv1alpha1.AgentCall{Name: "agent-b", Message: "task b"}},
-				{Name: "c", Agent: &agentv1alpha1.AgentCall{Name: "agent-c", Message: "task c"}},
+				{Name: "a", Agent: &agentv1alpha1.AgentCall{Name: "agent-a", Message: textMessage("task a")}},
+				{Name: "b", Agent: &agentv1alpha1.AgentCall{Name: "agent-b", Message: textMessage("task b")}},
+				{Name: "c", Agent: &agentv1alpha1.AgentCall{Name: "agent-c", Message: textMessage("task c")}},
 				{
 					Name:      "merge",
-					Agent:     &agentv1alpha1.AgentCall{Name: "agent-merge", Message: "merge results"},
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent-merge", Message: textMessage("merge results")},
 					DependsOn: []string{"a", "b", "c"},
 				},
 			},
@@ -374,10 +480,10 @@ func TestCompileToArgoWorkflow_Condition(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "classifier", Message: "classify"}},
+				{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "classifier", Message: textMessage("classify")}},
 				{
 					Name:      "technical",
-					Agent:     &agentv1alpha1.AgentCall{Name: "tech-support", Message: "help"},
+					Agent:     &agentv1alpha1.AgentCall{Name: "tech-support", Message: textMessage("help")},
 					DependsOn: []string{"classify"},
 					Condition: "{{tasks.classify.output.category}} == technical",
 				},
