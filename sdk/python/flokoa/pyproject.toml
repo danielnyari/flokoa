@@ -34,12 +34,20 @@ google-adk = [
     "google-adk>=1.14.1",
 ]
 
+workflow = [
+    "pydantic-graph>=0.2.2",
+    "pyyaml>=6.0",
+]
+
 [dependency-groups]
 pydantic-ai = [
     "flokoa[pydantic-ai]",
 ]
 google-adk = [
     "flokoa[google-adk]",
+]
+workflow = [
+    "flokoa[workflow]",
 ]
 dev = [
     "mypy-boto3-bedrock-runtime>=1.42.31",
