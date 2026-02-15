@@ -33,6 +33,7 @@ rules:
   - instructions
   - modelproviders
   - models
+  - prompts
   verbs:
   - create
   - delete
@@ -49,6 +50,7 @@ rules:
   - instructions/finalizers
   - modelproviders/finalizers
   - models/finalizers
+  - prompts/finalizers
   verbs:
   - update
 - apiGroups:
@@ -59,6 +61,7 @@ rules:
   - instructions/status
   - modelproviders/status
   - models/status
+  - prompts/status
   verbs:
   - get
   - patch

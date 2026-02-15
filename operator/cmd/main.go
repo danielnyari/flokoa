@@ -240,6 +240,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Instruction")
 		os.Exit(1)
 	}
+	if err := (&controller.PromptReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Prompt")
+		os.Exit(1)
+	}
 	if enableWebhooks {
 		if err := agentv1alpha1.SetupAgentWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Agent")
@@ -259,6 +266,10 @@ func main() {
 		}
 		if err := agentv1alpha1.SetupInstructionWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Instruction")
+			os.Exit(1)
+		}
+		if err := agentv1alpha1.SetupPromptWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Prompt")
 			os.Exit(1)
 		}
 	}

@@ -1,0 +1,30 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Prompt
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: customer-greeting
+spec:
+  source:
+    value: |
+      Hello {{ customer_name }},
+
+      Welcome to {{ company_name }} support. I'm here to help you with
+      your {{ issue_category }} inquiry.
+
+      {{ additional_context }}
+
+      How can I assist you today?
+  variables:
+    - name: customer_name
+      description: "The customer's display name"
+      required: true
+    - name: company_name
+      description: "The company name to use in the greeting"
+      default: "Acme Corp"
+    - name: issue_category
+      description: "The category of the customer's issue"
+      default: "general"
+    - name: additional_context
+      description: "Any additional context to include in the prompt"
