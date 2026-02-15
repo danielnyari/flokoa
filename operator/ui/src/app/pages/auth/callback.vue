@@ -22,21 +22,25 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-default">
-    <div class="w-full max-w-sm mx-auto p-8 text-center">
+  <div class="flex items-center justify-center min-h-screen">
+    <UPageCard class="w-full max-w-sm text-center">
       <template v-if="error">
-        <div class="flex flex-col items-center gap-4">
-          <UIcon name="i-lucide-alert-circle" class="size-12 text-error" />
-          <p class="text-sm text-error">{{ error }}</p>
+        <div class="flex flex-col items-center gap-4 p-6">
+          <UAlert
+            color="error"
+            icon="i-lucide-alert-circle"
+            title="Authentication failed"
+            :description="error"
+          />
           <UButton label="Try again" to="/login" />
         </div>
       </template>
       <template v-else>
-        <div class="flex flex-col items-center gap-4">
+        <div class="flex flex-col items-center gap-4 p-6">
           <UIcon name="i-lucide-loader-2" class="size-8 text-primary animate-spin" />
           <p class="text-sm text-muted">Completing sign in...</p>
         </div>
       </template>
-    </div>
+    </UPageCard>
   </div>
 </template>

@@ -7,9 +7,10 @@ export default defineNuxtRouteMiddleware((to) => {
 
   const auth = useAuth()
 
-  // Wait for auth to initialize
+  // While auth is initializing, redirect to login to prevent flash of protected content.
+  // The login page will redirect back after init completes if auth is disabled.
   if (auth.loading.value) {
-    return
+    return navigateTo('/login')
   }
 
   // If auth is disabled, allow all routes

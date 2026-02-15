@@ -28,11 +28,16 @@ interface TokenResponse {
   token_type: string
 }
 
-// Generate a random string for PKCE and state parameters
+// Generate a cryptographically secure random string for PKCE and state parameters.
+// Uses base64url encoding of random bytes for uniform entropy distribution.
 function generateRandomString(length: number): string {
-  const array = new Uint8Array(length)
+  const array = new Uint8Array(Math.ceil(length * 0.75))
   crypto.getRandomValues(array)
-  return Array.from(array, b => b.toString(36)).join('').slice(0, length)
+  return btoa(String.fromCharCode(...array))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+    .slice(0, length)
 }
 
 // Generate PKCE code verifier and challenge
@@ -48,12 +53,17 @@ async function generatePKCE() {
   return { verifier, challenge }
 }
 
-// Parse JWT payload without validation (validation happens server-side)
+// Parse JWT payload without validation (validation happens server-side).
+// Wrapped in try/catch to gracefully handle malformed tokens.
 function parseJwtPayload(token: string): Record<string, unknown> {
-  const payload = token.split('.')[1]
-  if (!payload) return {}
-  const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-  return JSON.parse(decoded)
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return {}
+    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    return JSON.parse(decoded)
+  } catch {
+    return {}
+  }
 }
 
 const _useAuth = () => {

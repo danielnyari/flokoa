@@ -1,5 +1,20 @@
 <script setup lang="ts">
 const auth = useAuth()
+
+const sessionItems = computed(() => {
+  if (!auth.isAuthEnabled.value || !auth.user.value) return []
+
+  const items: { label: string, value: string }[] = [
+    { label: 'Email', value: auth.user.value.email || 'N/A' },
+    { label: 'Name', value: auth.user.value.name || 'N/A' }
+  ]
+
+  if (auth.user.value.groups?.length) {
+    items.push({ label: 'Groups', value: auth.user.value.groups.join(', ') })
+  }
+
+  return items
+})
 </script>
 
 <template>
@@ -8,25 +23,24 @@ const auth = useAuth()
     description="Authentication is managed through your identity provider via OIDC (Dex)."
     variant="subtle"
   >
-    <div class="flex flex-col gap-3 max-w-sm">
-      <div v-if="auth.isAuthEnabled.value && auth.user.value" class="flex flex-col gap-2 text-sm">
-        <div class="flex justify-between">
-          <span class="text-muted">Email</span>
-          <span class="text-highlighted">{{ auth.user.value.email || 'N/A' }}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-muted">Name</span>
-          <span class="text-highlighted">{{ auth.user.value.name || 'N/A' }}</span>
-        </div>
-        <div v-if="auth.user.value.groups?.length" class="flex justify-between">
-          <span class="text-muted">Groups</span>
-          <span class="text-highlighted">{{ auth.user.value.groups.join(', ') }}</span>
-        </div>
+    <div v-if="auth.isAuthEnabled.value && auth.user.value" class="flex flex-col gap-3 max-w-sm">
+      <div
+        v-for="item in sessionItems"
+        :key="item.label"
+        class="flex justify-between text-sm"
+      >
+        <span class="text-muted">{{ item.label }}</span>
+        <span class="text-highlighted">{{ item.value }}</span>
       </div>
-      <p v-else-if="!auth.isAuthEnabled.value" class="text-sm text-muted">
-        Authentication is currently disabled. Enable Dex in the Helm chart configuration to enforce SSO.
-      </p>
     </div>
+    <UAlert
+      v-else-if="!auth.isAuthEnabled.value"
+      color="neutral"
+      variant="subtle"
+      icon="i-lucide-info"
+      title="Authentication disabled"
+      description="Enable Dex in the Helm chart configuration to enforce SSO."
+    />
   </UPageCard>
 
   <UPageCard
