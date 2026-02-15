@@ -124,34 +124,19 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 		if task.AgentTask != nil {
 			typeCount++
 		}
-		if task.WaitForSignal != nil {
-			typeCount++
-		}
 		if len(task.Switch) > 0 {
 			typeCount++
 		}
 		if typeCount == 0 {
 			allErrs = append(allErrs, field.Required(taskPath,
-				"exactly one of agent, agentTask, waitForSignal, or switch must be specified"))
+				"exactly one of agent, agentTask, or switch must be specified"))
 		}
 		if typeCount > 1 {
 			allErrs = append(allErrs, field.Forbidden(taskPath,
-				"only one of agent, agentTask, waitForSignal, or switch may be specified"))
+				"only one of agent, agentTask, or switch may be specified"))
 		}
 
-		// W4: Engine compatibility — Temporal-only features
-		if wf.Spec.Engine == agentv1alpha1.EngineTypeArgo || wf.Spec.Engine == "" {
-			if task.WaitForSignal != nil {
-				allErrs = append(allErrs, field.Forbidden(taskPath.Child("waitForSignal"),
-					"waitForSignal is only supported when engine is \"temporal\""))
-			}
-			if task.Loop != nil {
-				allErrs = append(allErrs, field.Forbidden(taskPath.Child("loop"),
-					"loop is only supported when engine is \"temporal\""))
-			}
-		}
-
-		// W5b: Validate message parts — exactly one of text/data/file per part
+		// W4: Validate message parts — exactly one of text/data/file per part
 		if task.Agent != nil {
 			for j, part := range task.Agent.Message.Parts {
 				partPath := taskPath.Child("agent", "message", "parts").Index(j)
@@ -211,12 +196,6 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 	// W5: DAG cycle detection
 	if cycleErr := detectDAGCycles(wf.Spec.Tasks); cycleErr != nil {
 		allErrs = append(allErrs, field.Invalid(tasksPath, nil, cycleErr.Error()))
-	}
-
-	// Temporal engine not yet implemented
-	if wf.Spec.Engine == agentv1alpha1.EngineTypeTemporal {
-		allErrs = append(allErrs, field.Invalid(specPath.Child("engine"), string(agentv1alpha1.EngineTypeTemporal),
-			"temporal engine is not yet supported; use \"argo\" or omit the engine field"))
 	}
 
 	return aggregateErrors(allErrs, wf.Name)

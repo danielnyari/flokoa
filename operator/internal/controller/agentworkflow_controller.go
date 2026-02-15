@@ -50,8 +50,7 @@ const (
 	ReasonWorkflowRunning    = "WorkflowRunning"
 	ReasonWorkflowComplete   = "WorkflowComplete"
 	ReasonWorkflowFailed     = "WorkflowFailed"
-	ReasonWorkflowError      = "WorkflowError"
-	ReasonEngineNotSupported = "EngineNotSupported"
+	ReasonWorkflowError = "WorkflowError"
 
 	// Requeue interval for monitoring running workflows
 	workflowPollInterval = 15 * time.Second
@@ -115,18 +114,6 @@ func (r *AgentWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: time.Second}, nil
-	}
-
-	// Check engine support
-	if awf.Spec.Engine == agentv1alpha1.EngineTypeTemporal {
-		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
-			ReasonEngineNotSupported, "temporal engine is not yet supported")
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		awf.Status.ObservedGeneration = awf.Generation
-		if err := r.Status().Update(ctx, awf); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
 	}
 
 	// If we already have a submitted Argo Workflow, monitor its status

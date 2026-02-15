@@ -37,7 +37,6 @@ func TestValidateAgentWorkflow_Valid(t *testing.T) {
 	wf := &agentv1alpha1.AgentWorkflow{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Engine: agentv1alpha1.EngineTypeArgo,
 			Params: []agentv1alpha1.WorkflowParam{
 				{Name: "topic", Value: "AI safety"},
 			},
@@ -160,58 +159,6 @@ func TestValidateAgentWorkflow_SelfDependency(t *testing.T) {
 
 	if err := ValidateAgentWorkflow(wf); err == nil {
 		t.Error("expected error for self-dependency")
-	}
-}
-
-func TestValidateAgentWorkflow_WaitForSignalOnArgo(t *testing.T) {
-	wf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Engine: agentv1alpha1.EngineTypeArgo,
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "wait", WaitForSignal: &agentv1alpha1.WaitForSignalSpec{Name: "approval"}},
-			},
-		},
-	}
-
-	if err := ValidateAgentWorkflow(wf); err == nil {
-		t.Error("expected error for waitForSignal on argo engine")
-	}
-}
-
-func TestValidateAgentWorkflow_LoopOnArgo(t *testing.T) {
-	wf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Engine: agentv1alpha1.EngineTypeArgo,
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name:  "loopy",
-					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")},
-					Loop:  &agentv1alpha1.LoopSpec{Until: "{{tasks.loopy.output.done}} == true", MaxIterations: 5},
-				},
-			},
-		},
-	}
-
-	if err := ValidateAgentWorkflow(wf); err == nil {
-		t.Error("expected error for loop on argo engine")
-	}
-}
-
-func TestValidateAgentWorkflow_TemporalNotSupported(t *testing.T) {
-	wf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Engine: agentv1alpha1.EngineTypeTemporal,
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{Name: "wait", WaitForSignal: &agentv1alpha1.WaitForSignalSpec{Name: "approval"}},
-			},
-		},
-	}
-
-	if err := ValidateAgentWorkflow(wf); err == nil {
-		t.Error("expected error for temporal engine (not yet supported)")
 	}
 }
 

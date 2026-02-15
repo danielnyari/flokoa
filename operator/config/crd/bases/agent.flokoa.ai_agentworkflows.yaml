@@ -20,9 +20,6 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .spec.engine
-      name: Engine
-      type: string
     - jsonPath: .status.argoWorkflowName
       name: Argo Workflow
       type: string
@@ -58,15 +55,6 @@ spec:
             properties:
               description:
                 description: Description is a human-readable description of the workflow.
-                type: string
-              engine:
-                default: argo
-                description: |-
-                  Engine specifies the workflow execution backend.
-                  Defaults to platform configuration if not set.
-                enum:
-                - argo
-                - temporal
                 type: string
               params:
                 description: Params are workflow-level parameters that can be referenced
@@ -118,7 +106,7 @@ spec:
                 items:
                   description: |-
                     WorkflowTask defines a single task in the workflow.
-                    Exactly one of Agent, AgentTask, WaitForSignal, or Switch must be specified.
+                    Exactly one of Agent, AgentTask, or Switch must be specified.
                   properties:
                     agent:
                       description: Agent calls a deployed Agent CR via the A2A protocol.
@@ -502,26 +490,6 @@ spec:
                       items:
                         type: string
                       type: array
-                    loop:
-                      description: |-
-                        Loop enables iterative execution of this task until a condition is met.
-                        Only supported when engine is "temporal".
-                      properties:
-                        maxIterations:
-                          description: MaxIterations is the maximum number of loop
-                            iterations.
-                          format: int32
-                          minimum: 1
-                          type: integer
-                        until:
-                          description: Until is an expression that when true, stops
-                            the loop.
-                          minLength: 1
-                          type: string
-                      required:
-                      - maxIterations
-                      - until
-                      type: object
                     name:
                       description: Name is the unique identifier for this task within
                         the workflow.
@@ -581,22 +549,6 @@ spec:
                     timeout:
                       description: Timeout is the maximum duration for this task.
                       type: string
-                    waitForSignal:
-                      description: |-
-                        WaitForSignal pauses the workflow until an external signal is received.
-                        Only supported when engine is "temporal".
-                      properties:
-                        name:
-                          description: Name is the signal name to wait for.
-                          minLength: 1
-                          type: string
-                        timeout:
-                          description: Timeout is the maximum duration to wait for
-                            the signal.
-                          type: string
-                      required:
-                      - name
-                      type: object
                   required:
                   - name
                   type: object

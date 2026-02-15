@@ -171,8 +171,6 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 		}
 	case task.AgentTask != nil:
 		buildEphemeralAgentTemplate(tmpl, task.AgentTask)
-	case task.WaitForSignal != nil:
-		return nil, fmt.Errorf("waitForSignal tasks cannot be compiled to Argo Workflows")
 	case len(task.Switch) > 0:
 		// Switch tasks are a no-op routing template; branching is in DAG when expressions.
 		tmpl.Script = &wfv1.ScriptTemplate{

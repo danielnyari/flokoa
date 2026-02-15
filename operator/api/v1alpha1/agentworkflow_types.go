@@ -22,17 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EngineType represents the workflow execution backend.
-// +kubebuilder:validation:Enum=argo;temporal
-type EngineType string
-
-const (
-	// EngineTypeArgo uses Argo Workflows as the execution backend.
-	EngineTypeArgo EngineType = "argo"
-	// EngineTypeTemporal uses Temporal as the execution backend.
-	EngineTypeTemporal EngineType = "temporal"
-)
-
 // WorkflowPhase represents the current phase of the workflow execution.
 // +kubebuilder:validation:Enum=Pending;Compiling;Running;Succeeded;Failed;Error
 type WorkflowPhase string
@@ -51,12 +40,6 @@ type AgentWorkflowSpec struct {
 	// Description is a human-readable description of the workflow.
 	// +optional
 	Description string `json:"description,omitempty"`
-
-	// Engine specifies the workflow execution backend.
-	// Defaults to platform configuration if not set.
-	// +optional
-	// +kubebuilder:default=argo
-	Engine EngineType `json:"engine,omitempty"`
 
 	// Params are workflow-level parameters that can be referenced in expressions.
 	// +optional
@@ -90,7 +73,7 @@ type WorkflowParam struct {
 }
 
 // WorkflowTask defines a single task in the workflow.
-// Exactly one of Agent, AgentTask, WaitForSignal, or Switch must be specified.
+// Exactly one of Agent, AgentTask, or Switch must be specified.
 type WorkflowTask struct {
 	// Name is the unique identifier for this task within the workflow.
 	// +kubebuilder:validation:Required
@@ -105,11 +88,6 @@ type WorkflowTask struct {
 	// AgentTask runs agent code in an ephemeral container.
 	// +optional
 	AgentTask *EphemeralAgentTask `json:"agentTask,omitempty"`
-
-	// WaitForSignal pauses the workflow until an external signal is received.
-	// Only supported when engine is "temporal".
-	// +optional
-	WaitForSignal *WaitForSignalSpec `json:"waitForSignal,omitempty"`
 
 	// Switch routes to different tasks based on the output of a previous task.
 	// +optional
@@ -132,11 +110,6 @@ type WorkflowTask struct {
 	// If false, the task is skipped.
 	// +optional
 	Condition string `json:"condition,omitempty"`
-
-	// Loop enables iterative execution of this task until a condition is met.
-	// Only supported when engine is "temporal".
-	// +optional
-	Loop *LoopSpec `json:"loop,omitempty"`
 }
 
 // AgentCall defines a task that calls a deployed Agent CR via the A2A protocol.
@@ -332,19 +305,6 @@ type EphemeralAgentTask struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// WaitForSignalSpec pauses the workflow until an external signal is received.
-// Only supported when engine is "temporal".
-type WaitForSignalSpec struct {
-	// Name is the signal name to wait for.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-
-	// Timeout is the maximum duration to wait for the signal.
-	// +optional
-	Timeout *metav1.Duration `json:"timeout,omitempty"`
-}
-
 // SwitchCase defines a conditional branch in a switch task.
 // Exactly one of Condition+Then or Default must be set.
 type SwitchCase struct {
@@ -359,20 +319,6 @@ type SwitchCase struct {
 	// Default is the fallback task name if no other condition matches.
 	// +optional
 	Default string `json:"default,omitempty"`
-}
-
-// LoopSpec enables iterative execution of a task.
-// Only supported when engine is "temporal".
-type LoopSpec struct {
-	// Until is an expression that when true, stops the loop.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Until string `json:"until"`
-
-	// MaxIterations is the maximum number of loop iterations.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Required
-	MaxIterations int32 `json:"maxIterations"`
 }
 
 // WorkflowRetryStrategy defines retry behavior for tasks.
@@ -454,7 +400,6 @@ type WorkflowTaskStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=awf
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
-// +kubebuilder:printcolumn:name="Engine",type="string",JSONPath=".spec.engine"
 // +kubebuilder:printcolumn:name="Argo Workflow",type="string",JSONPath=".status.argoWorkflowName"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
