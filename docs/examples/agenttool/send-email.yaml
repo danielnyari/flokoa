@@ -1,73 +1,52 @@
-# Email sending tool
+# Email sending tool with OpenAPI spec from ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: email-api-spec
+data:
+  openapi.yaml: |
+    openapi: "3.0.0"
+    info:
+      title: Email API
+      version: "1.0"
+    paths:
+      /mail/send:
+        post:
+          summary: Send email notification
+          requestBody:
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    to:
+                      type: string
+                      format: email
+                    subject:
+                      type: string
+                    body:
+                      type: string
+                  required: [to, subject, body]
+          responses:
+            "200":
+              description: Email sent
+---
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
   name: send-email
   labels:
-    type: http-api
     category: notifications
 spec:
-  type: http-api
+  type: openapi
   description: "Send email notifications to users"
-  
-  httpApi:
-    url: "https://api.sendgrid.com/v3/mail/send"
-    method: POST
+
+  openApi:
+    url: "https://api.sendgrid.com/v3"
     timeoutSeconds: 30
-    
     headers:
       Content-Type: "application/json"
-      # Note: Authorization header should be injected by agent runtime
-      # from secret at runtime, not stored here
-  
-  inputSchema:
-    type: object
-    properties:
-      to:
-        type: string
-        format: email
-        description: "Recipient email address"
-      subject:
-        type: string
-        description: "Email subject line"
-      body:
-        type: string
-        description: "Email body content"
-      isHtml:
-        type: boolean
-        default: false
-        description: "Whether body is HTML formatted"
-      cc:
-        type: array
-        items:
-          type: string
-          format: email
-        description: "CC recipients"
-      attachments:
-        type: array
-        items:
-          type: object
-          properties:
-            filename:
-              type: string
-            content:
-              type: string
-              description: "Base64 encoded content"
-        description: "Email attachments"
-    required:
-      - to
-      - subject
-      - body
-  
-  outputSchema:
-    type: object
-    properties:
-      messageId:
-        type: string
-        description: "Unique message identifier"
-      status:
-        type: string
-        enum: ["sent", "queued", "failed"]
-      error:
-        type: string
-        description: "Error message if status is failed"
+    openApiSchema:
+      valueFrom:
+        name: email-api-spec
+        key: openapi.yaml

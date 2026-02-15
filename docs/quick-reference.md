@@ -140,12 +140,13 @@ spec:
     - toolRef:
         name: weather-api
     - name: inline-tool
-      inline:
-        type: http-api
-        description: "..."
-        httpApi:
+      template:
+        type: openapi
+        description: "Call the example API"
+        openApi:
           url: "https://api.example.com"
-          method: GET
+          openApiSchema:
+            endpointPath: "/openapi.json"
   runtime:
     type: standard
     spec:
@@ -334,15 +335,12 @@ kind: AgentTool
 metadata:
   name: external-api
 spec:
-  type: http-api
+  type: openapi
   description: "Call external API"
-  httpApi:
-    url: "https://api.external.com/endpoint"
-    method: GET
-  inputSchema:
-    type: object
-    properties:
-      param: {type: string}
+  openApi:
+    url: "https://api.external.com"
+    openApiSchema:
+      endpointPath: "/openapi.json"
 ```
 
 ### Internal Service
@@ -353,31 +351,26 @@ kind: AgentTool
 metadata:
   name: internal-service
 spec:
-  type: http-api
+  type: openapi
   description: "Call internal service"
-  httpApi:
+  openApi:
     serviceRef:
       name: my-service
       namespace: backend
       port: 8080
-    method: GET
-  inputSchema:
-    type: object
-    properties:
-      param: {type: string}
+    openApiSchema:
+      endpointPath: "/openapi.json"
 ```
 
-### POST with JSON Body
+### OpenAPI Spec from ConfigMap
 
 ```yaml
-httpApi:
-  method: POST
-inputSchema:
-  type: object
-  properties:
-    name: {type: string}
-    email: {type: string}
-  required: ["name", "email"]
+openApi:
+  url: "https://api.example.com"
+  openApiSchema:
+    valueFrom:
+      name: api-specs
+      key: openapi.json
 ```
 
 ## Namespace Patterns

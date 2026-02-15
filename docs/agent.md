@@ -72,7 +72,7 @@ The `runtime` field defines how the agent is deployed:
 ```yaml
 spec:
   runtime:
-    type: standard  # Currently only 'standard' is supported
+    type: standard  # 'standard' or 'template'
     spec:
       replicas: 2
       
@@ -118,12 +118,13 @@ Explicitly declare which AI framework your agent uses:
 
 ```yaml
 spec:
-  framework: pydantic-ai  # or: langchain, crewai, marvin, autogen, a2a
+  framework: pydantic-ai  # or: langchain, google-adk, crewai, marvin, autogen, a2a
 ```
 
 Supported frameworks:
 - `pydantic-ai` - Pydantic AI framework
 - `langchain` - LangChain framework
+- `google-adk` - Google Agent Development Kit
 - `crewai` - CrewAI framework
 - `marvin` - Marvin AI framework
 - `autogen` - Microsoft AutoGen
@@ -150,18 +151,13 @@ Agents can use tools to interact with external services:
 spec:
   tools:
     - name: weather-api
-      inline:
-        type: http-api
+      template:
+        type: openapi
         description: "Get current weather for a location"
-        httpApi:
-          url: "https://api.weather.com/v1/current"
-          method: GET
-        inputSchema:
-          type: object
-          properties:
-            location:
-              type: string
-          required: ["location"]
+        openApi:
+          url: "https://api.weather.com/v1"
+          openApiSchema:
+            endpointPath: "/openapi.json"
 ```
 
 #### Tool Reference
@@ -323,22 +319,16 @@ spec:
     
     # Inline tool definition
     - name: database-query
-      inline:
-        type: http-api
+      template:
+        type: openapi
         description: "Query the product database"
-        httpApi:
+        openApi:
           serviceRef:
             name: database-service
             namespace: backend
             port: 5432
-          path: "/query"
-          method: POST
-        inputSchema:
-          type: object
-          properties:
-            query:
-              type: string
-          required: ["query"]
+          openApiSchema:
+            endpointPath: "/openapi.json"
     
     # Another external tool
     - toolRef:

@@ -291,11 +291,13 @@ Returns to LLM
 
 **Internal (serviceRef):**
 ```yaml
-httpApi:
+openApi:
   serviceRef:
     name: inventory-service
     namespace: backend
     port: 8080
+  openApiSchema:
+    endpointPath: "/openapi.json"
 ```
 - Calls Kubernetes service
 - No external network required
@@ -304,8 +306,10 @@ httpApi:
 
 **External (url):**
 ```yaml
-httpApi:
-  url: "https://api.external.com/v1/endpoint"
+openApi:
+  url: "https://api.external.com"
+  openApiSchema:
+    endpointPath: "/openapi.json"
 ```
 - Calls external HTTP API
 - Requires egress network access

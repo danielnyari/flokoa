@@ -70,16 +70,17 @@ kubectl describe agent my-first-agent
 
 ### Runtime Backends
 
-Flokoa currently supports the **standard** runtime backend, which:
-- Creates a Kubernetes Deployment for your agent
-- Creates a Kubernetes Service to expose your agent
-- Manages pod lifecycle, scaling, and health checks
+Flokoa supports two runtime backends:
+
+- **standard** - Creates a Kubernetes Deployment using your own container image, along with a Service to expose it. Manages pod lifecycle, scaling, and health checks.
+- **template** - Uses a generic runtime image managed by the operator. The agent's behavior is defined entirely in the CR via instructions and output schema.
 
 ### Framework Detection
 
 Flokoa can automatically detect which AI framework your agent uses:
 - pydantic-ai
 - langchain
+- google-adk
 - crewai
 - marvin
 - autogen
