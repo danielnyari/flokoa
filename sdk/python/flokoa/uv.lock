@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -767,6 +767,10 @@ google-adk = [
 pydantic-ai = [
     { name = "pydantic-ai" },
 ]
+workflow = [
+    { name = "pydantic-graph" },
+    { name = "pyyaml" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -782,6 +786,9 @@ google-adk = [
 pydantic-ai = [
     { name = "flokoa", extra = ["pydantic-ai"] },
 ]
+workflow = [
+    { name = "flokoa", extra = ["workflow"] },
+]
 
 [package.metadata]
 requires-dist = [
@@ -792,8 +799,10 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-ai", specifier = ">=1.44.0" },
     { name = "pydantic-ai", marker = "extra == 'pydantic-ai'", specifier = ">=1.44.0" },
+    { name = "pydantic-graph", marker = "extra == 'workflow'", specifier = ">=0.2.2" },
+    { name = "pyyaml", marker = "extra == 'workflow'", specifier = ">=6.0" },
 ]
-provides-extras = ["pydantic-ai", "google-adk"]
+provides-extras = ["pydantic-ai", "google-adk", "workflow"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -805,6 +814,7 @@ dev = [
 ]
 google-adk = [{ name = "flokoa", extras = ["google-adk"] }]
 pydantic-ai = [{ name = "flokoa", extras = ["pydantic-ai"] }]
+workflow = [{ name = "flokoa", extras = ["workflow"] }]
 
 [[package]]
 name = "frozenlist"
