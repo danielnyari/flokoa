@@ -104,3 +104,23 @@ webhooks:
     resources:
     - modelproviders
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-agentworkflow
+  failurePolicy: Fail
+  name: vagentworkflow-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - agentworkflows
+  sideEffects: None
