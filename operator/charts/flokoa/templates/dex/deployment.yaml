@@ -1,0 +1,90 @@
+{{- if .Values.dex.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flokoa.dex.fullname" . }}
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.dex.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "flokoa.dex.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/dex/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "flokoa.dex.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "flokoa.dex.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dex
+          image: {{ .Values.dex.image.registry }}/{{ .Values.dex.image.repository }}:{{ .Values.dex.image.tag }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command:
+            - /usr/local/bin/dex
+            - serve
+            - /etc/dex/config.yaml
+          ports:
+            - name: http
+              containerPort: 5556
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.dex.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          env:
+            {{- range $key, $value := .Values.dex.env }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flokoa.dex.fullname" $ }}-credentials
+                  key: {{ $key }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "flokoa.dex.fullname" . }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "flokoa.dex.fullname" . }}
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.dex.labels" . | nindent 4 }}
+{{- end }}

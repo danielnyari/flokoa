@@ -108,6 +108,30 @@ Server labels.
 {{- end }}
 
 {{/*
+Dex fullname.
+*/}}
+{{- define "flokoa.dex.fullname" -}}
+{{- printf "%s-dex" (include "flokoa.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Dex selector labels.
+*/}}
+{{- define "flokoa.dex.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "flokoa.name" . }}
+app.kubernetes.io/component: dex
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Dex labels.
+*/}}
+{{- define "flokoa.dex.labels" -}}
+{{ include "flokoa.labels" . }}
+{{ include "flokoa.dex.selectorLabels" . }}
+{{- end }}
+
+{{/*
 Construct an image reference from registry, repository, and tag.
 Usage: {{ include "flokoa.image" (dict "image" .Values.controller.image "appVersion" .Chart.AppVersion) }}
 */}}
