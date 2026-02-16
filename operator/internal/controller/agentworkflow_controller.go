@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	"github.com/danielnyari/flokoa/internal/domain/hash"
 )
 
 const (
@@ -524,7 +525,7 @@ func (r *AgentWorkflowReconciler) resolveToolRefs(ctx context.Context, namespace
 			result = append(result, toolConfigMapInfo{
 				toolName:      toolName,
 				configMapName: cmName,
-				dataHash:      hashConfigMapData(cm.Data),
+				dataHash:      hash.ConfigMapData(cm.Data),
 			})
 		} else if tool.Template != nil {
 			// Inline tools are not yet supported in workflows — would need to create AgentTool CRs
