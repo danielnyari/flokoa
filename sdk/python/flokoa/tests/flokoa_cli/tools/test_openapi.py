@@ -909,6 +909,7 @@ class TestEndToEnd:
 
         assert result == pet_data
         call_kwargs = mock_client.request.call_args
+        assert (call_kwargs.kwargs.get("method") or call_kwargs[1].get("method")) == "get"
         assert "/pet/42" in (call_kwargs.kwargs.get("url") or call_kwargs[1].get("url", ""))
 
     async def test_petstore_add_pet_with_body(self, openapi_spec):
@@ -963,6 +964,7 @@ class TestEndToEnd:
         result = await callable_fn(ctx)
 
         call_kwargs = mock_client.request.call_args
+        assert (call_kwargs.kwargs.get("method") or call_kwargs[1].get("method")) == "get"
         params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params", {})
         assert params.get("status") == "available"
 
@@ -1009,6 +1011,7 @@ class TestEndToEnd:
         await callable_fn(ctx, username="admin", password="secret")
 
         call_kwargs = mock_client.request.call_args
+        assert (call_kwargs.kwargs.get("method") or call_kwargs[1].get("method")) == "get"
         params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params", {})
         assert params.get("username") == "admin"
         assert params.get("password") == "secret"
@@ -1033,6 +1036,7 @@ class TestEndToEnd:
         await callable_fn(ctx, username="john")
 
         call_kwargs = mock_client.request.call_args
+        assert (call_kwargs.kwargs.get("method") or call_kwargs[1].get("method")) == "get"
         url = call_kwargs.kwargs.get("url") or call_kwargs[1].get("url", "")
         assert "/user/john" in url
 

@@ -20,6 +20,30 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _extract_final_response(event: Any) -> str | None:
+    """Extract final text response from an ADK event.
+
+    Inspects the event's content parts and returns the last text part found,
+    or None if the event has no text content.
+
+    Args:
+        event: An ADK event object with optional ``content.parts`` attribute.
+
+    Returns:
+        The text from the last text part, or None.
+    """
+    if not (hasattr(event, "content") and event.content):
+        return None
+    parts = getattr(event.content, "parts", None)
+    if not parts:
+        return None
+    text = None
+    for part in parts:
+        if hasattr(part, "text") and part.text:
+            text = part.text
+    return text
+
+
 def _openapi_adk_builder(tool_definition: FlokoaToolDefinition) -> list[Any]:
     from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import (
         OpenAPIToolset,
@@ -148,13 +172,9 @@ class GoogleADKAgentExecutor(FlokoaAgentExecutor):
             session_id=session.id,
             new_message=user_content,
         ):
-            # Capture the final text response from content events
-            if hasattr(event, "content") and event.content:
-                parts = getattr(event.content, "parts", None)
-                if parts:
-                    for part in parts:
-                        if hasattr(part, "text") and part.text:
-                            final_response = part.text
+            text = _extract_final_response(event)
+            if text is not None:
+                final_response = text
 
         if final_response:
             await event_queue.enqueue_event(new_agent_text_message(final_response))
