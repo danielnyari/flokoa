@@ -23,17 +23,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
@@ -57,17 +54,13 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 		reconciler := &AgentReconciler{}
 		deployment := reconciler.buildDeployment(agent, nil, "", nil, "", "")
 
-		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(deployment.Spec.Template.Spec.Containers[0].Image).NotTo(BeEmpty())
-		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal(defaultTemplateRuntimeImage))
+		container := firstContainer(deployment)
+		Expect(container.Image).NotTo(BeEmpty())
+		Expect(container.Image).To(Equal(defaultTemplateRuntimeImage))
 	})
 
 	Context("When reconciling a managed Agent", func() {
-		const (
-			agentNamespace = "default"
-			timeout        = time.Second * 10
-			interval       = time.Millisecond * 250
-		)
+		const agentNamespace = "default"
 
 		var (
 			ctx                context.Context
@@ -77,7 +70,6 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 
 		BeforeEach(func() {
 			ctx = context.Background()
-			// Use unique name per test to avoid conflicts
 			agentName = fmt.Sprintf("test-agent-%d", time.Now().UnixNano())
 			typeNamespacedName = types.NamespacedName{
 				Name:      agentName,
@@ -86,26 +78,7 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 		})
 
 		AfterEach(func() {
-			// Cleanup the Agent resource
-			agent := &agentv1alpha1.Agent{}
-			err := k8sClient.Get(ctx, typeNamespacedName, agent)
-			if err == nil {
-				By("Cleaning up the Agent resource")
-
-				// Remove finalizer if present to allow deletion
-				if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
-					controllerutil.RemoveFinalizer(agent, agentFinalizer)
-					Expect(k8sClient.Update(ctx, agent)).To(Succeed())
-				}
-
-				Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
-
-				// Wait for deletion to complete
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agent)
-					return errors.IsNotFound(err)
-				}, timeout, interval).Should(BeTrue())
-			}
+			cleanupAgent(ctx, typeNamespacedName)
 		})
 
 		It("should fail validation when model is not set for managed runtime", func() {
@@ -136,27 +109,11 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile should fail validation (no model)
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred()) // validation errors don't return err, they set status
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
 			By("Verifying agent status is Failed")
-			err = k8sClient.Get(ctx, typeNamespacedName, agent)
-			Expect(err).NotTo(HaveOccurred())
+			agent = getAgent(ctx, typeNamespacedName)
 			Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
 
 			readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
@@ -202,27 +159,11 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile should fail validation
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
 			By("Verifying agent status is Failed")
-			err = k8sClient.Get(ctx, typeNamespacedName, agent)
-			Expect(err).NotTo(HaveOccurred())
+			agent = getAgent(ctx, typeNamespacedName)
 			Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
 
 			readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
@@ -256,27 +197,11 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile should fail validation
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
 			By("Verifying agent status is Failed")
-			err = k8sClient.Get(ctx, typeNamespacedName, agent)
-			Expect(err).NotTo(HaveOccurred())
+			agent = getAgent(ctx, typeNamespacedName)
 			Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
 
 			readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
@@ -313,26 +238,11 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// First reconcile adds finalizer
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Second reconcile should fail validation
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
 			By("Verifying agent status is Failed")
-			err = k8sClient.Get(ctx, typeNamespacedName, agent)
-			Expect(err).NotTo(HaveOccurred())
+			agent = getAgent(ctx, typeNamespacedName)
 			Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
 
 			readyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeReady)
@@ -369,61 +279,37 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
-			// First reconcile adds finalizer
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("Verifying the Instruction CR was created via label lookup")
+			instructionList := &agentv1alpha1.InstructionList{}
+			Eventually(func() int {
+				_ = k8sClient.List(ctx, instructionList,
+					client.InNamespace(agentNamespace),
+					client.MatchingLabels{"flokoa.ai/agent": agentName},
+				)
+				return len(instructionList.Items)
+			}, testTimeout, testInterval).Should(Equal(1))
 
-			// Second reconcile creates resources including Instruction CR
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the Instruction CR was created")
-			instruction := &agentv1alpha1.Instruction{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{
-					Name:      fmt.Sprintf("%s-instruction", agentName),
-					Namespace: agentNamespace,
-				}, instruction)
-			}, timeout, interval).Should(Succeed())
-
+			instruction := instructionList.Items[0]
 			Expect(instruction.Spec.Content).To(Equal("You are a BYO agent with instructions."))
 			Expect(instruction.Labels["flokoa.ai/agent"]).To(Equal(agentName))
 
 			By("Verifying the Deployment has instruction volume mount")
-			deployment := &appsv1.Deployment{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, typeNamespacedName, deployment)
-			}, timeout, interval).Should(Succeed())
+			deployment := getDeployment(ctx, typeNamespacedName)
+			container := firstContainer(deployment)
 
-			container := deployment.Spec.Template.Spec.Containers[0]
-			var foundInstructionMount bool
-			for _, vm := range container.VolumeMounts {
-				if vm.Name == instructionVolumeName {
-					foundInstructionMount = true
-					Expect(vm.MountPath).To(Equal(instructionMountPath))
-					Expect(vm.SubPath).To(Equal(instructionConfigMapKey))
-					Expect(vm.ReadOnly).To(BeTrue())
-				}
-			}
-			Expect(foundInstructionMount).To(BeTrue(), "instruction volume mount should exist on BYO agent")
+			vm := findVolumeMount(container, instructionVolumeName)
+			Expect(vm).NotTo(BeNil(), "instruction volume mount should exist on BYO agent")
+			Expect(vm.MountPath).To(Equal(instructionMountPath))
+			Expect(vm.SubPath).To(Equal(instructionConfigMapKey))
+			Expect(vm.ReadOnly).To(BeTrue())
 
 			// Check FLOKOA_INSTRUCTION_PATH env var
-			envMap := make(map[string]string)
-			for _, env := range container.Env {
-				if env.Value != "" {
-					envMap[env.Name] = env.Value
-				}
-			}
-			Expect(envMap).To(HaveKeyWithValue("FLOKOA_INSTRUCTION_PATH", instructionMountPath))
+			env := findEnvVar(container, "FLOKOA_INSTRUCTION_PATH")
+			Expect(env).NotTo(BeNil())
+			Expect(env.Value).To(Equal(instructionMountPath))
 		})
 
 		It("should create Deployment, Service, and managed config ConfigMap for a managed agent", func() {
@@ -512,91 +398,67 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+			By("Verifying the inline config ConfigMap via the deployment volume source")
+			deployment := getDeployment(ctx, typeNamespacedName)
+
+			templateConfigVol := findVolume(deployment.Spec.Template.Spec, templateConfigVolumeName)
+			Expect(templateConfigVol).NotTo(BeNil(), "template-config volume should exist")
+			Expect(templateConfigVol.ConfigMap).NotTo(BeNil())
+			templateConfigCMName := templateConfigVol.ConfigMap.Name
+
+			inlineCM := getConfigMap(ctx, types.NamespacedName{
+				Name:      templateConfigCMName,
+				Namespace: agentNamespace,
 			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile creates resources
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the inline config ConfigMap was created")
-			inlineCM := &corev1.ConfigMap{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{
-					Name:      fmt.Sprintf("%s-template-config", agentName),
-					Namespace: agentNamespace,
-				}, inlineCM)
-			}, timeout, interval).Should(Succeed())
-
 			Expect(inlineCM.Data).To(HaveKey(templateConfigConfigMapKey))
 			Expect(inlineCM.Labels["app.kubernetes.io/component"]).To(Equal("template-config"))
 
 			By("Verifying the Deployment was created with correct inline configuration")
-			deployment := &appsv1.Deployment{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, typeNamespacedName, deployment)
-			}, timeout, interval).Should(Succeed())
-
 			Expect(*deployment.Spec.Replicas).To(Equal(int32(2)))
-			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 
-			container := deployment.Spec.Template.Spec.Containers[0]
+			container := firstContainer(deployment)
 			Expect(container.Name).To(Equal("agent"))
 			Expect(container.Image).To(Equal(defaultTemplateRuntimeImage))
 			Expect(container.Ports).To(HaveLen(1))
 			Expect(container.Ports[0].ContainerPort).To(Equal(int32(8080)))
 
-			// Check for FLOKOA_RUNTIME_MODE env var
-			envMap := make(map[string]string)
-			for _, env := range container.Env {
-				if env.Value != "" {
-					envMap[env.Name] = env.Value
-				}
-			}
-			Expect(envMap).To(HaveKeyWithValue("FLOKOA_RUNTIME_MODE", "template"))
-			Expect(envMap).To(HaveKeyWithValue("FLOKOA_TEMPLATE_CONFIG_PATH", templateConfigMountPath))
-			Expect(envMap).To(HaveKeyWithValue("CUSTOM_VAR", "custom-value"))
-			Expect(envMap).To(HaveKey("FLOKOA_AGENT_URL"))
+			// Check for expected env vars
+			runtimeModeEnv := findEnvVar(container, "FLOKOA_RUNTIME_MODE")
+			Expect(runtimeModeEnv).NotTo(BeNil())
+			Expect(runtimeModeEnv.Value).To(Equal("template"))
+
+			templateConfigPathEnv := findEnvVar(container, "FLOKOA_TEMPLATE_CONFIG_PATH")
+			Expect(templateConfigPathEnv).NotTo(BeNil())
+			Expect(templateConfigPathEnv.Value).To(Equal(templateConfigMountPath))
+
+			customVarEnv := findEnvVar(container, "CUSTOM_VAR")
+			Expect(customVarEnv).NotTo(BeNil())
+			Expect(customVarEnv.Value).To(Equal("custom-value"))
+
+			agentURLEnv := findEnvVar(container, "FLOKOA_AGENT_URL")
+			Expect(agentURLEnv).NotTo(BeNil())
 
 			// Check resource requests
 			Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
 			Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
 
 			// Check managed config volume mount exists
-			var foundManagedMount bool
-			for _, vm := range container.VolumeMounts {
-				if vm.Name == templateConfigVolumeName {
-					foundManagedMount = true
-					Expect(vm.MountPath).To(Equal(templateConfigMountPath))
-					Expect(vm.ReadOnly).To(BeTrue())
-				}
-			}
-			Expect(foundManagedMount).To(BeTrue(), "managed config volume mount should exist")
+			vm := findVolumeMount(container, templateConfigVolumeName)
+			Expect(vm).NotTo(BeNil(), "managed config volume mount should exist")
+			Expect(vm.MountPath).To(Equal(templateConfigMountPath))
+			Expect(vm.ReadOnly).To(BeTrue())
 
 			By("Verifying the Service was created with default ports")
-			service := &corev1.Service{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, typeNamespacedName, service)
-			}, timeout, interval).Should(Succeed())
-
+			service := getService(ctx, typeNamespacedName)
 			Expect(service.Spec.Ports).To(HaveLen(1))
 			Expect(service.Spec.Ports[0].Port).To(Equal(int32(80)))
 			Expect(service.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt32(8080)))
 
 			By("Verifying the Agent status")
-			err = k8sClient.Get(ctx, typeNamespacedName, agent)
-			Expect(err).NotTo(HaveOccurred())
+			agent = getAgent(ctx, typeNamespacedName)
 			Expect(agent.Status.Backend).To(Equal("core"))
 			Expect(agent.Status.URL).To(ContainSubstring(agentName))
 

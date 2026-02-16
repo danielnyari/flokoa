@@ -85,9 +85,9 @@ type WorkflowTask struct {
 	// +optional
 	Agent *AgentCall `json:"agent,omitempty"`
 
-	// AgentTask runs agent code in an ephemeral container.
+	// AgentTask runs a Marvin-powered task in an ephemeral container.
 	// +optional
-	AgentTask *EphemeralAgentTask `json:"agentTask,omitempty"`
+	AgentTask *AgentTask `json:"agentTask,omitempty"`
 
 	// Switch routes to different tasks based on the output of a previous task.
 	// +optional
@@ -312,41 +312,122 @@ type PushNotificationAuth struct {
 	Credentials string `json:"credentials,omitempty"`
 }
 
-// EphemeralAgentTask defines a task that runs agent code in a short-lived container.
-type EphemeralAgentTask struct {
-	// Entrypoint is the script or module to execute.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Entrypoint string `json:"entrypoint"`
+// MarvinTaskType represents the Marvin operation to perform.
+// +kubebuilder:validation:Enum=run;classify;extract;cast;generate
+type MarvinTaskType string
 
-	// Image is the container image to use. Defaults to the flokoa runtime image.
+const (
+	// MarvinTaskTypeRun executes a general-purpose task via marvin.run().
+	MarvinTaskTypeRun MarvinTaskType = "run"
+	// MarvinTaskTypeClassify classifies input into predefined labels via marvin.classify().
+	MarvinTaskTypeClassify MarvinTaskType = "classify"
+	// MarvinTaskTypeExtract extracts entities from input via marvin.extract().
+	MarvinTaskTypeExtract MarvinTaskType = "extract"
+	// MarvinTaskTypeCast transforms input into a target type via marvin.cast().
+	MarvinTaskTypeCast MarvinTaskType = "cast"
+	// MarvinTaskTypeGenerate generates structured objects via marvin.generate().
+	MarvinTaskTypeGenerate MarvinTaskType = "generate"
+)
+
+// AgentTask defines a Marvin-powered task that runs in a short-lived container.
+// The Type field determines which marvin.* function is called.
+type AgentTask struct {
+	// Type is the Marvin operation: run, classify, extract, cast, or generate.
+	// +kubebuilder:validation:Required
+	Type MarvinTaskType `json:"type"`
+
+	// Instruction provides the prompt or guidance for the task.
+	// - run: the main prompt (required)
+	// - classify/extract/cast/generate: optional guidance instructions
+	// Supports inline text (template) or reference to an Instruction CR (instructionRef).
+	// +optional
+	Instruction *InstructionEntry `json:"instruction,omitempty"`
+
+	// Input is the data to process.
+	// - classify: data to classify (required)
+	// - extract: data to extract from (required)
+	// - cast: data to transform (required)
+	// - run/generate: not used
+	// Supports expressions like {{tasks.prev.output}}.
+	// +optional
+	Input string `json:"input,omitempty"`
+
+	// ResultType constrains the output via JSON Schema.
+	// - run: optional (defaults to str)
+	// - extract: target type (defaults to str)
+	// - cast: target type (required)
+	// - generate: target type (required)
+	// - classify: not used (labels define the output)
+	// +optional
+	ResultType *StructuredIOSchema `json:"resultType,omitempty"`
+
+	// Labels for classify operations.
+	// Maps to marvin.classify(labels=[...]).
+	// Required when type=classify.
+	// +optional
+	Labels []string `json:"labels,omitempty"`
+
+	// MultiLabel enables multi-label classification (returns list instead of single label).
+	// Maps to marvin.classify(multi_label=True).
+	// Only used when type=classify.
+	// +optional
+	MultiLabel *bool `json:"multiLabel,omitempty"`
+
+	// Count is the number of items to generate.
+	// Maps to marvin.generate(n=...).
+	// Only used when type=generate. Defaults to 1.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Count *int32 `json:"count,omitempty"`
+
+	// Model references a Model CR for the LLM configuration.
+	// +optional
+	Model *AgentModelRef `json:"model,omitempty"`
+
+	// Tools available to the task. Can be inline definitions or references to AgentTool CRs.
+	// Primarily used with type=run.
+	// +optional
+	Tools []ToolEntry `json:"tools,omitempty"`
+
+	// Context is key-value data passed to the Marvin task.
+	// Values support expressions like {{tasks.prev.output}}.
+	// +optional
+	Context map[string]string `json:"context,omitempty"`
+
+	// Agent defines an inline Marvin agent for execution.
+	// Maps to the agent parameter in marvin.run(), marvin.classify(), etc.
+	// +optional
+	Agent *MarvinAgentSpec `json:"agent,omitempty"`
+
+	// Image overrides the container image. Defaults to the flokoa managed-task runtime.
 	// +optional
 	Image string `json:"image,omitempty"`
 
-	// Framework is the AI framework used by the agent code.
-	// +optional
-	// +kubebuilder:validation:Enum=pydantic-ai;langchain;crewai;custom
-	Framework string `json:"framework,omitempty"`
-
-	// Tools is a list of Tool CR names to inject into the agent environment.
-	// +optional
-	Tools []string `json:"tools,omitempty"`
-
-	// Context is a list of AgentContext CR names to mount.
-	// +optional
-	Context []string `json:"context,omitempty"`
-
-	// Env is a list of additional environment variables for the container.
+	// Env is additional environment variables for the container.
 	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
-
-	// Input is data passed to the agent. Supports expressions.
-	// +optional
-	Input string `json:"input,omitempty"`
 
 	// Resources specifies compute resource requirements for the container.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// MarvinAgentSpec defines an inline Marvin agent configuration.
+// Maps to marvin.Agent() constructor parameters.
+type MarvinAgentSpec struct {
+	// Name of the agent.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Instructions are behavioral instructions for this agent.
+	// +optional
+	Instructions string `json:"instructions,omitempty"`
+
+	// Model references a Model CR for this agent's LLM.
+	// If not specified, inherits the task-level model.
+	// +optional
+	Model *AgentModelRef `json:"model,omitempty"`
 }
 
 // SwitchCase defines a conditional branch in a switch task.

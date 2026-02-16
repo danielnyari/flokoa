@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from ...auth.auth_credential import AuthCredential
 from ...auth.auth_schemes import AuthScheme
+from ..utils import _to_snake_case
 from .common import ApiParameter
 from .operation_parser import OperationParser
 

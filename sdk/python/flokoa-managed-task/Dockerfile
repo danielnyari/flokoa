@@ -1,25 +1,4 @@
-# ============================================================================
-# flokoa-managed-task — production container image
-#
-# Base: python:3.13-alpine (~17 MB compressed vs ~50 MB for slim)
-#
-# Build:
-#   - 3-stage: uv binary → alpine builder → alpine runtime
-#   - UV_COMPILE_BYTECODE=1: pre-compile .pyc for faster cold-start
-#   - UV_LINK_MODE=copy: hard-copy files (no dangling symlinks across stages)
-#   - Layer caching: deps layer cached separately from source layer
-#   - Cache mount on /root/.cache/uv persists across builds
-#   - --frozen --no-dev --no-editable: exact lockfile, prod only, no src refs
-#
-# Runtime:
-#   - Alpine base + libstdc++ / libgcc (needed by native wheels)
-#   - Only .venv copied (no uv, no build tools, no source)
-#   - Bytecode pre-compiled; PYTHONDONTWRITEBYTECODE prevents re-generation
-#   - PYTHONUNBUFFERED for container log drivers
-#   - Rootless: uid 65532, nologin shell
-# ============================================================================
 
-# --- Stage 0: grab uv binary ---
 FROM ghcr.io/astral-sh/uv:0.8.17 AS uv
 
 # --- Stage 1: build ---

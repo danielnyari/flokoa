@@ -302,21 +302,59 @@ spec:
                       - name
                       type: object
                     agentTask:
-                      description: AgentTask runs agent code in an ephemeral container.
+                      description: AgentTask runs a Marvin-powered task in an ephemeral
+                        container.
                       properties:
+                        agent:
+                          description: |-
+                            Agent defines an inline Marvin agent for execution.
+                            Maps to the agent parameter in marvin.run(), marvin.classify(), etc.
+                          properties:
+                            instructions:
+                              description: Instructions are behavioral instructions
+                                for this agent.
+                              type: string
+                            model:
+                              description: |-
+                                Model references a Model CR for this agent's LLM.
+                                If not specified, inherits the task-level model.
+                              properties:
+                                name:
+                                  description: Name of the Model resource.
+                                  minLength: 1
+                                  type: string
+                                namespace:
+                                  description: Namespace of the Model resource. Defaults
+                                    to the Agent's namespace if not specified.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            name:
+                              description: Name of the agent.
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
                         context:
-                          description: Context is a list of AgentContext CR names
-                            to mount.
-                          items:
+                          additionalProperties:
                             type: string
-                          type: array
-                        entrypoint:
-                          description: Entrypoint is the script or module to execute.
-                          minLength: 1
-                          type: string
+                          description: |-
+                            Context is key-value data passed to the Marvin task.
+                            Values support expressions like {{tasks.prev.output}}.
+                          type: object
+                        count:
+                          description: |-
+                            Count is the number of items to generate.
+                            Maps to marvin.generate(n=...).
+                            Only used when type=generate. Defaults to 1.
+                          format: int32
+                          minimum: 1
+                          type: integer
                         env:
-                          description: Env is a list of additional environment variables
-                            for the container.
+                          description: Env is additional environment variables for
+                            the container.
                           items:
                             description: EnvVar represents an environment variable
                               present in a Container.
@@ -435,23 +473,76 @@ spec:
                             - name
                             type: object
                           type: array
-                        framework:
-                          description: Framework is the AI framework used by the agent
-                            code.
-                          enum:
-                          - pydantic-ai
-                          - langchain
-                          - crewai
-                          - custom
-                          type: string
                         image:
-                          description: Image is the container image to use. Defaults
-                            to the flokoa runtime image.
+                          description: Image overrides the container image. Defaults
+                            to the flokoa managed-task runtime.
                           type: string
                         input:
-                          description: Input is data passed to the agent. Supports
-                            expressions.
+                          description: |-
+                            Input is the data to process.
+                            - classify: data to classify (required)
+                            - extract: data to extract from (required)
+                            - cast: data to transform (required)
+                            - run/generate: not used
+                            Supports expressions like {{tasks.prev.output}}.
                           type: string
+                        instruction:
+                          description: |-
+                            Instruction provides the prompt or guidance for the task.
+                            - run: the main prompt (required)
+                            - classify/extract/cast/generate: optional guidance instructions
+                            Supports inline text (template) or reference to an Instruction CR (instructionRef).
+                          properties:
+                            instructionRef:
+                              description: InstructionRef references an existing Instruction
+                                resource.
+                              properties:
+                                name:
+                                  description: Name of the resource.
+                                  minLength: 1
+                                  type: string
+                                namespace:
+                                  description: Namespace of the resource. Defaults
+                                    to the referencing resource's namespace if not
+                                    specified.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            template:
+                              description: |-
+                                Template defines the instruction content directly in the Agent spec.
+                                When set, the operator creates a child Instruction CR.
+                              type: string
+                          type: object
+                        labels:
+                          description: |-
+                            Labels for classify operations.
+                            Maps to marvin.classify(labels=[...]).
+                            Required when type=classify.
+                          items:
+                            type: string
+                          type: array
+                        model:
+                          description: Model references a Model CR for the LLM configuration.
+                          properties:
+                            name:
+                              description: Name of the Model resource.
+                              minLength: 1
+                              type: string
+                            namespace:
+                              description: Namespace of the Model resource. Defaults
+                                to the Agent's namespace if not specified.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        multiLabel:
+                          description: |-
+                            MultiLabel enables multi-label classification (returns list instead of single label).
+                            Maps to marvin.classify(multi_label=True).
+                            Only used when type=classify.
+                          type: boolean
                         resources:
                           description: Resources specifies compute resource requirements
                             for the container.
@@ -513,14 +604,187 @@ spec:
                                 More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                               type: object
                           type: object
+                        resultType:
+                          description: |-
+                            ResultType constrains the output via JSON Schema.
+                            - run: optional (defaults to str)
+                            - extract: target type (defaults to str)
+                            - cast: target type (required)
+                            - generate: target type (required)
+                            - classify: not used (labels define the output)
+                          properties:
+                            description:
+                              type: string
+                            jsonSchema:
+                              x-kubernetes-preserve-unknown-fields: true
+                            name:
+                              type: string
+                          required:
+                          - description
+                          - jsonSchema
+                          - name
+                          type: object
                         tools:
-                          description: Tools is a list of Tool CR names to inject
-                            into the agent environment.
+                          description: |-
+                            Tools available to the task. Can be inline definitions or references to AgentTool CRs.
+                            Primarily used with type=run.
                           items:
-                            type: string
+                            description: |-
+                              ToolEntry represents either an inline tool definition or a reference to an AgentTool resource.
+                              Exactly one of Inline or ToolRef must be specified.
+                            properties:
+                              name:
+                                description: Name of the tool. Required for inline
+                                  tools, used as identifier.
+                                minLength: 1
+                                type: string
+                              template:
+                                description: |-
+                                  Template defines the tool directly in the Agent spec.
+                                  Uses the same spec as AgentTool for consistency.
+                                properties:
+                                  description:
+                                    description: Description is a human-readable description
+                                      for the LLM to understand the tool's purpose.
+                                    minLength: 1
+                                    type: string
+                                  openApi:
+                                    description: |-
+                                      OpenApi contains OpenAPI tool configuration.
+                                      Required when Type is "openapi".
+                                    properties:
+                                      headers:
+                                        additionalProperties:
+                                          type: string
+                                        description: Headers are additional HTTP headers
+                                          to include in API requests.
+                                        type: object
+                                      openApiSchema:
+                                        description: |-
+                                          OpenApiSchema specifies the source of the OpenAPI specification.
+                                          Exactly one of Value, ValueFrom, or EndpointPath must be specified.
+                                        properties:
+                                          endpointPath:
+                                            description: |-
+                                              EndpointPath is a path on the target service/URL where the OpenAPI spec is served
+                                              (e.g., "/openapi.json", "/docs/openapi.json", "/swagger.json").
+                                              The operator or runtime will fetch the spec from this path on the target.
+                                            type: string
+                                          value:
+                                            description: Value contains the OpenAPI
+                                              specification inline.
+                                            type: object
+                                            x-kubernetes-preserve-unknown-fields: true
+                                          valueFrom:
+                                            description: ValueFrom references a ConfigMap
+                                              containing the OpenAPI specification.
+                                            properties:
+                                              key:
+                                                description: The key to select.
+                                                type: string
+                                              name:
+                                                default: ""
+                                                description: |-
+                                                  Name of the referent.
+                                                  This field is effectively required, but due to backwards compatibility is
+                                                  allowed to be empty. Instances of this type with an empty value here are
+                                                  almost certainly wrong.
+                                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                type: string
+                                              optional:
+                                                description: Specify whether the ConfigMap
+                                                  or its key must be defined
+                                                type: boolean
+                                            required:
+                                            - key
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        type: object
+                                      serviceRef:
+                                        description: |-
+                                          ServiceRef references a Kubernetes service as the target API.
+                                          Mutually exclusive with URL.
+                                        properties:
+                                          name:
+                                            description: Name is the service name.
+                                            minLength: 1
+                                            type: string
+                                          namespace:
+                                            description: Namespace is the service
+                                              namespace. Defaults to the AgentTool's
+                                              namespace.
+                                            type: string
+                                          port:
+                                            description: |-
+                                              Port is the service port number.
+                                              Mutually exclusive with PortName.
+                                            format: int32
+                                            maximum: 65535
+                                            minimum: 1
+                                            type: integer
+                                          portName:
+                                            description: |-
+                                              PortName is the service port name.
+                                              Mutually exclusive with Port.
+                                            type: string
+                                        required:
+                                        - name
+                                        type: object
+                                      timeoutSeconds:
+                                        default: 30
+                                        description: TimeoutSeconds is the request
+                                          timeout in seconds for API calls.
+                                        format: int32
+                                        maximum: 300
+                                        minimum: 1
+                                        type: integer
+                                      url:
+                                        description: |-
+                                          URL is the base URL of the external API.
+                                          Mutually exclusive with ServiceRef.
+                                        type: string
+                                    required:
+                                    - openApiSchema
+                                    type: object
+                                  type:
+                                    description: Type specifies the kind of tool (e.g.,
+                                      openapi).
+                                    enum:
+                                    - openapi
+                                    type: string
+                                required:
+                                - description
+                                - type
+                                type: object
+                              toolRef:
+                                description: ToolRef references an existing AgentTool
+                                  resource.
+                                properties:
+                                  name:
+                                    description: Name of the AgentTool resource.
+                                    minLength: 1
+                                    type: string
+                                  namespace:
+                                    description: Namespace of the AgentTool. Defaults
+                                      to the Agent's namespace if not specified.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            type: object
                           type: array
+                        type:
+                          description: 'Type is the Marvin operation: run, classify,
+                            extract, cast, or generate.'
+                          enum:
+                          - run
+                          - classify
+                          - extract
+                          - cast
+                          - generate
+                          type: string
                       required:
-                      - entrypoint
+                      - type
                       type: object
                     condition:
                       description: |-

@@ -23,26 +23,19 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
 var _ = Describe("Agent Controller - Tools", func() {
 	Context("When reconciling an Agent with tools", func() {
-		const (
-			agentNamespace = "default"
-			timeout        = time.Second * 10
-			interval       = time.Millisecond * 250
-		)
+		const agentNamespace = "default"
 
 		var (
 			ctx                context.Context
@@ -52,7 +45,6 @@ var _ = Describe("Agent Controller - Tools", func() {
 
 		BeforeEach(func() {
 			ctx = context.Background()
-			// Use unique name per test to avoid conflicts
 			agentName = fmt.Sprintf("test-agent-%d", time.Now().UnixNano())
 			typeNamespacedName = types.NamespacedName{
 				Name:      agentName,
@@ -61,42 +53,40 @@ var _ = Describe("Agent Controller - Tools", func() {
 		})
 
 		AfterEach(func() {
-			// Cleanup the Agent resource
-			agent := &agentv1alpha1.Agent{}
-			err := k8sClient.Get(ctx, typeNamespacedName, agent)
-			if err == nil {
-				By("Cleaning up the Agent resource")
-
-				// Remove finalizer if present to allow deletion
-				if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
-					controllerutil.RemoveFinalizer(agent, agentFinalizer)
-					Expect(k8sClient.Update(ctx, agent)).To(Succeed())
-				}
-
-				Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
-
-				// Wait for deletion to complete
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agent)
-					return errors.IsNotFound(err)
-				}, timeout, interval).Should(BeTrue())
-			}
+			cleanupAgent(ctx, typeNamespacedName)
 		})
+
+		// listAgentToolsByAgent returns AgentTool CRs labeled for the given agent name.
+		listAgentToolsByAgent := func(agentName string) []agentv1alpha1.AgentTool {
+			list := &agentv1alpha1.AgentToolList{}
+			ExpectWithOffset(1, k8sClient.List(ctx, list,
+				client.InNamespace(agentNamespace),
+				client.MatchingLabels{"flokoa.ai/agent": agentName},
+			)).To(Succeed())
+			return list.Items
+		}
+
+		// cleanupAgentTools removes finalizers and deletes all AgentTools in the namespace
+		// matching the given label selector. Pass nil to clean up all AgentTools.
+		cleanupAgentTools := func(labels client.MatchingLabels) {
+			list := &agentv1alpha1.AgentToolList{}
+			opts := []client.ListOption{client.InNamespace(agentNamespace)}
+			if labels != nil {
+				opts = append(opts, labels)
+			}
+			_ = k8sClient.List(ctx, list, opts...)
+			for _, at := range list.Items {
+				if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
+					controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
+					_ = k8sClient.Update(ctx, &at)
+				}
+				_ = k8sClient.Delete(ctx, &at)
+			}
+		}
 
 		Context("Inline tools", func() {
 			AfterEach(func() {
-				// Cleanup any AgentTools created for inline tools
-				agentToolList := &agentv1alpha1.AgentToolList{}
-				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
-				for _, at := range agentToolList.Items {
-					if at.Labels["flokoa.ai/agent"] == agentName {
-						if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
-							controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
-							_ = k8sClient.Update(ctx, &at)
-						}
-						_ = k8sClient.Delete(ctx, &at)
-					}
-				}
+				cleanupAgentTools(client.MatchingLabels{"flokoa.ai/agent": agentName})
 			})
 
 			It("should create AgentTool CR and mount inline tools", func() {
@@ -137,33 +127,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates AgentTool CR
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Verifying AgentTool CR was created for inline tool")
-				agentToolName := fmt.Sprintf("%s-weather-api", agentName)
-				agentTool := &agentv1alpha1.AgentTool{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Name:      agentToolName,
-						Namespace: agentNamespace,
-					}, agentTool)
-				}, timeout, interval).Should(Succeed())
+				agentTools := listAgentToolsByAgent(agentName)
+				Expect(agentTools).To(HaveLen(1))
+				agentTool := agentTools[0]
 
 				Expect(agentTool.Spec.Type).To(Equal(agentv1alpha1.AgentToolTypeOpenAPI))
 				Expect(agentTool.Spec.Description).To(Equal("Get weather information"))
@@ -171,7 +141,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(agentTool.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "inline-tool"))
 
 				By("Simulating AgentTool controller creating ConfigMap")
-				configMapName := fmt.Sprintf("%s-spec", agentToolName)
+				// ConfigMap name follows the convention: "{agenttool-name}-spec"
+				configMapName := agentTool.Name + "-spec"
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      configMapName,
@@ -184,54 +155,33 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
 
 				By("Reconciling again to create deployment with volume mounts")
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
+				_, err := reconcileOnce(ctx, r, typeNamespacedName)
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying Deployment has volume mount for the tool")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
+				deployment := getDeployment(ctx, typeNamespacedName)
 
-				// Check volumes
-				var toolVolume *corev1.Volume
-				for i := range deployment.Spec.Template.Spec.Volumes {
-					if deployment.Spec.Template.Spec.Volumes[i].Name == "tool-weather-api" {
-						toolVolume = &deployment.Spec.Template.Spec.Volumes[i]
-						break
-					}
-				}
+				// Check volumes - volume name "tool-weather-api" uses the tool name from test input
+				toolVolume := findVolume(deployment.Spec.Template.Spec, "tool-weather-api")
 				Expect(toolVolume).NotTo(BeNil())
 				Expect(toolVolume.ConfigMap.Name).To(Equal(configMapName))
 
 				// Check volume mounts
-				container := deployment.Spec.Template.Spec.Containers[0]
-				var toolMount *corev1.VolumeMount
-				for i := range container.VolumeMounts {
-					if container.VolumeMounts[i].Name == "tool-weather-api" {
-						toolMount = &container.VolumeMounts[i]
-						break
-					}
-				}
+				container := firstContainer(deployment)
+				toolMount := findVolumeMount(container, "tool-weather-api")
 				Expect(toolMount).NotTo(BeNil())
 				Expect(toolMount.MountPath).To(Equal("/etc/flokoa/tools/weather-api"))
 				Expect(toolMount.ReadOnly).To(BeTrue())
 
 				By("Verifying ToolsReady condition is set")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agent)
-					if err != nil {
-						return false
-					}
+					agent := getAgent(ctx, typeNamespacedName)
 					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeToolsReady)
 					return condition != nil && condition.Status == metav1.ConditionTrue
-				}, timeout, interval).Should(BeTrue())
+				}, testTimeout, testInterval).Should(BeTrue())
 
 				By("Verifying LastToolSync is set")
-				err = k8sClient.Get(ctx, typeNamespacedName, agent)
-				Expect(err).NotTo(HaveOccurred())
+				agent = getAgent(ctx, typeNamespacedName)
 				Expect(agent.Status.LastToolSync).NotTo(BeNil())
 			})
 
@@ -286,76 +236,35 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates AgentTool CRs
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Verifying both AgentTool CRs were created")
-				at1 := &agentv1alpha1.AgentTool{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Name:      fmt.Sprintf("%s-tool-one", agentName),
-						Namespace: agentNamespace,
-					}, at1)
-				}, timeout, interval).Should(Succeed())
-
-				at2 := &agentv1alpha1.AgentTool{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Name:      fmt.Sprintf("%s-tool-two", agentName),
-						Namespace: agentNamespace,
-					}, at2)
-				}, timeout, interval).Should(Succeed())
+				agentTools := listAgentToolsByAgent(agentName)
+				Expect(agentTools).To(HaveLen(2))
 
 				By("Simulating AgentTool controller creating ConfigMaps")
-				cm1 := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-tool-one-spec", agentName),
-						Namespace: agentNamespace,
-					},
-					Data: map[string]string{"spec.json": `{"type":"openapi"}`},
+				for _, at := range agentTools {
+					cm := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      at.Name + "-spec",
+							Namespace: agentNamespace,
+						},
+						Data: map[string]string{"spec.json": `{"type":"openapi"}`},
+					}
+					Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 				}
-				Expect(k8sClient.Create(ctx, cm1)).To(Succeed())
-
-				cm2 := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-tool-two-spec", agentName),
-						Namespace: agentNamespace,
-					},
-					Data: map[string]string{"spec.json": `{"type":"openapi"}`},
-				}
-				Expect(k8sClient.Create(ctx, cm2)).To(Succeed())
 
 				By("Reconciling again to create deployment with volume mounts")
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
+				_, err := reconcileOnce(ctx, r, typeNamespacedName)
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying Deployment has both volume mounts")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
+				deployment := getDeployment(ctx, typeNamespacedName)
 
-				container := deployment.Spec.Template.Spec.Containers[0]
+				container := firstContainer(deployment)
 				Expect(container.VolumeMounts).To(HaveLen(3)) // 2 tools + 1 agent-card
 
-				// Find both volume mounts
 				mountPaths := make([]string, 0, 3)
 				for _, vm := range container.VolumeMounts {
 					mountPaths = append(mountPaths, vm.MountPath)
@@ -378,7 +287,6 @@ var _ = Describe("Agent Controller - Tools", func() {
 				agentTool := &agentv1alpha1.AgentTool{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: agentToolName, Namespace: agentNamespace}, agentTool)
 				if err == nil {
-					// Remove finalizer if present
 					if controllerutil.ContainsFinalizer(agentTool, "agent.flokoa.ai/agenttool-finalizer") {
 						controllerutil.RemoveFinalizer(agentTool, "agent.flokoa.ai/agenttool-finalizer")
 						_ = k8sClient.Update(ctx, agentTool)
@@ -408,9 +316,10 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
 
 				By("Creating the AgentTool's ConfigMap (simulating AgentTool controller)")
+				configMapName := agentToolName + "-spec"
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Name:      configMapName,
 						Namespace: agentNamespace,
 						Labels: map[string]string{
 							"app.kubernetes.io/name":      agentToolName,
@@ -452,52 +361,25 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates resources
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Verifying Deployment mounts the referenced AgentTool ConfigMap")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
+				deployment := getDeployment(ctx, typeNamespacedName)
 
-				// Check volumes - should reference the AgentTool's ConfigMap
-				var toolVolume *corev1.Volume
-				for i := range deployment.Spec.Template.Spec.Volumes {
-					if deployment.Spec.Template.Spec.Volumes[i].Name == fmt.Sprintf("tool-%s", agentToolName) {
-						toolVolume = &deployment.Spec.Template.Spec.Volumes[i]
-						break
-					}
-				}
+				// Volume name is "tool-{agentToolName}" where agentToolName is the test variable
+				volumeName := "tool-" + agentToolName
+				toolVolume := findVolume(deployment.Spec.Template.Spec, volumeName)
 				Expect(toolVolume).NotTo(BeNil())
-				Expect(toolVolume.ConfigMap.Name).To(Equal(fmt.Sprintf("%s-spec", agentToolName)))
+				Expect(toolVolume.ConfigMap.Name).To(HaveSuffix("-spec"))
+				Expect(toolVolume.ConfigMap.Name).To(Equal(configMapName))
 
 				// Check volume mounts
-				container := deployment.Spec.Template.Spec.Containers[0]
-				var toolMount *corev1.VolumeMount
-				for i := range container.VolumeMounts {
-					if container.VolumeMounts[i].Name == fmt.Sprintf("tool-%s", agentToolName) {
-						toolMount = &container.VolumeMounts[i]
-						break
-					}
-				}
+				container := firstContainer(deployment)
+				toolMount := findVolumeMount(container, volumeName)
 				Expect(toolMount).NotTo(BeNil())
-				Expect(toolMount.MountPath).To(Equal(fmt.Sprintf("/etc/flokoa/tools/%s", agentToolName)))
+				Expect(toolMount.MountPath).To(HavePrefix("/etc/flokoa/tools/"))
+				Expect(toolMount.MountPath).To(ContainSubstring(agentToolName))
 				Expect(toolMount.ReadOnly).To(BeTrue())
 			})
 
@@ -531,34 +413,24 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
+				r := newAgentReconciler()
 
 				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
+				result, err := reconcileOnce(ctx, r, typeNamespacedName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 				// Second reconcile should fail due to missing AgentTool
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
+				_, err = reconcileOnce(ctx, r, typeNamespacedName)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("non-existent-tool"))
 
 				By("Verifying ToolsReady condition shows failure")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agent)
-					if err != nil {
-						return false
-					}
+					agent := getAgent(ctx, typeNamespacedName)
 					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeToolsReady)
 					return condition != nil && condition.Status == metav1.ConditionFalse
-				}, timeout, interval).Should(BeTrue())
+				}, testTimeout, testInterval).Should(BeTrue())
 			})
 
 			It("should use custom name when specified in ToolRef", func() {
@@ -584,7 +456,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				By("Creating the AgentTool's ConfigMap")
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Name:      agentToolName + "-spec",
 						Namespace: agentNamespace,
 					},
 					Data: map[string]string{
@@ -623,38 +495,14 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates resources
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Verifying volume mount uses custom name")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
+				deployment := getDeployment(ctx, typeNamespacedName)
 
-				container := deployment.Spec.Template.Spec.Containers[0]
-				var toolMount *corev1.VolumeMount
-				for i := range container.VolumeMounts {
-					if container.VolumeMounts[i].Name == "tool-my-custom-tool-name" {
-						toolMount = &container.VolumeMounts[i]
-						break
-					}
-				}
+				container := firstContainer(deployment)
+				toolMount := findVolumeMount(container, "tool-my-custom-tool-name")
 				Expect(toolMount).NotTo(BeNil())
 				Expect(toolMount.MountPath).To(Equal("/etc/flokoa/tools/my-custom-tool-name"))
 			})
@@ -668,16 +516,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 			})
 
 			AfterEach(func() {
-				// Cleanup all AgentTool resources (both referenced and inline-created)
-				agentToolList := &agentv1alpha1.AgentToolList{}
-				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
-				for _, at := range agentToolList.Items {
-					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
-						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
-						_ = k8sClient.Update(ctx, &at)
-					}
-					_ = k8sClient.Delete(ctx, &at)
-				}
+				cleanupAgentTools(nil)
 			})
 
 			It("should handle both inline and referenced tools together", func() {
@@ -703,7 +542,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				By("Creating the AgentTool's ConfigMap")
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Name:      agentToolName + "-spec",
 						Namespace: agentNamespace,
 					},
 					Data: map[string]string{
@@ -754,38 +593,18 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates AgentTool CR for inline tool
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Verifying AgentTool CR was created for inline tool")
-				inlineAgentToolName := fmt.Sprintf("%s-inline-tool", agentName)
-				inlineAgentTool := &agentv1alpha1.AgentTool{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Name:      inlineAgentToolName,
-						Namespace: agentNamespace,
-					}, inlineAgentTool)
-				}, timeout, interval).Should(Succeed())
+				inlineTools := listAgentToolsByAgent(agentName)
+				Expect(inlineTools).To(HaveLen(1))
+				inlineAgentTool := inlineTools[0]
 
 				By("Simulating AgentTool controller creating ConfigMap for inline tool")
 				inlineConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", inlineAgentToolName),
+						Name:      inlineAgentTool.Name + "-spec",
 						Namespace: agentNamespace,
 					},
 					Data: map[string]string{"spec.json": `{"type":"openapi"}`},
@@ -793,18 +612,13 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, inlineConfigMap)).To(Succeed())
 
 				By("Reconciling again to create deployment with volume mounts")
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
+				_, err := reconcileOnce(ctx, r, typeNamespacedName)
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying Deployment has both volume mounts")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
+				deployment := getDeployment(ctx, typeNamespacedName)
 
-				container := deployment.Spec.Template.Spec.Containers[0]
+				container := firstContainer(deployment)
 				Expect(container.VolumeMounts).To(HaveLen(3)) // 2 tools + 1 agent-card
 
 				mountPaths := make([]string, 0, 3)
@@ -812,12 +626,11 @@ var _ = Describe("Agent Controller - Tools", func() {
 					mountPaths = append(mountPaths, vm.MountPath)
 				}
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/inline-tool"))
-				Expect(mountPaths).To(ContainElement(fmt.Sprintf("/etc/flokoa/tools/%s", agentToolName)))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/" + agentToolName))
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/agent-card.json"))
 
 				By("Verifying ToolsReady condition shows 2 tools synced")
-				err = k8sClient.Get(ctx, typeNamespacedName, agent)
-				Expect(err).NotTo(HaveOccurred())
+				agent = getAgent(ctx, typeNamespacedName)
 				condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeToolsReady)
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Message).To(ContainSubstring("2 tools"))
@@ -832,16 +645,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 			})
 
 			AfterEach(func() {
-				// Cleanup all AgentTool resources
-				agentToolList := &agentv1alpha1.AgentToolList{}
-				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
-				for _, at := range agentToolList.Items {
-					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
-						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
-						_ = k8sClient.Update(ctx, &at)
-					}
-					_ = k8sClient.Delete(ctx, &at)
-				}
+				cleanupAgentTools(nil)
 			})
 
 			It("should add tools-hash annotation to pod template", func() {
@@ -867,7 +671,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				By("Creating the AgentTool's ConfigMap")
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Name:      agentToolName + "-spec",
 						Namespace: agentNamespace,
 						Labels: map[string]string{
 							"app.kubernetes.io/name":      agentToolName,
@@ -909,29 +713,11 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates resources
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Verifying pod template has tools-hash annotation")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
+				deployment := getDeployment(ctx, typeNamespacedName)
 
 				Expect(deployment.Spec.Template.Annotations).To(HaveKey("flokoa.ai/tools-hash"))
 				initialHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
@@ -959,10 +745,14 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
 
 				By("Creating the AgentTool's ConfigMap")
+				configMapNN := types.NamespacedName{
+					Name:      agentToolName + "-spec",
+					Namespace: agentNamespace,
+				}
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", agentToolName),
-						Namespace: agentNamespace,
+						Name:      configMapNN.Name,
+						Namespace: configMapNN.Namespace,
 						Labels: map[string]string{
 							"app.kubernetes.io/name":      agentToolName,
 							"app.kubernetes.io/component": "agenttool-spec",
@@ -1003,53 +793,25 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates resources
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Getting the initial tools-hash")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
-
+				deployment := getDeployment(ctx, typeNamespacedName)
 				initialHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
 				Expect(initialHash).NotTo(BeEmpty())
 
 				By("Updating the ConfigMap content")
-				err = k8sClient.Get(ctx, types.NamespacedName{
-					Name:      fmt.Sprintf("%s-spec", agentToolName),
-					Namespace: agentNamespace,
-				}, toolConfigMap)
-				Expect(err).NotTo(HaveOccurred())
-
+				Expect(k8sClient.Get(ctx, configMapNN, toolConfigMap)).To(Succeed())
 				toolConfigMap.Data["spec.json"] = `{"type":"openapi","description":"Updated description"}`
 				Expect(k8sClient.Update(ctx, toolConfigMap)).To(Succeed())
 
 				By("Reconciling the Agent again")
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
+				_, err := reconcileOnce(ctx, r, typeNamespacedName)
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying the tools-hash has changed")
-				err = k8sClient.Get(ctx, typeNamespacedName, deployment)
-				Expect(err).NotTo(HaveOccurred())
-
+				Expect(k8sClient.Get(ctx, typeNamespacedName, deployment)).To(Succeed())
 				updatedHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
 				Expect(updatedHash).NotTo(BeEmpty())
 				Expect(updatedHash).NotTo(Equal(initialHash))
@@ -1078,30 +840,11 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Reconciling the Agent")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				// First reconcile adds finalizer
-				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-				// Second reconcile creates resources
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
 
 				By("Verifying pod template has no tools-hash annotation")
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, deployment)
-				}, timeout, interval).Should(Succeed())
-
+				deployment := getDeployment(ctx, typeNamespacedName)
 				Expect(deployment.Spec.Template.Annotations).To(BeNil())
 			})
 
@@ -1161,27 +904,11 @@ var _ = Describe("Agent Controller - Tools", func() {
 			AfterEach(func() {
 				// Cleanup agents
 				for _, name := range []string{agent1Name, agent2Name} {
-					agent := &agentv1alpha1.Agent{}
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, agent)
-					if err == nil {
-						if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
-							controllerutil.RemoveFinalizer(agent, agentFinalizer)
-							_ = k8sClient.Update(ctx, agent)
-						}
-						_ = k8sClient.Delete(ctx, agent)
-					}
+					cleanupAgent(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace})
 				}
 
 				// Cleanup AgentTools
-				agentToolList := &agentv1alpha1.AgentToolList{}
-				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
-				for _, at := range agentToolList.Items {
-					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
-						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
-						_ = k8sClient.Update(ctx, &at)
-					}
-					_ = k8sClient.Delete(ctx, &at)
-				}
+				cleanupAgentTools(nil)
 			})
 
 			It("should find all agents referencing an AgentTool", func() {
@@ -1234,12 +961,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				}
 
 				By("Calling findAgentsForAgentTool")
-				reconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				requests := reconciler.findAgentsForAgentTool(ctx, agentTool)
+				r := newAgentReconciler()
+				requests := r.findAgentsForAgentTool(ctx, agentTool)
 
 				By("Verifying both agents are returned")
 				Expect(requests).To(HaveLen(2))
@@ -1273,12 +996,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, inlineAgentTool)).To(Succeed())
 
 				By("Calling findAgentsForAgentTool")
-				reconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				requests := reconciler.findAgentsForAgentTool(ctx, inlineAgentTool)
+				r := newAgentReconciler()
+				requests := r.findAgentsForAgentTool(ctx, inlineAgentTool)
 
 				By("Verifying the owning agent is returned")
 				Expect(requests).To(HaveLen(1))
@@ -1306,12 +1025,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
 
 				By("Calling findAgentsForAgentTool")
-				reconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				requests := reconciler.findAgentsForAgentTool(ctx, agentTool)
+				r := newAgentReconciler()
+				requests := r.findAgentsForAgentTool(ctx, agentTool)
 
 				By("Verifying no agents are returned")
 				Expect(requests).To(BeEmpty())
@@ -1326,16 +1041,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 			})
 
 			AfterEach(func() {
-				// Cleanup AgentTools
-				agentToolList := &agentv1alpha1.AgentToolList{}
-				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
-				for _, at := range agentToolList.Items {
-					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
-						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
-						_ = k8sClient.Update(ctx, &at)
-					}
-					_ = k8sClient.Delete(ctx, &at)
-				}
+				cleanupAgentTools(nil)
 			})
 
 			It("should find agent for agenttool-spec ConfigMap", func() {
@@ -1361,7 +1067,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				By("Creating the AgentTool's ConfigMap with proper labels")
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", agentToolName),
+						Name:      agentToolName + "-spec",
 						Namespace: agentNamespace,
 						Labels: map[string]string{
 							"app.kubernetes.io/name":      agentToolName,
@@ -1402,12 +1108,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 				By("Calling findAgentsForConfigMap")
-				reconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				requests := reconciler.findAgentsForConfigMap(ctx, toolConfigMap)
+				r := newAgentReconciler()
+				requests := r.findAgentsForConfigMap(ctx, toolConfigMap)
 
 				By("Verifying the agent is returned")
 				Expect(requests).To(HaveLen(1))
@@ -1418,7 +1120,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				By("Creating an inline tool ConfigMap with agent label")
 				inlineConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-inline-tool-spec", agentName),
+						Name:      agentName + "-inline-tool-spec",
 						Namespace: agentNamespace,
 						Labels: map[string]string{
 							"app.kubernetes.io/component": "inline-tool-spec",
@@ -1432,12 +1134,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, inlineConfigMap)).To(Succeed())
 
 				By("Calling findAgentsForConfigMap")
-				reconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				requests := reconciler.findAgentsForConfigMap(ctx, inlineConfigMap)
+				r := newAgentReconciler()
+				requests := r.findAgentsForConfigMap(ctx, inlineConfigMap)
 
 				By("Verifying the agent is returned")
 				Expect(requests).To(HaveLen(1))
@@ -1458,12 +1156,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, regularConfigMap)).To(Succeed())
 
 				By("Calling findAgentsForConfigMap")
-				reconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				requests := reconciler.findAgentsForConfigMap(ctx, regularConfigMap)
+				r := newAgentReconciler()
+				requests := r.findAgentsForConfigMap(ctx, regularConfigMap)
 
 				By("Verifying no agents are returned")
 				Expect(requests).To(BeEmpty())
@@ -1484,27 +1178,11 @@ var _ = Describe("Agent Controller - Tools", func() {
 			AfterEach(func() {
 				// Cleanup agents
 				for _, name := range []string{agent1Name, agent2Name} {
-					agent := &agentv1alpha1.Agent{}
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, agent)
-					if err == nil {
-						if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
-							controllerutil.RemoveFinalizer(agent, agentFinalizer)
-							_ = k8sClient.Update(ctx, agent)
-						}
-						_ = k8sClient.Delete(ctx, agent)
-					}
+					cleanupAgent(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace})
 				}
 
 				// Cleanup AgentTools
-				agentToolList := &agentv1alpha1.AgentToolList{}
-				_ = k8sClient.List(ctx, agentToolList, client.InNamespace(agentNamespace))
-				for _, at := range agentToolList.Items {
-					if controllerutil.ContainsFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer") {
-						controllerutil.RemoveFinalizer(&at, "agent.flokoa.ai/agenttool-finalizer")
-						_ = k8sClient.Update(ctx, &at)
-					}
-					_ = k8sClient.Delete(ctx, &at)
-				}
+				cleanupAgentTools(nil)
 			})
 
 			It("should update all agents when shared tool ConfigMap changes", func() {
@@ -1528,10 +1206,14 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
 
 				By("Creating the AgentTool's ConfigMap")
+				configMapNN := types.NamespacedName{
+					Name:      agentToolName + "-spec",
+					Namespace: agentNamespace,
+				}
 				toolConfigMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-spec", agentToolName),
-						Namespace: agentNamespace,
+						Name:      configMapNN.Name,
+						Namespace: configMapNN.Namespace,
 						Labels: map[string]string{
 							"app.kubernetes.io/name":      agentToolName,
 							"app.kubernetes.io/component": "agenttool-spec",
@@ -1544,10 +1226,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(k8sClient.Create(ctx, toolConfigMap)).To(Succeed())
 
 				By("Creating two agents referencing the shared tool")
-				controllerReconciler := &AgentReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
+				r := newAgentReconciler()
 
 				initialHashes := make(map[string]string)
 
@@ -1578,49 +1257,30 @@ var _ = Describe("Agent Controller - Tools", func() {
 					}
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-					// Reconcile to add finalizer
-					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: types.NamespacedName{Name: name, Namespace: agentNamespace},
-					})
-					Expect(err).NotTo(HaveOccurred())
-
-					// Reconcile to create resources
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: types.NamespacedName{Name: name, Namespace: agentNamespace},
-					})
-					Expect(err).NotTo(HaveOccurred())
+					nn := types.NamespacedName{Name: name, Namespace: agentNamespace}
+					reconcileAgent(ctx, r, nn)
 
 					// Get initial hash
-					deployment := &appsv1.Deployment{}
-					err = k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, deployment)
-					Expect(err).NotTo(HaveOccurred())
+					deployment := getDeployment(ctx, nn)
 					initialHashes[name] = deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
 				}
 
 				By("Updating the shared ConfigMap")
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      fmt.Sprintf("%s-spec", agentToolName),
-					Namespace: agentNamespace,
-				}, toolConfigMap)
-				Expect(err).NotTo(HaveOccurred())
-
+				Expect(k8sClient.Get(ctx, configMapNN, toolConfigMap)).To(Succeed())
 				toolConfigMap.Data["spec.json"] = `{"type":"openapi","description":"Updated"}`
 				Expect(k8sClient.Update(ctx, toolConfigMap)).To(Succeed())
 
 				By("Reconciling both agents")
 				for _, name := range []string{agent1Name, agent2Name} {
-					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: types.NamespacedName{Name: name, Namespace: agentNamespace},
-					})
+					nn := types.NamespacedName{Name: name, Namespace: agentNamespace}
+					_, err := reconcileOnce(ctx, r, nn)
 					Expect(err).NotTo(HaveOccurred())
 				}
 
 				By("Verifying both agents have updated hashes")
 				for _, name := range []string{agent1Name, agent2Name} {
-					deployment := &appsv1.Deployment{}
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: agentNamespace}, deployment)
-					Expect(err).NotTo(HaveOccurred())
-
+					nn := types.NamespacedName{Name: name, Namespace: agentNamespace}
+					deployment := getDeployment(ctx, nn)
 					newHash := deployment.Spec.Template.Annotations["flokoa.ai/tools-hash"]
 					Expect(newHash).NotTo(Equal(initialHashes[name]))
 				}

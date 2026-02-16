@@ -351,9 +351,18 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.title = "FilePart"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.properties.file.title = "FileContent"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.text.title = "TextPart"' /tmp/agentworkflow_schema.json
-	@# Ephemeral agent task types
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.title = "EphemeralAgentTask"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.framework.title = "AgentFramework"' /tmp/agentworkflow_schema.json
+	@# Agent task types (Marvin)
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.title = "AgentTask"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.type.title = "MarvinTaskType"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.instruction.title = "InstructionEntry"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.instruction.properties.instructionRef.title = "InstructionRef"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.resultType.title = "StructuredIOSchema"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.model.title = "AgentModelRef"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.agent.title = "MarvinAgentSpec"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.agent.properties.model.title = "AgentModelRef"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.title = "ToolEntry"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.properties.toolRef.title = "ToolRef"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.properties.template.title = "AgentToolSpec"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.title = "EnvVar"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.title = "EnvVarSource"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.configMapKeyRef.title = "ConfigMapKeySelector"' /tmp/agentworkflow_schema.json
@@ -379,6 +388,20 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/agentworkflow.py
 	@rm /tmp/agentworkflow_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentworkflow.py"
+	@# Generate TaskConfig Pydantic v2 model from static schema
+	@echo "Building TaskConfig schema..."
+	@$(DATAMODEL_CODEGEN) \
+		--input config/schemas/taskconfig_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+		--allow-population-by-field-name \
+		--use-title-as-name \
+		--class-name TaskConfig \
+		--output $(PYTHON_MODELS_DIR)/taskconfig.py
+	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/taskconfig.py
+	@echo "Generated TaskConfig at $(PYTHON_MODELS_DIR)/taskconfig.py"
 
 ##@ gRPC Server
 

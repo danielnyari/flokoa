@@ -6,19 +6,20 @@ TemplatedPydanticAIAgentExecutor with mocked LLM calls (TestModel).
 
 import json
 
+import flokoa.utils as utils_module
 import pytest
 from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from flokoa.cache import ConfigCache
+from flokoa.utils.router import router as health_router
+from flokoa_types.templateconfig import OutputSchema, TemplateConfig
 from httpx import ASGITransport, AsyncClient
 from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
 
-import flokoa.utils as utils_module
-from flokoa.utils.router import router as health_router
 from flokoa_managed_agent.agent_executor import TemplatedPydanticAIAgentExecutor
-from flokoa_types.templateconfig import OutputSchema, TemplateConfig
 
 models.ALLOW_MODEL_REQUESTS = False
 
@@ -159,7 +160,7 @@ class _TestTemplatedExecutor(TemplatedPydanticAIAgentExecutor):
 @pytest.fixture
 def agent_executor(template_config, tools_dir, model_config_file, instruction_file):
     """Create a TemplatedPydanticAIAgentExecutor backed by test config files."""
-    return _TestTemplatedExecutor(config=template_config)
+    return _TestTemplatedExecutor(config=template_config, cache=ConfigCache())
 
 
 @pytest.fixture

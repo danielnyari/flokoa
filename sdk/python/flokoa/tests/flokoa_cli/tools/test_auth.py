@@ -36,10 +36,16 @@ from flokoa.auth.auth_schemes import (
     OpenIdConnectWithConfig,
 )
 from flokoa.tools.openapi import OpenAPIDeps, create_rest_api_callable
+from flokoa.auth.auth_credential import ServiceAccount, ServiceAccountCredential
 from flokoa.tools.openapi.auth.auth_helpers import (
     credential_to_param,
     dict_to_auth_scheme,
+    openid_dict_to_scheme_credential,
+    openid_url_to_scheme_credential,
     resolve_openid_connect_scheme,
+    service_account_dict_to_scheme_credential,
+    service_account_scheme_credential,
+    token_to_scheme_credential,
 )
 from flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger import (
     _EXPIRY_BUFFER_SECONDS,
@@ -845,3 +851,261 @@ class TestContentTypeResponseParsing:
         callable_fn = create_rest_api_callable(get_pet_config)
         result = await callable_fn(ctx, pet_id=1)
         assert result == {"ok": True}
+
+
+# ===========================================================================
+# token_to_scheme_credential — all locations and types
+# ===========================================================================
+
+
+class TestTokenToSchemeCredential:
+    def test_apikey_header(self):
+        scheme, cred = token_to_scheme_credential("apikey", "header", "X-API-Key", "key123")
+        assert scheme.type_ == SecuritySchemeType.apiKey
+        assert cred.api_key == "key123"
+
+    def test_apikey_query(self):
+        scheme, cred = token_to_scheme_credential("apikey", "query", "api_key", "key456")
+        assert scheme.in_.value == "query"
+        assert cred.api_key == "key456"
+
+    def test_apikey_cookie(self):
+        scheme, cred = token_to_scheme_credential("apikey", "cookie", "session", "cook789")
+        assert scheme.in_.value == "cookie"
+        assert cred.api_key == "cook789"
+
+    def test_apikey_invalid_location_raises(self):
+        with pytest.raises(ValueError, match="Invalid location"):
+            token_to_scheme_credential("apikey", "body", "key", "val")
+
+    def test_apikey_no_credential_value(self):
+        scheme, cred = token_to_scheme_credential("apikey", "header", "X-Key")
+        assert scheme is not None
+        assert cred is None
+
+    def test_oauth2_token(self):
+        scheme, cred = token_to_scheme_credential("oauth2Token", "header", "Authorization", "tok")
+        assert cred.auth_type == AuthCredentialTypes.HTTP
+        assert cred.http.credentials.token == "tok"
+
+    def test_oauth2_token_no_credential_value(self):
+        scheme, cred = token_to_scheme_credential("oauth2Token", "header", "Authorization")
+        assert scheme is not None
+        assert cred is None
+
+    def test_invalid_type_raises(self):
+        with pytest.raises(ValueError, match="Invalid security scheme type"):
+            token_to_scheme_credential("invalid", "header", "key", "val")
+
+
+# ===========================================================================
+# service_account helpers
+# ===========================================================================
+
+
+class TestServiceAccountHelpers:
+    def test_service_account_dict_to_scheme_credential(self):
+        config = {
+            "type": "service_account",
+            "project_id": "test-project",
+            "private_key_id": "key-id",
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n",
+            "client_email": "test@test.iam.gserviceaccount.com",
+            "client_id": "12345",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+        scheme, cred = service_account_dict_to_scheme_credential(
+            config, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        assert cred.auth_type == AuthCredentialTypes.SERVICE_ACCOUNT
+        assert cred.service_account is not None
+        assert cred.service_account.scopes == ["https://www.googleapis.com/auth/cloud-platform"]
+
+    def test_service_account_scheme_credential(self):
+        sa = ServiceAccount(
+            service_account_credential=ServiceAccountCredential.model_construct(
+                type_="service_account",
+                project_id="proj",
+                private_key_id="kid",
+                private_key="pk",
+                client_email="e@e.com",
+                client_id="cid",
+                auth_uri="https://accounts.google.com/o/oauth2/auth",
+                token_uri="https://oauth2.googleapis.com/token",
+                auth_provider_x509_cert_url="https://www.googleapis.com/oauth2/v1/certs",
+                client_x509_cert_url="https://www.googleapis.com/robot/v1/metadata/x509/test",
+                universe_domain="googleapis.com",
+            ),
+            scopes=["openid"],
+        )
+        scheme, cred = service_account_scheme_credential(sa)
+        assert cred.auth_type == AuthCredentialTypes.SERVICE_ACCOUNT
+        assert cred.service_account is sa
+
+
+# ===========================================================================
+# openid helpers
+# ===========================================================================
+
+
+class TestOpenIdHelpers:
+    def test_openid_dict_to_scheme_credential(self):
+        config_dict = {
+            "authorization_endpoint": "https://example.com/auth",
+            "token_endpoint": "https://example.com/token",
+        }
+        cred_dict = {
+            "client_id": "my-client",
+            "client_secret": "my-secret",
+            "redirect_uri": "http://localhost/callback",
+        }
+        scheme, cred = openid_dict_to_scheme_credential(config_dict, ["openid"], cred_dict)
+        assert isinstance(scheme, OpenIdConnectWithConfig)
+        assert cred.auth_type == AuthCredentialTypes.OPEN_ID_CONNECT
+        assert cred.oauth2.client_id == "my-client"
+        assert cred.oauth2.redirect_uri == "http://localhost/callback"
+
+    def test_openid_dict_unwraps_google_format(self):
+        """Google downloads have a single wrapper key like 'web' or 'installed'."""
+        config_dict = {
+            "authorization_endpoint": "https://example.com/auth",
+            "token_endpoint": "https://example.com/token",
+        }
+        cred_dict = {
+            "web": {
+                "client_id": "wrapped-client",
+                "client_secret": "wrapped-secret",
+            }
+        }
+        scheme, cred = openid_dict_to_scheme_credential(config_dict, ["openid"], cred_dict)
+        assert cred.oauth2.client_id == "wrapped-client"
+
+    def test_openid_dict_missing_fields_raises(self):
+        config_dict = {
+            "authorization_endpoint": "https://example.com/auth",
+            "token_endpoint": "https://example.com/token",
+        }
+        cred_dict = {"client_id": "only-id"}  # missing client_secret
+        with pytest.raises(ValueError, match="Missing required fields"):
+            openid_dict_to_scheme_credential(config_dict, ["openid"], cred_dict)
+
+    def test_openid_url_to_scheme_credential(self):
+        discovery_doc = {
+            "authorization_endpoint": "https://example.com/auth",
+            "token_endpoint": "https://example.com/token",
+        }
+        mock_response = httpx.Response(
+            200,
+            json=discovery_doc,
+            request=httpx.Request("GET", "https://example.com"),
+        )
+        cred_dict = {"client_id": "c", "client_secret": "s"}
+        with patch("flokoa.tools.openapi.auth.auth_helpers.httpx.get", return_value=mock_response):
+            scheme, cred = openid_url_to_scheme_credential(
+                "https://example.com/.well-known/openid-configuration",
+                ["openid"],
+                cred_dict,
+            )
+        assert isinstance(scheme, OpenIdConnectWithConfig)
+        assert cred.oauth2.client_id == "c"
+
+    def test_openid_url_fetch_failure_raises(self):
+        with patch(
+            "flokoa.tools.openapi.auth.auth_helpers.httpx.get",
+            side_effect=httpx.ConnectError("refused"),
+        ), pytest.raises(ValueError, match="Failed to fetch"):
+            openid_url_to_scheme_credential(
+                "https://bad.example.com/.well-known/openid-configuration",
+                ["openid"],
+                {"client_id": "c", "client_secret": "s"},
+            )
+
+
+# ===========================================================================
+# dict_to_auth_scheme — all types
+# ===========================================================================
+
+
+class TestDictToAuthScheme:
+    def test_apikey_scheme(self):
+        data = {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+        result = dict_to_auth_scheme(data)
+        assert isinstance(result, APIKey)
+        assert result.name == "X-API-Key"
+
+    def test_http_bearer_scheme(self):
+        data = {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+        result = dict_to_auth_scheme(data)
+        assert isinstance(result, HTTPBearer)
+
+    def test_http_basic_scheme(self):
+        from fastapi.openapi.models import HTTPBase
+
+        data = {"type": "http", "scheme": "basic"}
+        result = dict_to_auth_scheme(data)
+        assert isinstance(result, HTTPBase)
+
+    def test_oauth2_scheme(self):
+        data = {
+            "type": "oauth2",
+            "flows": {
+                "authorizationCode": {
+                    "authorizationUrl": "https://example.com/auth",
+                    "tokenUrl": "https://example.com/token",
+                }
+            },
+        }
+        result = dict_to_auth_scheme(data)
+        assert isinstance(result, OAuth2)
+
+    def test_missing_type_raises(self):
+        with pytest.raises(ValueError, match="Missing 'type'"):
+            dict_to_auth_scheme({"in": "header", "name": "key"})
+
+    def test_invalid_type_raises(self):
+        with pytest.raises(ValueError, match="Invalid security scheme type"):
+            dict_to_auth_scheme({"type": "unknown"})
+
+    def test_invalid_data_raises(self):
+        with pytest.raises(ValueError, match="Invalid security scheme data"):
+            dict_to_auth_scheme({"type": "apiKey"})  # missing 'in' and 'name'
+
+
+# ===========================================================================
+# credential_to_param — edge cases
+# ===========================================================================
+
+
+class TestCredentialToParamEdgeCases:
+    def test_http_cred_without_token_or_username_raises(self):
+        scheme = HTTPBearer()
+        cred = AuthCredential(
+            auth_type=AuthCredentialTypes.HTTP,
+            http=HttpAuth(scheme="bearer", credentials=HttpCredentials()),
+        )
+        with pytest.raises(ValueError, match="Invalid HTTP auth credentials"):
+            credential_to_param(scheme, cred)
+
+    def test_invalid_combination_raises(self):
+        scheme = HTTPBearer()
+        cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY, api_key="key")
+        # HTTPBearer + API_KEY type doesn't match the API key scheme check
+        # (needs apiKey scheme type_ == apiKey, but HTTPBearer type_ == http)
+        with pytest.raises(ValueError, match="Invalid HTTP auth credentials|Invalid security"):
+            credential_to_param(scheme, cred)
+
+    def test_apikey_query_location(self):
+        from fastapi.openapi.models import APIKeyIn
+
+        scheme = APIKey(**{"type": "apiKey", "in": "query", "name": "api_key"})
+        cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY, api_key="qk")
+        param, kwargs = credential_to_param(scheme, cred)
+        assert param.param_location == "query"
+        assert kwargs[param.py_name] == "qk"
+
+    def test_apikey_cookie_location(self):
+        scheme = APIKey(**{"type": "apiKey", "in": "cookie", "name": "token"})
+        cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY, api_key="ck")
+        param, kwargs = credential_to_param(scheme, cred)
+        assert param.param_location == "cookie"

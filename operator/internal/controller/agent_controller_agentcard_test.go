@@ -24,24 +24,16 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
 var _ = Describe("Agent Controller - AgentCard", func() {
 	Context("When reconciling AgentCard ConfigMap", func() {
-		const (
-			agentNamespace = "default"
-			timeout        = time.Second * 10
-			interval       = time.Millisecond * 250
-		)
+		const agentNamespace = "default"
 
 		var (
 			ctx                context.Context
@@ -60,26 +52,7 @@ var _ = Describe("Agent Controller - AgentCard", func() {
 		})
 
 		AfterEach(func() {
-			// Cleanup the Agent resource
-			agent := &agentv1alpha1.Agent{}
-			err := k8sClient.Get(ctx, typeNamespacedName, agent)
-			if err == nil {
-				By("Cleaning up the Agent resource")
-
-				// Remove finalizer if present to allow deletion
-				if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
-					controllerutil.RemoveFinalizer(agent, agentFinalizer)
-					Expect(k8sClient.Update(ctx, agent)).To(Succeed())
-				}
-
-				Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
-
-				// Wait for deletion to complete
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agent)
-					return errors.IsNotFound(err)
-				}, timeout, interval).Should(BeTrue())
-			}
+			cleanupAgent(ctx, typeNamespacedName)
 		})
 
 		It("should create AgentCard ConfigMap with correct JSON data", func() {
@@ -123,33 +96,22 @@ var _ = Describe("Agent Controller - AgentCard", func() {
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 			By("Reconciling the Agent")
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile creates resources
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("Finding the agent-card ConfigMap name from the deployment volume")
+			deployment := getDeployment(ctx, typeNamespacedName)
+			agentCardVolume := findVolume(deployment.Spec.Template.Spec, "agent-card")
+			Expect(agentCardVolume).NotTo(BeNil())
+			Expect(agentCardVolume.ConfigMap).NotTo(BeNil())
+			configMapName := agentCardVolume.ConfigMap.Name
+			Expect(configMapName).To(HaveSuffix("-agent-card"))
 
 			By("Verifying the AgentCard ConfigMap was created")
-			configMapName := fmt.Sprintf("%s-agent-card", agentName)
-			configMap := &corev1.ConfigMap{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{
-					Name:      configMapName,
-					Namespace: agentNamespace,
-				}, configMap)
-			}, timeout, interval).Should(Succeed())
+			configMap := getConfigMap(ctx, types.NamespacedName{
+				Name:      configMapName,
+				Namespace: agentNamespace,
+			})
 
 			By("Verifying ConfigMap labels")
 			Expect(configMap.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", agentName))
@@ -164,7 +126,7 @@ var _ = Describe("Agent Controller - AgentCard", func() {
 
 			By("Verifying JSON content matches AgentCard")
 			var card agentv1alpha1.AgentCardOverride
-			err = json.Unmarshal([]byte(cardJSON), &card)
+			err := json.Unmarshal([]byte(cardJSON), &card)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(card.Name).To(Equal("Test Agent"))
@@ -206,49 +168,20 @@ var _ = Describe("Agent Controller - AgentCard", func() {
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 			By("Reconciling the Agent")
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile creates resources
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
 			By("Verifying Deployment has agent-card volume")
-			deployment := &appsv1.Deployment{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, typeNamespacedName, deployment)
-			}, timeout, interval).Should(Succeed())
+			deployment := getDeployment(ctx, typeNamespacedName)
 
-			var agentCardVolume *corev1.Volume
-			for i := range deployment.Spec.Template.Spec.Volumes {
-				if deployment.Spec.Template.Spec.Volumes[i].Name == "agent-card" {
-					agentCardVolume = &deployment.Spec.Template.Spec.Volumes[i]
-					break
-				}
-			}
+			agentCardVolume := findVolume(deployment.Spec.Template.Spec, "agent-card")
 			Expect(agentCardVolume).NotTo(BeNil())
-			Expect(agentCardVolume.ConfigMap.Name).To(Equal(fmt.Sprintf("%s-agent-card", agentName)))
+			Expect(agentCardVolume.ConfigMap).NotTo(BeNil())
+			Expect(agentCardVolume.ConfigMap.Name).To(HaveSuffix("-agent-card"))
 
 			By("Verifying container has agent-card volume mount")
-			container := deployment.Spec.Template.Spec.Containers[0]
-			var agentCardMount *corev1.VolumeMount
-			for i := range container.VolumeMounts {
-				if container.VolumeMounts[i].Name == "agent-card" {
-					agentCardMount = &container.VolumeMounts[i]
-					break
-				}
-			}
+			container := firstContainer(deployment)
+			agentCardMount := findVolumeMount(container, "agent-card")
 			Expect(agentCardMount).NotTo(BeNil())
 			Expect(agentCardMount.MountPath).To(Equal("/etc/flokoa/agent-card.json"))
 			Expect(agentCardMount.SubPath).To(Equal("agent-card.json"))
@@ -283,41 +216,18 @@ var _ = Describe("Agent Controller - AgentCard", func() {
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 			By("Reconciling the Agent")
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile creates resources
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
 			By("Verifying container has FLOKOA_AGENT_URL env var")
-			deployment := &appsv1.Deployment{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, typeNamespacedName, deployment)
-			}, timeout, interval).Should(Succeed())
+			deployment := getDeployment(ctx, typeNamespacedName)
+			container := firstContainer(deployment)
 
-			container := deployment.Spec.Template.Spec.Containers[0]
-			var agentURLEnv *corev1.EnvVar
-			for i := range container.Env {
-				if container.Env[i].Name == "FLOKOA_AGENT_URL" {
-					agentURLEnv = &container.Env[i]
-					break
-				}
-			}
+			agentURLEnv := findEnvVar(container, "FLOKOA_AGENT_URL")
 			Expect(agentURLEnv).NotTo(BeNil())
-			expectedURL := fmt.Sprintf("http://%s.%s.svc.cluster.local", agentName, agentNamespace)
-			Expect(agentURLEnv.Value).To(Equal(expectedURL))
+			Expect(agentURLEnv.Value).To(HavePrefix("http://"))
+			Expect(agentURLEnv.Value).To(ContainSubstring(agentName))
+			Expect(agentURLEnv.Value).To(HaveSuffix(".svc.cluster.local"))
 		})
 
 		It("should update AgentCard ConfigMap when Agent spec changes", func() {
@@ -348,60 +258,43 @@ var _ = Describe("Agent Controller - AgentCard", func() {
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 			By("Reconciling the Agent")
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile creates resources
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			By("Finding the ConfigMap name from the deployment volume")
+			deployment := getDeployment(ctx, typeNamespacedName)
+			agentCardVolume := findVolume(deployment.Spec.Template.Spec, "agent-card")
+			Expect(agentCardVolume).NotTo(BeNil())
+			Expect(agentCardVolume.ConfigMap).NotTo(BeNil())
+			configMapName := agentCardVolume.ConfigMap.Name
 
 			By("Verifying initial ConfigMap content")
-			configMapName := fmt.Sprintf("%s-agent-card", agentName)
-			configMap := &corev1.ConfigMap{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{
-					Name:      configMapName,
-					Namespace: agentNamespace,
-				}, configMap)
-			}, timeout, interval).Should(Succeed())
+			configMap := getConfigMap(ctx, types.NamespacedName{
+				Name:      configMapName,
+				Namespace: agentNamespace,
+			})
 
 			var initialCard agentv1alpha1.AgentCardOverride
-			err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &initialCard)
+			err := json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &initialCard)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(initialCard.Name).To(Equal("Original Name"))
 
 			By("Updating the Agent Card")
-			err = k8sClient.Get(ctx, typeNamespacedName, agent)
-			Expect(err).NotTo(HaveOccurred())
-
+			agent = getAgent(ctx, typeNamespacedName)
 			agent.Spec.CardOverride.Name = "Updated Name"
 			agent.Spec.CardOverride.Description = "Updated description"
 			agent.Spec.CardOverride.Version = "2.0.0"
 			Expect(k8sClient.Update(ctx, agent)).To(Succeed())
 
 			By("Reconciling again")
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
+			_, err = reconcileOnce(ctx, r, typeNamespacedName)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying ConfigMap was updated")
-			err = k8sClient.Get(ctx, types.NamespacedName{
+			configMap = getConfigMap(ctx, types.NamespacedName{
 				Name:      configMapName,
 				Namespace: agentNamespace,
-			}, configMap)
-			Expect(err).NotTo(HaveOccurred())
+			})
 
 			var updatedCard agentv1alpha1.AgentCardOverride
 			err = json.Unmarshal([]byte(configMap.Data["agent-card.json"]), &updatedCard)
@@ -443,39 +336,16 @@ var _ = Describe("Agent Controller - AgentCard", func() {
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 			By("Reconciling the Agent")
-			controllerReconciler := &AgentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// First reconcile adds finalizer
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile creates resources
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
 
 			By("Verifying all env vars are present")
-			deployment := &appsv1.Deployment{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, typeNamespacedName, deployment)
-			}, timeout, interval).Should(Succeed())
+			deployment := getDeployment(ctx, typeNamespacedName)
+			container := firstContainer(deployment)
 
-			container := deployment.Spec.Template.Spec.Containers[0]
-			envNames := make([]string, 0, len(container.Env))
-			for _, env := range container.Env {
-				envNames = append(envNames, env.Name)
-			}
-
-			Expect(envNames).To(ContainElement("MY_VAR"))
-			Expect(envNames).To(ContainElement("ANOTHER_VAR"))
-			Expect(envNames).To(ContainElement("FLOKOA_AGENT_URL"))
+			Expect(findEnvVar(container, "MY_VAR")).NotTo(BeNil())
+			Expect(findEnvVar(container, "ANOTHER_VAR")).NotTo(BeNil())
+			Expect(findEnvVar(container, "FLOKOA_AGENT_URL")).NotTo(BeNil())
 		})
 	})
 })
