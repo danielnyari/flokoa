@@ -1,11 +1,23 @@
-"""Tests for GoogleADKAgentExecutor."""
+"""Tests for GoogleADKAgentExecutor.
 
-import sys
-from unittest.mock import AsyncMock, MagicMock
+Uses real Google ADK objects wherever possible, mocking only the LLM boundary
+(Runner.run_async) to avoid requiring API credentials.
+"""
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.adk.agents import LlmAgent
+from google.adk.tools import FunctionTool
+from google.genai import types as genai_types
 
 from flokoa.exceptions import CancelNotSupportedError
+from flokoa.integrations.google_adk.agent_executor import (
+    GoogleADKAgentExecutor,
+    _extract_final_response,
+)
+from flokoa.integrations.google_adk.toolset import FlokoaToolset
 from flokoa.tools import ToolsetFactory
 from flokoa_types import IntegrationType, ToolDefinition, ToolType
 from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
@@ -66,97 +78,9 @@ EMAIL_API_SPEC = {
 }
 
 
-# Mock google.adk modules before importing the executor
-@pytest.fixture(autouse=True)
-def mock_adk_modules(monkeypatch):
-    """Mock google.adk modules to avoid import errors."""
-    # Create mock modules
-    mock_google = MagicMock()
-    mock_adk = MagicMock()
-    mock_agents = MagicMock()
-    mock_runners = MagicMock()
-    mock_artifacts = MagicMock()
-    mock_sessions = MagicMock()
-    mock_memory = MagicMock()
-    mock_genai = MagicMock()
-    mock_types = MagicMock()
-
-    # Set up module hierarchy
-    mock_google.adk = mock_adk
-    mock_google.genai = mock_genai
-    mock_adk.agents = mock_agents
-    mock_adk.runners = mock_runners
-    mock_adk.artifacts = mock_artifacts
-    mock_adk.sessions = mock_sessions
-    mock_adk.memory = mock_memory
-    mock_genai.types = mock_types
-
-    # Mock tools module
-    mock_tools = MagicMock()
-    mock_adk.tools = mock_tools
-
-    # Mock openapi_tool submodules for the builder import
-    mock_openapi_tool = MagicMock()
-    mock_openapi_spec_parser = MagicMock()
-    mock_openapi_toolset = MagicMock()
-    mock_adk.tools.openapi_tool = mock_openapi_tool
-    mock_openapi_tool.openapi_spec_parser = mock_openapi_spec_parser
-    mock_openapi_spec_parser.openapi_toolset = mock_openapi_toolset
-
-    # Mock FunctionTool class
-    mock_function_tool_cls = MagicMock()
-    mock_tools.FunctionTool = mock_function_tool_cls
-
-    # Mock Content and Part classes
-    mock_content_cls = MagicMock()
-    mock_part_cls = MagicMock()
-    mock_part_cls.from_text = MagicMock(return_value=MagicMock())
-    mock_types.Content = mock_content_cls
-    mock_types.Part = mock_part_cls
-
-    # Install mock modules
-    sys.modules["google"] = mock_google
-    sys.modules["google.adk"] = mock_adk
-    sys.modules["google.adk.agents"] = mock_agents
-    sys.modules["google.adk.runners"] = mock_runners
-    sys.modules["google.adk.artifacts"] = mock_artifacts
-    sys.modules["google.adk.sessions"] = mock_sessions
-    sys.modules["google.adk.memory"] = mock_memory
-    sys.modules["google.adk.tools"] = mock_tools
-    sys.modules["google.adk.tools.openapi_tool"] = mock_openapi_tool
-    sys.modules["google.adk.tools.openapi_tool.openapi_spec_parser"] = mock_openapi_spec_parser
-    sys.modules["google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset"] = mock_openapi_toolset
-    sys.modules["google.genai"] = mock_genai
-    sys.modules["google.genai.types"] = mock_types
-
-    yield {
-        "google": mock_google,
-        "runners": mock_runners,
-        "artifacts": mock_artifacts,
-        "sessions": mock_sessions,
-        "memory": mock_memory,
-        "tools": mock_tools,
-        "types": mock_types,
-        "openapi_toolset": mock_openapi_toolset,
-    }
-
-    # Cleanup
-    for mod in [
-        "google",
-        "google.adk",
-        "google.adk.agents",
-        "google.adk.runners",
-        "google.adk.artifacts",
-        "google.adk.sessions",
-        "google.adk.memory",
-        "google.adk.tools",
-        "google.adk.tools.openapi_tool",
-        "google.adk.tools.openapi_tool.openapi_spec_parser",
-        "google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset",
-        "google.genai",
-        "google.genai.types",
-    ]:
-        sys.modules.pop(mod, None)
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -171,12 +95,13 @@ def mock_load_tools(monkeypatch):
 
 
 @pytest.fixture
-def mock_adk_agent():
-    """Create a mock ADK BaseAgent."""
-    agent = MagicMock()
-    agent.name = "test_agent"
-    agent.tools = []
-    return agent
+def adk_agent(mock_load_tools):
+    """Create a real ADK LlmAgent for testing."""
+    return LlmAgent(
+        name="test_agent",
+        model="gemini-2.0-flash",
+        tools=[],
+    )
 
 
 @pytest.fixture
@@ -210,15 +135,27 @@ def multiple_tool_definitions():
 
 @pytest.fixture
 def mock_toolset_factory():
-    """Factory that produces mock ADK tools for testing."""
+    """Factory that produces real ADK FunctionTools for testing."""
     factory = ToolsetFactory()
 
-    def mock_builder(td):
-        mock_tool = MagicMock()
-        mock_tool.name = td.name
-        return [mock_tool]
+    def adk_builder(td):
+        if "weather" in td.name:
 
-    factory.register(ToolType.OPENAPI, IntegrationType.GOOGLE_ADK, mock_builder)
+            def get_weather(location: str = "test") -> dict:
+                """Get the current weather for a location"""
+                return {"temperature": 20}
+
+            return [FunctionTool(func=get_weather)]
+        elif "email" in td.name:
+
+            def send_email(to: str = "", body: str = "") -> dict:
+                """Send an email"""
+                return {"sent": True}
+
+            return [FunctionTool(func=send_email)]
+        return []
+
+    factory.register(ToolType.OPENAPI, IntegrationType.GOOGLE_ADK, adk_builder)
     return factory
 
 
@@ -233,190 +170,269 @@ def mock_load_tools_with_definitions(monkeypatch, multiple_tool_definitions):
     return patched_load_tools
 
 
+# ===========================================================================
+# _extract_final_response — unit tests for response parsing logic
+# ===========================================================================
+
+
+class TestExtractFinalResponse:
+    """Tests for the extracted response-parsing function using real ADK types."""
+
+    def test_extracts_text_from_content_event(self):
+        """Real Content with a text Part should return the text."""
+        event = SimpleNamespace(
+            content=genai_types.Content(
+                role="model",
+                parts=[genai_types.Part.from_text(text="Hello from the agent!")],
+            )
+        )
+        assert _extract_final_response(event) == "Hello from the agent!"
+
+    def test_returns_none_when_content_is_none(self):
+        event = SimpleNamespace(content=None)
+        assert _extract_final_response(event) is None
+
+    def test_returns_none_when_no_content_attribute(self):
+        event = SimpleNamespace()
+        assert _extract_final_response(event) is None
+
+    def test_returns_none_when_parts_is_empty(self):
+        event = SimpleNamespace(
+            content=genai_types.Content(role="model", parts=[])
+        )
+        assert _extract_final_response(event) is None
+
+    def test_returns_last_text_part(self):
+        """When multiple text parts exist, returns the last one."""
+        event = SimpleNamespace(
+            content=genai_types.Content(
+                role="model",
+                parts=[
+                    genai_types.Part.from_text(text="First part"),
+                    genai_types.Part.from_text(text="Second part"),
+                ],
+            )
+        )
+        assert _extract_final_response(event) == "Second part"
+
+    def test_returns_none_when_parts_have_no_text(self):
+        """Parts without text attributes should be skipped."""
+        event = SimpleNamespace(
+            content=SimpleNamespace(parts=[SimpleNamespace(data=b"binary")])
+        )
+        assert _extract_final_response(event) is None
+
+    def test_returns_none_when_text_is_empty_string(self):
+        """Empty string text should be treated as no text."""
+        event = SimpleNamespace(
+            content=genai_types.Content(
+                role="model",
+                parts=[genai_types.Part.from_text(text="")],
+            )
+        )
+        assert _extract_final_response(event) is None
+
+
+# ===========================================================================
+# GoogleADKAgentExecutor — initialization
+# ===========================================================================
+
+
 class TestGoogleADKAgentExecutorInit:
     """Tests for GoogleADKAgentExecutor initialization."""
 
-    def test_init_with_agent(self, mock_adk_modules, mock_load_tools, mock_adk_agent):
-        """Test executor can be initialized with an ADK agent."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
-        )
-
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
-
-        assert executor.agent == mock_adk_agent
+    def test_init_with_real_agent(self, adk_agent):
+        executor = GoogleADKAgentExecutor(agent=adk_agent)
+        assert executor.agent is adk_agent
         assert executor.agent.name == "test_agent"
 
-    def test_init_with_custom_cache(
-        self, mock_adk_modules, mock_load_tools, mock_adk_agent
-    ):
-        """Test executor can be initialized with a custom cache."""
+    def test_init_with_custom_cache(self, adk_agent):
         from flokoa.cache import ConfigCache
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
-        )
 
         custom_cache = ConfigCache(ttl_seconds=120)
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, cache=custom_cache)
-
+        executor = GoogleADKAgentExecutor(agent=adk_agent, cache=custom_cache)
         assert executor.cache == custom_cache
 
 
+# ===========================================================================
+# GoogleADKAgentExecutor — execute with real ADK objects
+# ===========================================================================
+
+
 class TestGoogleADKAgentExecutorExecute:
-    """Tests for GoogleADKAgentExecutor.execute method."""
+    """Tests for execute() using real ADK types and narrow mocking.
 
-    async def test_execute_creates_runner(
-        self, mock_adk_modules, mock_load_tools, mock_adk_agent
-    ):
-        """Test execute creates a Runner with correct parameters."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
+    Only Runner.run_async is mocked (the LLM boundary). Everything else —
+    session creation, tool injection, response parsing, event enqueuing — uses
+    real objects.
+    """
+
+    async def test_execute_enqueues_text_response(self, adk_agent):
+        """Execute should parse a real Content event and enqueue the text."""
+        response_event = SimpleNamespace(
+            content=genai_types.Content(
+                role="model",
+                parts=[genai_types.Part.from_text(text="The weather is sunny!")],
+            )
         )
 
-        # Setup mocks
-        mock_session = MagicMock()
-        mock_session.id = "test-session-id"
-        mock_session.user_id = "flokoa_user"
+        async def fake_run_async(**kwargs):
+            yield response_event
 
-        mock_session_service = MagicMock()
-        mock_session_service.create_session = AsyncMock(return_value=mock_session)
-
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.app_name = "test_agent"
-        mock_runner_instance.session_service = mock_session_service
-
-        # Mock run_async as async generator
-        async def mock_run_async(**kwargs):
-            event = MagicMock()
-            event.content = MagicMock()
-            part = MagicMock()
-            part.text = "Hello from ADK!"
-            event.content.parts = [part]
-            yield event
-
-        mock_runner_instance.run_async = mock_run_async
-
-        mock_runner_cls = MagicMock(return_value=mock_runner_instance)
-        mock_adk_modules["runners"].Runner = mock_runner_cls
-
-        # Setup context and event queue
         mock_context = MagicMock()
-        mock_context.get_user_input.return_value = "Hello"
-
+        mock_context.get_user_input.return_value = "What's the weather?"
         mock_event_queue = MagicMock()
         mock_event_queue.enqueue_event = AsyncMock()
 
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
-        await executor.execute(mock_context, mock_event_queue)
+        executor = GoogleADKAgentExecutor(agent=adk_agent)
 
-        # Verify Runner was created with correct args
-        mock_runner_cls.assert_called_once()
-        call_kwargs = mock_runner_cls.call_args.kwargs
-        assert call_kwargs["app_name"] == "test_agent"
-        assert call_kwargs["agent"] == mock_adk_agent
+        with patch(
+            "google.adk.runners.Runner"
+        ) as MockRunner:
+            mock_runner = MagicMock()
+            mock_runner.app_name = "test_agent"
+            mock_session = MagicMock()
+            mock_session.id = "sess-1"
+            mock_session.user_id = "flokoa_user"
+            mock_runner.session_service.create_session = AsyncMock(
+                return_value=mock_session
+            )
+            mock_runner.run_async = fake_run_async
+            MockRunner.return_value = mock_runner
 
-    async def test_execute_sends_response(
-        self, mock_adk_modules, mock_load_tools, mock_adk_agent
-    ):
-        """Test execute sends the agent response to event queue."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
-        )
+            await executor.execute(mock_context, mock_event_queue)
 
-        # Setup mocks
-        mock_session = MagicMock()
-        mock_session.id = "test-session-id"
-        mock_session.user_id = "flokoa_user"
-
-        mock_session_service = MagicMock()
-        mock_session_service.create_session = AsyncMock(return_value=mock_session)
-
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.app_name = "test_agent"
-        mock_runner_instance.session_service = mock_session_service
-
-        expected_response = "This is the agent's response"
-
-        async def mock_run_async(**kwargs):
-            event = MagicMock()
-            event.content = MagicMock()
-            part = MagicMock()
-            part.text = expected_response
-            event.content.parts = [part]
-            yield event
-
-        mock_runner_instance.run_async = mock_run_async
-        mock_adk_modules["runners"].Runner = MagicMock(
-            return_value=mock_runner_instance
-        )
-
-        mock_context = MagicMock()
-        mock_context.get_user_input.return_value = "Hello"
-
-        mock_event_queue = MagicMock()
-        mock_event_queue.enqueue_event = AsyncMock()
-
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
-        await executor.execute(mock_context, mock_event_queue)
-
-        # Verify response was sent
+        # The actual text from the Content event should be enqueued
         mock_event_queue.enqueue_event.assert_called_once()
+        enqueued_msg = mock_event_queue.enqueue_event.call_args[0][0]
+        # Verify the enqueued message contains the correct response text
+        assert "The weather is sunny!" in str(enqueued_msg)
 
-    async def test_execute_handles_empty_response(
-        self, mock_adk_modules, mock_load_tools, mock_adk_agent
-    ):
-        """Test execute handles case where agent returns no content."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
-        )
+    async def test_execute_skips_empty_content_events(self, adk_agent):
+        """Events with content=None should not enqueue anything."""
+        empty_event = SimpleNamespace(content=None)
 
-        mock_session = MagicMock()
-        mock_session.id = "test-session-id"
-        mock_session.user_id = "flokoa_user"
-
-        mock_session_service = MagicMock()
-        mock_session_service.create_session = AsyncMock(return_value=mock_session)
-
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.app_name = "test_agent"
-        mock_runner_instance.session_service = mock_session_service
-
-        # Return event with no content
-        async def mock_run_async(**kwargs):
-            event = MagicMock()
-            event.content = None
-            yield event
-
-        mock_runner_instance.run_async = mock_run_async
-        mock_adk_modules["runners"].Runner = MagicMock(
-            return_value=mock_runner_instance
-        )
+        async def fake_run_async(**kwargs):
+            yield empty_event
 
         mock_context = MagicMock()
         mock_context.get_user_input.return_value = "Hello"
-
         mock_event_queue = MagicMock()
         mock_event_queue.enqueue_event = AsyncMock()
 
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
-        await executor.execute(mock_context, mock_event_queue)
+        executor = GoogleADKAgentExecutor(agent=adk_agent)
 
-        # No event should be enqueued when there's no response
+        with patch(
+            "google.adk.runners.Runner"
+        ) as MockRunner:
+            mock_runner = MagicMock()
+            mock_runner.app_name = "test_agent"
+            mock_session = MagicMock()
+            mock_session.id = "sess-1"
+            mock_session.user_id = "flokoa_user"
+            mock_runner.session_service.create_session = AsyncMock(
+                return_value=mock_session
+            )
+            mock_runner.run_async = fake_run_async
+            MockRunner.return_value = mock_runner
+
+            await executor.execute(mock_context, mock_event_queue)
+
         mock_event_queue.enqueue_event.assert_not_called()
+
+    async def test_execute_uses_last_text_across_events(self, adk_agent):
+        """When multiple events have text, the last one wins."""
+        event1 = SimpleNamespace(
+            content=genai_types.Content(
+                role="model",
+                parts=[genai_types.Part.from_text(text="Thinking...")],
+            )
+        )
+        event2 = SimpleNamespace(
+            content=genai_types.Content(
+                role="model",
+                parts=[genai_types.Part.from_text(text="Final answer: 42")],
+            )
+        )
+
+        async def fake_run_async(**kwargs):
+            yield event1
+            yield event2
+
+        mock_context = MagicMock()
+        mock_context.get_user_input.return_value = "What is the answer?"
+        mock_event_queue = MagicMock()
+        mock_event_queue.enqueue_event = AsyncMock()
+
+        executor = GoogleADKAgentExecutor(agent=adk_agent)
+
+        with patch(
+            "google.adk.runners.Runner"
+        ) as MockRunner:
+            mock_runner = MagicMock()
+            mock_runner.app_name = "test_agent"
+            mock_session = MagicMock()
+            mock_session.id = "sess-1"
+            mock_session.user_id = "flokoa_user"
+            mock_runner.session_service.create_session = AsyncMock(
+                return_value=mock_session
+            )
+            mock_runner.run_async = fake_run_async
+            MockRunner.return_value = mock_runner
+
+            await executor.execute(mock_context, mock_event_queue)
+
+        mock_event_queue.enqueue_event.assert_called_once()
+        enqueued_msg = mock_event_queue.enqueue_event.call_args[0][0]
+        assert "Final answer: 42" in str(enqueued_msg)
+
+    async def test_execute_passes_user_input_as_message(self, adk_agent):
+        """The user input from the context should be forwarded to the runner."""
+        captured_kwargs = {}
+
+        async def fake_run_async(**kwargs):
+            captured_kwargs.update(kwargs)
+            return
+            yield  # make it an async generator  # noqa: RUF027
+
+        mock_context = MagicMock()
+        mock_context.get_user_input.return_value = "Tell me about Flokoa"
+        mock_event_queue = MagicMock()
+        mock_event_queue.enqueue_event = AsyncMock()
+
+        executor = GoogleADKAgentExecutor(agent=adk_agent)
+
+        with patch(
+            "google.adk.runners.Runner"
+        ) as MockRunner:
+            mock_runner = MagicMock()
+            mock_runner.app_name = "test_agent"
+            mock_session = MagicMock()
+            mock_session.id = "sess-1"
+            mock_session.user_id = "flokoa_user"
+            mock_runner.session_service.create_session = AsyncMock(
+                return_value=mock_session
+            )
+            mock_runner.run_async = fake_run_async
+            MockRunner.return_value = mock_runner
+
+            await executor.execute(mock_context, mock_event_queue)
+
+        # Verify the user message was passed through
+        new_message = captured_kwargs["new_message"]
+        assert new_message.parts[0].text == "Tell me about Flokoa"
+
+
+# ===========================================================================
+# GoogleADKAgentExecutor — cancel
+# ===========================================================================
 
 
 class TestGoogleADKAgentExecutorCancel:
     """Tests for GoogleADKAgentExecutor.cancel method."""
 
-    async def test_cancel_raises_not_supported(
-        self, mock_adk_modules, mock_load_tools, mock_adk_agent
-    ):
-        """Test cancel raises CancelNotSupportedError."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
-        )
-
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
+    async def test_cancel_raises_not_supported(self, adk_agent):
+        executor = GoogleADKAgentExecutor(agent=adk_agent)
 
         mock_context = MagicMock()
         mock_event_queue = MagicMock()
@@ -425,124 +441,123 @@ class TestGoogleADKAgentExecutorCancel:
             await executor.cancel(mock_context, mock_event_queue)
 
 
+# ===========================================================================
+# GoogleADKAgentExecutor — tool injection
+# ===========================================================================
+
+
 class TestGoogleADKAgentExecutorToolInjection:
-    """Tests for GoogleADKAgentExecutor tool injection."""
+    """Tests for tool injection using real ADK agents and FunctionTools."""
 
     def test_get_toolset_returns_flokoa_toolset(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
+        self, mock_load_tools_with_definitions, mock_toolset_factory
     ):
-        """Test _get_toolset returns a FlokoaToolset instance."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
+        agent = LlmAgent(name="test_agent", model="gemini-2.0-flash", tools=[])
+        executor = GoogleADKAgentExecutor(
+            agent=agent, toolset_factory=mock_toolset_factory
         )
-        from flokoa.integrations.google_adk.toolset import FlokoaToolset
-
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
         toolset = executor._get_toolset()
-
         assert isinstance(toolset, FlokoaToolset)
 
     def test_inject_tools_adds_toolset_to_agent(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
+        self, mock_load_tools_with_definitions, mock_toolset_factory
     ):
-        """Test _inject_tools adds the toolset to agent.tools."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
+        agent = LlmAgent(name="test_agent", model="gemini-2.0-flash", tools=[])
+        executor = GoogleADKAgentExecutor(
+            agent=agent, toolset_factory=mock_toolset_factory
         )
-        from flokoa.integrations.google_adk.toolset import FlokoaToolset
-
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
-        assert len(mock_adk_agent.tools) == 0
 
         executor._inject_tools()
 
-        assert len(mock_adk_agent.tools) == 1
-        assert isinstance(mock_adk_agent.tools[0], FlokoaToolset)
+        assert len(agent.tools) == 1
+        assert isinstance(agent.tools[0], FlokoaToolset)
 
     def test_inject_tools_does_not_duplicate(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
+        self, mock_load_tools_with_definitions, mock_toolset_factory
     ):
-        """Test _inject_tools doesn't add duplicate toolsets."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
+        agent = LlmAgent(name="test_agent", model="gemini-2.0-flash", tools=[])
+        executor = GoogleADKAgentExecutor(
+            agent=agent, toolset_factory=mock_toolset_factory
         )
 
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
-
-        # Inject tools twice
         executor._inject_tools()
         executor._inject_tools()
 
-        # Should only have one toolset
-        assert len(mock_adk_agent.tools) == 1
+        assert len(agent.tools) == 1
 
-    def test_inject_tools_skips_when_no_tools(
-        self, mock_adk_modules, mock_load_tools, mock_adk_agent
+    def test_inject_tools_skips_when_no_tools(self, mock_load_tools):
+        agent = LlmAgent(name="test_agent", model="gemini-2.0-flash", tools=[])
+        executor = GoogleADKAgentExecutor(agent=agent)
+
+        executor._inject_tools()
+
+        assert len(agent.tools) == 0
+
+    def test_inject_tools_preserves_existing_tools(
+        self, mock_load_tools_with_definitions, mock_toolset_factory
     ):
-        """Test _inject_tools does nothing when there are no tool definitions."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
+        """Existing agent tools should remain after injection."""
+        existing_tool = FunctionTool(func=lambda x: x)
+        agent = LlmAgent(
+            name="test_agent", model="gemini-2.0-flash", tools=[existing_tool]
+        )
+        executor = GoogleADKAgentExecutor(
+            agent=agent, toolset_factory=mock_toolset_factory
         )
 
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent)
         executor._inject_tools()
 
-        # Should not add any toolset
-        assert len(mock_adk_agent.tools) == 0
+        assert len(agent.tools) == 2
+        assert agent.tools[0] is existing_tool
+        assert isinstance(agent.tools[1], FlokoaToolset)
 
-    def test_inject_tools_handles_none_tools_list(
-        self, mock_adk_modules, mock_load_tools_with_definitions, mock_adk_agent, mock_toolset_factory
-    ):
-        """Test _inject_tools handles agent with None tools list."""
-        from flokoa.integrations.google_adk.agent_executor import (
-            GoogleADKAgentExecutor,
-        )
-        from flokoa.integrations.google_adk.toolset import FlokoaToolset
 
-        mock_adk_agent.tools = None
-        executor = GoogleADKAgentExecutor(agent=mock_adk_agent, toolset_factory=mock_toolset_factory)
-        executor._inject_tools()
-
-        assert mock_adk_agent.tools is not None
-        assert len(mock_adk_agent.tools) == 1
-        assert isinstance(mock_adk_agent.tools[0], FlokoaToolset)
+# ===========================================================================
+# FlokoaToolset — tests with real FunctionTool instances
+# ===========================================================================
 
 
 class TestFlokoaToolset:
-    """Tests for FlokoaToolset class."""
+    """Tests for FlokoaToolset using real ADK FunctionTool instances."""
 
-    async def test_get_tools_returns_pre_built_tools(self, mock_adk_modules):
-        """Test get_tools returns the pre-built tools passed to constructor."""
-        from flokoa.integrations.google_adk.toolset import FlokoaToolset
+    async def test_get_tools_returns_real_function_tools(self):
+        """FlokoaToolset should return real FunctionTool instances with correct names."""
 
-        mock_tool_1 = MagicMock()
-        mock_tool_1.name = "tool1"
-        mock_tool_2 = MagicMock()
-        mock_tool_2.name = "tool2"
+        def greet(name: str = "World") -> str:
+            """Greet someone."""
+            return f"Hello, {name}!"
 
-        toolset = FlokoaToolset(tools=[mock_tool_1, mock_tool_2])
+        def add(a: int, b: int) -> int:
+            """Add two numbers."""
+            return a + b
+
+        tool_1 = FunctionTool(func=greet)
+        tool_2 = FunctionTool(func=add)
+
+        toolset = FlokoaToolset(tools=[tool_1, tool_2])
         tools = await toolset.get_tools()
 
         assert len(tools) == 2
-        assert tools[0] is mock_tool_1
-        assert tools[1] is mock_tool_2
+        assert tools[0].name == "greet"
+        assert tools[1].name == "add"
 
-    async def test_get_tools_returns_same_list(self, mock_adk_modules):
-        """Test get_tools returns the same list on subsequent calls."""
-        from flokoa.integrations.google_adk.toolset import FlokoaToolset
-
-        toolset = FlokoaToolset(tools=[MagicMock(), MagicMock()])
+    async def test_get_tools_returns_stable_reference(self):
+        """Subsequent calls should return the same list object (caching)."""
+        tool = FunctionTool(func=lambda: None)
+        toolset = FlokoaToolset(tools=[tool])
 
         tools1 = await toolset.get_tools()
         tools2 = await toolset.get_tools()
 
         assert tools1 is tools2
 
-    async def test_close_is_noop(self, mock_adk_modules):
-        """Test close method completes without error."""
-        from flokoa.integrations.google_adk.toolset import FlokoaToolset
-
+    async def test_get_tools_with_empty_list(self):
+        """Empty toolset should return empty list."""
         toolset = FlokoaToolset(tools=[])
+        tools = await toolset.get_tools()
+        assert tools == []
 
-        # Should not raise
+    async def test_close_is_noop(self):
+        """close() should complete without error."""
+        toolset = FlokoaToolset(tools=[])
         await toolset.close()
