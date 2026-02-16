@@ -51,7 +51,21 @@ var _ = Describe("AgentWorkflow Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: agentv1alpha1.AgentWorkflowSpec{
+						Tasks: []agentv1alpha1.WorkflowTask{
+							{
+								Name: "test-task",
+								Agent: &agentv1alpha1.AgentCall{
+									Name: "test-agent",
+									Message: agentv1alpha1.AgentMessage{
+										Parts: []agentv1alpha1.MessagePart{
+											{Text: &agentv1alpha1.TextPart{Text: "hello"}},
+										},
+									},
+								},
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
