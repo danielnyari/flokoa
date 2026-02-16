@@ -1207,3 +1207,278 @@ class TestOperationParser:
         locations = {p.param_location for p in params}
         assert "path" in locations
         assert "query" in locations
+
+
+# ---------------------------------------------------------------------------
+# OpenAPIToolset.from_tool_definition
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAPIToolsetFromToolDefinition:
+    """Tests for creating an OpenAPIToolset from a Flokoa ToolDefinition."""
+
+    @staticmethod
+    def _make_tool_definition(
+        name="my_tool",
+        url="https://api.example.com",
+        headers=None,
+        spec_dict=None,
+    ):
+        from flokoa_types import ToolDefinition
+
+        if spec_dict is None:
+            spec_dict = {
+                "openapi": "3.0.0",
+                "info": {"title": "Test", "version": "1.0"},
+                "servers": [{"url": "https://original.example.com"}],
+                "paths": {
+                    "/items/{itemId}": {
+                        "get": {
+                            "operationId": "getItem",
+                            "parameters": [
+                                {"name": "itemId", "in": "path", "required": True, "schema": {"type": "integer"}}
+                            ],
+                            "responses": {"200": {"description": "OK"}},
+                        }
+                    }
+                },
+            }
+
+        td_data = {
+            "name": name,
+            "spec": {
+                "type": "openapi",
+                "description": f"Tool: {name}",
+                "openApi": {
+                    "openApiSchema": {"value": spec_dict},
+                    "url": url,
+                },
+            },
+        }
+        if headers is not None:
+            td_data["spec"]["openApi"]["headers"] = headers
+        return ToolDefinition.model_validate(td_data)
+
+    def test_creates_toolset_from_tool_definition(self):
+        td = self._make_tool_definition()
+        toolset = OpenAPIToolset.from_tool_definition(td)
+        tools = toolset.get_tools()
+        assert len(tools) == 1
+        assert tools[0].name == "get_item"
+
+    def test_url_overrides_spec_servers(self):
+        td = self._make_tool_definition(url="https://override.example.com")
+        toolset = OpenAPIToolset.from_tool_definition(td)
+        # The config's endpoint should use the overridden URL
+        config = toolset._configs[0]
+        assert config.endpoint.base_url == "https://override.example.com"
+
+    def test_headers_applied_to_configs(self):
+        td = self._make_tool_definition(headers={"X-Custom": "value123"})
+        toolset = OpenAPIToolset.from_tool_definition(td)
+        config = toolset._configs[0]
+        assert config.default_headers.get("X-Custom") == "value123"
+
+    def test_missing_open_api_raises(self):
+        from flokoa_types import ToolDefinition
+
+        td = ToolDefinition.model_validate({
+            "name": "bad_tool",
+            "spec": {
+                "type": "openapi",
+                "description": "No openApi field",
+            },
+        })
+        with pytest.raises(ValueError, match="no openApi configuration"):
+            OpenAPIToolset.from_tool_definition(td)
+
+    def test_missing_spec_value_raises(self):
+        from flokoa_types import ToolDefinition
+
+        td = ToolDefinition.model_validate({
+            "name": "bad_tool",
+            "spec": {
+                "type": "openapi",
+                "description": "Empty schema",
+                "openApi": {
+                    "openApiSchema": {"value": None},
+                    "url": "https://api.example.com",
+                },
+            },
+        })
+        with pytest.raises(ValueError, match="no inline OpenAPI spec"):
+            OpenAPIToolset.from_tool_definition(td)
+
+    def test_no_url_keeps_original_servers(self):
+        from flokoa_types import ToolDefinition
+
+        td = ToolDefinition.model_validate({
+            "name": "tool_no_url",
+            "spec": {
+                "type": "openapi",
+                "description": "No URL override",
+                "openApi": {
+                    "openApiSchema": {
+                        "value": {
+                            "openapi": "3.0.0",
+                            "info": {"title": "T", "version": "1.0"},
+                            "servers": [{"url": "https://original.api.com"}],
+                            "paths": {
+                                "/ping": {
+                                    "get": {
+                                        "operationId": "ping",
+                                        "responses": {"200": {"description": "ok"}},
+                                    }
+                                }
+                            },
+                        }
+                    },
+                },
+            },
+        })
+        toolset = OpenAPIToolset.from_tool_definition(td)
+        config = toolset._configs[0]
+        assert config.endpoint.base_url == "https://original.api.com"
+
+
+# ---------------------------------------------------------------------------
+# OpenApiSpecParser — edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestOpenApiSpecParserEdgeCases:
+    def test_sanitize_removes_invalid_schema_types(self):
+        """Non-standard types like 'Any' should be removed from schemas."""
+        spec = {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/test": {
+                    "get": {
+                        "operationId": "test",
+                        "parameters": [
+                            {
+                                "name": "data",
+                                "in": "query",
+                                "schema": {"type": "Any"},
+                            }
+                        ],
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+        operations = OpenApiSpecParser().parse(spec)
+        assert len(operations) == 1
+
+    def test_auto_generates_operation_id_when_missing(self):
+        spec = {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "summary": "List users",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+        operations = OpenApiSpecParser().parse(spec)
+        assert len(operations) == 1
+        # Auto-generated name from path + method
+        assert operations[0].name
+
+    def test_circular_ref_handled(self):
+        """Circular $ref should not cause infinite recursion."""
+        spec = {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/nodes": {
+                    "get": {
+                        "operationId": "getNodes",
+                        "responses": {
+                            "200": {
+                                "description": "ok",
+                                "content": {
+                                    "application/json": {"schema": {"$ref": "#/components/schemas/Node"}}
+                                },
+                            }
+                        },
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "Node": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "children": {
+                                "type": "array",
+                                "items": {"$ref": "#/components/schemas/Node"},
+                            },
+                        },
+                    }
+                }
+            },
+        }
+        # Should not raise
+        operations = OpenApiSpecParser().parse(spec)
+        assert len(operations) == 1
+
+    def test_path_level_parameters_merged(self):
+        """Parameters defined at path level should be merged into operations."""
+        spec = {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/items/{itemId}": {
+                    "parameters": [
+                        {"name": "itemId", "in": "path", "required": True, "schema": {"type": "integer"}}
+                    ],
+                    "get": {
+                        "operationId": "getItem",
+                        "responses": {"200": {"description": "ok"}},
+                    },
+                }
+            },
+        }
+        operations = OpenApiSpecParser().parse(spec)
+        assert len(operations) == 1
+        param_names = {p.original_name for p in operations[0].parameters}
+        assert "itemId" in param_names
+
+    def test_null_path_item_skipped(self):
+        spec = {
+            "openapi": "3.0.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {"/test": None},
+        }
+        operations = OpenApiSpecParser().parse(spec)
+        assert len(operations) == 0
+
+    def test_schema_type_list_sanitized(self):
+        """Schema type as a list (OpenAPI 3.1) should be sanitized."""
+        spec = {
+            "openapi": "3.1.0",
+            "info": {"title": "T", "version": "1.0"},
+            "paths": {
+                "/test": {
+                    "get": {
+                        "operationId": "test",
+                        "parameters": [
+                            {
+                                "name": "id",
+                                "in": "query",
+                                "schema": {"type": ["string", "null"]},
+                            }
+                        ],
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        }
+        operations = OpenApiSpecParser().parse(spec)
+        assert len(operations) == 1

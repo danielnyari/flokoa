@@ -6,7 +6,10 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "marvin>=2.0",
+    "pydantic-ai>=0.1",
     "pyyaml>=6.0",
+    "flokoa-types",
+    "a2a-sdk>=0.3.22",
 ]
 
 [build-system]
@@ -18,3 +21,6 @@ packages = ["src/flokoa_managed_task"]
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+flokoa-types = { workspace = true }

@@ -104,7 +104,7 @@ func TestValidateAgentWorkflow_MultipleTaskTypes(t *testing.T) {
 				{
 					Name:      "multi",
 					Agent:     &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")},
-					AgentTask: &agentv1alpha1.EphemeralAgentTask{Entrypoint: "run.py"},
+					AgentTask: &agentv1alpha1.AgentTask{Type: agentv1alpha1.MarvinTaskTypeRun},
 				},
 			},
 		},

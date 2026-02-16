@@ -24,31 +24,38 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
+// getModelConfigMap discovers the model ConfigMap name from the deployment's
+// "model-config" volume and fetches it. This avoids reconstructing the name
+// with the same logic as production code (tautological assertion).
+func getModelConfigMap(ctx context.Context, nn types.NamespacedName) *corev1.ConfigMap {
+	deployment := getDeployment(ctx, nn)
+	vol := findVolume(deployment.Spec.Template.Spec, "model-config")
+	ExpectWithOffset(1, vol).NotTo(BeNil(), "deployment should have a model-config volume")
+	ExpectWithOffset(1, vol.ConfigMap).NotTo(BeNil(), "model-config volume should reference a ConfigMap")
+
+	cmName := vol.ConfigMap.Name
+	return getConfigMap(ctx, types.NamespacedName{Name: cmName, Namespace: nn.Namespace})
+}
+
 var _ = Describe("Agent Controller - Model", func() {
 	Context("When reconciling an Agent with Model", func() {
-		const (
-			agentNamespace = "default"
-			timeout        = time.Second * 10
-			interval       = time.Millisecond * 250
-		)
-
 		var (
 			ctx                context.Context
 			agentName          string
 			typeNamespacedName types.NamespacedName
 		)
+
+		const agentNamespace = "default"
 
 		BeforeEach(func() {
 			ctx = context.Background()
@@ -61,26 +68,7 @@ var _ = Describe("Agent Controller - Model", func() {
 		})
 
 		AfterEach(func() {
-			// Cleanup the Agent resource
-			agent := &agentv1alpha1.Agent{}
-			err := k8sClient.Get(ctx, typeNamespacedName, agent)
-			if err == nil {
-				By("Cleaning up the Agent resource")
-
-				// Remove finalizer if present to allow deletion
-				if controllerutil.ContainsFinalizer(agent, agentFinalizer) {
-					controllerutil.RemoveFinalizer(agent, agentFinalizer)
-					Expect(k8sClient.Update(ctx, agent)).To(Succeed())
-				}
-
-				Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
-
-				// Wait for deletion to complete
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, typeNamespacedName, agent)
-					return errors.IsNotFound(err)
-				}, timeout, interval).Should(BeTrue())
-			}
+			cleanupAgent(ctx, typeNamespacedName)
 		})
 
 		Context("Model reconciliation", func() {
@@ -191,34 +179,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					// First reconcile adds finalizer
-					result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-					// Second reconcile creates resources
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying Model ConfigMap was created")
-					modelConfigMapName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelConfigMapName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
-
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 					Expect(modelCM.Data).To(HaveKey("model.json"))
 
 					By("Verifying ResolvedModelConfig content")
@@ -229,8 +194,7 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(providerConfig.Model).To(Equal("gpt-4o"))
 
 					By("Verifying ModelReady condition")
-					err = k8sClient.Get(ctx, typeNamespacedName, agent)
-					Expect(err).NotTo(HaveOccurred())
+					agent = getAgent(ctx, typeNamespacedName)
 					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
 					Expect(condition).NotTo(BeNil())
 					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
@@ -308,48 +272,19 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					// First reconcile
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
-
-					// Second reconcile
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying Deployment has model volume")
-					deployment := &appsv1.Deployment{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, typeNamespacedName, deployment)
-					}, timeout, interval).Should(Succeed())
+					deployment := getDeployment(ctx, typeNamespacedName)
 
-					var modelVolume *corev1.Volume
-					for i := range deployment.Spec.Template.Spec.Volumes {
-						if deployment.Spec.Template.Spec.Volumes[i].Name == "model-config" {
-							modelVolume = &deployment.Spec.Template.Spec.Volumes[i]
-							break
-						}
-					}
+					modelVolume := findVolume(deployment.Spec.Template.Spec, "model-config")
 					Expect(modelVolume).NotTo(BeNil())
-					Expect(modelVolume.ConfigMap.Name).To(Equal(fmt.Sprintf("%s-model", agentName)))
+					Expect(modelVolume.ConfigMap).NotTo(BeNil())
 
 					By("Verifying container has model volume mount")
-					container := deployment.Spec.Template.Spec.Containers[0]
-					var modelMount *corev1.VolumeMount
-					for i := range container.VolumeMounts {
-						if container.VolumeMounts[i].Name == "model-config" {
-							modelMount = &container.VolumeMounts[i]
-							break
-						}
-					}
+					container := firstContainer(deployment)
+					modelMount := findVolumeMount(container, "model-config")
 					Expect(modelMount).NotTo(BeNil())
 					Expect(modelMount.MountPath).To(Equal("/etc/flokoa/model.json"))
 					Expect(modelMount.SubPath).To(Equal("model.json"))
@@ -433,33 +368,13 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying container has OPENAI_API_KEY secret env var")
-					deployment := &appsv1.Deployment{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, typeNamespacedName, deployment)
-					}, timeout, interval).Should(Succeed())
-
-					container := deployment.Spec.Template.Spec.Containers[0]
-					var apiKeyEnv *corev1.EnvVar
-					for i := range container.Env {
-						if container.Env[i].Name == "OPENAI_API_KEY" {
-							apiKeyEnv = &container.Env[i]
-							break
-						}
-					}
+					deployment := getDeployment(ctx, typeNamespacedName)
+					container := firstContainer(deployment)
+					apiKeyEnv := findEnvVar(container, "OPENAI_API_KEY")
 					Expect(apiKeyEnv).NotTo(BeNil())
 					Expect(apiKeyEnv.ValueFrom).NotTo(BeNil())
 					Expect(apiKeyEnv.ValueFrom.SecretKeyRef).NotTo(BeNil())
@@ -544,33 +459,13 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying container has ANTHROPIC_API_KEY secret env var")
-					deployment := &appsv1.Deployment{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, typeNamespacedName, deployment)
-					}, timeout, interval).Should(Succeed())
-
-					container := deployment.Spec.Template.Spec.Containers[0]
-					var apiKeyEnv *corev1.EnvVar
-					for i := range container.Env {
-						if container.Env[i].Name == "ANTHROPIC_API_KEY" {
-							apiKeyEnv = &container.Env[i]
-							break
-						}
-					}
+					deployment := getDeployment(ctx, typeNamespacedName)
+					container := firstContainer(deployment)
+					apiKeyEnv := findEnvVar(container, "ANTHROPIC_API_KEY")
 					Expect(apiKeyEnv).NotTo(BeNil())
 					Expect(apiKeyEnv.ValueFrom.SecretKeyRef.Name).To(Equal("my-anthropic-secret"))
 					Expect(apiKeyEnv.ValueFrom.SecretKeyRef.Key).To(Equal("anthropic-key"))
@@ -655,28 +550,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying Model ConfigMap was created with parameters")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
@@ -690,8 +568,7 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(providerConfig.Parameters.TopP).To(Equal("0.9"))
 
 					By("Verifying ModelReady condition")
-					err = k8sClient.Get(ctx, typeNamespacedName, agent)
-					Expect(err).NotTo(HaveOccurred())
+					agent = getAgent(ctx, typeNamespacedName)
 					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
 					Expect(condition).NotTo(BeNil())
 					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
@@ -772,28 +649,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying penalty parameters in ConfigMap")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
@@ -883,28 +743,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying Anthropic parameters in ConfigMap")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
@@ -1007,28 +850,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying Model ConfigMap was created")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
@@ -1111,28 +937,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying ConfigMap has OpenAI-specific config")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
@@ -1141,19 +950,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(providerConfig.Provider.OpenAI.BaseURL).To(Equal("https://custom.openai.api.com/v1"))
 
 					By("Verifying Deployment has env vars for OpenAI config")
-					deployment := &appsv1.Deployment{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, typeNamespacedName, deployment)
-					}, timeout, interval).Should(Succeed())
-
-					container := deployment.Spec.Template.Spec.Containers[0]
-					envMap := make(map[string]string)
-					for _, env := range container.Env {
-						if env.Value != "" {
-							envMap[env.Name] = env.Value
-						}
-					}
-					Expect(envMap["OPENAI_BASE_URL"]).To(Equal("https://custom.openai.api.com/v1"))
+					deployment := getDeployment(ctx, typeNamespacedName)
+					container := firstContainer(deployment)
+					baseURLEnv := findEnvVar(container, "OPENAI_BASE_URL")
+					Expect(baseURLEnv).NotTo(BeNil())
+					Expect(baseURLEnv.Value).To(Equal("https://custom.openai.api.com/v1"))
 				})
 
 				It("should handle Anthropic provider with custom baseURL", func() {
@@ -1229,28 +1030,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying ConfigMap has Anthropic-specific config")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
@@ -1259,19 +1043,9 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(providerConfig.Provider.Anthropic.BaseURL).To(Equal("https://custom.anthropic.api.com"))
 
 					By("Verifying Deployment has ANTHROPIC_BASE_URL env var")
-					deployment := &appsv1.Deployment{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, typeNamespacedName, deployment)
-					}, timeout, interval).Should(Succeed())
-
-					container := deployment.Spec.Template.Spec.Containers[0]
-					var baseURLEnv *corev1.EnvVar
-					for i := range container.Env {
-						if container.Env[i].Name == "ANTHROPIC_BASE_URL" {
-							baseURLEnv = &container.Env[i]
-							break
-						}
-					}
+					deployment := getDeployment(ctx, typeNamespacedName)
+					container := firstContainer(deployment)
+					baseURLEnv := findEnvVar(container, "ANTHROPIC_BASE_URL")
 					Expect(baseURLEnv).NotTo(BeNil())
 					Expect(baseURLEnv.Value).To(Equal("https://custom.anthropic.api.com"))
 				})
@@ -1351,28 +1125,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying ConfigMap has default headers")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var providerConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &providerConfig)
@@ -1410,26 +1167,18 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
+					r := newAgentReconciler()
 
 					// First reconcile adds finalizer
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
+					_, _ = reconcileOnce(ctx, r, typeNamespacedName)
 
 					// Second reconcile should fail due to missing Model
-					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
+					_, err := reconcileOnce(ctx, r, typeNamespacedName)
 					Expect(err).To(HaveOccurred())
 					Expect(err.Error()).To(ContainSubstring("failed to get Model"))
 
 					By("Verifying ModelReady condition is false")
-					err = k8sClient.Get(ctx, typeNamespacedName, agent)
-					Expect(err).NotTo(HaveOccurred())
+					agent = getAgent(ctx, typeNamespacedName)
 					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
 					Expect(condition).NotTo(BeNil())
 					Expect(condition.Status).To(Equal(metav1.ConditionFalse))
@@ -1492,24 +1241,16 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
+					r := newAgentReconciler()
 
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
+					_, _ = reconcileOnce(ctx, r, typeNamespacedName)
 
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
+					_, err = reconcileOnce(ctx, r, typeNamespacedName)
 					Expect(err).To(HaveOccurred())
 					Expect(err.Error()).To(ContainSubstring("is not ready"))
 
 					By("Verifying ModelReady condition is false")
-					err = k8sClient.Get(ctx, typeNamespacedName, agent)
-					Expect(err).NotTo(HaveOccurred())
+					agent = getAgent(ctx, typeNamespacedName)
 					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
 					Expect(condition).NotTo(BeNil())
 					Expect(condition.Status).To(Equal(metav1.ConditionFalse))
@@ -1588,28 +1329,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying initial ConfigMap content")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					var initialConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &initialConfig)
@@ -1623,17 +1347,12 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Update(ctx, model)).To(Succeed())
 
 					By("Reconciling the Agent again")
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
+					_, err = reconcileOnce(ctx, r, typeNamespacedName)
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Verifying ConfigMap was updated")
-					err = k8sClient.Get(ctx, types.NamespacedName{
-						Name:      modelCMName,
-						Namespace: agentNamespace,
-					}, modelCM)
-					Expect(err).NotTo(HaveOccurred())
+					// Re-discover the ConfigMap name from the deployment volume
+					modelCM = getModelConfigMap(ctx, typeNamespacedName)
 
 					var updatedConfig ResolvedModelConfig
 					err = json.Unmarshal([]byte(modelCM.Data["model.json"]), &updatedConfig)
@@ -1712,28 +1431,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying ConfigMap labels")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					Expect(modelCM.Labels["app.kubernetes.io/name"]).To(Equal(agentName))
 					Expect(modelCM.Labels["app.kubernetes.io/component"]).To(Equal("model-config"))
@@ -1812,28 +1514,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying ConfigMap has owner reference")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, types.NamespacedName{
-							Name:      modelCMName,
-							Namespace: agentNamespace,
-						}, modelCM)
-					}, timeout, interval).Should(Succeed())
+					modelCM := getModelConfigMap(ctx, typeNamespacedName)
 
 					Expect(modelCM.OwnerReferences).To(HaveLen(1))
 					Expect(modelCM.OwnerReferences[0].Name).To(Equal(agentName))
@@ -1865,41 +1550,15 @@ var _ = Describe("Agent Controller - Model", func() {
 					Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
 					By("Reconciling the Agent")
-					controllerReconciler := &AgentReconciler{
-						Client: k8sClient,
-						Scheme: k8sClient.Scheme(),
-					}
-
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: typeNamespacedName,
-					})
-					Expect(err).NotTo(HaveOccurred())
-
-					By("Verifying model ConfigMap was NOT created")
-					modelCMName := fmt.Sprintf("%s-model", agentName)
-					modelCM := &corev1.ConfigMap{}
-					err = k8sClient.Get(ctx, types.NamespacedName{
-						Name:      modelCMName,
-						Namespace: agentNamespace,
-					}, modelCM)
-					Expect(errors.IsNotFound(err)).To(BeTrue())
+					r := newAgentReconciler()
+					reconcileAgent(ctx, r, typeNamespacedName)
 
 					By("Verifying deployment does not have model volume")
-					deployment := &appsv1.Deployment{}
-					Eventually(func() error {
-						return k8sClient.Get(ctx, typeNamespacedName, deployment)
-					}, timeout, interval).Should(Succeed())
-
-					for _, vol := range deployment.Spec.Template.Spec.Volumes {
-						Expect(vol.Name).NotTo(Equal("model-config"))
-					}
+					deployment := getDeployment(ctx, typeNamespacedName)
+					Expect(findVolume(deployment.Spec.Template.Spec, "model-config")).To(BeNil())
 
 					By("Verifying no ModelReady condition exists")
-					err = k8sClient.Get(ctx, typeNamespacedName, agent)
-					Expect(err).NotTo(HaveOccurred())
+					agent = getAgent(ctx, typeNamespacedName)
 					condition := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
 					Expect(condition).To(BeNil())
 				})

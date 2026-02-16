@@ -6,4 +6,10 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: agentworkflow-sample
 spec:
-  # TODO(user): Add fields here
+  description: "Sample workflow using a Marvin classify task"
+  tasks:
+    - name: classify
+      agentTask:
+        type: classify
+        input: "The new feature works great but the documentation is lacking."
+        labels: ["positive", "negative", "mixed"]

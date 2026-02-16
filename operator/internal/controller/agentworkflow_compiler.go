@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	// defaultRuntimeImage is the default flokoa runtime image for ephemeral agent tasks.
-	defaultRuntimeImage = "ghcr.io/danielnyari/flokoa/runtime:latest"
+	// defaultManagedTaskImage is the default flokoa runtime image for Marvin agent tasks.
+	defaultManagedTaskImage = "ghcr.io/danielnyari/flokoa/managed-task:latest"
 
 	// dagEntrypointName is the name of the DAG entrypoint template.
 	dagEntrypointName = "main"
@@ -46,13 +46,22 @@ const (
 
 	// agentTaskResponseParam is the output parameter name for the full A2A response.
 	agentTaskResponseParam = "taskResponse"
+
+	// taskConfigEnvVar is the environment variable name for the serialized task config.
+	taskConfigEnvVar = "FLOKOA_TASK_CONFIG"
+
+	// Mount paths for resolved ConfigMaps in agent task containers.
+	agentTaskModelMountPath       = "/etc/flokoa/model.json"
+	agentTaskToolsMountPath       = "/etc/flokoa/tools"
+	agentTaskInstructionMountPath = "/etc/flokoa/instruction.txt"
 )
 
 // expressionRe matches {{...}} template expressions in DSL fields.
 var expressionRe = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
 // compileToArgoWorkflow translates an AgentWorkflow DSL into an Argo Workflow CR.
-func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow) (*wfv1.Workflow, error) {
+// resolvedTasks contains pre-resolved Model/Tool ConfigMap info for agentTask tasks, keyed by task name.
+func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo) (*wfv1.Workflow, error) {
 	wf := &wfv1.Workflow{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
@@ -96,7 +105,7 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow) (*wfv1.Workflow, er
 		templateName := task.Name
 
 		// Build the template for this task
-		tmpl, err := buildTemplate(awf, task)
+		tmpl, err := buildTemplate(awf, task, resolvedTasks[task.Name])
 		if err != nil {
 			return nil, fmt.Errorf("failed to build template for task %q: %w", task.Name, err)
 		}
@@ -142,7 +151,7 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow) (*wfv1.Workflow, er
 }
 
 // buildTemplate creates an Argo template for a single workflow task.
-func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.WorkflowTask) (*wfv1.Template, error) {
+func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.WorkflowTask, resolved *resolvedAgentTaskInfo) (*wfv1.Template, error) {
 	tmpl := &wfv1.Template{
 		Name: task.Name,
 	}
@@ -171,7 +180,9 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 			return nil, err
 		}
 	case task.AgentTask != nil:
-		buildEphemeralAgentTemplate(tmpl, task.AgentTask)
+		if err := buildAgentTaskTemplate(tmpl, task.AgentTask, resolved); err != nil {
+			return nil, err
+		}
 	case len(task.Switch) > 0:
 		// Switch tasks are a no-op routing template; branching is in DAG when expressions.
 		tmpl.Script = &wfv1.ScriptTemplate{
@@ -329,50 +340,121 @@ func buildPluginSendConfig(cfg *agentv1alpha1.MessageSendConfig) map[string]inte
 	return result
 }
 
-// buildEphemeralAgentTemplate populates a template with a container spec for ephemeral agent execution.
-func buildEphemeralAgentTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.EphemeralAgentTask) {
+// resolvedAgentTaskInfo holds pre-resolved ConfigMap info for a single agentTask.
+// Populated by the AgentWorkflow controller before compilation.
+type resolvedAgentTaskInfo struct {
+	// modelInfo is the resolved Model/ModelProvider configuration (ConfigMap name, env vars, secrets).
+	modelInfo *resolvedModelInfo
+	// toolConfigMaps contains resolved tool ConfigMap info for volume mounting.
+	toolConfigMaps []toolConfigMapInfo
+	// agentModelInfo is the resolved model for the inline agent (if different from task-level).
+	agentModelInfo *resolvedModelInfo
+	// instructionConfigMapName is the name of the ConfigMap for an instruction ref.
+	instructionConfigMapName string
+}
+
+// agentTaskConfig is the JSON structure serialized into the FLOKOA_TASK_CONFIG env var.
+// It contains all inline configuration for the Marvin task runtime.
+type agentTaskConfig struct {
+	Type         string                `json:"type"`
+	Instructions string                `json:"instructions,omitempty"`
+	Input        string                `json:"input,omitempty"`
+	ResultType   *agentTaskResultType  `json:"resultType,omitempty"`
+	Labels       []string              `json:"labels,omitempty"`
+	MultiLabel   *bool                 `json:"multiLabel,omitempty"`
+	Count        *int32                `json:"count,omitempty"`
+	Context      map[string]string     `json:"context,omitempty"`
+	Agent        *agentTaskAgentConfig `json:"agent,omitempty"`
+}
+
+type agentTaskResultType struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	JSONSchema  json.RawMessage `json:"jsonSchema"`
+}
+
+type agentTaskAgentConfig struct {
+	Name         string `json:"name"`
+	Instructions string `json:"instructions,omitempty"`
+}
+
+// buildAgentTaskTemplate populates a template with a container spec for a Marvin agent task.
+func buildAgentTaskTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.AgentTask, resolved *resolvedAgentTaskInfo) error {
 	image := agentTask.Image
 	if image == "" {
-		image = defaultRuntimeImage
+		image = defaultManagedTaskImage
+	}
+
+	// Build the task config JSON
+	cfg := agentTaskConfig{
+		Type: string(agentTask.Type),
+	}
+
+	// Instruction (inline only — instructionRef is handled via volume mount)
+	if agentTask.Instruction != nil && agentTask.Instruction.Template != "" {
+		cfg.Instructions = TranslateExpressions(agentTask.Instruction.Template)
+	}
+
+	// Input with expression translation
+	if agentTask.Input != "" {
+		cfg.Input = TranslateExpressions(agentTask.Input)
+	}
+
+	// ResultType
+	if agentTask.ResultType != nil {
+		rt := &agentTaskResultType{
+			Name:        agentTask.ResultType.Name,
+			Description: agentTask.ResultType.Description,
+		}
+		if agentTask.ResultType.JSONSchema != nil {
+			rt.JSONSchema = agentTask.ResultType.JSONSchema.Raw
+		}
+		cfg.ResultType = rt
+	}
+
+	// Classify-specific fields
+	if len(agentTask.Labels) > 0 {
+		cfg.Labels = agentTask.Labels
+	}
+	if agentTask.MultiLabel != nil {
+		cfg.MultiLabel = agentTask.MultiLabel
+	}
+
+	// Generate-specific fields
+	if agentTask.Count != nil {
+		cfg.Count = agentTask.Count
+	}
+
+	// Context with expression translation
+	if len(agentTask.Context) > 0 {
+		cfg.Context = make(map[string]string, len(agentTask.Context))
+		for k, v := range agentTask.Context {
+			cfg.Context[k] = TranslateExpressions(v)
+		}
+	}
+
+	// Inline agent config
+	if agentTask.Agent != nil {
+		cfg.Agent = &agentTaskAgentConfig{
+			Name:         agentTask.Agent.Name,
+			Instructions: agentTask.Agent.Instructions,
+		}
+	}
+
+	taskConfigJSON, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal agent task config: %w", err)
 	}
 
 	container := corev1.Container{
 		Image:   image,
-		Command: []string{"python", "-m", "flokoa.runtime"},
-		Args:    []string{agentTask.Entrypoint},
-		Env:     agentTask.Env,
-	}
-
-	// Add framework env var
-	if agentTask.Framework != "" {
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  "FLOKOA_FRAMEWORK",
-			Value: agentTask.Framework,
-		})
-	}
-
-	// Add input as env var
-	if agentTask.Input != "" {
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  "FLOKOA_INPUT",
-			Value: agentTask.Input,
-		})
-	}
-
-	// Add tools as a comma-separated env var
-	if len(agentTask.Tools) > 0 {
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  "FLOKOA_TOOLS",
-			Value: strings.Join(agentTask.Tools, ","),
-		})
-	}
-
-	// Add context as a comma-separated env var
-	if len(agentTask.Context) > 0 {
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  "FLOKOA_CONTEXT",
-			Value: strings.Join(agentTask.Context, ","),
-		})
+		Command: []string{"python", "-m", "flokoa_managed_task"},
+		Env: append([]corev1.EnvVar{
+			{
+				Name:  taskConfigEnvVar,
+				Value: string(taskConfigJSON),
+			},
+		}, agentTask.Env...),
 	}
 
 	// Resource requirements
@@ -380,7 +462,74 @@ func buildEphemeralAgentTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.E
 		container.Resources = *agentTask.Resources
 	}
 
+	// Volumes and volume mounts from resolved info
+	var volumes []corev1.Volume
+
+	if resolved != nil {
+		// Mount model ConfigMap
+		if resolved.modelInfo != nil && resolved.modelInfo.configMapName != "" {
+			volumes = append(volumes, corev1.Volume{
+				Name: "model-config",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: resolved.modelInfo.configMapName},
+					},
+				},
+			})
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+				Name:      "model-config",
+				MountPath: agentTaskModelMountPath,
+				SubPath:   "model.json",
+				ReadOnly:  true,
+			})
+			// Add non-secret env vars from model provider
+			container.Env = append(container.Env, resolved.modelInfo.envVars...)
+			// Add secret env vars from model provider
+			container.Env = append(container.Env, resolved.modelInfo.secretEnvVars...)
+		}
+
+		// Mount tool ConfigMaps
+		for _, toolCM := range resolved.toolConfigMaps {
+			volumeName := fmt.Sprintf("tool-%s", toolCM.toolName)
+			volumes = append(volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: toolCM.configMapName},
+					},
+				},
+			})
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+				Name:      volumeName,
+				MountPath: fmt.Sprintf("%s/%s.json", agentTaskToolsMountPath, toolCM.toolName),
+				SubPath:   "spec.json",
+				ReadOnly:  true,
+			})
+		}
+
+		// Mount instruction ConfigMap (for instructionRef)
+		if resolved.instructionConfigMapName != "" {
+			volumes = append(volumes, corev1.Volume{
+				Name: "instruction",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: resolved.instructionConfigMapName},
+					},
+				},
+			})
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+				Name:      "instruction",
+				MountPath: agentTaskInstructionMountPath,
+				SubPath:   "instruction.txt",
+				ReadOnly:  true,
+			})
+		}
+	}
+
 	tmpl.Container = &container
+	if len(volumes) > 0 {
+		tmpl.Volumes = volumes
+	}
 
 	// Output parameter: the container writes its result to /tmp/output
 	tmpl.Outputs = wfv1.Outputs{
@@ -393,6 +542,8 @@ func buildEphemeralAgentTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.E
 			},
 		},
 	}
+
+	return nil
 }
 
 // buildSwitchDAGTasks generates additional DAG tasks for switch routing.
