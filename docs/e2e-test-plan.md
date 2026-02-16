@@ -4,7 +4,7 @@
 
 - Validate that the Kubernetes Operator and Python SDK work together end-to-end.
 - Exercise both **standard Agents** (runtime type `standard`) and **template Agents** (Agents that rely on inline or referenced Instruction templates).
-- Cover real dependencies (ModelProvider, Model, Instruction, AgentTool, MCPServer, StateBackend, and in-cluster services).
+- Cover real dependencies (ModelProvider, Model, Instruction, AgentTool, and in-cluster services).
 - **Only mock LLM calls**. Every other dependency must be real and running in the test cluster.
 
 ## Selected Framework
@@ -27,8 +27,6 @@ Why:
    - Deterministic responses for assertions.
 5. **Real dependencies** deployed in cluster:
    - Tool service (HTTP API) for `AgentTool` reference tests.
-   - MCP server container for `MCPServer` connectivity.
-   - State backend (Redis/Postgres) container for stateful agents.
 
 ## Core Test Scenarios
 
@@ -67,13 +65,11 @@ For both standard and template agents, validate:
 
 - **ModelProvider/Model** CRDs resolve and are referenced across namespaces.
 - **AgentTool** references work for both inline and referenced tools.
-- **MCPServer** connection configuration is propagated to the pod.
-- **StateBackend** (e.g., Redis) is reachable and persists state across requests.
 
 ## Test Execution Flow (Ginkgo)
 
 1. Create namespace, install CRDs, deploy operator/server (existing setup).
-2. Deploy LLM stub, tool service, MCP server, and state backend.
+2. Deploy LLM stub and tool service.
 3. Build & load Python SDK agent images into Kind.
 4. Apply `ModelProvider`, `Model`, `Instruction`, `AgentTool`, and `Agent` manifests.
 5. Wait for `Ready` conditions and validate endpoints.
@@ -87,5 +83,5 @@ For both standard and template agents, validate:
 ## Success Criteria
 
 - Standard and template agents both reach `Ready=True`.
-- All dependencies (ModelProvider, Model, Instruction, AgentTool, MCPServer, StateBackend) work together in a live cluster.
+- All dependencies (ModelProvider, Model, Instruction, AgentTool) work together in a live cluster.
 - No mocks beyond LLM calls.

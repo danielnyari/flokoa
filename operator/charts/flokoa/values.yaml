@@ -232,6 +232,69 @@ server:
     # maxUnavailable: 1
 
 # =============================================================================
+# Authentication (Dex OIDC)
+# =============================================================================
+dex:
+  # -- Enable Dex OIDC identity federation
+  enabled: false
+
+  image:
+    # -- Dex image registry
+    registry: ghcr.io
+    # -- Dex image repository
+    repository: dexidp/dex
+    # -- Dex image tag
+    tag: v2.43.1
+
+  # -- Dex issuer URL (must be reachable by both clients and the server)
+  issuer: "https://dex.example.com"
+
+  # -- OIDC client ID for the Flokoa application
+  clientID: "flokoa"
+
+  # -- Allowed OAuth redirect URIs for the Flokoa frontend
+  redirectURIs:
+    - "https://flokoa.example.com/auth/callback"
+    # - "http://localhost:3000/auth/callback"  # for development
+
+  # -- Dex connector configuration for upstream identity providers.
+  # See https://dexidp.io/docs/connectors/ for available connector types.
+  connectors: []
+  #  - type: github
+  #    id: github
+  #    name: GitHub
+  #    config:
+  #      clientID: $GITHUB_CLIENT_ID
+  #      clientSecret: $GITHUB_CLIENT_SECRET
+  #      orgs:
+  #        - name: your-org
+  #  - type: oidc
+  #    id: google
+  #    name: Google
+  #    config:
+  #      issuer: https://accounts.google.com
+  #      clientID: $GOOGLE_CLIENT_ID
+  #      clientSecret: $GOOGLE_CLIENT_SECRET
+
+  # -- Environment variables mapped to Kubernetes secret keys.
+  # Used for connector credentials (clientID, clientSecret, etc.).
+  # Values here are stored in a Secret and injected into the Dex container.
+  env: {}
+  #  GITHUB_CLIENT_ID: ""
+  #  GITHUB_CLIENT_SECRET: ""
+  #  GOOGLE_CLIENT_ID: ""
+  #  GOOGLE_CLIENT_SECRET: ""
+
+  # -- Dex resource requests and limits
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "250m"
+
+# =============================================================================
 # Argo Workflows Integration (optional)
 # =============================================================================
 argo:

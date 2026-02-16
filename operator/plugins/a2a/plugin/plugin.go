@@ -68,12 +68,130 @@ func (p *Plugin) ExecuteTemplate(ctx context.Context, args executor.ExecuteTempl
 	return p.sendTask(ctx, key, spec, endpoint)
 }
 
+// buildA2AMessage converts the plugin's A2AMessage into an a2a.Message.
+func buildA2AMessage(msg *A2AMessage) *a2a.Message {
+	role := a2a.MessageRoleUser
+	if msg.Role == "agent" {
+		role = a2a.MessageRoleAgent
+	}
+
+	var parts []a2a.Part
+	for _, p := range msg.Parts {
+		switch {
+		case p.Text != nil:
+			tp := a2a.TextPart{Text: p.Text.Text}
+			if len(p.Text.Metadata) > 0 {
+				tp.Metadata = make(map[string]any, len(p.Text.Metadata))
+				for k, v := range p.Text.Metadata {
+					tp.Metadata[k] = v
+				}
+			}
+			parts = append(parts, tp)
+		case p.Data != nil:
+			dp := a2a.DataPart{Data: p.Data.Data}
+			if len(p.Data.Metadata) > 0 {
+				dp.Metadata = make(map[string]any, len(p.Data.Metadata))
+				for k, v := range p.Data.Metadata {
+					dp.Metadata[k] = v
+				}
+			}
+			parts = append(parts, dp)
+		case p.File != nil:
+			var fp a2a.FilePart
+			if p.File.File.URI != "" {
+				fp.File = &a2a.FileURI{
+					FileMeta: a2a.FileMeta{
+						Name:     p.File.File.Name,
+						MimeType: p.File.File.MimeType,
+					},
+					URI: p.File.File.URI,
+				}
+			} else if p.File.File.Bytes != "" {
+				fp.File = &a2a.FileBytes{
+					FileMeta: a2a.FileMeta{
+						Name:     p.File.File.Name,
+						MimeType: p.File.File.MimeType,
+					},
+					Bytes: p.File.File.Bytes,
+				}
+			}
+			if len(p.File.Metadata) > 0 {
+				fp.Metadata = make(map[string]any, len(p.File.Metadata))
+				for k, v := range p.File.Metadata {
+					fp.Metadata[k] = v
+				}
+			}
+			parts = append(parts, fp)
+		}
+	}
+
+	message := a2a.NewMessage(role, parts...)
+	if msg.TaskID != "" {
+		message.TaskID = a2a.TaskID(msg.TaskID)
+	}
+	if msg.ContextID != "" {
+		message.ContextID = msg.ContextID
+	}
+	if len(msg.ReferenceTaskIDs) > 0 {
+		refIDs := make([]a2a.TaskID, len(msg.ReferenceTaskIDs))
+		for i, id := range msg.ReferenceTaskIDs {
+			refIDs[i] = a2a.TaskID(id)
+		}
+		message.ReferenceTasks = refIDs
+	}
+	if len(msg.Extensions) > 0 {
+		message.Extensions = msg.Extensions
+	}
+	if len(msg.Metadata) > 0 {
+		message.Metadata = msg.Metadata
+	}
+
+	return message
+}
+
+// buildA2ASendConfig converts the plugin's A2ASendConfig into an a2a.MessageSendConfig.
+func buildA2ASendConfig(cfg *A2ASendConfig) *a2a.MessageSendConfig {
+	if cfg == nil {
+		return nil
+	}
+	result := &a2a.MessageSendConfig{}
+	if len(cfg.AcceptedOutputModes) > 0 {
+		result.AcceptedOutputModes = cfg.AcceptedOutputModes
+	}
+	if cfg.Blocking != nil {
+		result.Blocking = cfg.Blocking
+	}
+	if cfg.HistoryLength != nil {
+		result.HistoryLength = cfg.HistoryLength
+	}
+	if cfg.PushNotificationConfig != nil {
+		pushCfg := &a2a.PushConfig{
+			URL: cfg.PushNotificationConfig.URL,
+		}
+		if cfg.PushNotificationConfig.ID != "" {
+			pushCfg.ID = cfg.PushNotificationConfig.ID
+		}
+		if cfg.PushNotificationConfig.Token != "" {
+			pushCfg.Token = cfg.PushNotificationConfig.Token
+		}
+		if cfg.PushNotificationConfig.Authentication != nil {
+			pushCfg.Auth = &a2a.PushAuthInfo{
+				Schemes:     cfg.PushNotificationConfig.Authentication.Schemes,
+				Credentials: cfg.PushNotificationConfig.Authentication.Credentials,
+			}
+		}
+		result.PushConfig = pushCfg
+	}
+	return result
+}
+
 // sendTask sends a new task to the A2A agent
 func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoint string) (*executor.ExecuteTemplateReply, error) {
-	// Create and send the message
-	message := a2a.NewMessage(a2a.MessageRoleUser, a2a.TextPart{Text: spec.Message})
+	// Build the A2A message from structured parts
+	message := buildA2AMessage(&spec.Message)
 	params := &a2a.MessageSendParams{
 		Message: message,
+		Config:  buildA2ASendConfig(spec.Config),
 	}
 
 	candidates := endpointCandidates(endpoint)
@@ -313,8 +431,8 @@ func parseA2ASpec(template *wfv1.Template) (*A2ASpec, error) {
 	if spec.Agent == "" {
 		return nil, fmt.Errorf("agent name is required")
 	}
-	if spec.Message == "" {
-		return nil, fmt.Errorf("message is required")
+	if len(spec.Message.Parts) == 0 {
+		return nil, fmt.Errorf("message must have at least one part")
 	}
 
 	return &spec, nil

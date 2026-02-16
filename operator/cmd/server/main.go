@@ -42,6 +42,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Handle shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Initialize auth interceptor if enabled
+	var authInterceptor *server.AuthInterceptor
+	if cfg.Auth.Enabled {
+		if cfg.Auth.IssuerURL == "" {
+			log.Error(nil, "AUTH_OIDC_ISSUER_URL is required when auth is enabled")
+			os.Exit(1)
+		}
+		log.Info("Initializing OIDC auth", "issuer", cfg.Auth.IssuerURL, "clientID", cfg.Auth.ClientID)
+
+		var initErr error
+		authInterceptor, initErr = server.NewAuthInterceptor(ctx, server.AuthInterceptorConfig{
+			IssuerURL:     cfg.Auth.IssuerURL,
+			Audience:      cfg.Auth.ClientID,
+			PublicMethods: server.PublicGRPCMethods,
+		}, log.WithName("auth"))
+		if initErr != nil {
+			log.Error(initErr, "Failed to initialize OIDC auth interceptor")
+			os.Exit(1)
+		}
+		log.Info("OIDC auth initialized successfully")
+	} else {
+		log.Info("Auth disabled, all endpoints are public")
+	}
+
 	// Create services
 	agentService := server.NewAgentService(k8sClient)
 	modelService := server.NewModelService(k8sClient)
@@ -52,16 +80,14 @@ func main() {
 	grpcServer := server.NewServer(
 		cfg.Port,
 		cfg.HTTPPort,
+		cfg.Auth,
 		log,
+		authInterceptor,
 		agentService,
 		modelService,
 		modelProviderService,
 		agentToolService,
 	)
-
-	// Handle shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	if err := grpcServer.Start(ctx); err != nil {
 		log.Error(err, "Server failed")

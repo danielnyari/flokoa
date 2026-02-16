@@ -61,12 +61,12 @@ kubectl logs -l flokoa.ai/agent=basic-agent
 ## Field Reference
 
 ### Required Fields
-- `spec.runtime.type` - Runtime backend type (currently only "standard" supported)
+- `spec.runtime.type` - Runtime backend type (`standard` or `template`)
 - `spec.runtime.spec.container.name` - Container name
 - `spec.runtime.spec.container.image` - Container image
 
 ### Common Optional Fields
-- `spec.framework` - Framework type (pydantic-ai, langchain, crewai, marvin, autogen, a2a, custom)
+- `spec.framework` - Framework type (pydantic-ai, langchain, google-adk, crewai, marvin, autogen, a2a)
 - `spec.runtime.spec.replicas` - Number of pod replicas (default: 1)
 - `spec.runtime.spec.container.ports` - Container ports
 - `spec.runtime.spec.container.env` - Environment variables
@@ -83,18 +83,15 @@ kubectl logs -l flokoa.ai/agent=basic-agent
 
 The `spec.runtime.type` field determines the backend used to run the agent:
 
-- **`standard`** - Deploys agents using standard Kubernetes Deployments and Services. This is the default and currently the only supported runtime type.
-
-Future runtime types may include:
-- `knative` - Serverless deployment with Knative Serving (planned)
-- `job` - One-time execution using Kubernetes Jobs (planned)
+- **`standard`** - Deploys agents using standard Kubernetes Deployments and Services. The user provides their own container image.
+- **`template`** - Uses a generic runtime image fully managed by the operator. The agent's behavior is defined entirely in the CR via instructions and output schema.
 
 ## Status Fields
 
 The operator updates these status fields automatically:
 
 - `status.phase` - Current phase (Pending, Running, Failed)
-- `status.backend` - Backend implementation (core, knative)
+- `status.backend` - Backend implementation (standard, template)
 - `status.url` - Service endpoint URL
 - `status.replicas` - Current replica count
 - `status.availableReplicas` - Ready replicas

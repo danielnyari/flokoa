@@ -4,11 +4,13 @@ go 1.24.10
 
 require (
 	github.com/argoproj/argo-workflows/v3 v3.7.9
+	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/jsonschema-go v0.4.2
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
+	github.com/rs/cors v1.11.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409
 	google.golang.org/grpc v1.72.2
 	google.golang.org/protobuf v1.36.11
@@ -32,6 +34,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect

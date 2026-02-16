@@ -36,3 +36,4 @@ go.work.sum
 __pycache__/
 operator/plugins/a2a/a2a
 /.claude/worktrees
+/operator/ui/dist

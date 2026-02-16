@@ -325,6 +325,60 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--output $(PYTHON_MODELS_DIR)/templateconfig.py
 	@rm /tmp/templateConfig_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/templateconfig.py"
+	@# Extract AgentWorkflowSpec schema
+	@echo "Building AgentWorkflowSpec schema..."
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec' \
+		config/crd/bases/agent.flokoa.ai_agentworkflows.yaml > /tmp/agentworkflow_schema.json
+	@# Deduplicate shared schemas using $$defs (retryStrategy appears at both spec and task level)
+	@yq eval -i -o json '.["$$defs"].WorkflowRetryStrategy = .properties.retryStrategy | .["$$defs"].WorkflowRetryStrategy.title = "WorkflowRetryStrategy" | .["$$defs"].WorkflowRetryStrategy.properties.backoff.title = "WorkflowBackoff"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.retryStrategy = {"$$ref": "#/$$defs/WorkflowRetryStrategy"}' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.retryStrategy = {"$$ref": "#/$$defs/WorkflowRetryStrategy"}' /tmp/agentworkflow_schema.json
+	@# Simplify x-kubernetes-int-or-string anyOf patterns to plain strings (K8s quantities)
+	@yq eval -i -o json 'del(.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.resourceFieldRef.properties.divisor.anyOf) | .properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.resourceFieldRef.properties.divisor.type = "string"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json 'del(.properties.tasks.items.properties.agentTask.properties.resources.properties.limits.additionalProperties.anyOf) | .properties.tasks.items.properties.agentTask.properties.resources.properties.limits.additionalProperties.type = "string"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json 'del(.properties.tasks.items.properties.agentTask.properties.resources.properties.requests.additionalProperties.anyOf) | .properties.tasks.items.properties.agentTask.properties.resources.properties.requests.additionalProperties.type = "string"' /tmp/agentworkflow_schema.json
+	@# Add titles to all nested objects for proper Python class naming
+	@yq eval -i -o json '.title = "AgentWorkflowSpec"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.params.items.title = "WorkflowParam"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.title = "WorkflowTask"' /tmp/agentworkflow_schema.json
+	@# Agent call types
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.title = "AgentCall"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.config.title = "MessageSendConfig"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.title = "AgentMessage"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.role.title = "MessageRole"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.title = "MessagePart"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.data.title = "DataPart"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.title = "FilePart"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.properties.file.title = "FileContent"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.text.title = "TextPart"' /tmp/agentworkflow_schema.json
+	@# Ephemeral agent task types
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.title = "EphemeralAgentTask"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.framework.title = "AgentFramework"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.title = "EnvVar"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.title = "EnvVarSource"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.configMapKeyRef.title = "ConfigMapKeySelector"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.fieldRef.title = "ObjectFieldSelector"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.resourceFieldRef.title = "ResourceFieldSelector"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.secretKeyRef.title = "SecretKeySelector"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.resources.title = "ResourceRequirements"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.resources.properties.claims.items.title = "ResourceClaim"' /tmp/agentworkflow_schema.json
+	@# Switch type
+	@yq eval -i -o json '.properties.tasks.items.properties.switch.items.title = "SwitchCase"' /tmp/agentworkflow_schema.json
+	@# Generate AgentWorkflowSpec Pydantic v2 models
+	@$(DATAMODEL_CODEGEN) \
+		--input /tmp/agentworkflow_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+		--allow-population-by-field-name \
+		--use-title-as-name \
+		--class-name AgentWorkflowSpec \
+		--output $(PYTHON_MODELS_DIR)/agentworkflow.py
+	@# Add populate_by_alias=True to ConfigDict (no CLI flag for this in datamodel-codegen)
+	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/agentworkflow.py
+	@rm /tmp/agentworkflow_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentworkflow.py"
 
 ##@ gRPC Server
 

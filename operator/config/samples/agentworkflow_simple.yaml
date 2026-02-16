@@ -1,0 +1,27 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: research-and-summarize
+spec:
+  description: "A basic research-then-summarize pipeline"
+  params:
+    - name: topic
+      value: "transformer architectures"
+  tasks:
+    - name: research
+      agent:
+        name: researcher-agent
+        message:
+          parts:
+            - text:
+                text: "Find recent papers on {{params.topic}}"
+      timeout: 10m
+
+    - name: summarize
+      agent:
+        name: summarizer-agent
+        message:
+          parts:
+            - text:
+                text: "Summarize these findings: {{tasks.research.output}}"
+      dependsOn: [research]

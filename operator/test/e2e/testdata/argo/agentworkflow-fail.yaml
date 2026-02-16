@@ -1,0 +1,16 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: e2e-fail-workflow
+  namespace: flokoa-system
+spec:
+  description: "E2E test: workflow targeting non-existent agent"
+  tasks:
+    - name: call-nonexistent
+      agent:
+        name: nonexistent-agent
+        message:
+          parts:
+            - text:
+                text: "This should fail"
+      timeout: 30s
