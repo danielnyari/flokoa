@@ -187,8 +187,8 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 ##@ Python SDK
 
-PYTHON_SDK_DIR ?= ../sdk/python/src/
-PYTHON_MODELS_DIR ?= $(PYTHON_SDK_DIR)/flokoa/types
+PYTHON_SDK_DIR ?= ../sdk/python
+PYTHON_MODELS_DIR ?= $(PYTHON_SDK_DIR)/flokoa-types/src/flokoa_types
 PYTHON_VENV ?= $(LOCALBIN)/venv
 DATAMODEL_CODEGEN ?= $(PYTHON_VENV)/bin/datamodel-codegen
 
@@ -463,7 +463,7 @@ docker-push-plugins: ## Push docker images for all plugins.
 
 .PHONY: docker-build-flokoa-cli
 docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
-	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa/Dockerfile.managed -t ${FLOKOA_CLI_IMG} ../sdk/python
+	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} ../sdk/python
 
 .PHONY: docker-push-flokoa-cli
 docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.

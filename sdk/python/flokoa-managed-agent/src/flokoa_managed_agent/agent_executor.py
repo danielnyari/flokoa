@@ -15,8 +15,8 @@ from pydantic_ai import AgentRunResult
 from flokoa.cache import ConfigCache
 from flokoa.exceptions import ProviderNotConfiguredError
 from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
-from flokoa.templated.agent import TemplatedAgentBuilder
-from flokoa.types import TemplateConfig
+from flokoa_types import TemplateConfig
+from flokoa_managed_agent.bootstrap import TemplatedAgentBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class TemplatedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
     - Instruction from /etc/flokoa/instruction.txt (passed at construction)
     - Model config from /etc/flokoa/model.json (via parent)
     - Tools from /etc/flokoa/tools/ (via parent)
-    - Templated config from /etc/flokoa/managed-config.json (via builder)
+    - Templated config from /etc/flokoa/template-config.json (via builder)
     """
 
     def __init__(

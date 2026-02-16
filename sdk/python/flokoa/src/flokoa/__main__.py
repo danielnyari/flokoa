@@ -1,6 +1,5 @@
 import asyncio
 import importlib
-import logging
 import os
 import sys
 
@@ -12,38 +11,9 @@ from a2a.server.tasks import InMemoryTaskStore
 from fastapi import FastAPI
 
 from flokoa.integrations import IntegrationType, get_executor_cls
-from flokoa.utils import load_agent_card, load_templated_config
+from flokoa.utils import load_agent_card
 from flokoa.utils.agent_card_builder import AgentCardBuilder
 from flokoa.utils.router import router as health_router
-
-logger = logging.getLogger(__name__)
-
-
-class _MutuallyExclusiveOption(click.Option):
-    """Click Option subclass that enforces mutual exclusion with another option."""
-
-    def __init__(self, *args, **kwargs):
-        self.mutually_exclusive = kwargs.pop("mutually_exclusive", [])
-        super().__init__(*args, **kwargs)
-
-    def handle_parse_result(self, ctx, opts, args):
-        for mutex_name in self.mutually_exclusive:
-            if self.name in opts and mutex_name in opts:
-                raise click.UsageError(f"--{self.name} and --{mutex_name} are mutually exclusive.")
-        return super().handle_parse_result(ctx, opts, args)
-
-
-def _validate_mode(ctx, param, value):
-    """Callback to ensure exactly one of --module or --templated is provided."""
-    if ctx.resilient_parsing:
-        return value
-    # This runs after all params are parsed (attached to the last of the two).
-    # At this point ctx.params has 'module' already.
-    module = ctx.params.get("module")
-    templated = value
-    if not module and not templated:
-        raise click.UsageError("Either --module/-m or --templated/-t is required.")
-    return value
 
 
 @click.group()
@@ -56,28 +26,14 @@ def cli() -> None:
     "--module",
     "-m",
     type=str,
-    default=None,
-    cls=_MutuallyExclusiveOption,
-    mutually_exclusive=["templated"],
+    required=True,
     help="Module path to the agent (e.g. my_module:my_agent).",
-)
-@click.option(
-    "--templated",
-    "-t",
-    is_flag=True,
-    default=False,
-    callback=_validate_mode,
-    is_eager=False,
-    cls=_MutuallyExclusiveOption,
-    mutually_exclusive=["module"],
-    help="Run a templated agent from operator-mounted configuration.",
 )
 @click.option("--host", default=None, help="Host to bind the server to.")
 @click.option("--port", default=None, type=int, help="Port to bind the server to.")
 @click.option("--framework", type=click.Choice(IntegrationType, case_sensitive=False))
 def run(
-    module: str | None,
-    templated: bool,
+    module: str,
     host: str | None,
     port: int | None,
     framework: str,
@@ -85,22 +41,15 @@ def run(
     """Run a Flokoa agent server.
 
     \b
-    Integration mode:
+    Usage:
       flokoa run -m my_module:my_agent --framework pydantic-ai
-
-    \b
-    Templated mode (operator runtime):
-      flokoa run --templated
     """
-    if templated:
-        _start_templated(host=host or "0.0.0.0", port=port or 8080)  # noqa: S104
-    else:
-        _start_integration(
-            module=module,
-            host=host or "localhost",
-            port=port or 10001,
-            framework=framework,
-        )
+    _start_integration(
+        module=module,
+        host=host or "localhost",
+        port=port or 10001,
+        framework=framework,
+    )
 
 
 def _start_integration(module: str, host: str, port: int, framework: IntegrationType) -> None:
@@ -131,31 +80,6 @@ def _start_integration(module: str, host: str, port: int, framework: Integration
         agent_card = asyncio.run(builder.build())
 
     app = _get_app(agent_executor=agent_executor, agent_card=agent_card)
-    _run_server(app=app, host=host, port=port)
-
-
-def _start_templated(host: str, port: int) -> None:
-    """Start a templated agent from operator-mounted configuration."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-
-    from flokoa.templated.agent_executor import TemplatedPydanticAIAgentExecutor
-    from flokoa.utils import load_instruction
-
-    templated_config = load_templated_config()
-    instruction = load_instruction()
-
-    if instruction is None:
-        raise click.ClickException("No instruction found. Templated agents require spec.instruction to be set.")
-
-    logger.info("Building templated pydantic-ai agent")
-    executor = TemplatedPydanticAIAgentExecutor(config=templated_config)
-
-    # Use operator-mounted cardOverride if available, otherwise generate from agent
-    agent_card = load_agent_card(url=f"http://{host}:{port}/")
-    if agent_card is None:
-        card_builder = AgentCardBuilder(agent=executor.agent, rpc_url=f"http://{host}:{port}/")
-        agent_card = asyncio.run(card_builder.build())
-    app = _get_app(agent_executor=executor, agent_card=agent_card)
     _run_server(app=app, host=host, port=port)
 
 

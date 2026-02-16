@@ -21,8 +21,13 @@ flokoa/
 ├── operator/              # Kubernetes Operator (Go)
 │   └── CLAUDE.md          # Operator-specific guidance
 ├── sdk/
-│   └── python/            # Python SDK
-│       └── CLAUDE.md      # Python SDK-specific guidance
+│   └── python/            # Python SDK (uv workspace)
+│       ├── pyproject.toml         # Workspace root
+│       ├── flokoa/                # Public SDK package
+│       │   └── CLAUDE.md          # SDK-specific guidance
+│       ├── flokoa-types/          # Auto-generated Pydantic models from CRD schemas
+│       ├── flokoa-managed-agent/  # Operator-deployed pydantic-ai agent runtime
+│       └── flokoa-managed-task/   # Operator-deployed Marvin task runtime (scaffold)
 ├── docs/                  # Documentation
 │   └── examples/          # Example configurations
 └── .github/workflows/     # CI/CD pipelines
@@ -33,7 +38,7 @@ flokoa/
 Each module has its own CLAUDE.md with detailed instructions:
 
 - **Operator**: See `operator/CLAUDE.md` for Go/Kubebuilder development
-- **Python SDK**: See `sdk/python/CLAUDE.md` for Python development
+- **Python SDK**: See `sdk/python/flokoa/CLAUDE.md` for Python development
 
 ## Cross-Module Concepts
 

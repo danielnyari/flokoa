@@ -7,8 +7,8 @@ import pytest
 
 from flokoa.exceptions import CancelNotSupportedError
 from flokoa.tools import ToolsetFactory
-from flokoa.types import IntegrationType, ToolDefinition, ToolType
-from flokoa.types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
+from flokoa_types import IntegrationType, ToolDefinition, ToolType
+from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 
 pytestmark = pytest.mark.anyio
 

@@ -1,0 +1,79 @@
+# ============================================================================
+# flokoa-managed-agent — production container image
+#
+# Base: python:3.13-alpine (~17 MB compressed vs ~50 MB for slim)
+#
+# Build:
+#   - 3-stage: uv binary → alpine builder → alpine runtime
+#   - UV_COMPILE_BYTECODE=1: pre-compile .pyc for faster cold-start
+#   - UV_LINK_MODE=copy: hard-copy files (no dangling symlinks across stages)
+#   - Layer caching: deps layer cached separately from source layer
+#   - Cache mount on /root/.cache/uv persists across builds
+#   - --frozen --no-dev --no-editable: exact lockfile, prod only, no src refs
+#
+# Runtime:
+#   - Alpine base + libstdc++ / libgcc (needed by native wheels)
+#   - Only .venv copied (no uv, no build tools, no source)
+#   - Bytecode pre-compiled; PYTHONDONTWRITEBYTECODE prevents re-generation
+#   - PYTHONUNBUFFERED for container log drivers
+#   - Rootless: uid 65532, nologin shell
+# ============================================================================
+
+# --- Stage 0: grab uv binary ---
+FROM ghcr.io/astral-sh/uv:0.8.17 AS uv
+
+# --- Stage 1: build ---
+FROM python:3.13-alpine AS builder
+
+COPY --from=uv /uv /bin/uv
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /app
+
+# Layer 1 — dependency install (cached unless config files change)
+COPY pyproject.toml uv.lock ./
+COPY flokoa/pyproject.toml ./flokoa/pyproject.toml
+COPY flokoa-managed-agent/pyproject.toml ./flokoa-managed-agent/pyproject.toml
+
+# Stub packages so hatchling can discover them for workspace resolution
+RUN mkdir -p flokoa/src/flokoa flokoa-managed-agent/src/flokoa_managed_agent && \
+    touch flokoa/src/flokoa/__init__.py flokoa-managed-agent/src/flokoa_managed_agent/__init__.py
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --project flokoa-managed-agent \
+            --no-dev --no-install-project --no-install-workspace
+
+# Layer 2 — install workspace source (only re-runs when src/ changes)
+COPY flokoa/src ./flokoa/src
+COPY flokoa-managed-agent/src ./flokoa-managed-agent/src
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --project flokoa-managed-agent \
+            --no-dev --no-editable
+
+# --- Stage 2: runtime ---
+FROM python:3.13-alpine
+
+# libstdc++ / libgcc: required at runtime by native extension wheels
+# (grpcio, tokenizers, pydantic-core, etc.)
+RUN apk add --no-cache libstdc++ libgcc
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH" \
+    FLOKOA_CONFIG_PATH=/etc/flokoa/config.yaml
+
+RUN addgroup -g 65532 -S nonroot && \
+    adduser -u 65532 -G nonroot -S -H -s /sbin/nologin nonroot && \
+    mkdir -p /etc/flokoa/tools && chown -R nonroot:nonroot /etc/flokoa
+
+COPY --from=builder --chown=65532:65532 /app/.venv /app/.venv
+
+USER 65532:65532
+
+EXPOSE 8080
+
+ENTRYPOINT ["python", "-m", "flokoa_managed_agent"]

@@ -18,15 +18,15 @@ from flokoa.exceptions import (
     ProviderNotConfiguredError,
 )
 from flokoa.tools import ToolsetFactory, default_factory
-from flokoa.types import (
+from flokoa_types import (
     IntegrationType,
     ModelParameters,
     ToolType,
 )
-from flokoa.types import (
+from flokoa_types import (
     ToolDefinition as FlokoaToolDefinition,
 )
-from flokoa.types.modelconfig import ProviderType
+from flokoa_types.modelconfig import ProviderType
 
 from .models import PROVIDER_MODEL_MAP
 

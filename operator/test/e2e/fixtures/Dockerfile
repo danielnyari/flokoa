@@ -1,18 +1,40 @@
-FROM python:3.13-slim
+# E2E test image for flokoa-managed-agent (Alpine-based)
+
+FROM ghcr.io/astral-sh/uv:0.8.17 AS uv
+
+FROM python:3.13-alpine AS builder
+
+COPY --from=uv /uv /bin/uv
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
 
-# Install uv for fast package management
-RUN pip install uv
+COPY sdk/python/pyproject.toml sdk/python/uv.lock ./
+COPY sdk/python/flokoa/ ./flokoa/
+COPY sdk/python/flokoa-managed-agent/ ./flokoa-managed-agent/
 
-# Copy SDK source code
-COPY sdk/python /sdk
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --project flokoa-managed-agent --no-dev --no-editable
 
-# Install flokoa SDK from local source with pydantic-ai extra
-RUN uv pip install --system /sdk[pydantic-ai]
+FROM python:3.13-alpine
 
-# Expose port for the agent server
+RUN apk add --no-cache libstdc++ libgcc
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN addgroup -g 65532 -S nonroot && \
+    adduser -u 65532 -G nonroot -S -H -s /sbin/nologin nonroot && \
+    mkdir -p /etc/flokoa/tools && chown -R nonroot:nonroot /etc/flokoa
+
+COPY --from=builder --chown=65532:65532 /app/.venv /app/.venv
+
+USER 65532:65532
+
 EXPOSE 8080
 
-# Run as a templated agent - operator mounts instruction, model, tools config
-CMD ["flokoa", "run", "--templated", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["python", "-m", "flokoa_managed_agent"]

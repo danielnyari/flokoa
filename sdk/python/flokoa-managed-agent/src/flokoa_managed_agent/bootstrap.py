@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic_ai import Agent, StructuredDict
 
-from flokoa.types import TemplateConfig
+from flokoa_types import TemplateConfig
 
 logger = logging.getLogger(__name__)
 
