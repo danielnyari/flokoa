@@ -1,0 +1,16 @@
+# This patch adds args with the metrics bind address to the manager container.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --metrics-bind-address=:8443
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --metrics-secure=true
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --enable-http2=false
+- op: add
+  path: /spec/template/spec/containers/0/ports
+  value:
+    - containerPort: 8443
+      name: https
+      protocol: TCP

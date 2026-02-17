@@ -533,17 +533,59 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller and server to the K8s cluster specified in ~/.kube/config.
+	@if [ "$(DEPLOY_WITH_CERT_MANAGER)" = "true" ]; then \
+		$(MAKE) cert-manager-preflight; \
+	else \
+		$(MAKE) webhook-cleanup; \
+	fi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	cd config/server && $(KUSTOMIZE) edit set image server=${SERVER_IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build $(DEPLOY_KUSTOMIZATION) | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build $(DEPLOY_KUSTOMIZATION) | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Argo Workflows
 
 ARGO_WORKFLOWS_VERSION ?= 3.7.9
+CERT_MANAGER_VERSION ?= v1.16.3
+CERT_MANAGER_MANIFEST_URL ?= https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
+DEPLOY_WITH_CERT_MANAGER ?= false
+DEPLOY_KUSTOMIZATION ?= config/default-no-certmanager
+ifeq ($(DEPLOY_WITH_CERT_MANAGER),true)
+DEPLOY_KUSTOMIZATION = config/default
+endif
+
+.PHONY: cert-manager-install
+cert-manager-install: ## Install cert-manager CRDs and controllers.
+	@echo "Installing cert-manager $(CERT_MANAGER_VERSION)..."
+	$(KUBECTL) apply -f $(CERT_MANAGER_MANIFEST_URL)
+	@echo "Waiting for cert-manager webhook to become available..."
+	$(KUBECTL) wait deployment.apps/cert-manager-webhook \
+		--for=condition=Available \
+		--namespace cert-manager \
+		--timeout=5m
+
+.PHONY: cert-manager-preflight
+cert-manager-preflight: ## Ensure cert-manager CRDs exist before deploy (auto-install unless CERT_MANAGER_INSTALL_SKIP=true).
+	@if $(KUBECTL) get crd certificates.cert-manager.io >/dev/null 2>&1 && $(KUBECTL) get crd issuers.cert-manager.io >/dev/null 2>&1; then \
+		echo "cert-manager CRDs detected. Skipping install."; \
+	elif [ "$(CERT_MANAGER_INSTALL_SKIP)" = "true" ]; then \
+		echo "cert-manager CRDs not found and CERT_MANAGER_INSTALL_SKIP=true."; \
+		echo "Install cert-manager first or unset CERT_MANAGER_INSTALL_SKIP."; \
+		exit 1; \
+	else \
+		$(MAKE) cert-manager-install; \
+	fi
+
+.PHONY: webhook-cleanup
+webhook-cleanup: ## Remove webhook resources for no-cert-manager deployments.
+	-$(KUBECTL) delete validatingwebhookconfiguration validating-webhook-configuration --ignore-not-found=true
+	-$(KUBECTL) -n flokoa-system delete service webhook-service --ignore-not-found=true
+	-$(KUBECTL) -n flokoa-system delete secret webhook-server-cert --ignore-not-found=true
+	-$(KUBECTL) -n flokoa-system delete certificate serving-cert --ignore-not-found=true
+	-$(KUBECTL) -n flokoa-system delete issuer selfsigned-issuer --ignore-not-found=true
 
 .PHONY: deploy-argo-workflows
 deploy-argo-workflows: ## Deploy Argo Workflows with executor plugins enabled.

@@ -548,8 +548,9 @@ var _ = Describe("Model Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, model)).To(Succeed())
 
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: modelNSName})
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: modelNSName})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(modelRetryInterval))
 
 			var updated agentv1alpha1.Model
 			Expect(k8sClient.Get(ctx, modelNSName, &updated)).To(Succeed())
@@ -558,6 +559,35 @@ var _ = Describe("Model Controller", func() {
 			Expect(readyCond).NotTo(BeNil())
 			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
 			Expect(readyCond.Reason).To(Equal(ModelReasonProviderNotFound))
+		})
+
+		It("should requeue when provider exists but is not ready", func() {
+			provider := &agentv1alpha1.ModelProvider{
+				ObjectMeta: metav1.ObjectMeta{Name: providerName, Namespace: namespace},
+				Spec:       agentv1alpha1.ModelProviderSpec{OpenAI: &agentv1alpha1.OpenAIProviderSpec{}},
+			}
+			Expect(k8sClient.Create(ctx, provider)).To(Succeed())
+
+			model := &agentv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{Name: modelName, Namespace: namespace},
+				Spec: agentv1alpha1.ModelSpec{
+					Model:       "gpt-4o",
+					ProviderRef: agentv1alpha1.ProviderRef{Name: providerName},
+				},
+			}
+			Expect(k8sClient.Create(ctx, model)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: modelNSName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(modelRetryInterval))
+
+			var updated agentv1alpha1.Model
+			Expect(k8sClient.Get(ctx, modelNSName, &updated)).To(Succeed())
+
+			readyCond := meta.FindStatusCondition(updated.Status.Conditions, ModelConditionTypeReady)
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCond.Reason).To(Equal(ModelReasonProviderNotReady))
 		})
 
 		It("should update observedGeneration", func() {
