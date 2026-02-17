@@ -148,6 +148,86 @@ type AgentSpec struct {
 	// Tools available to this agent. Can be inline definitions or references to AgentTool resources.
 	// +optional
 	Tools []ToolEntry `json:"tools,omitempty"`
+
+	// Scaling configures KEDA-based autoscaling for the agent, including scale-to-zero.
+	// When set, the operator creates a KEDA ScaledObject targeting the agent's Deployment.
+	// Requires KEDA to be installed in the cluster.
+	// +optional
+	Scaling *ScalingSpec `json:"scaling,omitempty"`
+}
+
+// ScalingSpec defines KEDA-based autoscaling configuration for the agent.
+type ScalingSpec struct {
+	// MinReplicaCount is the minimum number of replicas KEDA will scale down to.
+	// Set to 0 to enable scale-to-zero. Defaults to 0.
+	// +kubebuilder:default=0
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MinReplicaCount *int32 `json:"minReplicaCount,omitempty"`
+
+	// MaxReplicaCount is the maximum number of replicas KEDA will scale up to.
+	// Defaults to 10.
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	MaxReplicaCount *int32 `json:"maxReplicaCount,omitempty"`
+
+	// CooldownPeriod is the period in seconds to wait after the last trigger reported
+	// active before scaling the resource back to minReplicaCount. Defaults to 300.
+	// +kubebuilder:default=300
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	CooldownPeriod *int32 `json:"cooldownPeriod,omitempty"`
+
+	// PollingInterval is the interval in seconds to check each trigger on. Defaults to 30.
+	// +kubebuilder:default=30
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	PollingInterval *int32 `json:"pollingInterval,omitempty"`
+
+	// Triggers defines the list of KEDA triggers for scaling decisions.
+	// At least one trigger must be specified.
+	// +kubebuilder:validation:MinItems=1
+	Triggers []ScalingTrigger `json:"triggers"`
+}
+
+// ScalingTrigger defines a single KEDA scaling trigger.
+type ScalingTrigger struct {
+	// Type is the KEDA trigger type (e.g., "prometheus", "cron", "cpu", "memory").
+	// +kubebuilder:validation:MinLength=1
+	Type string `json:"type"`
+
+	// Metadata is the trigger-specific configuration passed to KEDA.
+	// +kubebuilder:validation:MinProperties=1
+	Metadata map[string]string `json:"metadata"`
+
+	// Name is an optional identifier for this trigger, used in KEDA metrics naming.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// AuthenticationRef references a KEDA TriggerAuthentication or ClusterTriggerAuthentication resource.
+	// +optional
+	AuthenticationRef *ScalingTriggerAuth `json:"authenticationRef,omitempty"`
+
+	// MetricType specifies the metric type for the HPA (AverageValue, Value, Utilization).
+	// +kubebuilder:validation:Enum=AverageValue;Value;Utilization
+	// +optional
+	MetricType string `json:"metricType,omitempty"`
+}
+
+// ScalingTriggerAuth references a KEDA TriggerAuthentication resource.
+type ScalingTriggerAuth struct {
+	// Name of the TriggerAuthentication or ClusterTriggerAuthentication resource.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Kind is the resource kind: TriggerAuthentication or ClusterTriggerAuthentication.
+	// Defaults to TriggerAuthentication.
+	// +kubebuilder:validation:Enum=TriggerAuthentication;ClusterTriggerAuthentication
+	// +kubebuilder:default=TriggerAuthentication
+	// +optional
+	Kind string `json:"kind,omitempty"`
 }
 
 // InstructionEntry represents either an inline instruction or a reference to an Instruction resource.
@@ -351,6 +431,11 @@ type AgentStatus struct {
 	// DetectedFramework is the AI framework detected from the container image.
 	// +optional
 	DetectedFramework Framework `json:"detectedFramework,omitempty"`
+
+	// ScaledObjectName is the name of the KEDA ScaledObject managing this agent's autoscaling.
+	// Empty when scaling is not configured.
+	// +optional
+	ScaledObjectName string `json:"scaledObjectName,omitempty"`
 
 	// Conditions represent the latest available observations of the agent's state.
 	// +optional

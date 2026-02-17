@@ -6,6 +6,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
@@ -61,6 +62,12 @@ type InstructionWriter interface {
 // SecretReader reads Secret resources.
 type SecretReader interface {
 	GetSecret(ctx context.Context, key types.NamespacedName) (*corev1.Secret, error)
+}
+
+// ScaledObjectRepo handles KEDA ScaledObject CRUD operations using unstructured objects.
+type ScaledObjectRepo interface {
+	EnsureScaledObject(ctx context.Context, desired *unstructured.Unstructured) error
+	DeleteScaledObject(ctx context.Context, key types.NamespacedName) error
 }
 
 // OwnerSetter sets controller owner references.

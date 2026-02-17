@@ -1,0 +1,93 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: agent-keda-sample
+spec:
+  card:
+    name: KEDA-Scaled Agent
+    description: An agent with KEDA autoscaling and scale-to-zero
+    version: "1.0.0"
+    skills:
+    - id: chat
+      name: Chat
+      description: General purpose chat
+      tags: ["chat"]
+
+  framework: pydantic-ai
+
+  runtime:
+    type: standard
+    standard:
+      replicas: 1
+      container:
+        name: agent
+        image: ghcr.io/example/agent:latest
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+  # KEDA autoscaling with scale-to-zero support
+  scaling:
+    minReplicaCount: 0     # Scale to zero when idle
+    maxReplicaCount: 5
+    cooldownPeriod: 300    # Wait 5 minutes before scaling down
+    pollingInterval: 15    # Check triggers every 15 seconds
+    triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-server.monitoring.svc.cluster.local
+        metricName: http_requests_total
+        threshold: "100"
+        query: sum(rate(http_requests_total{deployment="agent-keda-sample"}[2m]))
+
+---
+# Example with cron-based scaling (business hours)
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: agent-cron-scaling
+spec:
+  card:
+    name: Business Hours Agent
+    description: An agent that scales based on business hours
+    version: "1.0.0"
+    skills:
+    - id: support
+      name: Support
+      description: Customer support
+      tags: ["support"]
+
+  runtime:
+    type: standard
+    standard:
+      container:
+        name: agent
+        image: ghcr.io/example/support-agent:latest
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+  scaling:
+    minReplicaCount: 0
+    maxReplicaCount: 10
+    triggers:
+    - type: cron
+      metadata:
+        timezone: America/New_York
+        start: 0 8 * * 1-5    # 8 AM weekdays
+        end: 0 18 * * 1-5     # 6 PM weekdays
+        desiredReplicas: "3"
