@@ -29,6 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	agentapp "github.com/danielnyari/flokoa/internal/app/agent"
+	"github.com/danielnyari/flokoa/internal/infra/repo"
 )
 
 const (
@@ -55,9 +57,30 @@ func minimalCard() agentv1alpha1.AgentCardOverride {
 
 // newAgentReconciler creates a new AgentReconciler using the test k8sClient.
 func newAgentReconciler() *AgentReconciler {
+	c := k8sClient
+	scheme := c.Scheme()
+
+	agentToolRepo := &repo.AgentToolRepoImpl{Client: c}
+	instructionRepo := &repo.InstructionRepoImpl{Client: c}
+
+	appService := agentapp.NewService(agentapp.Deps{
+		AgentTools:   agentToolRepo,
+		AgentToolW:   agentToolRepo,
+		Models:       &repo.ModelRepoImpl{Client: c},
+		Providers:    &repo.ModelProviderRepoImpl{Client: c},
+		Instructions: instructionRepo,
+		InstructionW: instructionRepo,
+		ConfigMaps:   &repo.ConfigMapRepoImpl{Client: c},
+		Deployments:  &repo.DeploymentRepoImpl{Client: c},
+		Services:     &repo.ServiceRepoImpl{Client: c},
+		Secrets:      &repo.SecretRepoImpl{Client: c},
+		OwnerSetter:  &repo.OwnerSetterImpl{Scheme: scheme},
+	})
+
 	return &AgentReconciler{
-		Client: k8sClient,
-		Scheme: k8sClient.Scheme(),
+		Client:     c,
+		Scheme:     scheme,
+		AppService: appService,
 	}
 }
 
