@@ -215,17 +215,18 @@ func main() {
 	agentToolRepo := &repo.AgentToolRepoImpl{Client: k8sClient}
 	instructionRepo := &repo.InstructionRepoImpl{Client: k8sClient}
 	agentAppService := agentapp.NewService(agentapp.Deps{
-		AgentTools:   agentToolRepo,
-		AgentToolW:   agentToolRepo,
-		Models:       &repo.ModelRepoImpl{Client: k8sClient},
-		Providers:    &repo.ModelProviderRepoImpl{Client: k8sClient},
-		Instructions: instructionRepo,
-		InstructionW: instructionRepo,
-		ConfigMaps:   &repo.ConfigMapRepoImpl{Client: k8sClient},
-		Deployments:  &repo.DeploymentRepoImpl{Client: k8sClient},
-		Services:     &repo.ServiceRepoImpl{Client: k8sClient},
-		Secrets:      &repo.SecretRepoImpl{Client: k8sClient},
-		OwnerSetter:  &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
+		AgentTools:    agentToolRepo,
+		AgentToolW:    agentToolRepo,
+		Models:        &repo.ModelRepoImpl{Client: k8sClient},
+		Providers:     &repo.ModelProviderRepoImpl{Client: k8sClient},
+		Instructions:  instructionRepo,
+		InstructionW:  instructionRepo,
+		ConfigMaps:    &repo.ConfigMapRepoImpl{Client: k8sClient},
+		Deployments:   &repo.DeploymentRepoImpl{Client: k8sClient},
+		Services:      &repo.ServiceRepoImpl{Client: k8sClient},
+		Secrets:       &repo.SecretRepoImpl{Client: k8sClient},
+		ScaledObjects: &repo.ScaledObjectRepoImpl{Client: k8sClient},
+		OwnerSetter:   &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
 	})
 
 	if err := (&controller.AgentReconciler{

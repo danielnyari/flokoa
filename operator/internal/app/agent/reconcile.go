@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
@@ -19,17 +21,18 @@ import (
 
 // Deps holds the repository dependencies for the agent application service.
 type Deps struct {
-	AgentTools   repo.AgentToolReader
-	AgentToolW   repo.AgentToolWriter
-	Models       repo.ModelReader
-	Providers    repo.ModelProviderReader
-	Instructions repo.InstructionReader
-	InstructionW repo.InstructionWriter
-	ConfigMaps   repo.ConfigMapRepo
-	Deployments  repo.DeploymentRepo
-	Services     repo.ServiceRepo
-	Secrets      repo.SecretReader
-	OwnerSetter  repo.OwnerSetter
+	AgentTools    repo.AgentToolReader
+	AgentToolW    repo.AgentToolWriter
+	Models        repo.ModelReader
+	Providers     repo.ModelProviderReader
+	Instructions  repo.InstructionReader
+	InstructionW  repo.InstructionWriter
+	ConfigMaps    repo.ConfigMapRepo
+	Deployments   repo.DeploymentRepo
+	Services      repo.ServiceRepo
+	Secrets       repo.SecretReader
+	ScaledObjects repo.ScaledObjectRepo
+	OwnerSetter   repo.OwnerSetter
 }
 
 // ReconcileResult holds the result of a reconciliation.
@@ -171,6 +174,12 @@ func (s *Service) Reconcile(ctx context.Context, agent *agentv1alpha1.Agent) Rec
 		logger.Error(err, "Failed to reconcile Service")
 		agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
 		return ReconcileResult{Requeue: true, Error: err}
+	}
+
+	// Reconcile KEDA ScaledObject (if scaling is configured)
+	if err := s.reconcileScaledObject(ctx, agent); err != nil {
+		logger.Error(err, "Failed to reconcile ScaledObject")
+		// ScaledObject failures are non-fatal — agent still runs, just without autoscaling
 	}
 
 	// Update status
@@ -321,6 +330,76 @@ func (s *Service) reconcileTemplateConfigMap(ctx context.Context, agent *agentv1
 	}
 
 	return configMapName, nil
+}
+
+// reconcileScaledObject creates, updates, or deletes the KEDA ScaledObject for the agent.
+// When agent.Spec.Scaling is set, a ScaledObject is created targeting the agent's Deployment.
+// When agent.Spec.Scaling is removed, any existing ScaledObject is cleaned up.
+func (s *Service) reconcileScaledObject(ctx context.Context, agent *agentv1alpha1.Agent) error {
+	if s.deps.ScaledObjects == nil {
+		// ScaledObject repo not configured — skip silently
+		return nil
+	}
+
+	scaledObjectName := builder.ScaledObjectName(agent.Name)
+
+	if agent.Spec.Scaling == nil {
+		// Scaling removed — delete ScaledObject if it exists and clear status
+		if agent.Status.ScaledObjectName != "" {
+			if err := s.deps.ScaledObjects.DeleteScaledObject(ctx, types.NamespacedName{
+				Name:      agent.Status.ScaledObjectName,
+				Namespace: agent.Namespace,
+			}); err != nil {
+				agentdomain.SetCondition(agent, agentdomain.ConditionTypeScalingReady,
+					metav1.ConditionFalse, agentdomain.ReasonScaledObjectFailed,
+					fmt.Sprintf("Failed to delete ScaledObject: %v", err))
+				return err
+			}
+			agent.Status.ScaledObjectName = ""
+			agentdomain.SetCondition(agent, agentdomain.ConditionTypeScalingReady,
+				metav1.ConditionFalse, agentdomain.ReasonScaledObjectRemoved, "ScaledObject removed")
+		}
+		return nil
+	}
+
+	desired := builder.BuildScaledObject(builder.ScaledObjectParams{
+		AgentName:      agent.Name,
+		AgentNamespace: agent.Namespace,
+		Labels:         agentdomain.Labels(agent),
+		DeploymentName: agent.Name,
+		Scaling:        *agent.Spec.Scaling,
+	})
+
+	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
+		return fmt.Errorf("failed to set owner reference on ScaledObject: %w", err)
+	}
+
+	if err := s.deps.ScaledObjects.EnsureScaledObject(ctx, desired); err != nil {
+		// Detect KEDA not installed (CRD missing)
+		if isNoMatchError(err) {
+			agentdomain.SetCondition(agent, agentdomain.ConditionTypeScalingReady,
+				metav1.ConditionFalse, agentdomain.ReasonKEDANotInstalled,
+				"KEDA CRDs not found in cluster — install KEDA to enable autoscaling")
+			return err
+		}
+		agentdomain.SetCondition(agent, agentdomain.ConditionTypeScalingReady,
+			metav1.ConditionFalse, agentdomain.ReasonScaledObjectFailed,
+			fmt.Sprintf("Failed to reconcile ScaledObject: %v", err))
+		return err
+	}
+
+	agent.Status.ScaledObjectName = scaledObjectName
+	agentdomain.SetCondition(agent, agentdomain.ConditionTypeScalingReady,
+		metav1.ConditionTrue, agentdomain.ReasonScaledObjectReady,
+		fmt.Sprintf("ScaledObject %s is configured", scaledObjectName))
+
+	return nil
+}
+
+// isNoMatchError checks if an error is a "no matches for kind" error,
+// indicating the CRD is not installed.
+func isNoMatchError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no matches for kind")
 }
 
 // templateConfig represents the configuration written to the managed agent's ConfigMap.

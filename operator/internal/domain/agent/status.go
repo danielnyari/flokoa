@@ -14,22 +14,27 @@ const (
 	ConditionTypeModelReady        = "ModelReady"
 	ConditionTypeModelSecretsReady = "ModelSecretsReady"
 	ConditionTypeInstructionReady  = "InstructionReady"
+	ConditionTypeScalingReady      = "ScalingReady"
 )
 
 // Condition reason constants for Agent status.
 const (
-	ReasonDeploymentReady      = "DeploymentReady"
-	ReasonDeploymentNotReady   = "DeploymentNotReady"
-	ReasonReconcileError       = "ReconcileError"
-	ReasonValidationFailed     = "ValidationFailed"
-	ReasonToolsSynced          = "ToolsSynced"
-	ReasonToolSyncFailed       = "ToolSyncFailed"
-	ReasonModelResolved        = "ModelResolved"
-	ReasonModelSecretsResolved = "ModelSecretsResolved"
-	ReasonModelSecretsMissing  = "ModelSecretsMissing"
-	ReasonModelResolveFailed   = "ModelResolveFailed"
-	ReasonInstructionResolved  = "InstructionResolved"
+	ReasonDeploymentReady       = "DeploymentReady"
+	ReasonDeploymentNotReady    = "DeploymentNotReady"
+	ReasonReconcileError        = "ReconcileError"
+	ReasonValidationFailed      = "ValidationFailed"
+	ReasonToolsSynced           = "ToolsSynced"
+	ReasonToolSyncFailed        = "ToolSyncFailed"
+	ReasonModelResolved         = "ModelResolved"
+	ReasonModelSecretsResolved  = "ModelSecretsResolved"
+	ReasonModelSecretsMissing   = "ModelSecretsMissing"
+	ReasonModelResolveFailed    = "ModelResolveFailed"
+	ReasonInstructionResolved   = "InstructionResolved"
 	ReasonInstructionSyncFailed = "InstructionSyncFailed"
+	ReasonScaledObjectReady     = "ScaledObjectReady"
+	ReasonScaledObjectFailed    = "ScaledObjectFailed"
+	ReasonScaledObjectRemoved   = "ScaledObjectRemoved"
+	ReasonKEDANotInstalled      = "KEDANotInstalled"
 )
 
 // SetCondition updates or adds a condition to the Agent status.
