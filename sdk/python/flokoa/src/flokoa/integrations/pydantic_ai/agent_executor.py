@@ -1,14 +1,10 @@
 import logging
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, override
+from typing import TYPE_CHECKING, Any, override
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
-from pydantic import BaseModel
 from pydantic_ai import FunctionToolset
-from pydantic_ai.providers import infer_provider_class
-from pydantic_ai.settings import ModelSettings, merge_model_settings
 
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.cache import ConfigCache
@@ -20,7 +16,6 @@ from flokoa.exceptions import (
 from flokoa.tools import ToolsetFactory, default_factory
 from flokoa_types import (
     IntegrationType,
-    ModelParameters,
     ToolType,
 )
 from flokoa_types import (
@@ -28,7 +23,7 @@ from flokoa_types import (
 )
 from flokoa_types.modelconfig import ProviderType
 
-from .models import PROVIDER_MODEL_MAP
+from .model_factory import create_model, create_provider
 
 
 def _openapi_builder(tool_definition: FlokoaToolDefinition) -> list[Any]:
@@ -136,10 +131,9 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         self._cached_tool_definitions = None
 
     def _create_provider(self, provider_type: ProviderType) -> "Provider":
-        if self.provider_config is None:
-            raise ProviderNotConfiguredError(f"Provider config is required to create provider '{provider_type.value}'")
-        provider_cls = infer_provider_class(provider=provider_type.value)
-        return provider_cls(**self.provider_config.model_dump())
+        if self.model_config is None:
+            raise ProviderNotConfiguredError(f"Model config is required to create provider '{provider_type.value}'")
+        return create_provider(self.model_config)
 
     def _create_model(self, provider: "Provider") -> "Model":
         if self.model_config is None:
@@ -147,74 +141,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
         if self.model_provider is None:
             raise ProviderNotConfiguredError("Model provider is required to create a model")
 
-        provider_entry = PROVIDER_MODEL_MAP.get(self.model_provider)
-        if not provider_entry:
-            raise ModelNotConfiguredError(f"No model mapping found for provider '{self.model_provider}'")
-
-        model_cls = provider_entry["model_class"]
-        model_settings = self._build_model_settings()
-
-        if model_settings is None:
-            raise ModelNotConfiguredError("Model settings could not be built from configuration")
-
-        return model_cls(self.model_config.model, provider=provider, settings=model_settings)
-
-    def _build_model_settings(self) -> ModelSettings | None:
-        """Build pydantic_ai ModelSettings from flokoa ModelParameters."""
-        if not self.model_config or not self.model_config.parameters:
-            return None
-
-        params = self.model_config.parameters
-        common_settings = self._params_to_settings(params)
-        provider_settings = self._provider_params_to_settings()
-
-        return merge_model_settings(common_settings, provider_settings)
-
-    def _params_to_settings(self, params: ModelParameters) -> ModelSettings:
-        """Convert common ModelParameters to ModelSettings dict."""
-        # Mapping of param attribute -> (settings key, optional transform)
-        param_mappings: list[tuple[str, str, Callable[[Any], Any] | None]] = [
-            ("max_tokens", "max_tokens", None),
-            ("temperature", "temperature", float),
-            ("top_p", "top_p", float),
-            ("seed", "seed", None),
-            ("presence_penalty", "presence_penalty", float),
-            ("frequency_penalty", "frequency_penalty", float),
-            ("logit_bias", "logit_bias", None),
-            ("stop_sequences", "stop_sequences", None),
-            ("extra_headers", "extra_headers", None),
-            ("extra_body", "extra_body", None),
-            ("parallel_tool_calls", "parallel_tool_calls", None),
-            ("time_out", "timeout", float),
-        ]
-
-        settings: ModelSettings = {}
-        for attr, key, transform in param_mappings:
-            value = getattr(params, attr)
-            if value is not None:
-                settings[key] = transform(value) if transform else value
-
-        return settings
-
-    def _provider_params_to_settings(self) -> ModelSettings | None:
-        """Convert provider-specific parameters to prefixed ModelSettings dict."""
-        provider_params = self.provider_model_parameters
-        if not provider_params or not self.model_provider:
-            return None
-
-        prefix = self.model_provider.value + "_"
-        settings: ModelSettings = {}
-
-        for field_name in provider_params.__pydantic_fields__:
-            value = getattr(provider_params, field_name)
-            if value is not None:
-                if isinstance(value, Enum):
-                    value = value.value
-                elif isinstance(value, BaseModel):
-                    value = value.model_dump(exclude_none=True)
-                settings[prefix + field_name] = value
-
-        return settings if settings else None
+        return create_model(self.model_config, provider)
 
     @override
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:

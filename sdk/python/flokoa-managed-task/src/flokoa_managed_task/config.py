@@ -1,17 +1,18 @@
 """Configuration loading for managed tasks.
 
-Loads TaskConfig from the FLOKOA_TASK_CONFIG env var,
-ModelConfig from /etc/flokoa/model.json, and instruction
-text from /etc/flokoa/instruction.txt.
+Loads TaskConfig from the FLOKOA_TASK_CONFIG env var.
+Model and instruction loading is delegated to the flokoa SDK utils.
 """
 
 import os
 
-from flokoa_types import ModelConfig, TaskConfig
+from flokoa.utils import load_instruction, load_model_config
+from flokoa_types import TaskConfig
 
 TASK_CONFIG_ENV = "FLOKOA_TASK_CONFIG"
-MODEL_CONFIG_PATH = "/etc/flokoa/model.json"
-INSTRUCTION_PATH = "/etc/flokoa/instruction.txt"
+
+# Re-export so existing imports from this module continue to work.
+__all__ = ["load_instruction", "load_model_config", "load_task_config"]
 
 
 def load_task_config() -> TaskConfig:
@@ -24,21 +25,3 @@ def load_task_config() -> TaskConfig:
     if not raw:
         raise RuntimeError(f"{TASK_CONFIG_ENV} environment variable is not set")
     return TaskConfig.model_validate_json(raw)
-
-
-def load_model_config() -> ModelConfig | None:
-    """Load ModelConfig from /etc/flokoa/model.json if present."""
-    path = os.environ.get("FLOKOA_MODEL_CONFIG_PATH", MODEL_CONFIG_PATH)
-    if not os.path.exists(path):
-        return None
-    with open(path) as f:
-        return ModelConfig.model_validate_json(f.read())
-
-
-def load_instruction() -> str | None:
-    """Load instruction text from /etc/flokoa/instruction.txt if present."""
-    path = os.environ.get("FLOKOA_INSTRUCTION_PATH", INSTRUCTION_PATH)
-    if not os.path.exists(path):
-        return None
-    with open(path) as f:
-        return f.read()

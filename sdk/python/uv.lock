@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -880,18 +880,18 @@ version = "0.1.0"
 source = { editable = "flokoa-managed-task" }
 dependencies = [
     { name = "a2a-sdk" },
+    { name = "flokoa", extra = ["pydantic-ai"] },
     { name = "flokoa-types" },
     { name = "marvin" },
-    { name = "pydantic-ai" },
     { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", specifier = ">=0.3.22" },
+    { name = "flokoa", extras = ["pydantic-ai"], editable = "flokoa" },
     { name = "flokoa-types", editable = "flokoa-types" },
     { name = "marvin", specifier = ">=2.0" },
-    { name = "pydantic-ai", specifier = ">=0.1" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
 
