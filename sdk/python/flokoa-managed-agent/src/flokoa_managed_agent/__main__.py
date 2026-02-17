@@ -13,10 +13,10 @@ from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from fastapi import FastAPI
-
 from flokoa.utils import load_agent_card
 from flokoa.utils.agent_card_builder import AgentCardBuilder
 from flokoa.utils.router import router as health_router
+
 from flokoa_managed_agent.agent_executor import TemplatedPydanticAIAgentExecutor
 from flokoa_managed_agent.config import load_templated_config
 

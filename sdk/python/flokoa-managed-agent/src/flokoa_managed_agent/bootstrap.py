@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pydantic_ai import Agent, StructuredDict
-
 from flokoa_types import TemplateConfig
+from pydantic_ai import Agent, StructuredDict
 
 logger = logging.getLogger(__name__)
 
@@ -42,4 +41,4 @@ class TemplatedAgentBuilder:
     def from_config(cls, config: TemplateConfig) -> Agent[None, dict[str, Any]]:
         """Create a builder instance from the given config."""
         instance = cls(config=config)
-        return Agent(output_type=instance.output_schema)
+        return Agent(output_type=instance.output_schema, instrument=True)
