@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	modeldomain "github.com/danielnyari/flokoa/internal/domain/model"
 )
 
 // Condition types for Model
@@ -112,7 +113,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Validate that provider-specific parameters match the provider type
-	if err := r.validateProviderParams(&model, modelProvider.Status.Provider); err != nil {
+	if err := modeldomain.ValidateProviderParams(model.Spec.Parameters, modelProvider.Status.Provider); err != nil {
 		r.setNotReady(&model, ModelReasonProviderParamsMismatch, err.Error())
 		if err := r.Status().Update(ctx, &model); err != nil {
 			return ctrl.Result{}, err
@@ -171,46 +172,6 @@ func (r *ModelReconciler) setNotReady(model *agentv1alpha1.Model, reason, messag
 		Reason:             reason,
 		Message:            message,
 	})
-}
-
-// validateProviderParams validates that provider-specific parameters match the provider type
-func (r *ModelReconciler) validateProviderParams(model *agentv1alpha1.Model, providerType agentv1alpha1.ProviderType) error {
-	if model.Spec.Parameters == nil {
-		return nil // No parameters to validate
-	}
-
-	params := model.Spec.Parameters
-
-	// Count how many provider-specific param blocks are set
-	count := 0
-	var setProvider agentv1alpha1.ProviderType
-
-	if params.OpenAI != nil {
-		count++
-		setProvider = agentv1alpha1.ProviderTypeOpenAI
-	}
-	if params.Anthropic != nil {
-		count++
-		setProvider = agentv1alpha1.ProviderTypeAnthropic
-	}
-	if params.Google != nil {
-		count++
-		setProvider = agentv1alpha1.ProviderTypeGoogle
-	}
-	if params.Bedrock != nil {
-		count++
-		setProvider = agentv1alpha1.ProviderTypeBedrock
-	}
-
-	if count > 1 {
-		return fmt.Errorf("only one provider-specific parameters block can be set, found %d", count)
-	}
-
-	if count == 1 && setProvider != providerType {
-		return fmt.Errorf("provider-specific parameters (%s) do not match the ModelProvider type (%s)", setProvider, providerType)
-	}
-
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

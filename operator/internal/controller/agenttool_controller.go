@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	tooldomain "github.com/danielnyari/flokoa/internal/domain/tool"
 )
 
 const (
@@ -130,42 +131,14 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // validateSpec validates the AgentTool spec including the OpenAPI schema source
 func (r *AgentToolReconciler) validateSpec(ctx context.Context, agentTool *agentv1alpha1.AgentTool) error {
-	if agentTool.Spec.OpenApi == nil {
-		return fmt.Errorf("openApi is required when type is %q", agentTool.Spec.Type)
+	// Pure spec validation (no I/O)
+	if err := tooldomain.ValidateSpec(agentTool); err != nil {
+		return err
 	}
 
-	// Validate that exactly one of URL or ServiceRef is specified
-	openApi := agentTool.Spec.OpenApi
-	if openApi.URL == "" && openApi.ServiceRef == nil {
-		return fmt.Errorf("either url or serviceRef must be specified")
-	}
-	if openApi.URL != "" && openApi.ServiceRef != nil {
-		return fmt.Errorf("url and serviceRef are mutually exclusive")
-	}
-
-	// Validate the OpenAPI schema source
-	schema := &openApi.OpenApiSchema
-	sources := 0
-	if schema.Value != nil && schema.Value.Raw != nil {
-		sources++
-	}
-	if schema.ValueFrom != nil {
-		sources++
-	}
-	if schema.EndpointPath != "" {
-		sources++
-	}
-
-	if sources == 0 {
-		return fmt.Errorf("openApiSchema is required: exactly one of value, valueFrom, or endpointPath must be specified")
-	}
-	if sources > 1 {
-		return fmt.Errorf("openApiSchema: only one of value, valueFrom, or endpointPath may be specified")
-	}
-
-	// Validate valueFrom ConfigMap reference if specified
-	if schema.ValueFrom != nil {
-		if err := r.validateConfigMapRef(ctx, agentTool.Namespace, schema.ValueFrom); err != nil {
+	// I/O validation: validate ConfigMap reference if specified
+	if agentTool.Spec.OpenApi != nil && agentTool.Spec.OpenApi.OpenApiSchema.ValueFrom != nil {
+		if err := r.validateConfigMapRef(ctx, agentTool.Namespace, agentTool.Spec.OpenApi.OpenApiSchema.ValueFrom); err != nil {
 			return fmt.Errorf("openApiSchema.valueFrom validation failed: %w", err)
 		}
 	}

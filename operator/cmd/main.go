@@ -39,7 +39,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	agentapp "github.com/danielnyari/flokoa/internal/app/agent"
 	"github.com/danielnyari/flokoa/internal/controller"
+	"github.com/danielnyari/flokoa/internal/infra/repo"
 	webhookagentv1alpha1 "github.com/danielnyari/flokoa/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -208,9 +210,28 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Build repository implementations for agent app service.
+	k8sClient := mgr.GetClient()
+	agentToolRepo := &repo.AgentToolRepoImpl{Client: k8sClient}
+	instructionRepo := &repo.InstructionRepoImpl{Client: k8sClient}
+	agentAppService := agentapp.NewService(agentapp.Deps{
+		AgentTools:   agentToolRepo,
+		AgentToolW:   agentToolRepo,
+		Models:       &repo.ModelRepoImpl{Client: k8sClient},
+		Providers:    &repo.ModelProviderRepoImpl{Client: k8sClient},
+		Instructions: instructionRepo,
+		InstructionW: instructionRepo,
+		ConfigMaps:   &repo.ConfigMapRepoImpl{Client: k8sClient},
+		Deployments:  &repo.DeploymentRepoImpl{Client: k8sClient},
+		Services:     &repo.ServiceRepoImpl{Client: k8sClient},
+		Secrets:      &repo.SecretRepoImpl{Client: k8sClient},
+		OwnerSetter:  &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
+	})
+
 	if err := (&controller.AgentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		AppService: agentAppService,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Agent")
 		os.Exit(1)

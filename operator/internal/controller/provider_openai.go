@@ -1,32 +1,6 @@
 package controller
 
-import (
-	corev1 "k8s.io/api/core/v1"
+import modeldomain "github.com/danielnyari/flokoa/internal/domain/model"
 
-	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
-)
-
-// OpenAIProviderHandler handles OpenAI model configuration.
-type OpenAIProviderHandler struct{}
-
-func (h *OpenAIProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error) {
-	config := buildBaseConfig(provider, model)
-
-	// Add API key as secret env var
-	addAPIKeyEnvVar(config, provider.Spec.APIKeySecretRef, "OPENAI_API_KEY")
-
-	// Add OpenAI-specific environment variables for SDK compatibility
-	if provider.Spec.OpenAI != nil {
-		openaiSpec := provider.Spec.OpenAI
-
-		if openaiSpec.BaseURL != "" {
-			config.EnvVars = append(config.EnvVars, corev1.EnvVar{
-				Name:  "OPENAI_BASE_URL",
-				Value: openaiSpec.BaseURL,
-			})
-		}
-
-	}
-
-	return config, nil
-}
+// OpenAIProviderHandler is a type alias for backwards compatibility.
+type OpenAIProviderHandler = modeldomain.OpenAIProviderHandler

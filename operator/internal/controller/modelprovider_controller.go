@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	modelproviderdomain "github.com/danielnyari/flokoa/internal/domain/modelprovider"
 )
 
 // Condition types for ModelProvider
@@ -70,7 +71,7 @@ func (r *ModelProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	logger.Info("Reconciling ModelProvider", "name", modelProvider.Name)
 
 	// Validate that exactly one provider is set
-	providerType, err := r.validateProvider(&modelProvider)
+	providerType, err := modelproviderdomain.ValidateProvider(&modelProvider)
 	if err != nil {
 		// Set condition to indicate validation failure
 		meta.SetStatusCondition(&modelProvider.Status.Conditions, metav1.Condition{
@@ -123,38 +124,6 @@ func (r *ModelProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	logger.Info("ModelProvider reconciled successfully", "name", modelProvider.Name, "provider", providerType)
 	return ctrl.Result{}, nil
-}
-
-// validateProvider checks that exactly one provider block is set and returns the provider type
-func (r *ModelProviderReconciler) validateProvider(mp *agentv1alpha1.ModelProvider) (agentv1alpha1.ProviderType, error) {
-	count := 0
-	var providerType agentv1alpha1.ProviderType
-
-	if mp.Spec.OpenAI != nil {
-		count++
-		providerType = agentv1alpha1.ProviderTypeOpenAI
-	}
-	if mp.Spec.Anthropic != nil {
-		count++
-		providerType = agentv1alpha1.ProviderTypeAnthropic
-	}
-	if mp.Spec.Google != nil {
-		count++
-		providerType = agentv1alpha1.ProviderTypeGoogle
-	}
-	if mp.Spec.Bedrock != nil {
-		count++
-		providerType = agentv1alpha1.ProviderTypeBedrock
-	}
-
-	if count == 0 {
-		return "", fmt.Errorf("exactly one of openai, anthropic, google, or bedrock must be specified")
-	}
-	if count > 1 {
-		return "", fmt.Errorf("only one of openai, anthropic, google, or bedrock can be specified, found %d", count)
-	}
-
-	return providerType, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
