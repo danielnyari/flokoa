@@ -55,9 +55,10 @@ def run(
 def _start_integration(module: str, host: str, port: int, framework: IntegrationType) -> None:
     """Start a user-provided agent with an A2A server."""
     # Initialize OpenTelemetry if the tracing extra is installed.
-    from flokoa.telemetry import init_telemetry, instrument_fastapi
+    from flokoa.telemetry import init_telemetry, instrument_fastapi, instrument_pydantic_ai
 
     init_telemetry("flokoa-agent", restore_context_from_env=False)
+    instrument_pydantic_ai()
 
     cwd = os.getcwd()
     if cwd not in sys.path:

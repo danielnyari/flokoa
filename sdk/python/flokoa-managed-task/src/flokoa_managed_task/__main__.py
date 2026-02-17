@@ -28,9 +28,10 @@ def main() -> None:
     # Initialize OpenTelemetry and restore the parent trace context from the
     # FLOKOA_TRACEPARENT env var injected by the Argo workflow parameter.
     # This is a one-shot container, so we attach the context at process level.
-    from flokoa.telemetry import init_telemetry
+    from flokoa.telemetry import init_telemetry, instrument_pydantic_ai
 
     init_telemetry("flokoa-managed-task", restore_context_from_env=True)
+    instrument_pydantic_ai()
 
     task_config = load_task_config()
     logger.info("Loaded task config: type=%s", task_config.type.value)

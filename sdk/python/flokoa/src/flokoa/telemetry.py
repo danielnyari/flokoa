@@ -81,6 +81,24 @@ def init_telemetry(
             logger.info("Restored trace context from %s", _TRACEPARENT_ENV)
 
 
+def instrument_pydantic_ai() -> None:
+    """Enable OpenTelemetry instrumentation for all PydanticAI agents.
+
+    Calls ``Agent.instrument_all()`` so that every agent run, model request,
+    and tool call emits OTEL spans following the GenAI semantic conventions.
+
+    If PydanticAI is not installed this is a no-op.
+    """
+    try:
+        from pydantic_ai import Agent
+    except ImportError:
+        logger.debug("pydantic-ai not installed — skipping agent instrumentation")
+        return
+
+    Agent.instrument_all()
+    logger.info("PydanticAI OpenTelemetry instrumentation enabled")
+
+
 def instrument_fastapi(app: FastAPI) -> None:
     """Instrument a FastAPI application with OpenTelemetry.
 

@@ -31,9 +31,10 @@ def main() -> None:
     # A2A server) we do NOT restore context from the env var — each incoming
     # HTTP request carries its own traceparent header which is extracted by the
     # FastAPI OTEL instrumentation below.
-    from flokoa.telemetry import init_telemetry, instrument_fastapi
+    from flokoa.telemetry import init_telemetry, instrument_fastapi, instrument_pydantic_ai
 
     init_telemetry("flokoa-managed-agent", restore_context_from_env=False)
+    instrument_pydantic_ai()
 
     host = os.environ.get("FLOKOA_HOST", "0.0.0.0")  # noqa: S104
     port = int(os.environ.get("FLOKOA_PORT", "8080"))
