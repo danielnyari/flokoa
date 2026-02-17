@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -42,6 +43,7 @@ import (
 	agentapp "github.com/danielnyari/flokoa/internal/app/agent"
 	"github.com/danielnyari/flokoa/internal/controller"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
+	"github.com/danielnyari/flokoa/internal/telemetry"
 	webhookagentv1alpha1 "github.com/danielnyari/flokoa/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -96,6 +98,18 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Initialize OpenTelemetry distributed tracing.
+	otelShutdown, err := telemetry.Init(context.Background(), "flokoa-operator")
+	if err != nil {
+		setupLog.Error(err, "failed to initialize OpenTelemetry")
+		os.Exit(1)
+	}
+	defer func() {
+		if shutdownErr := otelShutdown(context.Background()); shutdownErr != nil {
+			setupLog.Error(shutdownErr, "failed to shut down OpenTelemetry")
+		}
+	}()
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

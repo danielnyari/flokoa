@@ -13,8 +13,13 @@ import (
 	"github.com/a2aproject/a2a-go/a2aclient"
 	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	executor "github.com/argoproj/argo-workflows/v3/pkg/plugins/executor"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/danielnyari/flokoa/internal/telemetry"
 )
 
 // Plugin implements the Argo Workflows executor plugin for A2A protocol
@@ -44,6 +49,20 @@ func (p *Plugin) ExecuteTemplate(ctx context.Context, args executor.ExecuteTempl
 		return failedReply(fmt.Sprintf("failed to parse A2A spec: %v", err)), nil
 	}
 
+	// Restore the distributed trace context from the traceparent injected by
+	// the controller into the Argo workflow parameter.
+	if spec.Traceparent != "" {
+		ctx = telemetry.ContextFromTraceparent(ctx, spec.Traceparent)
+	}
+
+	ctx, span := telemetry.Tracer("flokoa.a2a-plugin").Start(ctx, "a2a.execute_template",
+		trace.WithAttributes(
+			attribute.String("a2a.agent", spec.Agent),
+			attribute.String("a2a.template", args.Template.Name),
+		),
+	)
+	defer span.End()
+
 	// Use workflow namespace as default if not specified
 	namespace := spec.Namespace
 	if namespace == "" {
@@ -62,8 +81,11 @@ func (p *Plugin) ExecuteTemplate(ctx context.Context, args executor.ExecuteTempl
 	// New task: resolve endpoint and send
 	endpoint, err := p.resolver.Resolve(ctx, spec.Agent, namespace)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to resolve agent endpoint")
 		return failedReply(fmt.Sprintf("failed to resolve agent endpoint: %v", err)), nil
 	}
+	span.SetAttributes(attribute.String("a2a.endpoint", endpoint))
 
 	return p.sendTask(ctx, key, spec, endpoint)
 }
@@ -187,8 +209,28 @@ func buildA2ASendConfig(cfg *A2ASendConfig) *a2a.MessageSendConfig {
 
 // sendTask sends a new task to the A2A agent
 func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoint string) (*executor.ExecuteTemplateReply, error) {
+	ctx, span := telemetry.Tracer("flokoa.a2a-plugin").Start(ctx, "a2a.send",
+		trace.WithAttributes(
+			attribute.String("a2a.agent", spec.Agent),
+			attribute.String("a2a.endpoint", endpoint),
+		),
+	)
+	defer span.End()
+
 	// Build the A2A message from structured parts
 	message := buildA2AMessage(&spec.Message)
+
+	// Inject the child span's traceparent into the A2A message metadata so the
+	// downstream agent can restore the trace context even if HTTP header
+	// propagation is not available.
+	childTraceparent := telemetry.ExtractTraceparent(ctx)
+	if childTraceparent != "" {
+		if message.Metadata == nil {
+			message.Metadata = make(map[string]any)
+		}
+		message.Metadata["traceparent"] = childTraceparent
+	}
+
 	params := &a2a.MessageSendParams{
 		Message: message,
 		Config:  buildA2ASendConfig(spec.Config),
@@ -273,15 +315,25 @@ func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoi
 
 // pollTask polls an existing A2A task for completion
 func (p *Plugin) pollTask(ctx context.Context, key string, spec *A2ASpec, progress *ProgressState) (*executor.ExecuteTemplateReply, error) {
+	_, span := telemetry.Tracer("flokoa.a2a-plugin").Start(ctx, "a2a.poll",
+		trace.WithAttributes(
+			attribute.String("a2a.task_id", progress.TaskID),
+			attribute.String("a2a.endpoint", progress.Endpoint),
+		),
+	)
+	defer span.End()
+
 	// Check for timeout
 	if progress.IsTimedOut() {
 		p.tasks.Delete(key)
+		span.SetStatus(codes.Error, "task timed out")
 		return failedReply(fmt.Sprintf("A2A task timed out after %v", progress.Timeout)), nil
 	}
 
 	// Create A2A client
 	a2aClient, err := p.createClient(ctx, progress.Endpoint)
 	if err != nil {
+		span.RecordError(err)
 		return failedReply(fmt.Sprintf("failed to create A2A client: %v", err)), nil
 	}
 
@@ -291,8 +343,11 @@ func (p *Plugin) pollTask(ctx context.Context, key string, spec *A2ASpec, progre
 	})
 	if err != nil {
 		log.Printf("A2A get task failed: endpoint=%s taskID=%s error=%v", progress.Endpoint, progress.TaskID, err)
+		span.RecordError(err)
 		return failedReply(fmt.Sprintf("failed to get A2A task: %v", err)), nil
 	}
+
+	span.SetAttributes(attribute.String("a2a.task_state", string(task.Status.State)))
 
 	// Check if task is in terminal state
 	if task.Status.State.Terminal() {
