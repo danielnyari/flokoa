@@ -91,14 +91,13 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 
 	// Inject traceparent as a workflow-level parameter so it is available to
 	// all templates via {{workflow.parameters._flokoa_traceparent}}.
-	if traceparent != "" {
-		wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, wfv1.Parameter{
-			Name:  traceparentWorkflowParam,
-			Value: wfv1.AnyStringPtr(traceparent),
-		})
-	}
+	wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, wfv1.Parameter{
+		Name:  traceparentWorkflowParam,
+		Value: wfv1.AnyStringPtr(traceparent),
+	})
 
 	// Workflow-level parameters
+	if len(awf.Spec.Params) > 0 {
 	if len(awf.Spec.Params) > 0 {
 		for _, p := range awf.Spec.Params {
 			param := wfv1.Parameter{
