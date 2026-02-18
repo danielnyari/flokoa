@@ -160,12 +160,24 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 E2E_NAMESPACE ?= flokoa-system
+MINIKUBE ?= minikube
+PETSTORE_IMAGE ?= localhost/petstore:test
+PETSTORE_DOCKERFILE ?= test/e2e/testdata/petstore.Dockerfile
+PETSTORE_BUILD_CONTEXT ?= test/e2e/testdata/
 
 .PHONY: deploy-e2e-testdata
 deploy-e2e-testdata: kustomize ## Create the OpenAI secret from OPENAI_API_KEY and apply e2e testdata.
 ifndef OPENAI_API_KEY
 	$(error OPENAI_API_KEY is not set)
 endif
+	@command -v $(MINIKUBE) >/dev/null 2>&1 || { \
+		echo "Minikube is not installed. Please install Minikube manually."; \
+		exit 1; \
+	}
+	@echo "Building petstore image $(PETSTORE_IMAGE)..."
+	$(CONTAINER_TOOL) build -f $(PETSTORE_DOCKERFILE) -t $(PETSTORE_IMAGE) $(PETSTORE_BUILD_CONTEXT)
+	@echo "Loading petstore image into minikube..."
+	$(MINIKUBE) image load $(PETSTORE_IMAGE)
 	$(KUBECTL) create secret generic openai-api-key \
 		--namespace=$(E2E_NAMESPACE) \
 		--from-literal=api-key=$(OPENAI_API_KEY) \
