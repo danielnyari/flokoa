@@ -6,6 +6,7 @@ WORKDIR /workspace
 # Copy the main operator module (needed for replace directive)
 COPY go.mod go.sum ./
 COPY api/ api/
+COPY internal/ internal/
 
 # Copy plugin go mod files
 COPY plugins/a2a/go.mod plugins/a2a/go.sum ./plugins/a2a/

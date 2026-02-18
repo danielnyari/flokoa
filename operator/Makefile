@@ -161,9 +161,11 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 
 E2E_NAMESPACE ?= flokoa-system
 MINIKUBE ?= minikube
-PETSTORE_IMAGE ?= localhost/petstore:test
+PETSTORE_IMAGE ?= petstore:test
 PETSTORE_DOCKERFILE ?= test/e2e/testdata/petstore.Dockerfile
 PETSTORE_BUILD_CONTEXT ?= test/e2e/testdata/
+PETSTORE_IMAGE_PLATFORM ?= linux/amd64
+E2E_IMAGE_BUILD_MODE ?= minikube
 
 .PHONY: deploy-e2e-testdata
 deploy-e2e-testdata: kustomize ## Create the OpenAI secret from OPENAI_API_KEY and apply e2e testdata.
@@ -175,9 +177,18 @@ endif
 		exit 1; \
 	}
 	@echo "Building petstore image $(PETSTORE_IMAGE)..."
-	$(CONTAINER_TOOL) build -f $(PETSTORE_DOCKERFILE) -t $(PETSTORE_IMAGE) $(PETSTORE_BUILD_CONTEXT)
-	@echo "Loading petstore image into minikube..."
-	$(MINIKUBE) image load $(PETSTORE_IMAGE)
+	@if [ "$(E2E_IMAGE_BUILD_MODE)" = "minikube" ]; then \
+		$(MINIKUBE) image build -t $(PETSTORE_IMAGE) -f $(PETSTORE_DOCKERFILE) $(PETSTORE_BUILD_CONTEXT); \
+	elif [ "$(CONTAINER_TOOL)" = "docker" ]; then \
+		docker buildx build --platform=$(PETSTORE_IMAGE_PLATFORM) --load -f $(PETSTORE_DOCKERFILE) -t $(PETSTORE_IMAGE) $(PETSTORE_BUILD_CONTEXT); \
+		docker image inspect $(PETSTORE_IMAGE) >/dev/null; \
+	else \
+		$(CONTAINER_TOOL) build --platform=$(PETSTORE_IMAGE_PLATFORM) -f $(PETSTORE_DOCKERFILE) -t $(PETSTORE_IMAGE) $(PETSTORE_BUILD_CONTEXT); \
+	fi
+	@if [ "$(E2E_IMAGE_BUILD_MODE)" != "minikube" ]; then \
+		echo "Loading petstore image into minikube..."; \
+		$(MINIKUBE) image load $(PETSTORE_IMAGE); \
+	fi
 	$(KUBECTL) create secret generic openai-api-key \
 		--namespace=$(E2E_NAMESPACE) \
 		--from-literal=api-key=$(OPENAI_API_KEY) \
