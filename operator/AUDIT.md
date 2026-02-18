@@ -422,7 +422,7 @@ The controller setup doesn't configure `MaxConcurrentReconciles`. With the defau
 
 **Severity:** Medium — single reconcile bottleneck or unhandled concurrency.
 
-### 4c. Cross-namespace references without RBAC enforcement
+### 4f. Cross-namespace references without RBAC enforcement
 
 The Agent CRD allows cross-namespace references for Models (`model.namespace`) and Tools. However:
 1. No RBAC check verifies the Agent's namespace has permission to reference resources in other namespaces
@@ -431,7 +431,7 @@ The Agent CRD allows cross-namespace references for Models (`model.namespace`) a
 
 **Severity:** Medium — security gap for multi-tenant clusters.
 
-### 4d. No leader election guard in gRPC server
+### 4g. No leader election guard in gRPC server
 
 The gRPC server and HTTP gateway start regardless of leader election status. If running multiple operator replicas:
 1. All replicas serve gRPC/HTTP (could be intentional for read-only API)
@@ -439,6 +439,20 @@ The gRPC server and HTTP gateway start regardless of leader election status. If 
 3. The server uses `client.Client` directly, which goes through the controller-runtime cache — if the cache isn't started (non-leader), reads may fail
 
 **Severity:** Medium — potential stale reads or errors from non-leader replicas.
+
+### 4h. Webhooks missing cross-resource reference validation
+
+**Files:** `api/v1alpha1/agent_webhook.go`, `api/v1alpha1/model_webhook.go`
+
+All webhooks validate structural correctness (exactly-one-of checks, required fields) but **none** validate that referenced resources actually exist:
+
+- **Agent webhook** (lines 120-142): validates tools have one of `template`/`toolRef`, but doesn't check `toolRef.Name` points to an existing AgentTool
+- **Agent webhook** (lines 105-118): validates instruction has one of `template`/`instructionRef`, but doesn't check `instructionRef.Name` points to an existing Instruction
+- **Model webhook** (lines 64-112): validates anthropic thinking parameters, but doesn't check `providerRef` points to an existing ModelProvider
+
+This means all cross-resource reference errors are only caught during reconciliation, not at admission time. Users get no `kubectl apply` feedback when referencing non-existent resources.
+
+**Severity:** High — broken references accepted at admission, fail silently during reconciliation.
 
 ---
 
@@ -471,20 +485,88 @@ The controller currently requeues all errors identically via controller-runtime'
 
 ## 6. MEDIUM: Helm Chart / Deployment Issues
 
-### 6a. No resource limits on operator deployment by default
+### 6a. Server deployment uses controller's ServiceAccount (privilege escalation)
 
-If the Helm chart doesn't set resource requests/limits for the operator pod, it can:
-- Be OOM-killed during high reconciliation load
-- Starve other pods on the node
-- Not benefit from Kubernetes QoS guarantees
+**File:** `charts/flokoa/templates/server/deployment.yaml:36`
 
-### 6b. No PodDisruptionBudget for the operator
+```yaml
+serviceAccountName: {{ include "flokoa.controller.serviceAccountName" . }}
+```
+
+The gRPC server deployment uses the **controller's** service account instead of its own. The server only needs read-only access to CRDs, but inherits the controller's full RBAC (create, update, delete on deployments, services, configmaps, etc.). If the server is compromised via the gRPC/HTTP endpoint, the attacker gets controller-level write access.
+
+**Severity:** High — violates least privilege; server compromise = full cluster write access.
+
+### 6b. A2A plugin auth silently disabled if token file missing
+
+**File:** `plugins/a2a/main.go:43-49,128-134`
+
+```go
+token, err := os.ReadFile(tokenPath)
+if err != nil {
+    log.Printf("Warning: failed to read Argo token from %s: %v", tokenPath, err)
+    // Continues with empty argoToken!
+}
+
+// Later in auth check:
+if argoToken != "" {
+    // Auth check only runs if token was loaded
+}
+```
+
+If the Argo-injected token file is missing or unreadable, the plugin logs a warning and **silently disables authentication**. Any HTTP client can then execute arbitrary A2A tasks. This should be a fatal error when running in an Argo context.
+
+**Severity:** High — security: unauthenticated task execution.
+
+### 6c. HTTP server missing ReadHeaderTimeout (slowloris risk)
+
+**File:** `internal/server/server.go:269-272`
+
+```go
+s.httpServer = &http.Server{
+    Addr:    fmt.Sprintf(":%d", s.httpPort),
+    Handler: c.Handler(mux),
+    // No ReadHeaderTimeout, ReadTimeout, or WriteTimeout
+}
+```
+
+The HTTP gateway has no timeouts configured. A slow client (or slowloris attack) can hold connections open indefinitely, exhausting server resources.
+
+**Severity:** Medium — DoS risk on the HTTP gateway.
+
+### 6d. gRPC error mapping leaks internal Kubernetes details
+
+**File:** `internal/server/errors.go:33`
+
+```go
+return status.Errorf(codes.Internal, "internal error: %s", err.Error())
+```
+
+The default case in `mapKubernetesError` returns the full Kubernetes error string to gRPC clients. This can expose internal API paths, resource versions, field names, and cluster structure.
+
+**Severity:** Medium — information disclosure to API clients.
+
+### 6e. No PodDisruptionBudget for the operator
 
 If the operator pod is evicted during a node drain, all reconciliation stops until it's rescheduled. A PDB would ensure at least one replica remains during voluntary disruptions.
 
-### 6c. CRDs in Helm chart but no upgrade strategy
+### 6f. CRDs in Helm chart but no upgrade strategy
 
 CRDs bundled in Helm charts are notoriously problematic for upgrades — `helm upgrade` doesn't update CRDs. The project has CRDs in both `config/crd/` (kustomize) and `charts/flokoa/crds/`, but there's no documented upgrade path.
+
+### 6g. ConfigMap update drops annotations
+
+**File:** `internal/infra/repo/configmap.go:39-40`
+
+```go
+existing.Data = desired.Data
+existing.Labels = desired.Labels
+// Annotations are NOT preserved
+```
+
+`EnsureConfigMap` overwrites Data and Labels but drops all existing annotations. Any annotations set by other controllers, backup tools (Velero), or monitoring (Prometheus) are silently lost on every reconciliation.
+
+**Severity:** Medium — silent metadata loss.
 
 ---
 
@@ -511,39 +593,76 @@ a2aClient, err := p.createClient(ctx, candidate)
 
 For long-running workflows with many polls, this creates excessive HTTP connection churn.
 
-### 7c. `endpointCandidates` heuristic is fragile
+### 7c. Missing nil check on SendMessage result before type assertion
+
+**File:** `plugins/a2a/plugin/plugin.go:274-292`
+
+```go
+switch r := result.(type) {
+case *a2a.Task:
+    taskID = r.ID       // panics if r is nil (typed nil interface)
+    contextID = r.ContextID
+    if r.Status.State.Terminal() {  // panic chain
+```
+
+If `a2aClient.SendMessage` returns a typed nil (e.g., `(*a2a.Task)(nil)`), the type switch matches `*a2a.Task` but dereferencing `r.ID` panics. A nil check after the switch case is needed.
+
+**Severity:** Medium — panic on malformed A2A response.
+
+### 7d. `endpointCandidates` heuristic is fragile
 
 The function tries both `endpoint` and `endpoint/a2a` (or strips `/a2a`). This heuristic-based endpoint discovery is fragile and should be replaced with proper service discovery from the Agent CR's status URL.
+
+### 7e. Plugin JSON marshaling error silently discarded
+
+**File:** `plugins/a2a/plugin/plugin.go:442`
+
+```go
+taskJSON, _ := json.Marshal(task)
+```
+
+If marshaling fails, `taskJSON` is nil and the Argo output parameter `taskResponse` becomes an empty string. The workflow's downstream steps that depend on parsing `taskResponse` will fail with confusing errors instead of a clear marshaling failure.
+
+**Severity:** Low — incomplete workflow outputs.
 
 ---
 
 ## Prioritized Remediation Plan
 
-### P0 — Fix Before Next Deploy
+### P0 — Fix Before Next Deploy (prevents panics, security holes, and data loss)
 1. **Add nil check for `Runtime.Standard` in `ValidateSpec`** — prevents nil deref panics
-2. **Add admission webhook for Agent CRD** with validation + defaulting
-3. **Fix tool reconciler to return error when ConfigMap missing** (not silently skip)
-4. **Fix A2A plugin to requeue on transient poll failures** instead of failing permanently
-5. **Add ModelProvider type validation** — reject providers with no provider-specific field
-6. **Fix finalizer cleanup in 3 controllers** — don't block finalizer removal on cleanup failures for already-deleted resources
-7. **Replace all 7 `_ = r.Status().Update()` calls** with proper error handling (log + continue, or return error)
-8. **Add checked type assertions** to all 6 watcher mapper functions
+2. **Fix A2A plugin to requeue on transient poll failures** instead of failing permanently
+3. **Fix A2A plugin auth to fatal on missing token** — prevents unauthenticated task execution
+4. **Fix server deployment to use its own ServiceAccount** — prevents privilege escalation
+5. **Fix finalizer cleanup in 3 controllers** — don't block finalizer removal on cleanup failures
+6. **Replace all 7 `_ = r.Status().Update()` calls** with proper error handling
+7. **Add checked type assertions** to all 6 watcher mapper functions
+8. **Fix tool reconciler to return error when ConfigMap missing** (not silently skip)
+9. **Add ModelProvider type validation** — reject providers with no provider-specific field
+10. **Add nil check on A2A SendMessage result** before field dereference
 
-### P1 — Fix This Sprint
-9. **Add conflict retry logic** for status updates (optimistic concurrency)
-10. **Add structured error types** (transient vs. permanent) to stop infinite requeues
-11. **Persist A2A plugin task state** (to ConfigMap or CRD status) to survive restarts
-12. **Add integration tests for cross-controller flows** (Agent → AgentTool → ConfigMap)
-13. **Add negative/error path tests** for all controllers
-14. **Fix agent controller error masking** — preserve both status update and reconciliation errors
-15. **Add workflow monitoring timeout** — fail or alert after configurable duration
-16. **Update ObservedGeneration on all status paths** in AgentWorkflow controller
+### P1 — Fix This Sprint (correctness, testing, observability)
+11. **Add admission webhook for Agent CRD** with validation + defaulting
+12. **Add cross-resource reference validation to webhooks** (tool, instruction, provider refs)
+13. **Add conflict retry logic** for status updates (optimistic concurrency)
+14. **Add structured error types** (transient vs. permanent) to stop infinite requeues
+15. **Persist A2A plugin task state** (to ConfigMap or CRD status) to survive restarts
+16. **Add integration tests for cross-controller flows** (Agent → AgentTool → ConfigMap)
+17. **Add negative/error path tests** for all controllers
+18. **Fix agent controller error masking** — preserve both status update and reconciliation errors
+19. **Add workflow monitoring timeout** — fail or alert after configurable duration
+20. **Update ObservedGeneration on all status paths** in AgentWorkflow controller
+21. **Add ReadHeaderTimeout to HTTP server** — prevent slowloris
+22. **Sanitize gRPC error messages** — don't leak internal Kubernetes details
+23. **Fix ConfigMap repo to preserve annotations** on update
 
-### P2 — Fix This Quarter
-17. Add Prometheus metrics for reconciliation
-18. Add PodDisruptionBudget to Helm chart
-19. Configure MaxConcurrentReconciles with conflict handling
-20. Add cross-namespace RBAC validation
-21. Add CRD upgrade strategy documentation
-22. Replace `reconcileAgent` test helper with explicit multi-step reconciliation
-23. Add namespace filtering to watcher list operations for performance at scale
+### P2 — Fix This Quarter (hardening, scalability, operational readiness)
+24. Add Prometheus metrics for reconciliation
+25. Add PodDisruptionBudget to Helm chart
+26. Configure MaxConcurrentReconciles with conflict handling
+27. Add cross-namespace RBAC validation
+28. Add CRD upgrade strategy documentation
+29. Replace `reconcileAgent` test helper with explicit multi-step reconciliation
+30. Add namespace filtering to watcher list operations for performance at scale
+31. Add server NetworkPolicy to Helm chart
+32. Add audit logging for CUD operations in gRPC server
