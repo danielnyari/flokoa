@@ -13,12 +13,15 @@ The Flokoa Operator is a Kubernetes Operator for managing AI Agents through Cust
 
 | Component | Version |
 |-----------|---------|
-| Go | 1.24.0 |
+| Go | 1.24.10 |
 | Kubebuilder | v4 layout |
 | Operator SDK | v1.42.0 |
 | controller-runtime | v0.21.0 |
-| Kubernetes API | v0.33.0 |
+| Kubernetes API | v0.33.1 |
 | Argo Workflows | 3.7.9 |
+| gRPC | v1.72.2 |
+| grpc-gateway | v2.26.3 |
+| OpenTelemetry | v1.36.0 |
 
 **Testing**: Ginkgo v2 + Gomega (BDD-style testing)
 **Linting**: golangci-lint v2.1.0
@@ -28,53 +31,90 @@ The Flokoa Operator is a Kubernetes Operator for managing AI Agents through Cust
 
 ```
 operator/
-├── api/v1alpha1/              # CRD type definitions
-│   ├── agent_types.go         # Agent CRD schema
-│   ├── agenttool_types.go     # AgentTool CRD schema
-│   ├── model_types.go         # Model CRD schema (multi-provider)
-│   ├── modelprovider_types.go # ModelProvider CRD schema
-│   ├── instruction_types.go   # Instruction CRD schema
-│   ├── groupversion_info.go   # API group registration
-│   └── zz_generated.deepcopy.go  # Generated (DO NOT EDIT)
+├── api/v1alpha1/                  # CRD type definitions
+│   ├── agent_types.go             # Agent CRD schema
+│   ├── agenttool_types.go         # AgentTool CRD schema
+│   ├── agentworkflow_types.go     # AgentWorkflow CRD schema
+│   ├── model_types.go             # Model CRD schema (multi-provider)
+│   ├── modelprovider_types.go     # ModelProvider CRD schema
+│   ├── instruction_types.go       # Instruction CRD schema
+│   ├── groupversion_info.go       # API group registration
+│   ├── *_webhook.go               # Webhook definitions
+│   └── zz_generated.deepcopy.go   # Generated (DO NOT EDIT)
 ├── cmd/
-│   ├── main.go                # Operator entrypoint
-│   └── server/main.go         # gRPC server entrypoint
-├── internal/controller/       # Reconciliation logic
-│   ├── agent_controller.go    # Agent reconciler
-│   ├── modelprovider_controller.go
-│   ├── provider_openai.go     # Provider implementation
-│   └── *_test.go              # Tests
-├── server/                    # gRPC server
-│   └── proto/                 # Protocol buffer definitions
+│   ├── main.go                    # Operator entrypoint
+│   └── server/main.go             # gRPC server entrypoint
+├── internal/
+│   ├── controller/                # Reconciliation logic
+│   │   ├── agent_controller.go    # Agent reconciler (primary)
+│   │   ├── agenttool_controller.go
+│   │   ├── agentworkflow_controller.go
+│   │   ├── agentworkflow_compiler.go  # Argo Workflow compilation
+│   │   ├── instruction_controller.go
+│   │   ├── model_controller.go
+│   │   ├── modelprovider_controller.go
+│   │   ├── provider_openai.go     # Provider implementations
+│   │   ├── provider_anthropic.go
+│   │   ├── provider_google.go
+│   │   ├── provider_bedrock.go
+│   │   └── *_test.go              # Tests
+│   ├── app/agent/                 # Domain logic
+│   │   ├── reconcile.go           # Main reconciliation orchestration
+│   │   ├── tool_reconciler.go     # Tool setup
+│   │   ├── instruction_reconciler.go  # Instruction/prompt management
+│   │   └── model_reconciler.go    # Model and provider configuration
+│   ├── infra/                     # Infrastructure layer
+│   │   ├── builder/               # Kubernetes resource construction (Deployment, Service)
+│   │   ├── repo/                  # Data access layer (interfaces, CRUD for K8s resources)
+│   │   └── fakes/                 # Test doubles
+│   ├── server/                    # gRPC service implementations
+│   │   ├── server.go              # Server initialization
+│   │   ├── agent_service.go       # Agent CRUD service
+│   │   ├── auth.go                # OIDC authentication
+│   │   ├── interceptors.go        # gRPC interceptors
+│   │   └── *_service.go           # Other resource services
+│   ├── telemetry/                 # OpenTelemetry integration
+│   └── webhook/v1alpha1/          # Admission webhooks
+├── server/                        # gRPC/Protobuf definitions
+│   ├── proto/                     # .proto files (buf-managed)
+│   ├── gen/                       # Generated Go code
+│   ├── buf.yaml                   # Buf configuration
+│   └── Dockerfile                 # gRPC server image
 ├── plugins/
-│   └── a2a/                   # Argo A2A executor plugin
-│       ├── main.go            # Plugin HTTP server
-│       ├── plugin/            # Plugin logic
-│       │   ├── plugin.go      # ExecuteTemplate handler
-│       │   ├── resolver.go    # Agent endpoint resolution
-│       │   └── types.go       # A2ASpec, ProgressState
-│       ├── config/            # Plugin deployment config
-│       │   └── plugin.yaml    # ExecutorPlugin CR
-│       └── Dockerfile         # Plugin image build
-├── config/                    # Kubernetes manifests
-│   ├── crd/bases/             # Generated CRD YAML files
-│   ├── rbac/                  # RBAC roles
-│   ├── manager/               # Operator deployment
-│   ├── server/                # gRPC server deployment
-│   └── samples/               # Example CRs
+│   └── a2a/                       # Argo A2A executor plugin
+│       ├── main.go                # Plugin HTTP server
+│       ├── plugin/                # Plugin logic
+│       │   ├── plugin.go          # ExecuteTemplate handler
+│       │   ├── resolver.go        # Agent endpoint resolution
+│       │   └── types.go           # A2ASpec, ProgressState
+│       ├── config/plugin.yaml     # ExecutorPlugin CR definition
+│       └── Dockerfile             # Plugin image build
+├── charts/flokoa/                 # Helm chart
+│   ├── Chart.yaml                 # Chart metadata (appVersion 0.0.7)
+│   ├── values.yaml                # Configuration values
+│   └── templates/                 # 40+ templates (controller, server, A2A, RBAC, Dex)
+├── config/                        # Kustomize manifests
+│   ├── crd/bases/                 # Generated CRD YAML files
+│   ├── rbac/                      # RBAC roles (admin, editor, viewer per CRD)
+│   ├── manager/                   # Operator deployment
+│   ├── server/                    # gRPC server deployment
+│   ├── samples/                   # Example CRs (16 samples)
+│   └── schemas/                   # JSON schemas
 ├── test/
-│   ├── e2e/                   # End-to-end tests
-│   │   └── testdata/argo/     # Argo workflow test fixtures
-│   └── utils/                 # Test utilities
-├── hack/                      # Build scripts
-├── Makefile                   # Build targets
-├── Dockerfile                 # Multi-stage build
-└── go.mod                     # Go dependencies
+│   ├── e2e/                       # End-to-end tests
+│   │   ├── testdata/              # Test fixtures (CRs + Argo workflows)
+│   │   └── kind-config.yaml       # Kind cluster configuration
+│   └── utils/                     # Test utilities
+├── hack/                          # Build scripts (boilerplate template)
+├── Makefile                       # Build targets
+├── Dockerfile                     # Multi-stage build (distroless)
+├── .golangci.yml                  # Linter configuration
+└── go.mod                         # Go 1.24.10 dependencies
 ```
 
 ## Core CRDs
 
-The operator manages five CRDs under `agent.flokoa.ai/v1alpha1`:
+The operator manages six CRDs under `agent.flokoa.ai/v1alpha1`:
 
 ### Agent
 Manages AI agents. Key spec fields: `framework`, `runtime` (standard/template), `model`, `instruction`, `tools`, `card` (A2A protocol metadata with skills).
@@ -90,6 +130,9 @@ Provider connection config. Supports OpenAI, Anthropic, Google, Bedrock with API
 
 ### Instruction
 System prompt management. Content field holds the prompt text; controller creates a ConfigMap.
+
+### AgentWorkflow
+Multi-agent workflow definitions compiled to Argo Workflows. Supports tasks with agent references, parameters, conditions, dependencies, and lifecycle phases (Pending, Compiling, Running, Succeeded, Failed, Error).
 
 ## Development Commands
 
@@ -349,10 +392,12 @@ make generate-python-models
 ```
 
 This extracts JSON schemas from generated CRDs and uses `datamodel-codegen` to produce:
-- `sdk/python/src/flokoa/types/agenttool.py` - AgentToolSpec
-- `sdk/python/src/flokoa/types/agentcard.py` - AgentCard
-- `sdk/python/src/flokoa/types/modelconfig.py` - ModelConfig (combined provider + model params)
-- `sdk/python/src/flokoa/types/templateconfig.py` - TemplateConfig (managed runtime config)
+- `sdk/python/flokoa-types/src/flokoa_types/agenttool.py` - AgentToolSpec
+- `sdk/python/flokoa-types/src/flokoa_types/agentcard.py` - AgentCard
+- `sdk/python/flokoa-types/src/flokoa_types/modelconfig.py` - ModelConfig (combined provider + model params)
+- `sdk/python/flokoa-types/src/flokoa_types/templateconfig.py` - TemplateConfig (managed runtime config)
+- `sdk/python/flokoa-types/src/flokoa_types/agentworkflow.py` - AgentWorkflow
+- `sdk/python/flokoa-types/src/flokoa_types/taskconfig.py` - TaskConfig
 
 **Prerequisite**: Requires `yq` installed on the system. The target automatically creates a Python venv with `datamodel-code-generator`.
 
@@ -366,6 +411,18 @@ Key enabled linters (`.golangci.yml`):
 - `revive` - Import shadowing, comment spacing
 - `gocyclo` - Cyclomatic complexity
 - `misspell` - Spelling errors
+- `dupl` - Code duplication detection
+- `goconst` - Repeated strings that could be constants
+- `ineffassign` - Ineffectual assignments
+- `lll` - Line length limits (excluded for api/ and internal/)
+- `prealloc` - Slice preallocation hints
+- `unconvert` - Unnecessary type conversions
+- `unparam` - Unused function parameters
+- `unused` - Unused code detection
+- `copyloopvar` - Loop variable copy issues
+- `nakedret` - Naked returns in long functions
+
+Formatters: `gofmt`, `goimports`
 
 Run `make lint` before committing.
 
@@ -476,12 +533,18 @@ Generated code is excluded from linting. If you see lint errors in `zz_generated
 ### Python model generation fails
 Ensure `yq` is installed (`brew install yq` on macOS). The Makefile creates a Python venv automatically.
 
-## Status
+## Architecture Notes
 
-Key items to implement:
-- [ ] Agent reconciliation logic
-- [ ] Backend integration (Knative, native Deployment)
-- [ ] State backend connections
-- [ ] Tool injection
-- [ ] MCP server integration
-- [ ] Webhook validation (optional)
+### Layered Architecture
+The operator follows a layered architecture pattern:
+- **API layer** (`api/v1alpha1/`) - CRD type definitions with kubebuilder markers
+- **Controller layer** (`internal/controller/`) - Kubernetes reconciliation loops
+- **Domain layer** (`internal/app/agent/`) - Business logic for agent reconciliation (tools, instructions, models)
+- **Infrastructure layer** (`internal/infra/`) - Kubernetes resource builders and repository pattern for CRUD operations
+- **Server layer** (`internal/server/`) - gRPC API with OIDC auth
+
+### AgentWorkflow Compilation
+AgentWorkflow CRDs are compiled into Argo Workflow resources by `agentworkflow_compiler.go`. The compiler translates high-level task definitions into Argo DAG templates that call agents via the A2A executor plugin.
+
+### Provider Implementations
+Each LLM provider (OpenAI, Anthropic, Google, Bedrock) has a dedicated file in `internal/controller/` that handles provider-specific model parameter validation and configuration.
