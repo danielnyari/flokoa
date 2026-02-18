@@ -28,13 +28,15 @@ sdk/python/                          # Workspace root
 │   │   ├── tools/                  # Tool implementations (OpenAPI, etc.)
 │   │   └── utils/                  # Config loaders, agent card builder
 │   └── tests/
-├── flokoa-types/                    # Auto-generated Pydantic models from CRD schemas (DO NOT EDIT)
+├── flokoa-types/                    # Auto-generated Pydantic models from CRD schemas (DO NOT EDIT generated files)
 │   ├── pyproject.toml
 │   └── src/flokoa_types/
-│       ├── __init__.py             # Re-exports + IntegrationType, ToolType, ToolDefinition
+│       ├── __init__.py             # Re-exports + IntegrationType, ToolType, ToolDefinition (hand-maintained)
 │       ├── agentcard.py            # Generated: AgentCard
 │       ├── agenttool.py            # Generated: AgentToolSpec
+│       ├── agentworkflow.py        # Generated: AgentWorkflow
 │       ├── modelconfig.py          # Generated: ModelConfig, ProviderType, etc.
+│       ├── taskconfig.py           # Generated: TaskConfig, TaskAgentConfig
 │       └── templateconfig.py       # Generated: TemplateConfig
 ├── flokoa-managed-agent/           # Operator-deployed pydantic-ai agent runtime
 │   ├── pyproject.toml              # Depends on flokoa[pydantic-ai]
@@ -103,11 +105,13 @@ make generate-python-models
 
 This uses `datamodel-codegen` to extract JSON schemas from CRD YAML files and produce Pydantic v2 BaseModel classes:
 
-| Generated File | Source CRD | Class |
-|---------------|-----------|-------|
+| Generated File | Source CRD | Key Classes |
+|---------------|-----------|-------------|
 | `agenttool.py` | `agent.flokoa.ai_agenttools` | `AgentToolSpec` |
 | `agentcard.py` | `agent.flokoa.ai_agents` (card field) | `AgentCard` |
-| `modelconfig.py` | Combined from `Models` + `ModelProviders` | `ModelConfig` |
+| `agentworkflow.py` | `agent.flokoa.ai_agentworkflows` | `AgentWorkflow` |
+| `modelconfig.py` | Combined from `Models` + `ModelProviders` | `ModelConfig`, `ProviderType`, provider-specific configs |
+| `taskconfig.py` | Task configuration | `TaskConfig`, `TaskAgentConfig`, `TaskResultType` |
 | `templateconfig.py` | `agent.flokoa.ai_agents` (runtime.template.config) | `TemplateConfig` |
 
 The generation pipeline:
@@ -164,13 +168,21 @@ Configuration in `pyproject.toml`. Key rules enabled:
 - `I` - isort (import sorting)
 - `E`, `W` - pycodestyle
 - `F` - pyflakes
-- `S` - flake8-bandit (security)
+- `S` - flake8-bandit (security) — disabled in tests for assertions/passwords
 - `B` - flake8-bugbear
 - `C4` - flake8-comprehensions
+- `C90` - mccabe complexity
 - `UP` - pyupgrade
 - `SIM` - flake8-simplify
+- `A` - flake8-builtins
+- `YTT` - flake8-2020
+- `T10` - flake8-debugger
+- `PGH` - pygrep-hooks
+- `RUF` - ruff-specific rules
+- `TRY` - tryceratops (exception handling)
 
-Line length: 120 characters
+Line length: 120 characters. Target version: py39.
+Ignored: `E501` (line too long), `E731` (lambda assignment), `TRY003` (long exception messages).
 
 ### Type Checking
 
@@ -201,8 +213,9 @@ Core dependencies (flokoa):
 - `pydantic` - Data validation
 
 Optional extras:
-- `pydantic-ai` - Pydantic AI framework support
-- `google-adk` - Google ADK framework support
+- `pydantic-ai` - Pydantic AI framework support (>= 1.44.0)
+- `google-adk` - Google ADK framework support (>= 1.14.1)
+- `tracing` - OpenTelemetry tracing support (opentelemetry-sdk, OTLP exporter, FastAPI instrumentation)
 
 Dev dependencies (in `dependency-groups`):
 - `pre-commit`
@@ -262,10 +275,22 @@ _try_load(
 )
 ```
 
+## OpenAPI Tool System
+
+The SDK includes a comprehensive OpenAPI tool system in `src/flokoa/tools/openapi/`:
+
+- `openapi_toolset.py` - Creates tool instances from OpenAPI specs
+- `openapi_spec_parser.py` - Parses OpenAPI 3.x specifications
+- `operation_parser.py` - Converts API operations to tool definitions
+- `rest_api_tool.py` - Executes REST API calls as tools
+- `auth/` - Authentication subsystem with OAuth2, service account, and auto-auth credential exchangers
+
+This maps to the `AgentTool` CRD's `openapi` type, providing runtime tool execution for agents.
+
 ## CI/CD
 
 GitHub Actions workflow `.github/workflows/test-python.yml`:
 - Triggered by changes to `sdk/python/**`
 - Uses `astral-sh/setup-uv` for package management
-- Runs `uv sync --all-extras` + `pytest`
+- Runs `uv sync --all-packages --all-extras` + `pytest` with coverage
 - Uploads coverage to Codecov
