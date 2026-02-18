@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -809,6 +809,7 @@ pydantic-ai = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "flokoa", extra = ["google-adk", "pydantic-ai"] },
     { name = "mypy-boto3-bedrock-runtime" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -836,6 +837,8 @@ provides-extras = ["pydantic-ai", "google-adk"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "flokoa", extras = ["google-adk"] },
+    { name = "flokoa", extras = ["pydantic-ai"] },
     { name = "mypy-boto3-bedrock-runtime", specifier = ">=1.42.31" },
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "pytest", specifier = ">=9.0.2" },
