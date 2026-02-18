@@ -21,11 +21,11 @@ import (
 
 // ModelReconciler handles model resolution for an agent.
 type ModelReconciler struct {
-	models     repo.ModelReader
-	providers  repo.ModelProviderReader
-	configMaps repo.ConfigMapRepo
-	secrets    repo.SecretReader
-	owner      repo.OwnerSetter
+	models             repo.ModelReader
+	providers          repo.ModelProviderReader
+	configMaps         repo.ConfigMapRepo
+	secrets            repo.SecretReader
+	owner              repo.OwnerSetter
 	getProviderHandler func(agentv1alpha1.ProviderType) (modeldomain.ProviderHandler, bool)
 }
 

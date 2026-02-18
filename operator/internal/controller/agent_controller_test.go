@@ -802,6 +802,66 @@ var _ = Describe("Agent Controller", func() {
 				}
 			})
 
+			It("findAgentsForModelProvider should return agents referencing models that use the provider", func() {
+				providerName := fmt.Sprintf("target-provider-%d", time.Now().UnixNano())
+				modelName := fmt.Sprintf("target-model-%d", time.Now().UnixNano())
+
+				provider := &agentv1alpha1.ModelProvider{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      providerName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.ModelProviderSpec{
+						OpenAI: &agentv1alpha1.OpenAIProviderSpec{},
+					},
+				}
+				Expect(k8sClient.Create(ctx, provider)).To(Succeed())
+				defer func() { _ = k8sClient.Delete(ctx, provider) }()
+
+				model := &agentv1alpha1.Model{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      modelName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.ModelSpec{
+						Model:       "gpt-4o",
+						ProviderRef: agentv1alpha1.ProviderRef{Name: providerName},
+					},
+				}
+				Expect(k8sClient.Create(ctx, model)).To(Succeed())
+				defer func() { _ = k8sClient.Delete(ctx, model) }()
+
+				agent := &agentv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      agentName,
+						Namespace: agentNamespace,
+					},
+					Spec: agentv1alpha1.AgentSpec{
+						CardOverride: minimalCard(),
+						Runtime: agentv1alpha1.RuntimeSpec{
+							Type: agentv1alpha1.RuntimeTypeStandard,
+							Standard: &agentv1alpha1.StandardRuntimeSpec{
+								Container: corev1.Container{Image: "nginx:latest"},
+							},
+						},
+						Model: &agentv1alpha1.AgentModelRef{Name: modelName},
+					},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				r := newAgentReconciler()
+				requests := r.findAgentsForModelProvider(ctx, provider)
+
+				found := false
+				for _, req := range requests {
+					if req.Name == agentName {
+						found = true
+						break
+					}
+				}
+				Expect(found).To(BeTrue(), "should find the agent depending on models that use this provider")
+			})
+
 			It("findAgentsForInstruction should find agent by label for inline instruction", func() {
 				instruction := &agentv1alpha1.Instruction{
 					ObjectMeta: metav1.ObjectMeta{

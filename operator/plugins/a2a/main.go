@@ -12,6 +12,7 @@ import (
 	"time"
 
 	executor "github.com/argoproj/argo-workflows/v3/pkg/plugins/executor"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -19,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	"github.com/danielnyari/flokoa/internal/telemetry"
 	"github.com/danielnyari/flokoa/operator/plugins/a2a/plugin"
 )
 
@@ -48,6 +50,21 @@ func init() {
 }
 
 func main() {
+	// Initialize OpenTelemetry distributed tracing.
+	otelShutdown, err := telemetry.Init(context.Background(), "flokoa-a2a-plugin")
+	if err != nil {
+		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
+	}
+	defer func() {
+		if shutdownErr := otelShutdown(context.Background()); shutdownErr != nil {
+			log.Printf("Failed to shut down OpenTelemetry: %v", shutdownErr)
+		}
+	}()
+
+	// Wrap the default HTTP transport with OTEL instrumentation so that
+	// outgoing requests to agent endpoints carry W3C traceparent headers.
+	http.DefaultTransport = otelhttp.NewTransport(http.DefaultTransport)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = defaultPort

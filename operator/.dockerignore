@@ -1,3 +1,18 @@
 # More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
-# Ignore build and test binaries.
+# Build artifacts and binaries
 bin/
+*.out
+*.test
+
+# Node modules (rebuilt inside Docker)
+ui/src/node_modules/
+ui/src/.output/
+
+# Dev/test files
+.devcontainer/
+.env
+.idea
+.vscode
+test/
+cover.out
+Dockerfile.cross

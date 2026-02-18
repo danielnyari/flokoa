@@ -83,6 +83,52 @@ func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Obj
 	return requests
 }
 
+// findAgentsForModelProvider returns Agents affected by ModelProvider changes through Model -> Agent references.
+func (r *AgentReconciler) findAgentsForModelProvider(ctx context.Context, obj client.Object) []reconcile.Request {
+	provider := obj.(*agentv1alpha1.ModelProvider)
+
+	modelList := &agentv1alpha1.ModelList{}
+	if err := r.List(ctx, modelList); err != nil {
+		return nil
+	}
+
+	affectedModels := map[types.NamespacedName]struct{}{}
+	for _, model := range modelList.Items {
+		providerNamespace := model.Spec.ProviderRef.Namespace
+		if providerNamespace == "" {
+			providerNamespace = model.Namespace
+		}
+		if providerNamespace == provider.Namespace && model.Spec.ProviderRef.Name == provider.Name {
+			affectedModels[types.NamespacedName{Name: model.Name, Namespace: model.Namespace}] = struct{}{}
+		}
+	}
+
+	if len(affectedModels) == 0 {
+		return nil
+	}
+
+	agentList := &agentv1alpha1.AgentList{}
+	if err := r.List(ctx, agentList); err != nil {
+		return nil
+	}
+
+	requests := []reconcile.Request{}
+	for _, agent := range agentList.Items {
+		if agent.Spec.Model == nil {
+			continue
+		}
+		modelNamespace := agent.Spec.Model.Namespace
+		if modelNamespace == "" {
+			modelNamespace = agent.Namespace
+		}
+		if _, ok := affectedModels[types.NamespacedName{Name: agent.Spec.Model.Name, Namespace: modelNamespace}]; ok {
+			requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Name: agent.Name, Namespace: agent.Namespace}})
+		}
+	}
+
+	return requests
+}
+
 // findAgentsForSecret returns Agents affected by Secret changes through ModelProvider -> Model -> Agent references.
 func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
 	secret := obj.(*corev1.Secret)

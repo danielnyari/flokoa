@@ -23,6 +23,9 @@ import (
 	"time"
 
 	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,6 +39,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/internal/domain/hash"
+	"github.com/danielnyari/flokoa/internal/telemetry"
 )
 
 const (
@@ -80,6 +84,14 @@ type AgentWorkflowReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *AgentWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := telemetry.Tracer("flokoa.operator").Start(ctx, "agentworkflow.reconcile",
+		trace.WithAttributes(
+			attribute.String("workflow.name", req.Name),
+			attribute.String("workflow.namespace", req.Namespace),
+		),
+	)
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling AgentWorkflow", "name", req.Name, "namespace", req.Namespace)
 
@@ -88,6 +100,8 @@ func (r *AgentWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get AgentWorkflow")
 		return ctrl.Result{}, err
 	}
 
@@ -137,12 +151,26 @@ func (r *AgentWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 // compileAndSubmit compiles the AgentWorkflow DSL to an Argo Workflow and submits it.
 func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *agentv1alpha1.AgentWorkflow) (ctrl.Result, error) {
+	ctx, span := telemetry.Tracer("flokoa.operator").Start(ctx, "agentworkflow.compile_and_submit",
+		trace.WithAttributes(
+			attribute.String("workflow.name", awf.Name),
+			attribute.String("workflow.namespace", awf.Namespace),
+			attribute.Int("workflow.task_count", len(awf.Spec.Tasks)),
+		),
+	)
+	defer span.End()
+
 	logger := log.FromContext(ctx)
+
+	// Extract W3C traceparent from the current span context so it can be
+	// propagated into the Argo Workflow and downstream agent processes.
+	traceparent := telemetry.ExtractTraceparent(ctx)
 
 	// Set phase to Compiling
 	awf.Status.Phase = agentv1alpha1.WorkflowPhaseCompiling
 	awf.Status.ObservedGeneration = awf.Generation
 	if err := r.Status().Update(ctx, awf); err != nil {
+		span.RecordError(err)
 		return ctrl.Result{}, err
 	}
 
@@ -154,17 +182,21 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 			ReasonCompileFailed, fmt.Sprintf("Failed to resolve dependencies: %v", err))
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
 		_ = r.Status().Update(ctx, awf)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to resolve dependencies")
 		return ctrl.Result{}, err
 	}
 
-	// Compile DSL to Argo Workflow
-	argoWf, err := compileToArgoWorkflow(awf, resolvedTasks)
+	// Compile DSL to Argo Workflow, injecting trace context for downstream propagation.
+	argoWf, err := compileToArgoWorkflow(awf, resolvedTasks, traceparent)
 	if err != nil {
 		logger.Error(err, "Failed to compile AgentWorkflow")
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
 			ReasonCompileFailed, err.Error())
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
 		_ = r.Status().Update(ctx, awf)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to compile workflow")
 		return ctrl.Result{}, err
 	}
 

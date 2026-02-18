@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: tool-service
-        image: localhost/petstore:test
+        image: petstore:test
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
