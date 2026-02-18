@@ -315,7 +315,7 @@ func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoi
 
 // pollTask polls an existing A2A task for completion
 func (p *Plugin) pollTask(ctx context.Context, key string, spec *A2ASpec, progress *ProgressState) (*executor.ExecuteTemplateReply, error) {
-	_, span := telemetry.Tracer("flokoa.a2a-plugin").Start(ctx, "a2a.poll",
+	ctx, span := telemetry.Tracer("flokoa.a2a-plugin").Start(ctx, "a2a.poll",
 		trace.WithAttributes(
 			attribute.String("a2a.task_id", progress.TaskID),
 			attribute.String("a2a.endpoint", progress.Endpoint),

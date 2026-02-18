@@ -98,7 +98,6 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 
 	// Workflow-level parameters
 	if len(awf.Spec.Params) > 0 {
-	if len(awf.Spec.Params) > 0 {
 		for _, p := range awf.Spec.Params {
 			param := wfv1.Parameter{
 				Name:  p.Name,
