@@ -78,9 +78,132 @@ This is an unchecked type assertion. If any code path stores a non-`*ProgressSta
 
 **Severity:** Medium — currently safe but fragile; any future refactoring could introduce a panic.
 
+### 1e. Unchecked type assertions in all watcher mappers (6 instances)
+
+**File:** `internal/controller/agent_watchers.go`
+
+Every watcher mapper function uses unchecked type assertions:
+
+```go
+// Line 17
+func (r *AgentReconciler) findAgentsForInstruction(ctx context.Context, obj client.Object) []reconcile.Request {
+    instruction := obj.(*agentv1alpha1.Instruction)  // panics if wrong type
+
+// Line 58
+    model := obj.(*agentv1alpha1.Model)  // panics if wrong type
+
+// Line 88
+    provider := obj.(*agentv1alpha1.ModelProvider)  // panics if wrong type
+
+// Line 134
+    secret := obj.(*corev1.Secret)  // panics if wrong type
+
+// Line 202
+    agentTool := obj.(*agentv1alpha1.AgentTool)  // panics if wrong type
+
+// Line 246
+    cm := obj.(*corev1.ConfigMap)  // panics if wrong type
+```
+
+While controller-runtime should only pass the registered type, any bug in the framework or a misconfigured watch would cause an immediate panic with no recovery. All 6 should use checked assertions with `ok` guard.
+
+**Severity:** Medium — 6 potential panic sites in a critical code path.
+
+### 1f. AgentWorkflow compiler: nil map lookup for resolved tasks
+
+**File:** `internal/controller/agentworkflow_compiler.go:124`
+
+```go
+for _, task := range awf.Spec.Tasks {
+    if task.AgentTask == nil {
+        continue
+    }
+    tmpl, err := buildTemplate(awf, task, resolvedTasks[task.Name])  // nil if key missing
+```
+
+If `resolvedTasks` doesn't contain `task.Name` (e.g., resolution skipped it due to an error), `buildTemplate` receives `nil` for the `resolved` parameter. While the downstream code does nil-check `resolved`, this is fragile — one missed nil check in a future edit panics the operator.
+
+**Severity:** Medium — fragile nil chain.
+
 ---
 
 ## 2. CRITICAL: Error Handling Gaps
+
+### 2e. Status update errors explicitly swallowed with `_ =` across 3 controllers
+
+Across `agenttool_controller.go`, `agentworkflow_controller.go`, and `instruction_controller.go`, status updates in error paths are **intentionally discarded** using `_ =`:
+
+**`agenttool_controller.go`:**
+```go
+// Line 107: validation failure path
+_ = r.Status().Update(ctx, agentTool)  // error discarded
+// Line 116: ConfigMap reconciliation failure path
+_ = r.Status().Update(ctx, agentTool)  // error discarded
+```
+
+**`agentworkflow_controller.go`:**
+```go
+// Line 184: dependency resolution failure
+_ = r.Status().Update(ctx, awf)  // error discarded
+// Line 197: workflow compilation failure
+_ = r.Status().Update(ctx, awf)  // error discarded
+// Line 218: Argo Workflow creation failure
+_ = r.Status().Update(ctx, awf)  // error discarded
+// Line 253: Argo Workflow not found
+_ = r.Status().Update(ctx, awf)  // error discarded
+```
+
+**`instruction_controller.go`:**
+```go
+// Line 102: ConfigMap reconciliation failure
+_ = r.Status().Update(ctx, instruction)  // error discarded
+```
+
+**Total:** 7 instances of explicitly swallowed status update errors. If the API server is under pressure (exactly when you need status conditions most), these status updates fail silently, leaving stale/missing conditions that break observability.
+
+**Severity:** High — status conditions lost during cluster instability when they're needed most.
+
+### 2f. Finalizer removal blocked by cleanup failures in 3 controllers
+
+When dependent resource deletion fails during the finalizer cleanup path, all three secondary controllers return the error **without removing the finalizer**, permanently blocking deletion:
+
+**`agenttool_controller.go:82-88`:**
+```go
+if err := r.deleteConfigMap(ctx, agentTool); err != nil {
+    logger.Error(err, "Failed to delete ConfigMap")
+    return ctrl.Result{}, err  // Finalizer never removed → stuck in Terminating
+}
+controllerutil.RemoveFinalizer(agentTool, agentToolFinalizer)  // unreachable on error
+```
+
+**`instruction_controller.go:75-82`:** Same pattern — ConfigMap deletion failure blocks finalizer.
+
+**`agentworkflow_controller.go:120`:** Same pattern — Argo Workflow deletion failure blocks finalizer.
+
+If the dependent resource (ConfigMap or Argo Workflow) is in a broken state or the API server is temporarily unreachable, the CRD resource gets **permanently stuck in Terminating** state. The fix is to distinguish "resource already gone" (proceed with finalizer removal) from "transient API failure" (retry).
+
+**Severity:** High — resources stuck in Terminating state requiring manual intervention.
+
+### 2g. Agent controller masks reconciliation errors with status update errors
+
+**File:** `internal/controller/agent_controller.go:80-92`
+
+```go
+result := r.AppService.Reconcile(ctx, agent)
+
+if err := r.Status().Update(ctx, agent); err != nil {
+    logger.Error(err, "Failed to update Agent status")
+    return ctrl.Result{}, err  // Returns status update error
+}
+
+if result.Error != nil {
+    return ctrl.Result{}, result.Error  // Never reached if status update failed
+}
+```
+
+If both `r.Status().Update()` fails AND `result.Error` is non-nil, only the status update error surfaces — the actual reconciliation error is lost. This makes debugging harder because the logged error doesn't reflect the root cause.
+
+**Severity:** Medium — root cause errors masked during debugging.
 
 ### 2a. Validation errors silently swallowed — no requeue
 
@@ -238,7 +361,60 @@ There is a webhook for `AgentWorkflow` but **no admission webhook for the `Agent
 
 **Severity:** High — invalid resources accepted and stored; poor UX; missing defaulting causes nil panics.
 
-### 4b. No rate limiting / max concurrent reconciles configured
+### 4b. Watcher mappers list ALL namespaces without filtering
+
+**File:** `internal/controller/agent_watchers.go:91,110`
+
+The `findAgentsForModelProvider` mapper lists all Models across all namespaces:
+
+```go
+modelList := &agentv1alpha1.ModelList{}
+if err := r.List(ctx, modelList); err != nil {  // ALL namespaces
+    return nil
+}
+```
+
+Then lists all Agents across all namespaces:
+
+```go
+agentList := &agentv1alpha1.AgentList{}
+if err := r.List(ctx, agentList); err != nil {  // ALL namespaces
+    return nil
+}
+```
+
+In a cluster with thousands of agents/models, a single ModelProvider update triggers two unfiltered list calls that scan every resource. This causes latency spikes on every provider change.
+
+**Severity:** Medium — performance degradation at scale.
+
+### 4c. AgentWorkflow ObservedGeneration only set during Compiling phase
+
+**File:** `internal/controller/agentworkflow_controller.go:171`
+
+```go
+awf.Status.Phase = agentv1alpha1.WorkflowPhaseCompiling
+awf.Status.ObservedGeneration = awf.Generation  // Only set here
+```
+
+ObservedGeneration is only updated when entering `Compiling` phase. During the monitoring phase (Running/Succeeded/Failed), if the spec changes, ObservedGeneration stays stale. Users can't tell whether the current status reflects the latest spec or an older generation.
+
+**Severity:** Medium — stale ObservedGeneration misleads status consumers.
+
+### 4d. No timeout for stuck AgentWorkflow monitoring
+
+**File:** `internal/controller/agentworkflow_controller.go:303-304`
+
+```go
+if awf.Status.Phase == agentv1alpha1.WorkflowPhaseRunning {
+    return ctrl.Result{RequeueAfter: workflowPollInterval}, nil  // 15s forever
+}
+```
+
+A workflow stuck in `Running` state (e.g., Argo controller is down, or the workflow itself hangs) causes **indefinite 15-second requeue cycles** with no timeout. Over hours/days, hundreds of stuck workflows accumulate and consume the entire controller's reconcile capacity.
+
+**Severity:** Medium — resource exhaustion from stuck workflows.
+
+### 4e. No rate limiting / max concurrent reconciles configured
 
 **File:** `internal/controller/agent_controller.go` (SetupWithManager)
 
@@ -349,18 +525,25 @@ The function tries both `endpoint` and `endpoint/a2a` (or strips `/a2a`). This h
 3. **Fix tool reconciler to return error when ConfigMap missing** (not silently skip)
 4. **Fix A2A plugin to requeue on transient poll failures** instead of failing permanently
 5. **Add ModelProvider type validation** — reject providers with no provider-specific field
+6. **Fix finalizer cleanup in 3 controllers** — don't block finalizer removal on cleanup failures for already-deleted resources
+7. **Replace all 7 `_ = r.Status().Update()` calls** with proper error handling (log + continue, or return error)
+8. **Add checked type assertions** to all 6 watcher mapper functions
 
 ### P1 — Fix This Sprint
-6. **Add conflict retry logic** for status updates (optimistic concurrency)
-7. **Add structured error types** (transient vs. permanent) to stop infinite requeues
-8. **Persist A2A plugin task state** (to ConfigMap or CRD status) to survive restarts
-9. **Add integration tests for cross-controller flows** (Agent → AgentTool → ConfigMap)
-10. **Add negative/error path tests** for all controllers
+9. **Add conflict retry logic** for status updates (optimistic concurrency)
+10. **Add structured error types** (transient vs. permanent) to stop infinite requeues
+11. **Persist A2A plugin task state** (to ConfigMap or CRD status) to survive restarts
+12. **Add integration tests for cross-controller flows** (Agent → AgentTool → ConfigMap)
+13. **Add negative/error path tests** for all controllers
+14. **Fix agent controller error masking** — preserve both status update and reconciliation errors
+15. **Add workflow monitoring timeout** — fail or alert after configurable duration
+16. **Update ObservedGeneration on all status paths** in AgentWorkflow controller
 
 ### P2 — Fix This Quarter
-11. Add Prometheus metrics for reconciliation
-12. Add PodDisruptionBudget to Helm chart
-13. Configure MaxConcurrentReconciles with conflict handling
-14. Add cross-namespace RBAC validation
-15. Add CRD upgrade strategy documentation
-16. Replace `reconcileAgent` test helper with explicit multi-step reconciliation
+17. Add Prometheus metrics for reconciliation
+18. Add PodDisruptionBudget to Helm chart
+19. Configure MaxConcurrentReconciles with conflict handling
+20. Add cross-namespace RBAC validation
+21. Add CRD upgrade strategy documentation
+22. Replace `reconcileAgent` test helper with explicit multi-step reconciliation
+23. Add namespace filtering to watcher list operations for performance at scale
