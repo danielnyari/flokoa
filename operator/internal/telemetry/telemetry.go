@@ -52,7 +52,6 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 
 	opts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	}
 
 	// Only add the OTLP exporter when an endpoint is configured.
