@@ -60,6 +60,7 @@ func jsonRaw(s string) *apiextensionsv1.JSON {
 }
 
 // wantWorkflow builds the expected compiled Argo Workflow with standard metadata.
+// It always prepends the _flokoa_traceparent parameter to match compiler behavior.
 func wantWorkflow(name, namespace string, templates []wfv1.Template, opts ...func(*wfv1.Workflow)) *wfv1.Workflow {
 	wf := &wfv1.Workflow{
 		TypeMeta: metav1.TypeMeta{
@@ -77,6 +78,11 @@ func wantWorkflow(name, namespace string, templates []wfv1.Template, opts ...fun
 		Spec: wfv1.WorkflowSpec{
 			Entrypoint: "main",
 			Templates:  templates,
+			Arguments: wfv1.Arguments{
+				Parameters: []wfv1.Parameter{
+					{Name: "_flokoa_traceparent", Value: wfv1.AnyStringPtr("")},
+				},
+			},
 		},
 	}
 	for _, opt := range opts {
@@ -85,10 +91,10 @@ func wantWorkflow(name, namespace string, templates []wfv1.Template, opts ...fun
 	return wf
 }
 
-// withParams adds workflow-level argument parameters.
+// withParams adds workflow-level argument parameters after the traceparent parameter.
 func withParams(params ...wfv1.Parameter) func(*wfv1.Workflow) {
 	return func(wf *wfv1.Workflow) {
-		wf.Spec.Arguments.Parameters = params
+		wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, params...)
 	}
 }
 
@@ -355,7 +361,10 @@ func TestCompileToArgoWorkflow_AgentTaskRun(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"research": {},
+	}
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -410,7 +419,10 @@ func TestCompileToArgoWorkflow_AgentTaskClassify(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"classify": {},
+	}
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -463,7 +475,10 @@ func TestCompileToArgoWorkflow_AgentTaskExtract(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"extract-names": {},
+	}
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -521,7 +536,10 @@ func TestCompileToArgoWorkflow_AgentTaskCast(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"cast-data": {},
+	}
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -581,7 +599,10 @@ func TestCompileToArgoWorkflow_AgentTaskGenerate(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"generate-examples": {},
+	}
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -638,7 +659,10 @@ func TestCompileToArgoWorkflow_AgentTaskWithInlineAgent(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"agent-run": {},
+	}
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -693,7 +717,10 @@ func TestCompileToArgoWorkflow_AgentTaskCustomImage(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"custom": {},
+	}
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
