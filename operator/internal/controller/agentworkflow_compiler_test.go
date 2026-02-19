@@ -59,9 +59,6 @@ func jsonRaw(s string) *apiextensionsv1.JSON {
 	return &apiextensionsv1.JSON{Raw: []byte(s)}
 }
 
-// int32Ptr returns a pointer to an int32.
-func int32Ptr(v int32) *int32 { return &v }
-
 // wantWorkflow builds the expected compiled Argo Workflow with standard metadata.
 func wantWorkflow(name, namespace string, templates []wfv1.Template, opts ...func(*wfv1.Workflow)) *wfv1.Workflow {
 	wf := &wfv1.Workflow{

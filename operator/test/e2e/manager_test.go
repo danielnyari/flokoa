@@ -84,7 +84,8 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("Fetching controller manager pod description")
 			pod := &corev1.Pod{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: controllerPodName, Namespace: managerNamespace}, pod); err == nil {
+			nn := types.NamespacedName{Name: controllerPodName, Namespace: managerNamespace}
+			if err := k8sClient.Get(ctx, nn, pod); err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Pod description:\n  Name: %s\n  Phase: %s\n  Conditions:\n",
 					pod.Name, pod.Status.Phase)
 				for _, cond := range pod.Status.Conditions {
@@ -159,7 +160,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
-				endpoints := &corev1.Endpoints{}
+				endpoints := &corev1.Endpoints{} //nolint:staticcheck // TODO: migrate to discoveryv1.EndpointSlice
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: metricsServiceName, Namespace: managerNamespace}, endpoints)
 				g.Expect(err).NotTo(HaveOccurred())
 				// Check that we have at least one ready address

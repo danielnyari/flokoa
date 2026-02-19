@@ -191,7 +191,7 @@ func (s *Service) Reconcile(ctx context.Context, agent *agentv1alpha1.Agent) Rec
 }
 
 func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, templateConfigMapName string, instructionConfigMapName string) (*appsv1.Deployment, error) {
-	var toolMounts []builder.ToolMount
+	toolMounts := make([]builder.ToolMount, 0, len(toolConfigMaps))
 	for _, t := range toolConfigMaps {
 		toolMounts = append(toolMounts, builder.ToolMount{
 			ToolName:      t.toolName,

@@ -109,13 +109,13 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 
 	// Workflow-level timeout
 	if awf.Spec.Timeout != nil {
-		seconds := int64(awf.Spec.Timeout.Duration.Seconds())
+		seconds := int64(awf.Spec.Timeout.Seconds())
 		wf.Spec.ActiveDeadlineSeconds = &seconds
 	}
 
 	// Build templates and DAG tasks
-	var dagTasks []wfv1.DAGTask
-	var templates []wfv1.Template
+	dagTasks := make([]wfv1.DAGTask, 0, len(awf.Spec.Tasks))
+	templates := make([]wfv1.Template, 0, len(awf.Spec.Tasks)+1)
 
 	for _, task := range awf.Spec.Tasks {
 		templateName := task.Name
@@ -186,7 +186,7 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 
 	// Per-task timeout
 	if task.Timeout != nil {
-		seconds := int64(task.Timeout.Duration.Seconds())
+		seconds := int64(task.Timeout.Seconds())
 		tmpl.ActiveDeadlineSeconds = &intstr.IntOrString{
 			Type:   intstr.Int,
 			IntVal: int32(seconds),

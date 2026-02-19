@@ -104,7 +104,9 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.validateSpec(ctx, agentTool); err != nil {
 		logger.Error(err, "Spec validation failed")
 		r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionFalse, ReasonValidationFailed, err.Error())
-		_ = r.Status().Update(ctx, agentTool)
+		if statusErr := r.Status().Update(ctx, agentTool); statusErr != nil {
+			logger.Error(statusErr, "Failed to update AgentTool status after validation failure")
+		}
 		return ctrl.Result{}, err
 	}
 	r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionTrue, ReasonValidationSuccess, "Spec is valid")
@@ -113,7 +115,9 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.reconcileConfigMap(ctx, agentTool); err != nil {
 		logger.Error(err, "Failed to reconcile ConfigMap")
 		r.setCondition(agentTool, ConditionTypeStored, metav1.ConditionFalse, ReasonStorageFailed, err.Error())
-		_ = r.Status().Update(ctx, agentTool)
+		if statusErr := r.Status().Update(ctx, agentTool); statusErr != nil {
+			logger.Error(statusErr, "Failed to update AgentTool status after ConfigMap reconciliation failure")
+		}
 		return ctrl.Result{}, err
 	}
 	r.setCondition(agentTool, ConditionTypeStored, metav1.ConditionTrue, ReasonStorageSuccess, "Spec stored in ConfigMap")

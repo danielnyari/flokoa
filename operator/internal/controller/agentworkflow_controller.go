@@ -181,7 +181,9 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
 			ReasonCompileFailed, fmt.Sprintf("Failed to resolve dependencies: %v", err))
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		_ = r.Status().Update(ctx, awf)
+		if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+			logger.Error(statusErr, "Failed to update AgentWorkflow status after dependency resolution failure")
+		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to resolve dependencies")
 		return ctrl.Result{}, err
@@ -194,7 +196,9 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
 			ReasonCompileFailed, err.Error())
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		_ = r.Status().Update(ctx, awf)
+		if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+			logger.Error(statusErr, "Failed to update AgentWorkflow status after compilation failure")
+		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to compile workflow")
 		return ctrl.Result{}, err
@@ -215,7 +219,9 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 		r.setCondition(awf, ConditionTypeWorkflowSubmitted, metav1.ConditionFalse,
 			ReasonSubmitFailed, err.Error())
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		_ = r.Status().Update(ctx, awf)
+		if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+			logger.Error(statusErr, "Failed to update AgentWorkflow status after Argo Workflow creation failure")
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -250,7 +256,9 @@ func (r *AgentWorkflowReconciler) monitorArgoWorkflow(ctx context.Context, awf *
 			r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
 				ReasonWorkflowError, "Argo Workflow not found")
 			awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-			_ = r.Status().Update(ctx, awf)
+			if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+				logger.Error(statusErr, "Failed to update AgentWorkflow status after Argo Workflow not found")
+			}
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -313,7 +321,7 @@ func (r *AgentWorkflowReconciler) monitorArgoWorkflow(ctx context.Context, awf *
 
 // extractTaskStatuses maps Argo Workflow node statuses to AgentWorkflow task statuses.
 func (r *AgentWorkflowReconciler) extractTaskStatuses(argoWf *wfv1.Workflow) []agentv1alpha1.WorkflowTaskStatus {
-	var statuses []agentv1alpha1.WorkflowTaskStatus
+	statuses := make([]agentv1alpha1.WorkflowTaskStatus, 0, len(argoWf.Status.Nodes))
 
 	for _, node := range argoWf.Status.Nodes {
 		// Skip non-task nodes (e.g., the DAG root node)
@@ -445,7 +453,7 @@ func (r *AgentWorkflowReconciler) resolveModelRef(ctx context.Context, awf *agen
 		return nil, fmt.Errorf("failed to get Model %s/%s: %w", modelNamespace, modelRef.Name, err)
 	}
 	if !model.Status.Ready {
-		return nil, fmt.Errorf("Model %s/%s is not ready", modelNamespace, model.Name)
+		return nil, fmt.Errorf("model %s/%s is not ready", modelNamespace, model.Name)
 	}
 
 	// Fetch the ModelProvider CR
