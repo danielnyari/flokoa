@@ -1,4 +1,9 @@
-"""Bootstrap logic for instantiating and executing Marvin tasks from config."""
+"""Bootstrap logic for instantiating and executing Marvin tasks from config.
+
+Supports both:
+- The unified :class:`AgentConfig` / :class:`TaskAgentConfig` path
+- The legacy :class:`TaskConfig` path (backward compatibility)
+"""
 
 from __future__ import annotations
 
@@ -11,10 +16,99 @@ from a2a.utils import new_data_artifact, new_text_artifact
 from marvin import Agent as MarvinAgent
 from pydantic_ai import StructuredDict
 
+from flokoa.config import AgentConfig, TaskAgentConfig
 from flokoa.integrations.pydantic_ai.model_factory import create_model_from_config
 from flokoa_types import ModelConfig, TaskConfig, TaskResultType
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Unified config path
+# ---------------------------------------------------------------------------
+
+
+def execute_task_from_config(config: AgentConfig) -> Artifact:
+    """Execute a Marvin task from a unified :class:`AgentConfig`.
+
+    Args:
+        config: A validated AgentConfig wrapping a TaskAgentConfig.
+
+    Returns:
+        An A2A Artifact wrapping the task result.
+    """
+    inner = config.root
+    if not isinstance(inner, TaskAgentConfig):
+        raise TypeError(f"Expected TaskAgentConfig, got {type(inner).__name__}")
+
+    agent = _build_marvin_agent_from_unified(inner)
+    instructions = inner.instruction
+    task_type = inner.task_type.value
+    result_type = _build_result_type(inner.result_type)
+
+    match task_type:
+        case "run":
+            result = marvin.run(
+                instructions or "",
+                result_type=result_type or str,
+                agents=[agent] if agent else None,
+            )
+        case "classify":
+            result = marvin.classify(
+                inner.input or "",
+                labels=inner.labels or [],
+                multi_label=inner.multi_label or False,
+                instructions=instructions,
+                agents=[agent] if agent else None,
+            )
+        case "extract":
+            result = marvin.extract(
+                inner.input or "",
+                target=result_type or str,
+                instructions=instructions,
+                agents=[agent] if agent else None,
+            )
+        case "cast":
+            result = marvin.cast(
+                inner.input or "",
+                target=result_type,
+                instructions=instructions,
+                agents=[agent] if agent else None,
+            )
+        case "generate":
+            result = marvin.generate(
+                target=result_type,
+                n=inner.count or 1,
+                instructions=instructions,
+                agents=[agent] if agent else None,
+            )
+        case _:
+            raise ValueError(f"Unknown task type: {task_type}")
+
+    name = inner.result_type.name if inner.result_type else "result"
+    description = inner.result_type.description if inner.result_type else None
+    return _build_artifact(result, name, description)
+
+
+def _build_marvin_agent_from_unified(config: TaskAgentConfig) -> MarvinAgent | None:
+    """Build a Marvin Agent from unified TaskAgentConfig."""
+    if not config.model:
+        return None
+
+    model = create_model_from_config(config.model)
+    agent_kwargs: dict[str, Any] = {"model": model}
+
+    if config.name:
+        agent_kwargs["name"] = config.name
+    if config.instruction:
+        agent_kwargs["instructions"] = config.instruction
+
+    return MarvinAgent(**agent_kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Legacy config path (backward compatibility)
+# ---------------------------------------------------------------------------
 
 
 def execute_task(
@@ -23,6 +117,8 @@ def execute_task(
     instruction: str | None,
 ) -> Artifact:
     """Execute a Marvin task and return the result as an A2A Artifact.
+
+    Retained for backward compatibility with the legacy config path.
 
     Args:
         task_config: The task configuration from FLOKOA_TASK_CONFIG.
@@ -44,7 +140,7 @@ def execute_task(
             result = marvin.run(
                 instructions or "",
                 result_type=_build_result_type(task_config.result_type) or str,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "classify":
             result = marvin.classify(
@@ -52,33 +148,42 @@ def execute_task(
                 labels=task_config.labels or [],
                 multi_label=task_config.multi_label or False,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "extract":
             result = marvin.extract(
                 task_config.input or "",
                 target=_build_result_type(task_config.result_type) or str,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "cast":
             result = marvin.cast(
                 task_config.input or "",
                 target=_build_result_type(task_config.result_type),
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "generate":
             result = marvin.generate(
                 target=_build_result_type(task_config.result_type),
                 n=task_config.count or 1,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case _:
             raise ValueError(f"Unknown task type: {task_type}")
 
-    return _build_artifact(result, task_config)
+    name = task_config.result_type.name if task_config.result_type else "result"
+    description = (
+        task_config.result_type.description if task_config.result_type else None
+    )
+    return _build_artifact(result, name, description)
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
 
 def _build_marvin_agent(
@@ -116,13 +221,8 @@ def _build_result_type(result_type: TaskResultType | None) -> type | None:
     )
 
 
-def _build_artifact(result: Any, task_config: TaskConfig) -> Artifact:
+def _build_artifact(result: Any, name: str, description: str | None) -> Artifact:
     """Wrap a Marvin task result in an A2A Artifact."""
-    name = task_config.result_type.name if task_config.result_type else "result"
-    description = (
-        task_config.result_type.description if task_config.result_type else None
-    )
-
     if isinstance(result, str):
         return new_text_artifact(name=name, text=result, description=description)
     elif isinstance(result, dict):

@@ -16,12 +16,17 @@ from .conftest import INSTRUCTION_TEXT, MODEL_CONFIG_DATA, TEMPLATE_CONFIG_DATA
 def test_main_raises_without_template_config(tmp_path, monkeypatch):
     """main() raises FileNotFoundError when template config is missing."""
     monkeypatch.setenv("FLOKOA_TEMPLATE_CONFIG_PATH", str(tmp_path / "missing.json"))
+    # Ensure unified config path doesn't exist either
+    monkeypatch.setenv("FLOKOA_AGENT_CONFIG_PATH", str(tmp_path / "no-unified.json"))
     with pytest.raises(FileNotFoundError, match="Templated config file not found"):
         main()
 
 
 def test_main_raises_without_instruction(tmp_path, monkeypatch):
     """main() raises RuntimeError when instruction file is missing."""
+    # Ensure unified config path doesn't exist
+    monkeypatch.setenv("FLOKOA_AGENT_CONFIG_PATH", str(tmp_path / "no-unified.json"))
+
     # Provide valid template config
     config_path = tmp_path / "template-config.json"
     config_path.write_text(json.dumps(TEMPLATE_CONFIG_DATA))

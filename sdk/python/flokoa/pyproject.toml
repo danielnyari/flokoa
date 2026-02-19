@@ -51,6 +51,8 @@ google-adk = [
     "flokoa[google-adk]",
 ]
 dev = [
+    "flokoa[google-adk]",
+    "flokoa[pydantic-ai]",
     "mypy-boto3-bedrock-runtime>=1.42.31",
     "pre-commit>=4.0.0",
     "pytest>=9.0.2",
