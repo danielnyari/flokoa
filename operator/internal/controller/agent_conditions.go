@@ -61,13 +61,12 @@ type toolConfigMapInfo struct {
 
 // resolvedModelInfo is a compatibility type for existing tests.
 type resolvedModelInfo struct {
-	provider          agentv1alpha1.ProviderType
-	model             string
-	configMapName     string
-	envVars           []corev1.EnvVar
-	secretEnvVars     []corev1.EnvVar
-	secretRefsHash    string
-	missingSecretRefs []string
+	provider       agentv1alpha1.ProviderType
+	model          string
+	configMapName  string
+	envVars        []corev1.EnvVar
+	secretEnvVars  []corev1.EnvVar
+	secretRefsHash string
 }
 
 // ConfigMap key constants (re-exported for existing tests that reference them).
@@ -92,7 +91,7 @@ func (r *AgentReconciler) calculatePhase(deployment *appsv1.Deployment) agentv1a
 
 // buildDeployment is a compatibility wrapper for existing tests that call r.buildDeployment.
 func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, templateConfigMapName string, instructionConfigMapName string) *appsv1.Deployment {
-	var toolMounts []builder.ToolMount
+	toolMounts := make([]builder.ToolMount, 0, len(toolConfigMaps))
 	for _, t := range toolConfigMaps {
 		toolMounts = append(toolMounts, builder.ToolMount{
 			ToolName:      t.toolName,
@@ -125,7 +124,7 @@ func (r *AgentReconciler) buildDeployment(agent *agentv1alpha1.Agent, toolConfig
 }
 
 // computeSecretRefsHash is a compatibility wrapper for existing tests.
-func (r *AgentReconciler) computeSecretRefsHash(ctx context.Context, namespace string, secretEnvVars []corev1.EnvVar) (string, []string, error) {
+func (r *AgentReconciler) computeSecretRefsHash(ctx context.Context, namespace string, secretEnvVars []corev1.EnvVar) (string, []string, error) { //nolint:unparam
 	if len(secretEnvVars) == 0 {
 		return "", nil, nil
 	}

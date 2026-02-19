@@ -35,7 +35,7 @@ func TestConfigMapData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ConfigMapData(tt.data)
-			if tt.data == nil || len(tt.data) == 0 {
+			if len(tt.data) == 0 {
 				if got != "" {
 					t.Errorf("ConfigMapData(%v) = %q, want empty string", tt.data, got)
 				}
@@ -111,7 +111,7 @@ func TestSecretVersions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := SecretVersions(tt.versions)
-			if tt.versions == nil || len(tt.versions) == 0 {
+			if len(tt.versions) == 0 {
 				if got != "" {
 					t.Errorf("SecretVersions(%v) = %q, want empty string", tt.versions, got)
 				}

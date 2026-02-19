@@ -13,6 +13,11 @@ const DefaultTimeout = 5 * time.Minute
 // DefaultPollInterval is the default interval between task status polls
 const DefaultPollInterval = 5 * time.Second
 
+// MaxPollErrors is the maximum number of consecutive transient poll errors
+// before permanently failing the task. This prevents network blips from
+// causing permanent workflow failures.
+const MaxPollErrors = 5
+
 // A2ASpec defines the configuration for an A2A plugin step.
 // The message field uses structured A2A message format aligned with the a2a-go library.
 type A2ASpec struct {
@@ -98,17 +103,17 @@ type A2AFileContent struct {
 
 // A2ASendConfig configures message sending. Aligns with a2a.MessageSendConfig.
 type A2ASendConfig struct {
-	AcceptedOutputModes    []string                    `json:"acceptedOutputModes,omitempty"`
-	Blocking               *bool                       `json:"blocking,omitempty"`
-	HistoryLength          *int                        `json:"historyLength,omitempty"`
-	PushNotificationConfig *A2APushNotificationConfig  `json:"pushNotificationConfig,omitempty"`
+	AcceptedOutputModes    []string                   `json:"acceptedOutputModes,omitempty"`
+	Blocking               *bool                      `json:"blocking,omitempty"`
+	HistoryLength          *int                       `json:"historyLength,omitempty"`
+	PushNotificationConfig *A2APushNotificationConfig `json:"pushNotificationConfig,omitempty"`
 }
 
 // A2APushNotificationConfig configures push notifications. Aligns with a2a.PushNotificationConfig.
 type A2APushNotificationConfig struct {
-	URL            string              `json:"url"`
-	ID             string              `json:"id,omitempty"`
-	Token          string              `json:"token,omitempty"`
+	URL            string                   `json:"url"`
+	ID             string                   `json:"id,omitempty"`
+	Token          string                   `json:"token,omitempty"`
 	Authentication *A2APushNotificationAuth `json:"authentication,omitempty"`
 }
 
@@ -142,6 +147,9 @@ type ProgressState struct {
 
 	// Timeout is the configured timeout duration
 	Timeout time.Duration `json:"timeout"`
+
+	// PollErrors tracks consecutive poll errors for transient failure resilience
+	PollErrors int `json:"pollErrors,omitempty"`
 }
 
 // MarshalProgress serializes the progress state to a string for storage in Argo node progress

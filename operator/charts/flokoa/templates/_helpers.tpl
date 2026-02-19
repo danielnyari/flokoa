@@ -91,6 +91,17 @@ Server fullname.
 {{- end }}
 
 {{/*
+Server service account name.
+*/}}
+{{- define "flokoa.server.serviceAccountName" -}}
+{{- if .Values.server.serviceAccount.create }}
+{{- default (include "flokoa.server.fullname" .) .Values.server.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.server.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
 Server selector labels.
 */}}
 {{- define "flokoa.server.selectorLabels" -}}

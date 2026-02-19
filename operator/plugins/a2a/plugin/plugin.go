@@ -277,6 +277,9 @@ func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoi
 
 	switch r := result.(type) {
 	case *a2a.Task:
+		if r == nil {
+			return failedReply("received nil task from A2A agent"), nil
+		}
 		taskID = r.ID
 		contextID = r.ContextID
 		// Check if task is already in terminal state
@@ -348,8 +351,25 @@ func (p *Plugin) pollTask(ctx context.Context, key string, spec *A2ASpec, progre
 	if err != nil {
 		log.Printf("A2A get task failed: endpoint=%s taskID=%s error=%v", progress.Endpoint, progress.TaskID, err)
 		span.RecordError(err)
-		return failedReply(fmt.Sprintf("failed to get A2A task: %v", err)), nil
+
+		// Distinguish transient errors from permanent ones: requeue on transient
+		// failures so that network blips don't permanently fail the workflow step.
+		progress.PollErrors++
+		if progress.PollErrors < MaxPollErrors {
+			log.Printf("Transient poll error (%d/%d), requeueing: %v", progress.PollErrors, MaxPollErrors, err)
+			return &executor.ExecuteTemplateReply{
+				Node: &wfv1.NodeResult{
+					Phase:   wfv1.NodeRunning,
+					Message: fmt.Sprintf("A2A poll error (attempt %d/%d): %v", progress.PollErrors, MaxPollErrors, err),
+				},
+				Requeue: &metav1.Duration{Duration: DefaultPollInterval},
+			}, nil
+		}
+		return failedReply(fmt.Sprintf("failed to get A2A task after %d attempts: %v", progress.PollErrors, err)), nil
 	}
+
+	// Reset error counter on successful poll
+	progress.PollErrors = 0
 
 	span.SetAttributes(attribute.String("a2a.task_state", string(task.Status.State)))
 

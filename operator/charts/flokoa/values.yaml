@@ -231,6 +231,18 @@ server:
     minAvailable: 1
     # maxUnavailable: 1
 
+  serviceAccount:
+    # -- Create a dedicated ServiceAccount for the server (recommended for least-privilege)
+    create: true
+    # -- Override the server ServiceAccount name
+    name: ""
+    # -- Annotations to add to the server ServiceAccount
+    annotations: {}
+
+  rbac:
+    # -- Create read-only ClusterRole and binding for the server
+    create: true
+
 # =============================================================================
 # Authentication (Dex OIDC)
 # =============================================================================
