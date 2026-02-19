@@ -99,7 +99,9 @@ func (r *InstructionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile ConfigMap")
 		r.setCondition(instruction, ConditionTypeInstructionStored, metav1.ConditionFalse, ReasonInstructionStoreFailed, err.Error())
-		_ = r.Status().Update(ctx, instruction)
+		if statusErr := r.Status().Update(ctx, instruction); statusErr != nil {
+			logger.Error(statusErr, "Failed to update Instruction status after ConfigMap reconciliation failure")
+		}
 		return ctrl.Result{}, err
 	}
 	r.setCondition(instruction, ConditionTypeInstructionStored, metav1.ConditionTrue, ReasonInstructionStored, "Instruction stored in ConfigMap")

@@ -244,7 +244,7 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 				fileServer.ServeHTTP(w, r)
 				return
 			}
-			f.Close()
+			_ = f.Close()
 			fileServer.ServeHTTP(w, r)
 		})
 	} else {

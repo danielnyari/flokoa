@@ -128,7 +128,9 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Created AgentWorkflow: e2e-petstore-workflow\n")
 
 			By("waiting for AgentWorkflow to complete")
-			err = waitForAgentWorkflowPhase("e2e-petstore-workflow", namespace, agentv1alpha1.WorkflowPhaseSucceeded, 5*time.Minute)
+			err = waitForAgentWorkflowPhase(
+				"e2e-petstore-workflow", namespace,
+				agentv1alpha1.WorkflowPhaseSucceeded, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "AgentWorkflow did not succeed")
 
 			By("verifying AgentWorkflow status")

@@ -19,11 +19,11 @@ func TestModelToProto(t *testing.T) {
 	maxTokens := int32(4096)
 	model := &agentv1alpha1.Model{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gpt-4o",
+			Name:      testModelName,
 			Namespace: "models",
 		},
 		Spec: agentv1alpha1.ModelSpec{
-			Model: "gpt-4o",
+			Model: testModelName,
 			ProviderRef: agentv1alpha1.ProviderRef{
 				Name:      "openai-provider",
 				Namespace: "providers",
@@ -48,8 +48,8 @@ func TestModelToProto(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Metadata == nil || result.Metadata.Name != "gpt-4o" {
-		t.Fatal("expected metadata with name gpt-4o")
+	if result.Metadata == nil || result.Metadata.Name != testModelName {
+		t.Fatal("expected metadata with name " + testModelName)
 	}
 	if result.Spec == nil {
 		t.Fatal("expected non-nil spec")
@@ -69,7 +69,7 @@ func TestModelSpecToProto_Nil(t *testing.T) {
 func TestModelSpecToProto(t *testing.T) {
 	maxTokens := int32(4096)
 	spec := &agentv1alpha1.ModelSpec{
-		Model: "gpt-4o",
+		Model: testModelName,
 		ProviderRef: agentv1alpha1.ProviderRef{
 			Name:      "openai-provider",
 			Namespace: "providers",
@@ -84,7 +84,7 @@ func TestModelSpecToProto(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Model != "gpt-4o" {
+	if result.Model != testModelName {
 		t.Fatalf("expected model gpt-4o, got %q", result.Model)
 	}
 	if result.ProviderRef == nil {
@@ -103,7 +103,7 @@ func TestModelSpecToProto(t *testing.T) {
 
 func TestModelSpecToProto_NilParameters(t *testing.T) {
 	spec := &agentv1alpha1.ModelSpec{
-		Model: "gpt-4o",
+		Model: testModelName,
 		ProviderRef: agentv1alpha1.ProviderRef{
 			Name: "provider",
 		},
@@ -278,7 +278,7 @@ func TestModelListToProto(t *testing.T) {
 		Items: []agentv1alpha1.Model{
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: "model-1"},
-				Spec:       agentv1alpha1.ModelSpec{Model: "gpt-4o"},
+				Spec:       agentv1alpha1.ModelSpec{Model: testModelName},
 			},
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: "model-2"},
@@ -320,11 +320,11 @@ func TestModelFromProto_Nil(t *testing.T) {
 func TestModelFromProto(t *testing.T) {
 	proto := &pb.Model{
 		Metadata: &pb.ObjectMeta{
-			Name:      "gpt-4o",
+			Name:      testModelName,
 			Namespace: "models",
 		},
 		Spec: &pb.ModelSpec{
-			Model: "gpt-4o",
+			Model: testModelName,
 			ProviderRef: &pb.ProviderRef{
 				Name:      "openai",
 				Namespace: "providers",
@@ -340,10 +340,10 @@ func TestModelFromProto(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Name != "gpt-4o" {
+	if result.Name != testModelName {
 		t.Fatalf("expected name gpt-4o, got %q", result.Name)
 	}
-	if result.Spec.Model != "gpt-4o" {
+	if result.Spec.Model != testModelName {
 		t.Fatalf("expected model gpt-4o, got %q", result.Spec.Model)
 	}
 	if result.Spec.ProviderRef.Name != "openai" {

@@ -11,6 +11,8 @@ import (
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
 )
 
+const testNamespace = "default"
+
 // validAgentToolSpec creates a minimal valid AgentToolSpec for testing.
 func validAgentToolSpec() agentv1alpha1.AgentToolSpec {
 	return agentv1alpha1.AgentToolSpec{
@@ -37,14 +39,14 @@ var _ = Describe("AgentToolService", func() {
 		})
 
 		It("should return InvalidArgument when name is empty", func() {
-			_, err := svc.GetAgentTool(ctx, &pb.GetAgentToolRequest{Namespace: "default"})
+			_, err := svc.GetAgentTool(ctx, &pb.GetAgentToolRequest{Namespace: testNamespace})
 			Expect(err).To(HaveOccurred())
 			Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
 		})
 
 		It("should return NotFound for non-existent tool", func() {
 			_, err := svc.GetAgentTool(ctx, &pb.GetAgentToolRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				Name:      "nonexistent",
 			})
 			Expect(err).To(HaveOccurred())
@@ -55,7 +57,7 @@ var _ = Describe("AgentToolService", func() {
 			tool := &agentv1alpha1.AgentTool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-tool-get",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: validAgentToolSpec(),
 			}
@@ -65,7 +67,7 @@ var _ = Describe("AgentToolService", func() {
 			})
 
 			result, err := svc.GetAgentTool(ctx, &pb.GetAgentToolRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				Name:      "test-tool-get",
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -91,7 +93,7 @@ var _ = Describe("AgentToolService", func() {
 			tool := &agentv1alpha1.AgentTool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-tool-list",
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels:    map[string]string{"test": "tool-list"},
 				},
 				Spec: spec,
@@ -102,7 +104,7 @@ var _ = Describe("AgentToolService", func() {
 			})
 
 			result, err := svc.ListAgentTools(ctx, &pb.ListAgentToolsRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				Options: &pb.ListOptions{
 					LabelSelector: "test=tool-list",
 				},
@@ -146,11 +148,11 @@ var _ = Describe("AgentToolService", func() {
 
 		It("should create a tool successfully", func() {
 			result, err := svc.CreateAgentTool(ctx, &pb.CreateAgentToolRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				AgentTool: &pb.AgentTool{
 					Metadata: &pb.ObjectMeta{
 						Name:      "test-tool-create",
-						Namespace: "default",
+						Namespace: testNamespace,
 					},
 					Spec: &pb.AgentToolSpec{
 						Type:        pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI,
@@ -169,7 +171,7 @@ var _ = Describe("AgentToolService", func() {
 			DeferCleanup(func() {
 				t := &agentv1alpha1.AgentTool{}
 				t.Name = "test-tool-create"
-				t.Namespace = "default"
+				t.Namespace = testNamespace
 				_ = k8sClient.Delete(ctx, t)
 			})
 		})
@@ -178,7 +180,7 @@ var _ = Describe("AgentToolService", func() {
 			tool := &agentv1alpha1.AgentTool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-tool-dup",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: validAgentToolSpec(),
 			}
@@ -188,11 +190,11 @@ var _ = Describe("AgentToolService", func() {
 			})
 
 			_, err := svc.CreateAgentTool(ctx, &pb.CreateAgentToolRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				AgentTool: &pb.AgentTool{
 					Metadata: &pb.ObjectMeta{
 						Name:      "test-tool-dup",
-						Namespace: "default",
+						Namespace: testNamespace,
 					},
 					Spec: &pb.AgentToolSpec{
 						Type:        pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI,
@@ -216,7 +218,7 @@ var _ = Describe("AgentToolService", func() {
 			tool := &agentv1alpha1.AgentTool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-tool-update",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: validAgentToolSpec(),
 			}
@@ -229,7 +231,7 @@ var _ = Describe("AgentToolService", func() {
 				AgentTool: &pb.AgentTool{
 					Metadata: &pb.ObjectMeta{
 						Name:      "test-tool-update",
-						Namespace: "default",
+						Namespace: testNamespace,
 					},
 					Spec: &pb.AgentToolSpec{
 						Type:        pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI,
@@ -246,7 +248,7 @@ var _ = Describe("AgentToolService", func() {
 				AgentTool: &pb.AgentTool{
 					Metadata: &pb.ObjectMeta{
 						Name:      "nonexistent",
-						Namespace: "default",
+						Namespace: testNamespace,
 					},
 					Spec: &pb.AgentToolSpec{
 						Type:        pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI,
@@ -270,14 +272,14 @@ var _ = Describe("AgentToolService", func() {
 			tool := &agentv1alpha1.AgentTool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-tool-delete",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: validAgentToolSpec(),
 			}
 			Expect(k8sClient.Create(ctx, tool)).To(Succeed())
 
 			result, err := svc.DeleteAgentTool(ctx, &pb.DeleteAgentToolRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				Name:      "test-tool-delete",
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -286,7 +288,7 @@ var _ = Describe("AgentToolService", func() {
 
 		It("should return NotFound for non-existent tool", func() {
 			_, err := svc.DeleteAgentTool(ctx, &pb.DeleteAgentToolRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				Name:      "nonexistent-tool-delete",
 			})
 			Expect(err).To(HaveOccurred())
@@ -297,7 +299,7 @@ var _ = Describe("AgentToolService", func() {
 	Context("UpdateAgentToolStatus", func() {
 		It("should return InvalidArgument when status is nil", func() {
 			_, err := svc.UpdateAgentToolStatus(ctx, &pb.UpdateAgentToolStatusRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				Name:      "test",
 			})
 			Expect(err).To(HaveOccurred())
@@ -308,7 +310,7 @@ var _ = Describe("AgentToolService", func() {
 			tool := &agentv1alpha1.AgentTool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-tool-status",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: validAgentToolSpec(),
 			}
@@ -318,7 +320,7 @@ var _ = Describe("AgentToolService", func() {
 			})
 
 			result, err := svc.UpdateAgentToolStatus(ctx, &pb.UpdateAgentToolStatusRequest{
-				Namespace: "default",
+				Namespace: testNamespace,
 				Name:      "test-tool-status",
 				Status: &pb.AgentToolStatus{
 					ObservedGeneration: 1,

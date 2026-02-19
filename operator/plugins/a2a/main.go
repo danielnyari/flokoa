@@ -39,13 +39,19 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(agentv1alpha1.AddToScheme(scheme))
 
-	// Read the Argo token for authorization
-	token, err := os.ReadFile(tokenPath)
-	if err != nil {
-		log.Printf("Warning: failed to read Argo token from %s: %v", tokenPath, err)
-	} else {
+	// Read the Argo token for authorization.
+	// When the token file exists (i.e. running inside Argo), it MUST be readable.
+	// A missing/unreadable token would silently disable authentication, allowing
+	// any HTTP client to execute arbitrary A2A tasks.
+	if _, statErr := os.Stat(tokenPath); statErr == nil {
+		token, err := os.ReadFile(tokenPath)
+		if err != nil {
+			log.Fatalf("FATAL: Argo token file exists at %s but cannot be read: %v", tokenPath, err)
+		}
 		argoToken = string(token)
 		log.Printf("Loaded Argo token for authorization")
+	} else {
+		log.Printf("Warning: Argo token file not found at %s — running without auth (development mode only)", tokenPath)
 	}
 }
 

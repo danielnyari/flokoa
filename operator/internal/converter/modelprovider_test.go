@@ -9,6 +9,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const testProviderName = "openai-provider"
+
 func TestModelProviderToProto_Nil(t *testing.T) {
 	result := ModelProviderToProto(nil)
 	if result != nil {
@@ -20,7 +22,7 @@ func TestModelProviderToProto(t *testing.T) {
 	useSystemCAs := true
 	provider := &agentv1alpha1.ModelProvider{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "openai-provider",
+			Name:      testProviderName,
 			Namespace: "providers",
 		},
 		Spec: agentv1alpha1.ModelProviderSpec{
@@ -49,7 +51,7 @@ func TestModelProviderToProto(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Metadata == nil || result.Metadata.Name != "openai-provider" {
+	if result.Metadata == nil || result.Metadata.Name != testProviderName {
 		t.Fatal("expected metadata with name")
 	}
 	if result.Spec == nil {
@@ -322,7 +324,7 @@ func TestModelProviderFromProto_Nil(t *testing.T) {
 func TestModelProviderFromProto(t *testing.T) {
 	proto := &pb.ModelProvider{
 		Metadata: &pb.ObjectMeta{
-			Name:      "openai-provider",
+			Name:      testProviderName,
 			Namespace: "ns",
 		},
 		Spec: &pb.ModelProviderSpec{
@@ -337,7 +339,7 @@ func TestModelProviderFromProto(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Name != "openai-provider" {
+	if result.Name != testProviderName {
 		t.Fatalf("expected name, got %q", result.Name)
 	}
 	if result.Spec.OpenAI == nil {

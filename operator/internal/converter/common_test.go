@@ -9,6 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const testAnnotationValue = "value"
+
 func TestObjectMetaToProto_Nil(t *testing.T) {
 	result := ObjectMetaToProto(nil)
 	if result != nil {
@@ -24,7 +26,7 @@ func TestObjectMetaToProto_BasicFields(t *testing.T) {
 		ResourceVersion: "42",
 		Generation:      3,
 		Labels:          map[string]string{"app": "test"},
-		Annotations:     map[string]string{"note": "value"},
+		Annotations:     map[string]string{"note": testAnnotationValue},
 		Finalizers:      []string{"finalizer.flokoa.ai"},
 	}
 
@@ -50,7 +52,7 @@ func TestObjectMetaToProto_BasicFields(t *testing.T) {
 	if result.Labels["app"] != "test" {
 		t.Fatal("expected label app=test")
 	}
-	if result.Annotations["note"] != "value" {
+	if result.Annotations["note"] != testAnnotationValue {
 		t.Fatal("expected annotation note=value")
 	}
 	if len(result.Finalizers) != 1 || result.Finalizers[0] != "finalizer.flokoa.ai" {
@@ -171,7 +173,7 @@ func TestObjectMetaFromProto_BasicFields(t *testing.T) {
 		Namespace:       "default",
 		ResourceVersion: "42",
 		Labels:          map[string]string{"app": "test"},
-		Annotations:     map[string]string{"note": "value"},
+		Annotations:     map[string]string{"note": testAnnotationValue},
 		Finalizers:      []string{"finalizer.flokoa.ai"},
 	}
 
@@ -191,7 +193,7 @@ func TestObjectMetaFromProto_BasicFields(t *testing.T) {
 	if result.Labels["app"] != "test" {
 		t.Fatal("expected label")
 	}
-	if result.Annotations["note"] != "value" {
+	if result.Annotations["note"] != testAnnotationValue {
 		t.Fatal("expected annotation")
 	}
 	if len(result.Finalizers) != 1 || result.Finalizers[0] != "finalizer.flokoa.ai" {

@@ -9,6 +9,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const testModelName = "gpt-4o"
+
 func TestAgentToProto_Nil(t *testing.T) {
 	result := AgentToProto(nil)
 	if result != nil {
@@ -43,7 +45,7 @@ func TestAgentToProto_FullAgent(t *testing.T) {
 				},
 			},
 			Model: &agentv1alpha1.AgentModelRef{
-				Name:      "gpt-4o",
+				Name:      testModelName,
 				Namespace: "models",
 			},
 			Tools: []agentv1alpha1.ToolEntry{
@@ -103,7 +105,7 @@ func TestAgentSpecToProto_WithModel(t *testing.T) {
 	spec := &agentv1alpha1.AgentSpec{
 		Framework: agentv1alpha1.FrameworkLangChain,
 		Model: &agentv1alpha1.AgentModelRef{
-			Name:      "gpt-4o",
+			Name:      testModelName,
 			Namespace: "models",
 		},
 	}
@@ -115,7 +117,7 @@ func TestAgentSpecToProto_WithModel(t *testing.T) {
 	if result.Model == nil {
 		t.Fatal("expected model ref to be set")
 	}
-	if result.Model.Name != "gpt-4o" {
+	if result.Model.Name != testModelName {
 		t.Fatalf("expected model name gpt-4o, got %q", result.Model.Name)
 	}
 	if result.Model.Namespace != "models" {

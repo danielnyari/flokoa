@@ -22,7 +22,6 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -69,9 +68,6 @@ const metricsRoleBindingName = "flokoa-metrics-binding"
 
 // a2aPluginImage is the name of the A2A plugin image for testing
 const a2aPluginImage = "localhost/a2a-plugin:test"
-
-// argoNamespace is the namespace where Argo Workflows is deployed
-const argoNamespace = "argo"
 
 func initializeTestNamespace() string {
 	if explicit := os.Getenv("E2E_NAMESPACE"); explicit != "" {
@@ -129,7 +125,7 @@ func getMetricsOutput() string {
 	req := clientset.CoreV1().Pods(managerNamespace).GetLogs("curl-metrics", &corev1.PodLogOptions{})
 	logs, err := req.Stream(ctx)
 	Expect(err).NotTo(HaveOccurred())
-	defer logs.Close()
+	defer func() { _ = logs.Close() }()
 
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, logs)
@@ -221,11 +217,15 @@ func applyManifestFile(path string) error {
 					return fmt.Errorf("failed to delete %s/%s for recreation: %w", obj.GetKind(), obj.GetName(), err)
 				}
 				// Wait for pod to be deleted
-				if err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
-					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), &corev1.Pod{})
-					return apierrors.IsNotFound(err), nil
-				}); err != nil {
-					return fmt.Errorf("failed waiting for %s/%s deletion: %w", obj.GetKind(), obj.GetName(), err)
+				err := wait.PollUntilContextTimeout(
+					ctx, 500*time.Millisecond, 30*time.Second, true,
+					func(ctx context.Context) (bool, error) {
+						err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), &corev1.Pod{})
+						return apierrors.IsNotFound(err), nil
+					})
+				if err != nil {
+					return fmt.Errorf("failed waiting for %s/%s deletion: %w",
+						obj.GetKind(), obj.GetName(), err)
 				}
 				if err := k8sClient.Create(ctx, obj); err != nil {
 					return fmt.Errorf("failed to recreate %s/%s: %w", obj.GetKind(), obj.GetName(), err)
@@ -257,31 +257,6 @@ func deleteManifestFile(path string) {
 	}
 }
 
-// createNamespace creates a namespace with optional labels
-func createNamespace(name string, labels map[string]string) error {
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: labels,
-		},
-	}
-	err := k8sClient.Create(ctx, ns)
-	if apierrors.IsAlreadyExists(err) {
-		return nil
-	}
-	return err
-}
-
-// deleteNamespace deletes a namespace
-func deleteNamespace(name string) {
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-	}
-	_ = k8sClient.Delete(ctx, ns)
-}
-
 // waitForDeploymentReady waits for a deployment to be ready
 func waitForDeploymentReady(name, ns string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
@@ -303,30 +278,6 @@ func waitForDeploymentReady(name, ns string, timeout time.Duration) error {
 		}
 
 		return deploy.Status.ReadyReplicas >= desiredReplicas, nil
-	})
-}
-
-// waitForPodRunning waits for a pod to be in Running phase
-func waitForPodRunning(name, ns string, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
-		pod := &corev1.Pod{}
-		err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, pod)
-		if err != nil {
-			return false, nil
-		}
-		return pod.Status.Phase == corev1.PodRunning, nil
-	})
-}
-
-// waitForPodPhase waits for a pod to reach a specific phase
-func waitForPodPhase(name, ns string, phase corev1.PodPhase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
-		pod := &corev1.Pod{}
-		err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, pod)
-		if err != nil {
-			return false, nil
-		}
-		return pod.Status.Phase == phase, nil
 	})
 }
 
@@ -379,105 +330,11 @@ func waitForAgentWorkflowPhase(name, ns string, targetPhase agentv1alpha1.Workfl
 	})
 }
 
-// waitForWorkflowPhase waits for a workflow to reach a specific phase
-func waitForWorkflowPhase(name, ns string, phase wfv1.WorkflowPhase, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
-		wf := &wfv1.Workflow{}
-		err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, wf)
-		if err != nil {
-			return false, nil
-		}
-		return wf.Status.Phase == phase, nil
-	})
-}
-
 // getWorkflow retrieves a workflow by name
 func getWorkflow(name, ns string) (*wfv1.Workflow, error) {
 	wf := &wfv1.Workflow{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, wf)
 	return wf, err
-}
-
-// createWorkflow creates a workflow from a YAML file and returns the created workflow name
-func createWorkflow(path string) (string, error) {
-	objects, err := loadManifestsFromFile(path)
-	if err != nil {
-		return "", err
-	}
-
-	for _, obj := range objects {
-		if obj.GetKind() != "Workflow" {
-			continue
-		}
-
-		if obj.GetNamespace() == "" {
-			obj.SetNamespace(namespace)
-		}
-
-		// Convert to Workflow type
-		wf := &wfv1.Workflow{}
-		data, err := obj.MarshalJSON()
-		if err != nil {
-			return "", err
-		}
-		if err := json.Unmarshal(data, wf); err != nil {
-			return "", err
-		}
-
-		// Create the workflow
-		if err := k8sClient.Create(ctx, wf); err != nil {
-			return "", err
-		}
-
-		return wf.Name, nil
-	}
-
-	return "", fmt.Errorf("no Workflow found in %s", path)
-}
-
-// deleteWorkflow deletes a workflow by name
-func deleteWorkflow(name, ns string) {
-	wf := &wfv1.Workflow{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-		},
-	}
-	_ = k8sClient.Delete(ctx, wf)
-}
-
-// createConfigMap creates a ConfigMap
-func createConfigMap(name, ns string, data map[string]string, labels map[string]string) error {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-			Labels:    labels,
-		},
-		Data: data,
-	}
-	err := k8sClient.Create(ctx, cm)
-	if apierrors.IsAlreadyExists(err) {
-		existing := &corev1.ConfigMap{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, existing); err != nil {
-			return err
-		}
-		existing.Data = data
-		existing.Labels = labels
-		return k8sClient.Update(ctx, existing)
-	}
-	return err
-}
-
-// deleteConfigMap deletes a ConfigMap
-func deleteConfigMap(name, ns string) {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-		},
-	}
-	_ = k8sClient.Delete(ctx, cm)
 }
 
 // createClusterRoleBinding creates a ClusterRoleBinding
@@ -522,7 +379,7 @@ func getPodLogs(name, ns string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer logs.Close()
+	defer func() { _ = logs.Close() }()
 
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, logs)
