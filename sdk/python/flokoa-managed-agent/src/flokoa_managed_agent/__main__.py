@@ -20,11 +20,11 @@ from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from fastapi import FastAPI
-
 from flokoa.config import LlmAgentConfig
 from flokoa.utils import load_agent_card
 from flokoa.utils.agent_card_builder import AgentCardBuilder
 from flokoa.utils.router import router as health_router
+
 from flokoa_managed_agent.agent_executor import TemplatedPydanticAIAgentExecutor
 from flokoa_managed_agent.config import load_managed_agent_config, load_templated_config
 
@@ -37,6 +37,7 @@ def main() -> None:
 
     host = os.environ.get("FLOKOA_HOST", "0.0.0.0")  # noqa: S104
     port = int(os.environ.get("FLOKOA_PORT", "8080"))
+    public_url = os.environ.get("FLOKOA_PUBLIC_URL", f"http://{host}:{port}/")
 
     # Try unified config first, then fall back to legacy
     agent_config = load_managed_agent_config()
@@ -60,9 +61,9 @@ def main() -> None:
         executor = TemplatedPydanticAIAgentExecutor(config=templated_config)
 
     # Use operator-mounted cardOverride if available, otherwise generate from agent
-    agent_card = load_agent_card(url=f"http://{host}:{port}/")
+    agent_card = load_agent_card(url=public_url)
     if agent_card is None:
-        card_builder = AgentCardBuilder(agent=executor.agent, rpc_url=f"http://{host}:{port}/")
+        card_builder = AgentCardBuilder(agent=executor.agent, rpc_url=public_url)
         agent_card = asyncio.run(card_builder.build())
 
     request_handler = DefaultRequestHandler(

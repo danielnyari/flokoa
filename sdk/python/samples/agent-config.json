@@ -1,0 +1,27 @@
+{
+  "name": "sample-agent",
+  "description": "A helpful assistant powered by OpenAI.",
+  "instruction": "You are a helpful assistant. Respond concisely and accurately.",
+  "model": {
+    "provider": {
+      "type": "openai"
+    },
+    "model": "gpt-4o"
+  },
+  "outputSchema": {
+    "name": "response",
+    "description": "The agent response",
+    "jsonSchema": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "The answer to the user's question"
+        }
+      },
+      "required": [
+        "answer"
+      ]
+    }
+  }
+}

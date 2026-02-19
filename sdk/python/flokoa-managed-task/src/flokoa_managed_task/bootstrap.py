@@ -51,7 +51,7 @@ def execute_task_from_config(config: AgentConfig) -> Artifact:
             result = marvin.run(
                 instructions or "",
                 result_type=result_type or str,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "classify":
             result = marvin.classify(
@@ -59,28 +59,28 @@ def execute_task_from_config(config: AgentConfig) -> Artifact:
                 labels=inner.labels or [],
                 multi_label=inner.multi_label or False,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "extract":
             result = marvin.extract(
                 inner.input or "",
                 target=result_type or str,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "cast":
             result = marvin.cast(
                 inner.input or "",
                 target=result_type,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "generate":
             result = marvin.generate(
                 target=result_type,
                 n=inner.count or 1,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case _:
             raise ValueError(f"Unknown task type: {task_type}")
@@ -140,7 +140,7 @@ def execute_task(
             result = marvin.run(
                 instructions or "",
                 result_type=_build_result_type(task_config.result_type) or str,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "classify":
             result = marvin.classify(
@@ -148,34 +148,36 @@ def execute_task(
                 labels=task_config.labels or [],
                 multi_label=task_config.multi_label or False,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "extract":
             result = marvin.extract(
                 task_config.input or "",
                 target=_build_result_type(task_config.result_type) or str,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "cast":
             result = marvin.cast(
                 task_config.input or "",
                 target=_build_result_type(task_config.result_type),
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case "generate":
             result = marvin.generate(
                 target=_build_result_type(task_config.result_type),
                 n=task_config.count or 1,
                 instructions=instructions,
-                agent=agent,
+                agents=[agent] if agent else None,
             )
         case _:
             raise ValueError(f"Unknown task type: {task_type}")
 
     name = task_config.result_type.name if task_config.result_type else "result"
-    description = task_config.result_type.description if task_config.result_type else None
+    description = (
+        task_config.result_type.description if task_config.result_type else None
+    )
     return _build_artifact(result, name, description)
 
 

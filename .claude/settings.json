@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(make test-e2e:*)",
-      "Bash(yq eval:*)"
+      "Bash(yq eval:*)",
+      "Bash(make:*)"
     ]
   }
 }
