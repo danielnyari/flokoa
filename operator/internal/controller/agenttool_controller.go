@@ -104,7 +104,9 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.validateSpec(ctx, agentTool); err != nil {
 		logger.Error(err, "Spec validation failed")
 		r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionFalse, ReasonValidationFailed, err.Error())
-		if statusErr := r.Status().Update(ctx, agentTool); statusErr != nil {
+		if statusErr := updateStatusWithRetry(ctx, r.Client, agentTool, func() {
+			r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionFalse, ReasonValidationFailed, err.Error())
+		}); statusErr != nil {
 			logger.Error(statusErr, "Failed to update AgentTool status after validation failure")
 		}
 		return ctrl.Result{}, err
@@ -115,7 +117,9 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.reconcileConfigMap(ctx, agentTool); err != nil {
 		logger.Error(err, "Failed to reconcile ConfigMap")
 		r.setCondition(agentTool, ConditionTypeStored, metav1.ConditionFalse, ReasonStorageFailed, err.Error())
-		if statusErr := r.Status().Update(ctx, agentTool); statusErr != nil {
+		if statusErr := updateStatusWithRetry(ctx, r.Client, agentTool, func() {
+			r.setCondition(agentTool, ConditionTypeStored, metav1.ConditionFalse, ReasonStorageFailed, err.Error())
+		}); statusErr != nil {
 			logger.Error(statusErr, "Failed to update AgentTool status after ConfigMap reconciliation failure")
 		}
 		return ctrl.Result{}, err
@@ -125,7 +129,10 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Update observed generation
 	agentTool.Status.ObservedGeneration = agentTool.Generation
 
-	if err := r.Status().Update(ctx, agentTool); err != nil {
+	desiredStatus := agentTool.Status.DeepCopy()
+	if err := updateStatusWithRetry(ctx, r.Client, agentTool, func() {
+		agentTool.Status = *desiredStatus
+	}); err != nil {
 		logger.Error(err, "Failed to update status")
 		return ctrl.Result{}, err
 	}

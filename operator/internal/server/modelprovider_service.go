@@ -36,7 +36,7 @@ func (s *ModelProviderService) GetModelProvider(ctx context.Context, req *pb.Get
 	var provider agentv1alpha1.ModelProvider
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &provider); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	return converter.ModelProviderToProto(&provider), nil
@@ -74,7 +74,7 @@ func (s *ModelProviderService) ListModelProviders(ctx context.Context, req *pb.L
 	}
 
 	if err := s.client.List(ctx, &providerList, opts...); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	return converter.ModelProviderListToProto(&providerList), nil
@@ -98,7 +98,7 @@ func (s *ModelProviderService) CreateModelProvider(ctx context.Context, req *pb.
 	}
 
 	if err := s.client.Create(ctx, provider); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	return converter.ModelProviderToProto(provider), nil
@@ -122,14 +122,14 @@ func (s *ModelProviderService) UpdateModelProvider(ctx context.Context, req *pb.
 		Name:      req.ModelProvider.Metadata.Name,
 	}
 	if err := s.client.Get(ctx, key, &existing); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	updated := converter.ModelProviderFromProto(req.ModelProvider)
 	updated.ResourceVersion = existing.ResourceVersion
 
 	if err := s.client.Update(ctx, updated); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	return converter.ModelProviderToProto(updated), nil
@@ -149,7 +149,7 @@ func (s *ModelProviderService) DeleteModelProvider(ctx context.Context, req *pb.
 	provider.Namespace = req.Namespace
 
 	if err := s.client.Delete(ctx, provider); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	return &pb.DeleteModelProviderResponse{}, nil
@@ -175,7 +175,7 @@ func (s *ModelProviderService) UpdateModelProviderStatus(ctx context.Context, re
 	var provider agentv1alpha1.ModelProvider
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &provider); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	provider.Status.Ready = req.Status.Ready
@@ -187,7 +187,7 @@ func (s *ModelProviderService) UpdateModelProviderStatus(ctx context.Context, re
 	}
 
 	if err := s.client.Status().Update(ctx, &provider); err != nil {
-		return nil, mapKubernetesError(err, "model provider")
+		return nil, mapKubernetesError(ctx, err, "model provider")
 	}
 
 	return converter.ModelProviderToProto(&provider), nil

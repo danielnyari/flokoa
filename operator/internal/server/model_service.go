@@ -36,7 +36,7 @@ func (s *ModelService) GetModel(ctx context.Context, req *pb.GetModelRequest) (*
 	var model agentv1alpha1.Model
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &model); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	return converter.ModelToProto(&model), nil
@@ -74,7 +74,7 @@ func (s *ModelService) ListModels(ctx context.Context, req *pb.ListModelsRequest
 	}
 
 	if err := s.client.List(ctx, &modelList, opts...); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	return converter.ModelListToProto(&modelList), nil
@@ -107,7 +107,7 @@ func (s *ModelService) CreateModel(ctx context.Context, req *pb.CreateModelReque
 	}
 
 	if err := s.client.Create(ctx, model); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	return converter.ModelToProto(model), nil
@@ -131,14 +131,14 @@ func (s *ModelService) UpdateModel(ctx context.Context, req *pb.UpdateModelReque
 		Name:      req.Model.Metadata.Name,
 	}
 	if err := s.client.Get(ctx, key, &existing); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	updated := converter.ModelFromProto(req.Model)
 	updated.ResourceVersion = existing.ResourceVersion
 
 	if err := s.client.Update(ctx, updated); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	return converter.ModelToProto(updated), nil
@@ -158,7 +158,7 @@ func (s *ModelService) DeleteModel(ctx context.Context, req *pb.DeleteModelReque
 	model.Namespace = req.Namespace
 
 	if err := s.client.Delete(ctx, model); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	return &pb.DeleteModelResponse{}, nil
@@ -184,7 +184,7 @@ func (s *ModelService) UpdateModelStatus(ctx context.Context, req *pb.UpdateMode
 	var model agentv1alpha1.Model
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &model); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	model.Status.Ready = req.Status.Ready
@@ -201,7 +201,7 @@ func (s *ModelService) UpdateModelStatus(ctx context.Context, req *pb.UpdateMode
 	}
 
 	if err := s.client.Status().Update(ctx, &model); err != nil {
-		return nil, mapKubernetesError(err, "model")
+		return nil, mapKubernetesError(ctx, err, "model")
 	}
 
 	return converter.ModelToProto(&model), nil

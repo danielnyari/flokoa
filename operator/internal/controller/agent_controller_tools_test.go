@@ -420,10 +420,11 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
-				// Second reconcile should fail due to missing AgentTool
-				_, err = reconcileOnce(ctx, r, typeNamespacedName)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("non-existent-tool"))
+				// Second reconcile detects missing AgentTool as dependency error
+				// → requeue after fixed interval, no error returned (#96)
+				result, err = reconcileOnce(ctx, r, typeNamespacedName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(30 * time.Second))
 
 				By("Verifying ToolsReady condition shows failure")
 				Eventually(func() bool {

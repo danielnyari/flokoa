@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/a2aproject/a2a-go/a2a"
@@ -25,14 +24,17 @@ import (
 // Plugin implements the Argo Workflows executor plugin for A2A protocol
 type Plugin struct {
 	resolver *Resolver
-	// tasks stores in-progress task state keyed by workflow UID + template name
-	tasks sync.Map
+	// tasks stores in-progress task state keyed by workflow UID + template name.
+	// Backed by a ConfigMap for persistence across restarts (fixes #97).
+	tasks *StateStore
 }
 
-// New creates a new A2A executor plugin
-func New(k8sClient client.Client) *Plugin {
+// New creates a new A2A executor plugin with persistent state storage.
+// The namespace is used for the backing ConfigMap that persists task state.
+func New(k8sClient client.Client, namespace string) *Plugin {
 	return &Plugin{
 		resolver: NewResolver(k8sClient),
+		tasks:    NewStateStore(k8sClient, namespace),
 	}
 }
 
@@ -73,12 +75,7 @@ func (p *Plugin) ExecuteTemplate(ctx context.Context, args executor.ExecuteTempl
 	key := taskKey(args.Workflow.ObjectMeta.UID, args.Template.Name)
 
 	// Check if this is a requeue (we have an in-progress task)
-	if state, ok := p.tasks.Load(key); ok {
-		progress, ok := state.(*ProgressState)
-		if !ok {
-			p.tasks.Delete(key)
-			return failedReply(fmt.Sprintf("internal error: unexpected state type %T for task %s", state, key)), nil
-		}
+	if progress, ok := p.tasks.Load(key); ok {
 		return p.pollTask(ctx, key, spec, progress)
 	}
 

@@ -1172,10 +1172,11 @@ var _ = Describe("Agent Controller - Model", func() {
 					// First reconcile adds finalizer
 					_, _ = reconcileOnce(ctx, r, typeNamespacedName)
 
-					// Second reconcile should fail due to missing Model
-					_, err := reconcileOnce(ctx, r, typeNamespacedName)
-					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("failed to get Model"))
+					// Second reconcile detects missing Model as dependency error
+					// → requeue after fixed interval, no error returned (#96)
+					result, err := reconcileOnce(ctx, r, typeNamespacedName)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.RequeueAfter).To(Equal(30 * time.Second))
 
 					By("Verifying ModelReady condition is false")
 					agent = getAgent(ctx, typeNamespacedName)
@@ -1245,9 +1246,10 @@ var _ = Describe("Agent Controller - Model", func() {
 
 					_, _ = reconcileOnce(ctx, r, typeNamespacedName)
 
-					_, err = reconcileOnce(ctx, r, typeNamespacedName)
-					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("is not ready"))
+					// Dependency error (Model not ready) → requeue after interval (#96)
+					result, err := reconcileOnce(ctx, r, typeNamespacedName)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.RequeueAfter).To(Equal(30 * time.Second))
 
 					By("Verifying ModelReady condition is false")
 					agent = getAgent(ctx, typeNamespacedName)

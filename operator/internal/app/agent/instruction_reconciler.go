@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	flokoaerrors "github.com/danielnyari/flokoa/internal/errors"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
 )
 
@@ -44,18 +45,18 @@ func (ir *InstructionReconciler) Reconcile(ctx context.Context, agent *agentv1al
 
 		instruction, err := ir.instructions.GetInstruction(ctx, types.NamespacedName{Name: entry.InstructionRef.Name, Namespace: namespace})
 		if err != nil {
-			return "", fmt.Errorf("failed to get referenced Instruction %s/%s: %w", namespace, entry.InstructionRef.Name, err)
+			return "", flokoaerrors.NewDependency(fmt.Errorf("failed to get referenced Instruction %s/%s: %w", namespace, entry.InstructionRef.Name, err))
 		}
 
 		if instruction.Status.ConfigMapName == "" {
-			return "", fmt.Errorf("instruction %s/%s has no ConfigMap yet (not reconciled)", namespace, instruction.Name)
+			return "", flokoaerrors.NewDependencyf("instruction %s/%s has no ConfigMap yet (not reconciled)", namespace, instruction.Name)
 		}
 
 		logger.Info("Resolved instruction reference", "instruction", instruction.Name, "configMap", instruction.Status.ConfigMapName)
 		return instruction.Status.ConfigMapName, nil
 	}
 
-	return "", fmt.Errorf("instruction entry has neither inline nor instructionRef set")
+	return "", flokoaerrors.NewPermanentf("instruction entry has neither inline nor instructionRef set")
 }
 
 // reconcileInlineInstruction creates or updates an Instruction CR for an inline instruction definition.

@@ -21,8 +21,10 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -30,32 +32,39 @@ import (
 // +kubebuilder:webhook:path=/validate-agent-flokoa-ai-v1alpha1-agent,mutating=false,failurePolicy=fail,sideEffects=None,groups=agent.flokoa.ai,resources=agents,verbs=create;update,versions=v1alpha1,name=vagent-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // AgentCustomValidator validates Agent resources.
-type AgentCustomValidator struct{}
+// Reader is used for cross-resource reference validation (fixes #94).
+//
+// +kubebuilder:object:generate=false
+type AgentCustomValidator struct {
+	Reader client.Reader
+}
 
 var _ webhook.CustomValidator = &AgentCustomValidator{}
 
 func SetupAgentWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&Agent{}).
-		WithValidator(&AgentCustomValidator{}).
+		WithValidator(&AgentCustomValidator{Reader: mgr.GetClient()}).
 		Complete()
 }
 
-func (v *AgentCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *AgentCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	agent, ok := obj.(*Agent)
 	if !ok {
 		return nil, fmt.Errorf("expected an Agent but got %T", obj)
 	}
 	warnings := collectAgentWarnings(agent)
+	warnings = append(warnings, v.validateReferences(ctx, agent)...)
 	return warnings, validateAgent(agent)
 }
 
-func (v *AgentCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (v *AgentCustomValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
 	agent, ok := newObj.(*Agent)
 	if !ok {
 		return nil, fmt.Errorf("expected an Agent but got %T", newObj)
 	}
 	warnings := collectAgentWarnings(agent)
+	warnings = append(warnings, v.validateReferences(ctx, agent)...)
 	return warnings, validateAgent(agent)
 }
 
@@ -153,4 +162,59 @@ func validateAgent(agent *Agent) error {
 	}
 
 	return aggregateErrors("Agent", agent.Name, allErrs)
+}
+
+// validateReferences checks that cross-resource references exist.
+// These are returned as warnings (not errors) to avoid ordering issues during
+// resource creation (fixes #94).
+func (v *AgentCustomValidator) validateReferences(ctx context.Context, agent *Agent) admission.Warnings {
+	if v.Reader == nil {
+		return nil
+	}
+
+	var warnings admission.Warnings
+
+	// Check Model reference
+	if agent.Spec.Model != nil {
+		ns := agent.Spec.Model.Namespace
+		if ns == "" {
+			ns = agent.Namespace
+		}
+		model := &Model{}
+		if err := v.Reader.Get(ctx, types.NamespacedName{Name: agent.Spec.Model.Name, Namespace: ns}, model); err != nil {
+			warnings = append(warnings,
+				fmt.Sprintf("referenced Model %s/%s not found — the agent will not reconcile until it exists", ns, agent.Spec.Model.Name))
+		}
+	}
+
+	// Check Instruction reference
+	if agent.Spec.Instruction != nil && agent.Spec.Instruction.InstructionRef != nil {
+		ref := agent.Spec.Instruction.InstructionRef
+		ns := ref.Namespace
+		if ns == "" {
+			ns = agent.Namespace
+		}
+		instr := &Instruction{}
+		if err := v.Reader.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ns}, instr); err != nil {
+			warnings = append(warnings,
+				fmt.Sprintf("referenced Instruction %s/%s not found — the agent will not reconcile until it exists", ns, ref.Name))
+		}
+	}
+
+	// Check Tool references
+	for _, tool := range agent.Spec.Tools {
+		if tool.ToolRef != nil {
+			ns := tool.ToolRef.Namespace
+			if ns == "" {
+				ns = agent.Namespace
+			}
+			at := &AgentTool{}
+			if err := v.Reader.Get(ctx, types.NamespacedName{Name: tool.ToolRef.Name, Namespace: ns}, at); err != nil {
+				warnings = append(warnings,
+					fmt.Sprintf("referenced AgentTool %s/%s not found — the agent will not reconcile until it exists", ns, tool.ToolRef.Name))
+			}
+		}
+	}
+
+	return warnings
 }

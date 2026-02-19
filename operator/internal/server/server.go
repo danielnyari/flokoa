@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -267,8 +268,11 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	})
 
 	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", s.httpPort),
-		Handler: c.Handler(mux),
+		Addr:              fmt.Sprintf(":%d", s.httpPort),
+		Handler:           c.Handler(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
 	}
 
 	s.log.Info("Starting HTTP gateway", "port", s.httpPort, "swagger-ui", fmt.Sprintf("http://localhost:%d/swagger/", s.httpPort))

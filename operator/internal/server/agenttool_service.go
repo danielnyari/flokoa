@@ -36,7 +36,7 @@ func (s *AgentToolService) GetAgentTool(ctx context.Context, req *pb.GetAgentToo
 	var tool agentv1alpha1.AgentTool
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &tool); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(&tool), nil
@@ -74,7 +74,7 @@ func (s *AgentToolService) ListAgentTools(ctx context.Context, req *pb.ListAgent
 	}
 
 	if err := s.client.List(ctx, &toolList, opts...); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	return converter.AgentToolListToProto(&toolList), nil
@@ -101,7 +101,7 @@ func (s *AgentToolService) CreateAgentTool(ctx context.Context, req *pb.CreateAg
 	}
 
 	if err := s.client.Create(ctx, tool); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(tool), nil
@@ -125,14 +125,14 @@ func (s *AgentToolService) UpdateAgentTool(ctx context.Context, req *pb.UpdateAg
 		Name:      req.AgentTool.Metadata.Name,
 	}
 	if err := s.client.Get(ctx, key, &existing); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	updated := converter.AgentToolFromProto(req.AgentTool)
 	updated.ResourceVersion = existing.ResourceVersion
 
 	if err := s.client.Update(ctx, updated); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(updated), nil
@@ -152,7 +152,7 @@ func (s *AgentToolService) DeleteAgentTool(ctx context.Context, req *pb.DeleteAg
 	tool.Namespace = req.Namespace
 
 	if err := s.client.Delete(ctx, tool); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	return &pb.DeleteAgentToolResponse{}, nil
@@ -178,7 +178,7 @@ func (s *AgentToolService) UpdateAgentToolStatus(ctx context.Context, req *pb.Up
 	var tool agentv1alpha1.AgentTool
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &tool); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	tool.Status.ObservedGeneration = req.Status.ObservedGeneration
@@ -187,7 +187,7 @@ func (s *AgentToolService) UpdateAgentToolStatus(ctx context.Context, req *pb.Up
 	}
 
 	if err := s.client.Status().Update(ctx, &tool); err != nil {
-		return nil, mapKubernetesError(err, "agent tool")
+		return nil, mapKubernetesError(ctx, err, "agent tool")
 	}
 
 	return converter.AgentToolToProto(&tool), nil

@@ -36,7 +36,7 @@ func (s *AgentService) GetAgent(ctx context.Context, req *pb.GetAgentRequest) (*
 	var agent agentv1alpha1.Agent
 	key := client.ObjectKey{Namespace: req.Namespace, Name: req.Name}
 	if err := s.client.Get(ctx, key, &agent); err != nil {
-		return nil, mapKubernetesError(err, "agent")
+		return nil, mapKubernetesError(ctx, err, "agent")
 	}
 
 	return converter.AgentToProto(&agent), nil
@@ -74,7 +74,7 @@ func (s *AgentService) ListAgents(ctx context.Context, req *pb.ListAgentsRequest
 	}
 
 	if err := s.client.List(ctx, &agentList, opts...); err != nil {
-		return nil, mapKubernetesError(err, "agent")
+		return nil, mapKubernetesError(ctx, err, "agent")
 	}
 
 	return converter.AgentListToProto(&agentList), nil

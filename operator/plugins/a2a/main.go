@@ -82,8 +82,15 @@ func main() {
 		log.Printf("Warning: failed to create Kubernetes client, will use convention-based agent resolution: %v", err)
 	}
 
-	// Create the plugin
-	p := plugin.New(k8sClient)
+	// Determine the namespace for persisting plugin state (fixes #97).
+	// In-cluster this comes from the downward API; outside the cluster we fall back to "default".
+	pluginNamespace := os.Getenv("POD_NAMESPACE")
+	if pluginNamespace == "" {
+		pluginNamespace = "default"
+	}
+
+	// Create the plugin with persistent state storage
+	p := plugin.New(k8sClient, pluginNamespace)
 
 	// Setup HTTP server
 	mux := http.NewServeMux()

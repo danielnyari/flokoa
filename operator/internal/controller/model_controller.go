@@ -96,7 +96,10 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if errors.IsNotFound(err) {
 			r.setNotReady(&model, ModelReasonProviderNotFound,
 				fmt.Sprintf("ModelProvider %s/%s not found", providerNamespace, model.Spec.ProviderRef.Name))
-			if err := r.Status().Update(ctx, &model); err != nil {
+			if err := updateStatusWithRetry(ctx, r.Client, &model, func() {
+				r.setNotReady(&model, ModelReasonProviderNotFound,
+					fmt.Sprintf("ModelProvider %s/%s not found", providerNamespace, model.Spec.ProviderRef.Name))
+			}); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{RequeueAfter: modelRetryInterval}, nil
@@ -108,7 +111,10 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if !modelProvider.Status.Ready {
 		r.setNotReady(&model, ModelReasonProviderNotReady,
 			fmt.Sprintf("ModelProvider %s/%s is not ready", providerNamespace, model.Spec.ProviderRef.Name))
-		if err := r.Status().Update(ctx, &model); err != nil {
+		if err := updateStatusWithRetry(ctx, r.Client, &model, func() {
+			r.setNotReady(&model, ModelReasonProviderNotReady,
+				fmt.Sprintf("ModelProvider %s/%s is not ready", providerNamespace, model.Spec.ProviderRef.Name))
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: modelRetryInterval}, nil
@@ -117,8 +123,10 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Validate that provider-specific parameters match the provider type
 	if err := modeldomain.ValidateProviderParams(model.Spec.Parameters, modelProvider.Status.Provider); err != nil {
 		r.setNotReady(&model, ModelReasonProviderParamsMismatch, err.Error())
-		if err := r.Status().Update(ctx, &model); err != nil {
-			return ctrl.Result{}, err
+		if updateErr := updateStatusWithRetry(ctx, r.Client, &model, func() {
+			r.setNotReady(&model, ModelReasonProviderParamsMismatch, err.Error())
+		}); updateErr != nil {
+			return ctrl.Result{}, updateErr
 		}
 		return ctrl.Result{}, nil
 	}
@@ -154,7 +162,10 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		Message:            "Model is ready",
 	})
 
-	if err := r.Status().Update(ctx, &model); err != nil {
+	desiredStatus := model.Status.DeepCopy()
+	if err := updateStatusWithRetry(ctx, r.Client, &model, func() {
+		model.Status = *desiredStatus
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

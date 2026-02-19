@@ -15,6 +15,7 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/internal/domain/hash"
 	modeldomain "github.com/danielnyari/flokoa/internal/domain/model"
+	flokoaerrors "github.com/danielnyari/flokoa/internal/errors"
 	"github.com/danielnyari/flokoa/internal/infra/builder"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
 )
@@ -45,11 +46,11 @@ func (m *ModelReconciler) Reconcile(ctx context.Context, agent *agentv1alpha1.Ag
 
 	model, err := m.models.GetModel(ctx, types.NamespacedName{Name: agent.Spec.Model.Name, Namespace: modelNamespace})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Model %s/%s: %w", modelNamespace, agent.Spec.Model.Name, err)
+		return nil, flokoaerrors.NewDependency(fmt.Errorf("failed to get Model %s/%s: %w", modelNamespace, agent.Spec.Model.Name, err))
 	}
 
 	if !model.Status.Ready {
-		return nil, fmt.Errorf("model %s/%s is not ready", modelNamespace, model.Name)
+		return nil, flokoaerrors.NewDependencyf("model %s/%s is not ready", modelNamespace, model.Name)
 	}
 
 	// Resolve the ModelProvider
@@ -60,22 +61,22 @@ func (m *ModelReconciler) Reconcile(ctx context.Context, agent *agentv1alpha1.Ag
 
 	modelProvider, err := m.providers.GetModelProvider(ctx, types.NamespacedName{Name: model.Spec.ProviderRef.Name, Namespace: providerNamespace})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ModelProvider %s/%s: %w", providerNamespace, model.Spec.ProviderRef.Name, err)
+		return nil, flokoaerrors.NewDependency(fmt.Errorf("failed to get ModelProvider %s/%s: %w", providerNamespace, model.Spec.ProviderRef.Name, err))
 	}
 
 	if !modelProvider.Status.Ready {
-		return nil, fmt.Errorf("ModelProvider %s/%s is not ready", providerNamespace, modelProvider.Name)
+		return nil, flokoaerrors.NewDependencyf("ModelProvider %s/%s is not ready", providerNamespace, modelProvider.Name)
 	}
 
 	providerType := modelProvider.GetProviderType()
 	if providerType == "" {
-		return nil, fmt.Errorf("ModelProvider %s/%s has no provider type configured (must set one of openai, anthropic, google, or bedrock)", providerNamespace, modelProvider.Name)
+		return nil, flokoaerrors.NewPermanentf("ModelProvider %s/%s has no provider type configured (must set one of openai, anthropic, google, or bedrock)", providerNamespace, modelProvider.Name)
 	}
 	logger.Info("Resolved Model and ModelProvider", "model", model.Name, "modelName", model.Spec.Model, "provider", providerType, "modelProvider", modelProvider.Name)
 
 	providerHandler, ok := m.getProviderHandler(providerType)
 	if !ok {
-		return nil, fmt.Errorf("unsupported model provider: %s", providerType)
+		return nil, flokoaerrors.NewPermanentf("unsupported model provider: %s", providerType)
 	}
 
 	resolvedConfig, err := providerHandler.BuildConfig(modelProvider, model)
