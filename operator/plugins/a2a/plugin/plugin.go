@@ -354,6 +354,7 @@ func (p *Plugin) pollTask(ctx context.Context, key string, spec *A2ASpec, progre
 
 		// Distinguish transient errors from permanent ones: requeue on transient
 		// failures so that network blips don't permanently fail the workflow step.
+		// The counter lives in-memory (see MaxPollErrors doc for rationale).
 		progress.PollErrors++
 		if progress.PollErrors < MaxPollErrors {
 			log.Printf("Transient poll error (%d/%d), requeueing: %v", progress.PollErrors, MaxPollErrors, err)

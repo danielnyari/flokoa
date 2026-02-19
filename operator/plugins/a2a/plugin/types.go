@@ -16,6 +16,14 @@ const DefaultPollInterval = 5 * time.Second
 // MaxPollErrors is the maximum number of consecutive transient poll errors
 // before permanently failing the task. This prevents network blips from
 // causing permanent workflow failures.
+//
+// Note: The counter is stored in-memory (sync.Map) because the Argo executor
+// plugin API (ExecuteTemplateArgs) does not provide a mechanism to persist
+// arbitrary state to the node and read it back on requeue. If the plugin
+// container restarts, the counter resets to 0 along with all other in-memory
+// task state (TaskID, Endpoint, etc.), which causes Argo to re-execute the
+// template from scratch. This is acceptable because a restart invalidates
+// all polling state, not just the error counter.
 const MaxPollErrors = 5
 
 // A2ASpec defines the configuration for an A2A plugin step.
