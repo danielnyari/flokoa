@@ -68,6 +68,9 @@ func (m *ModelReconciler) Reconcile(ctx context.Context, agent *agentv1alpha1.Ag
 	}
 
 	providerType := modelProvider.GetProviderType()
+	if providerType == "" {
+		return nil, fmt.Errorf("ModelProvider %s/%s has no provider type configured (must set one of openai, anthropic, google, or bedrock)", providerNamespace, modelProvider.Name)
+	}
 	logger.Info("Resolved Model and ModelProvider", "model", model.Name, "modelName", model.Spec.Model, "provider", providerType, "modelProvider", modelProvider.Name)
 
 	providerHandler, ok := m.getProviderHandler(providerType)

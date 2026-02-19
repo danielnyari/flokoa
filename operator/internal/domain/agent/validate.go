@@ -24,6 +24,9 @@ func ValidateSpec(agent *agentv1alpha1.Agent) error {
 		if agent.Spec.Runtime.Template != nil {
 			return fmt.Errorf("runtime.managed must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeStandard)
 		}
+		if agent.Spec.Runtime.Standard == nil {
+			return fmt.Errorf("runtime.standard is required when runtime.type is %q", agentv1alpha1.RuntimeTypeStandard)
+		}
 	case agentv1alpha1.RuntimeTypeTemplate:
 		if agent.Spec.Runtime.Standard != nil {
 			return fmt.Errorf("runtime.standard must not be set when runtime.type is %q", agentv1alpha1.RuntimeTypeTemplate)

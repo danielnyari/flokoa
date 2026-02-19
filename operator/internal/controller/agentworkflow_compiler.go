@@ -120,8 +120,20 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 	for _, task := range awf.Spec.Tasks {
 		templateName := task.Name
 
+		// Look up resolved info for agentTask tasks; return an error if resolution
+		// was expected but the entry is missing (e.g. resolution was skipped due to
+		// an earlier error that was silently ignored).
+		var resolved *resolvedAgentTaskInfo
+		if task.AgentTask != nil {
+			var ok bool
+			resolved, ok = resolvedTasks[task.Name]
+			if !ok {
+				return nil, fmt.Errorf("task %q: missing resolved agent task info", task.Name)
+			}
+		}
+
 		// Build the template for this task
-		tmpl, err := buildTemplate(awf, task, resolvedTasks[task.Name])
+		tmpl, err := buildTemplate(awf, task, resolved)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build template for task %q: %w", task.Name, err)
 		}
@@ -208,6 +220,8 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 				Args:    []string{"switch-router"},
 			},
 		}
+	default:
+		return nil, fmt.Errorf("task has no recognized type (must set one of agent, agentTask, or switch)")
 	}
 
 	return tmpl, nil
