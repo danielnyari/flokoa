@@ -50,6 +50,12 @@ const (
 	// taskConfigEnvVar is the environment variable name for the serialized task config.
 	taskConfigEnvVar = "FLOKOA_TASK_CONFIG"
 
+	// traceparentEnvVar is the env var used to propagate W3C traceparent into agent task pods.
+	traceparentEnvVar = "FLOKOA_TRACEPARENT"
+
+	// traceparentWorkflowParam is the Argo workflow-level parameter that carries the traceparent value.
+	traceparentWorkflowParam = "_flokoa_traceparent"
+
 	// Mount paths for resolved ConfigMaps in agent task containers.
 	agentTaskModelMountPath       = "/etc/flokoa/model.json"
 	agentTaskToolsMountPath       = "/etc/flokoa/tools"
@@ -61,7 +67,10 @@ var expressionRe = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
 // compileToArgoWorkflow translates an AgentWorkflow DSL into an Argo Workflow CR.
 // resolvedTasks contains pre-resolved Model/Tool ConfigMap info for agentTask tasks, keyed by task name.
-func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo) (*wfv1.Workflow, error) {
+// traceparent is the W3C traceparent header value from the controller's current span; it is
+// injected as a workflow-level parameter so that every task (container or plugin) can
+// propagate the distributed trace.
+func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo, traceparent string) (*wfv1.Workflow, error) {
 	wf := &wfv1.Workflow{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
@@ -79,6 +88,13 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 			Entrypoint: dagEntrypointName,
 		},
 	}
+
+	// Inject traceparent as a workflow-level parameter so it is available to
+	// all templates via {{workflow.parameters._flokoa_traceparent}}.
+	wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, wfv1.Parameter{
+		Name:  traceparentWorkflowParam,
+		Value: wfv1.AnyStringPtr(traceparent),
+	})
 
 	// Workflow-level parameters
 	if len(awf.Spec.Params) > 0 {
@@ -202,6 +218,9 @@ func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) err
 	a2aSpec := map[string]interface{}{
 		"agent":   agent.Name,
 		"message": buildPluginMessage(&agent.Message),
+		// Argo substitutes the workflow parameter reference at runtime so the
+		// A2A plugin receives the actual traceparent value.
+		"traceparent": fmt.Sprintf("{{workflow.parameters.%s}}", traceparentWorkflowParam),
 	}
 	if agent.Namespace != "" {
 		a2aSpec["namespace"] = agent.Namespace
@@ -453,6 +472,12 @@ func buildAgentTaskTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.AgentT
 			{
 				Name:  taskConfigEnvVar,
 				Value: string(taskConfigJSON),
+			},
+			{
+				// Propagate W3C traceparent into the agent task container so the
+				// Python runtime can restore the trace context for OpenTelemetry.
+				Name:  traceparentEnvVar,
+				Value: fmt.Sprintf("{{workflow.parameters.%s}}", traceparentWorkflowParam),
 			},
 		}, agentTask.Env...),
 	}

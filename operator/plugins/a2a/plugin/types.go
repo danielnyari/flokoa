@@ -30,6 +30,11 @@ type A2ASpec struct {
 
 	// Timeout is the maximum time to wait for the task to complete (optional, default 5m)
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// Traceparent is the W3C traceparent header value injected by the compiler
+	// from the controller's span context. The plugin uses it to restore the
+	// distributed trace and propagate it to the downstream agent.
+	Traceparent string `json:"traceparent,omitempty"`
 }
 
 // A2AMessage represents an A2A protocol message in the plugin spec.

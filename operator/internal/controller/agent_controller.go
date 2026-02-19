@@ -119,6 +119,10 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&agentv1alpha1.Model{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForModel),
 		).
+		Watches(
+			&agentv1alpha1.ModelProvider{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForModelProvider),
+		).
 		Named("agent").
 		Complete(r)
 }

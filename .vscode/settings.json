@@ -7,6 +7,10 @@
   "python.testing.cwd": "${workspaceFolder}/sdk/python",
   "python.defaultInterpreterPath": "${workspaceFolder}/sdk/python/.venv/bin/python",
   "python.analysis.extraPaths": [
+    "${workspaceFolder}/sdk/python/flokoa/src",
+    "${workspaceFolder}/sdk/python/flokoa-types/src",
+    "${workspaceFolder}/sdk/python/flokoa-managed-agent/src",
+    "${workspaceFolder}/sdk/python/flokoa-managed-task/src",
     "${workspaceFolder}/sdk/python/src"
   ],
   "go.testFlags": [

@@ -20,7 +20,10 @@ from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from fastapi import FastAPI
+<<<<<<< claude/improve-agent-config-AgzoG
 from flokoa.config import LlmAgentConfig
+=======
+>>>>>>> main
 from flokoa.utils import load_agent_card
 from flokoa.utils.agent_card_builder import AgentCardBuilder
 from flokoa.utils.router import router as health_router
@@ -34,6 +37,15 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     """Start the managed agent from operator-mounted configuration."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+
+    # Initialize OpenTelemetry tracing.  For the managed-agent (long-running
+    # A2A server) we do NOT restore context from the env var — each incoming
+    # HTTP request carries its own traceparent header which is extracted by the
+    # FastAPI OTEL instrumentation below.
+    from flokoa.telemetry import init_telemetry, instrument_fastapi, instrument_pydantic_ai
+
+    init_telemetry("flokoa-managed-agent", restore_context_from_env=False)
+    instrument_pydantic_ai()
 
     host = os.environ.get("FLOKOA_HOST", "0.0.0.0")  # noqa: S104
     port = int(os.environ.get("FLOKOA_PORT", "8080"))
@@ -78,6 +90,10 @@ def main() -> None:
 
     app: FastAPI = server.build()
     app.include_router(health_router)
+
+    # Instrument FastAPI so incoming requests with a traceparent header are
+    # automatically linked to the distributed trace.
+    instrument_fastapi(app)
 
     uvicorn.run(app, host=host, port=port)
 

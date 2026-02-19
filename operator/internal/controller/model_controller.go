@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -50,6 +51,7 @@ const (
 	ModelReasonValidated              = "Validated"
 	ModelReasonProviderParamsMismatch = "ProviderParametersMismatch"
 	ModelReasonMultipleProviderParams = "MultipleProviderParameters"
+	modelRetryInterval                = 2 * time.Second
 )
 
 // ModelReconciler reconciles a Model object
@@ -97,7 +99,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			if err := r.Status().Update(ctx, &model); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: modelRetryInterval}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -109,7 +111,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if err := r.Status().Update(ctx, &model); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: modelRetryInterval}, nil
 	}
 
 	// Validate that provider-specific parameters match the provider type

@@ -54,6 +54,12 @@ def run(
 
 def _start_integration(module: str, host: str, port: int, framework: IntegrationType) -> None:
     """Start a user-provided agent with an A2A server."""
+    # Initialize OpenTelemetry if the tracing extra is installed.
+    from flokoa.telemetry import init_telemetry, instrument_fastapi, instrument_pydantic_ai
+
+    init_telemetry("flokoa-agent", restore_context_from_env=False)
+    instrument_pydantic_ai()
+
     cwd = os.getcwd()
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
@@ -80,6 +86,7 @@ def _start_integration(module: str, host: str, port: int, framework: Integration
         agent_card = asyncio.run(builder.build())
 
     app = _get_app(agent_executor=agent_executor, agent_card=agent_card)
+    instrument_fastapi(app)
     _run_server(app=app, host=host, port=port)
 
 

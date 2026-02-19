@@ -1,0 +1,15 @@
+# Adds namespace to all resources.
+namespace: flokoa-system
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+- ../server
+- metrics_service.yaml
+
+patches:
+- path: manager_metrics_patch.yaml
+  target:
+    kind: Deployment
+    name: flokoa-controller

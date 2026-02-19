@@ -43,17 +43,17 @@ type ReconcileResult struct {
 // Service is the application-layer orchestrator for Agent reconciliation.
 // It uses repository interfaces for all I/O, making it testable with fakes.
 type Service struct {
-	deps              Deps
-	toolReconciler    *ToolReconciler
-	modelReconciler   *ModelReconciler
-	instrReconciler   *InstructionReconciler
+	deps               Deps
+	toolReconciler     *ToolReconciler
+	modelReconciler    *ModelReconciler
+	instrReconciler    *InstructionReconciler
 	getProviderHandler func(agentv1alpha1.ProviderType) (modeldomain.ProviderHandler, bool)
 }
 
 // NewService creates a new agent application service.
 func NewService(deps Deps) *Service {
 	s := &Service{
-		deps:              deps,
+		deps:               deps,
 		getProviderHandler: modeldomain.GetProviderHandler,
 	}
 	s.toolReconciler = &ToolReconciler{
@@ -63,11 +63,11 @@ func NewService(deps Deps) *Service {
 		owner:      deps.OwnerSetter,
 	}
 	s.modelReconciler = &ModelReconciler{
-		models:     deps.Models,
-		providers:  deps.Providers,
-		configMaps: deps.ConfigMaps,
-		secrets:    deps.Secrets,
-		owner:      deps.OwnerSetter,
+		models:             deps.Models,
+		providers:          deps.Providers,
+		configMaps:         deps.ConfigMaps,
+		secrets:            deps.Secrets,
+		owner:              deps.OwnerSetter,
 		getProviderHandler: s.getProviderHandler,
 	}
 	s.instrReconciler = &InstructionReconciler{

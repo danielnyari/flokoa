@@ -192,7 +192,7 @@ func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -205,13 +205,13 @@ func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 			),
 			{
 				Name:                  "research",
-				Plugin:                makePlugin(map[string]interface{}{"agent": "researcher-agent", "message": pluginTextMessage("Find papers on {{params.topic}}")}),
+				Plugin:                makePlugin(map[string]interface{}{"agent": "researcher-agent", "message": pluginTextMessage("Find papers on {{params.topic}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
 				ActiveDeadlineSeconds: &intstr.IntOrString{Type: intstr.Int, IntVal: 600},
 				Outputs:               pluginOutputs(),
 			},
 			{
 				Name:    "summarize",
-				Plugin:  makePlugin(map[string]interface{}{"agent": "summarizer-agent", "message": pluginTextMessage("Summarize: {{tasks.research.output}}")}),
+				Plugin:  makePlugin(map[string]interface{}{"agent": "summarizer-agent", "message": pluginTextMessage("Summarize: {{tasks.research.output}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
 				Outputs: pluginOutputs(),
 			},
 		},
@@ -238,7 +238,7 @@ func TestCompileToArgoWorkflow_AgentTemplate(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -249,9 +249,10 @@ func TestCompileToArgoWorkflow_AgentTemplate(t *testing.T) {
 			{
 				Name: "call-agent",
 				Plugin: makePlugin(map[string]interface{}{
-					"agent":     "my-agent",
-					"namespace": "agents",
-					"message":   pluginTextMessage("Hello agent"),
+					"agent":       "my-agent",
+					"namespace":   "agents",
+					"message":     pluginTextMessage("Hello agent"),
+					"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
 				}),
 				Outputs: pluginOutputs(),
 			},
@@ -294,7 +295,7 @@ func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -305,7 +306,8 @@ func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
 			{
 				Name: "multi-part",
 				Plugin: makePlugin(map[string]interface{}{
-					"agent": "my-agent",
+					"agent":       "my-agent",
+					"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
 					"message": map[string]interface{}{
 						"role":      "user",
 						"contextId": "ctx-123",
@@ -356,7 +358,7 @@ func TestCompileToArgoWorkflow_AgentTaskRun(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -378,6 +380,7 @@ func TestCompileToArgoWorkflow_AgentTaskRun(t *testing.T) {
 								"prev":   "{{tasks.prep.outputs.parameters.result}}",
 							},
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 					},
 				},
 				Outputs: containerOutputs(),
@@ -410,7 +413,7 @@ func TestCompileToArgoWorkflow_AgentTaskClassify(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -431,6 +434,7 @@ func TestCompileToArgoWorkflow_AgentTaskClassify(t *testing.T) {
 							Labels:       []string{"positive", "negative", "neutral"},
 							MultiLabel:   &multiLabel,
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 					},
 				},
 				Outputs: containerOutputs(),
@@ -462,7 +466,7 @@ func TestCompileToArgoWorkflow_AgentTaskExtract(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -485,6 +489,7 @@ func TestCompileToArgoWorkflow_AgentTaskExtract(t *testing.T) {
 								JSONSchema:  json.RawMessage(`{"type":"string"}`),
 							},
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 					},
 				},
 				Outputs: containerOutputs(),
@@ -519,7 +524,7 @@ func TestCompileToArgoWorkflow_AgentTaskCast(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -543,6 +548,7 @@ func TestCompileToArgoWorkflow_AgentTaskCast(t *testing.T) {
 								JSONSchema:  json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"}}}`),
 							},
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 					},
 				},
 				Outputs: containerOutputs(),
@@ -578,7 +584,7 @@ func TestCompileToArgoWorkflow_AgentTaskGenerate(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -602,6 +608,7 @@ func TestCompileToArgoWorkflow_AgentTaskGenerate(t *testing.T) {
 								JSONSchema:  json.RawMessage(`{"type":"object","properties":{"input":{"type":"string"},"expected":{"type":"string"}}}`),
 							},
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 					},
 				},
 				Outputs: containerOutputs(),
@@ -634,7 +641,7 @@ func TestCompileToArgoWorkflow_AgentTaskWithInlineAgent(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -656,6 +663,7 @@ func TestCompileToArgoWorkflow_AgentTaskWithInlineAgent(t *testing.T) {
 								Instructions: "You are a data analyst",
 							},
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 					},
 				},
 				Outputs: containerOutputs(),
@@ -688,7 +696,7 @@ func TestCompileToArgoWorkflow_AgentTaskCustomImage(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -706,6 +714,7 @@ func TestCompileToArgoWorkflow_AgentTaskCustomImage(t *testing.T) {
 							Type:         "run",
 							Instructions: "Run task",
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 						{Name: "CUSTOM_VAR", Value: "custom-value"},
 					},
 				},
@@ -762,7 +771,7 @@ func TestCompileToArgoWorkflow_AgentTaskWithResolvedVolumes(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, resolved)
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -780,6 +789,7 @@ func TestCompileToArgoWorkflow_AgentTaskWithResolvedVolumes(t *testing.T) {
 							Type:         "run",
 							Instructions: "Run with model",
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 						{Name: "MODEL_PROVIDER", Value: "openai"},
 						{
 							Name: "OPENAI_API_KEY",
@@ -834,7 +844,7 @@ func TestCompileToArgoWorkflow_AgentTaskModelOnly(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, resolved)
+	got, err := compileToArgoWorkflow(awf, resolved, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -852,6 +862,7 @@ func TestCompileToArgoWorkflow_AgentTaskModelOnly(t *testing.T) {
 							Type:         "run",
 							Instructions: "hello",
 						}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{Name: "model-config", MountPath: agentTaskModelMountPath, SubPath: "model.json", ReadOnly: true},
@@ -886,7 +897,7 @@ func TestCompileToArgoWorkflow_RetryStrategy(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -898,7 +909,7 @@ func TestCompileToArgoWorkflow_RetryStrategy(t *testing.T) {
 			dagTmpl(wfv1.DAGTask{Name: "task1", Template: "task1"}),
 			{
 				Name:    "task1",
-				Plugin:  makePlugin(map[string]interface{}{"agent": "agent1", "message": pluginTextMessage("hello")}),
+				Plugin:  makePlugin(map[string]interface{}{"agent": "agent1", "message": pluginTextMessage("hello"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
 				Outputs: pluginOutputs(),
 				RetryStrategy: &wfv1.RetryStrategy{
 					Limit: &limit,
@@ -926,7 +937,7 @@ func TestCompileToArgoWorkflow_WorkflowTimeout(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -936,7 +947,7 @@ func TestCompileToArgoWorkflow_WorkflowTimeout(t *testing.T) {
 			dagTmpl(wfv1.DAGTask{Name: "task1", Template: "task1"}),
 			{
 				Name:    "task1",
-				Plugin:  makePlugin(map[string]interface{}{"agent": "agent1", "message": pluginTextMessage("hello")}),
+				Plugin:  makePlugin(map[string]interface{}{"agent": "agent1", "message": pluginTextMessage("hello"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
 				Outputs: pluginOutputs(),
 			},
 		},
@@ -963,7 +974,7 @@ func TestCompileToArgoWorkflow_FanOutFanIn(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -976,10 +987,10 @@ func TestCompileToArgoWorkflow_FanOutFanIn(t *testing.T) {
 				wfv1.DAGTask{Name: "c", Template: "c"},
 				wfv1.DAGTask{Name: "merge", Template: "merge", Dependencies: []string{"a", "b", "c"}},
 			),
-			{Name: "a", Plugin: makePlugin(map[string]interface{}{"agent": "agent-a", "message": pluginTextMessage("task a")}), Outputs: pluginOutputs()},
-			{Name: "b", Plugin: makePlugin(map[string]interface{}{"agent": "agent-b", "message": pluginTextMessage("task b")}), Outputs: pluginOutputs()},
-			{Name: "c", Plugin: makePlugin(map[string]interface{}{"agent": "agent-c", "message": pluginTextMessage("task c")}), Outputs: pluginOutputs()},
-			{Name: "merge", Plugin: makePlugin(map[string]interface{}{"agent": "agent-merge", "message": pluginTextMessage("merge results")}), Outputs: pluginOutputs()},
+			{Name: "a", Plugin: makePlugin(map[string]interface{}{"agent": "agent-a", "message": pluginTextMessage("task a"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "b", Plugin: makePlugin(map[string]interface{}{"agent": "agent-b", "message": pluginTextMessage("task b"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "c", Plugin: makePlugin(map[string]interface{}{"agent": "agent-c", "message": pluginTextMessage("task c"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "merge", Plugin: makePlugin(map[string]interface{}{"agent": "agent-merge", "message": pluginTextMessage("merge results"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
 		},
 	)
 
@@ -1002,7 +1013,7 @@ func TestCompileToArgoWorkflow_Condition(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil)
+	got, err := compileToArgoWorkflow(awf, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1018,8 +1029,8 @@ func TestCompileToArgoWorkflow_Condition(t *testing.T) {
 					When:         "{{tasks.classify.outputs.parameters.result}} == technical",
 				},
 			),
-			{Name: "classify", Plugin: makePlugin(map[string]interface{}{"agent": "classifier", "message": pluginTextMessage("classify")}), Outputs: pluginOutputs()},
-			{Name: "technical", Plugin: makePlugin(map[string]interface{}{"agent": "tech-support", "message": pluginTextMessage("help")}), Outputs: pluginOutputs()},
+			{Name: "classify", Plugin: makePlugin(map[string]interface{}{"agent": "classifier", "message": pluginTextMessage("classify"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "technical", Plugin: makePlugin(map[string]interface{}{"agent": "tech-support", "message": pluginTextMessage("help"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
 		},
 	)
 

@@ -35,6 +35,12 @@ make install
 make deploy IMG=<some-registry>/operator:tag
 ```
 
+By default, deployment runs without cert-manager/webhooks. To enable webhook TLS via cert-manager:
+
+```sh
+make deploy DEPLOY_WITH_CERT_MANAGER=true IMG=<some-registry>/operator:tag
+```
+
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
 privileges or be logged in as admin.
 
@@ -132,4 +138,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
