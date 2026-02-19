@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -14,7 +15,11 @@ import (
 
 // findAgentsForInstruction returns the Agents that reference a given Instruction.
 func (r *AgentReconciler) findAgentsForInstruction(ctx context.Context, obj client.Object) []reconcile.Request {
-	instruction := obj.(*agentv1alpha1.Instruction)
+	instruction, ok := obj.(*agentv1alpha1.Instruction)
+	if !ok {
+		log.FromContext(ctx).Error(nil, "findAgentsForInstruction received unexpected object type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
 	logger := log.FromContext(ctx)
 
 	if agentName, ok := instruction.Labels["flokoa.ai/agent"]; ok {
@@ -55,7 +60,11 @@ func (r *AgentReconciler) findAgentsForInstruction(ctx context.Context, obj clie
 
 // findAgentsForModel returns the Agents that reference a given Model.
 func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
-	model := obj.(*agentv1alpha1.Model)
+	model, ok := obj.(*agentv1alpha1.Model)
+	if !ok {
+		log.FromContext(ctx).Error(nil, "findAgentsForModel received unexpected object type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
 
 	var agents agentv1alpha1.AgentList
 	if err := r.List(ctx, &agents, client.InNamespace(model.Namespace)); err != nil {
@@ -85,7 +94,11 @@ func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Obj
 
 // findAgentsForModelProvider returns Agents affected by ModelProvider changes through Model -> Agent references.
 func (r *AgentReconciler) findAgentsForModelProvider(ctx context.Context, obj client.Object) []reconcile.Request {
-	provider := obj.(*agentv1alpha1.ModelProvider)
+	provider, ok := obj.(*agentv1alpha1.ModelProvider)
+	if !ok {
+		log.FromContext(ctx).Error(nil, "findAgentsForModelProvider received unexpected object type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
 
 	modelList := &agentv1alpha1.ModelList{}
 	if err := r.List(ctx, modelList); err != nil {
@@ -131,7 +144,11 @@ func (r *AgentReconciler) findAgentsForModelProvider(ctx context.Context, obj cl
 
 // findAgentsForSecret returns Agents affected by Secret changes through ModelProvider -> Model -> Agent references.
 func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
-	secret := obj.(*corev1.Secret)
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		log.FromContext(ctx).Error(nil, "findAgentsForSecret received unexpected object type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
 
 	providerList := &agentv1alpha1.ModelProviderList{}
 	if err := r.List(ctx, providerList, client.InNamespace(secret.Namespace)); err != nil {
@@ -199,7 +216,11 @@ func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Ob
 
 // findAgentsForAgentTool returns the Agents that reference a given AgentTool.
 func (r *AgentReconciler) findAgentsForAgentTool(ctx context.Context, obj client.Object) []reconcile.Request {
-	agentTool := obj.(*agentv1alpha1.AgentTool)
+	agentTool, ok := obj.(*agentv1alpha1.AgentTool)
+	if !ok {
+		log.FromContext(ctx).Error(nil, "findAgentsForAgentTool received unexpected object type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
 	logger := log.FromContext(ctx)
 
 	if agentName, ok := agentTool.Labels["flokoa.ai/agent"]; ok {
@@ -243,7 +264,11 @@ func (r *AgentReconciler) findAgentsForAgentTool(ctx context.Context, obj client
 
 // findAgentsForConfigMap returns the Agents that use a given ConfigMap (for tool specs).
 func (r *AgentReconciler) findAgentsForConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
-	cm := obj.(*corev1.ConfigMap)
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		log.FromContext(ctx).Error(nil, "findAgentsForConfigMap received unexpected object type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
 
 	component := cm.Labels["app.kubernetes.io/component"]
 	if component != "agenttool-spec" && component != "inline-tool-spec" && component != "instruction" {

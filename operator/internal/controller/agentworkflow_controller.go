@@ -462,6 +462,9 @@ func (r *AgentWorkflowReconciler) resolveModelRef(ctx context.Context, awf *agen
 	}
 
 	providerType := modelProvider.GetProviderType()
+	if providerType == "" {
+		return nil, fmt.Errorf("ModelProvider %s/%s has no provider type configured (must set one of openai, anthropic, google, or bedrock)", providerNamespace, modelProvider.Name)
+	}
 	logger.Info("Resolved Model for workflow task", "task", taskName, "model", model.Spec.Model, "provider", providerType)
 
 	// Build provider-specific configuration

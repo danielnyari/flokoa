@@ -74,7 +74,11 @@ func (p *Plugin) ExecuteTemplate(ctx context.Context, args executor.ExecuteTempl
 
 	// Check if this is a requeue (we have an in-progress task)
 	if state, ok := p.tasks.Load(key); ok {
-		progress := state.(*ProgressState)
+		progress, ok := state.(*ProgressState)
+		if !ok {
+			p.tasks.Delete(key)
+			return failedReply(fmt.Sprintf("internal error: unexpected state type %T for task %s", state, key)), nil
+		}
 		return p.pollTask(ctx, key, spec, progress)
 	}
 
