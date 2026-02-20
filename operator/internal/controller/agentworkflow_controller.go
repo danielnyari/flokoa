@@ -46,28 +46,14 @@ const (
 	agentWorkflowFinalizer = "agent.flokoa.ai/agentworkflow-finalizer"
 
 	// Condition types
-	ConditionTypeWorkflowCompiled  = "Compiled"
-	ConditionTypeWorkflowSubmitted = "Submitted"
-	ConditionTypeWorkflowReady     = "Ready"
+	ConditionTypeWorkflowCompiled = "Compiled"
+	ConditionTypeWorkflowReady    = "Ready"
 
 	// Reasons
-	ReasonCompiled         = "Compiled"
-	ReasonCompileFailed    = "CompileFailed"
-	ReasonSubmitted        = "Submitted"
-	ReasonSubmitFailed     = "SubmitFailed"
-	ReasonWorkflowRunning  = "WorkflowRunning"
-	ReasonWorkflowComplete = "WorkflowComplete"
-	ReasonWorkflowFailed   = "WorkflowFailed"
-	ReasonWorkflowError    = "WorkflowError"
-
-	// Requeue interval for monitoring running workflows
-	workflowPollInterval = 15 * time.Second
-
-	// defaultWorkflowTimeout is used when spec.timeout is not set (fixes #101)
-	defaultWorkflowTimeout = 1 * time.Hour
-
-	// Reason for timeout
-	ReasonWorkflowTimeout = "WorkflowTimeout"
+	ReasonCompiled      = "Compiled"
+	ReasonCompileFailed = "CompileFailed"
+	ReasonApplied       = "Applied"
+	ReasonApplyFailed   = "ApplyFailed"
 )
 
 // AgentWorkflowReconciler reconciles a AgentWorkflow object
@@ -80,6 +66,7 @@ type AgentWorkflowReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agentworkflows/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agentworkflows/finalizers,verbs=update
 // +kubebuilder:rbac:groups=argoproj.io,resources=workflows,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=argoproj.io,resources=workflowtemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models,verbs=get;list;watch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=modelproviders,verbs=get;list;watch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttools,verbs=get;list;watch
@@ -114,16 +101,16 @@ func (r *AgentWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Handle deletion
 	if !awf.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(awf, agentWorkflowFinalizer) {
-			// Clean up the Argo Workflow if it exists
-			if awf.Status.ArgoWorkflowName != "" {
-				argoWf := &wfv1.Workflow{}
+			// Clean up the Argo WorkflowTemplate if it exists
+			if awf.Status.WorkflowTemplateName != "" {
+				wft := &wfv1.WorkflowTemplate{}
 				err := r.Get(ctx, client.ObjectKey{
-					Name:      awf.Status.ArgoWorkflowName,
+					Name:      awf.Status.WorkflowTemplateName,
 					Namespace: awf.Namespace,
-				}, argoWf)
+				}, wft)
 				if err == nil {
-					logger.Info("Deleting Argo Workflow", "name", awf.Status.ArgoWorkflowName)
-					if err := r.Delete(ctx, argoWf); err != nil && !apierrors.IsNotFound(err) {
+					logger.Info("Deleting Argo WorkflowTemplate", "name", awf.Status.WorkflowTemplateName)
+					if err := r.Delete(ctx, wft); err != nil && !apierrors.IsNotFound(err) {
 						return ctrl.Result{}, err
 					}
 				}
@@ -146,18 +133,13 @@ func (r *AgentWorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// If we already have a submitted Argo Workflow, monitor its status
-	if awf.Status.ArgoWorkflowName != "" && awf.Status.Phase != agentv1alpha1.WorkflowPhaseError {
-		return r.monitorArgoWorkflow(ctx, awf)
-	}
-
-	// Compile and submit
-	return r.compileAndSubmit(ctx, awf)
+	// Compile and apply the WorkflowTemplate
+	return r.compileAndApply(ctx, awf)
 }
 
-// compileAndSubmit compiles the AgentWorkflow DSL to an Argo Workflow and submits it.
-func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *agentv1alpha1.AgentWorkflow) (ctrl.Result, error) {
-	ctx, span := telemetry.Tracer("flokoa.operator").Start(ctx, "agentworkflow.compile_and_submit",
+// compileAndApply compiles the AgentWorkflow DSL to an Argo WorkflowTemplate and creates or updates it.
+func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agentv1alpha1.AgentWorkflow) (ctrl.Result, error) {
+	ctx, span := telemetry.Tracer("flokoa.operator").Start(ctx, "agentworkflow.compile_and_apply",
 		trace.WithAttributes(
 			attribute.String("workflow.name", awf.Name),
 			attribute.String("workflow.namespace", awf.Namespace),
@@ -167,10 +149,6 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 	defer span.End()
 
 	logger := log.FromContext(ctx)
-
-	// Extract W3C traceparent from the current span context so it can be
-	// propagated into the Argo Workflow and downstream agent processes.
-	traceparent := telemetry.ExtractTraceparent(ctx)
 
 	// Set phase to Compiling
 	awf.Status.Phase = agentv1alpha1.WorkflowPhaseCompiling
@@ -202,8 +180,8 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 		return ctrl.Result{}, err
 	}
 
-	// Compile DSL to Argo Workflow, injecting trace context for downstream propagation.
-	argoWf, err := compileToArgoWorkflow(awf, resolvedTasks, traceparent)
+	// Compile DSL to Argo WorkflowTemplate
+	wft, err := compileToArgoWorkflowTemplate(awf, resolvedTasks)
 	if err != nil {
 		logger.Error(err, "Failed to compile AgentWorkflow")
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
@@ -222,137 +200,63 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 	}
 
 	r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionTrue,
-		ReasonCompiled, "AgentWorkflow compiled to Argo Workflow")
+		ReasonCompiled, "AgentWorkflow compiled to Argo WorkflowTemplate")
 
-	// Set owner reference so the Argo Workflow is cleaned up with the AgentWorkflow
-	if err := controllerutil.SetControllerReference(awf, argoWf, r.Scheme); err != nil {
+	// Set owner reference so the Argo WorkflowTemplate is cleaned up with the AgentWorkflow
+	if err := controllerutil.SetControllerReference(awf, wft, r.Scheme); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	// Create the Argo Workflow
-	logger.Info("Creating Argo Workflow", "generateName", argoWf.GenerateName)
-	if err := r.Create(ctx, argoWf); err != nil {
-		logger.Error(err, "Failed to create Argo Workflow")
-		r.setCondition(awf, ConditionTypeWorkflowSubmitted, metav1.ConditionFalse,
-			ReasonSubmitFailed, err.Error())
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		awf.Status.ObservedGeneration = awf.Generation
-		desiredStatus := awf.Status.DeepCopy()
-		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
-			awf.Status = *desiredStatus
-		}); statusErr != nil {
-			logger.Error(statusErr, "Failed to update AgentWorkflow status after Argo Workflow creation failure")
-		}
-		return ctrl.Result{}, err
-	}
-
-	// Update status with the created Argo Workflow name
-	r.setCondition(awf, ConditionTypeWorkflowSubmitted, metav1.ConditionTrue,
-		ReasonSubmitted, fmt.Sprintf("Argo Workflow %q created", argoWf.Name))
-	awf.Status.ArgoWorkflowName = argoWf.Name
-	awf.Status.Phase = agentv1alpha1.WorkflowPhaseRunning
-	now := metav1.Now()
-	awf.Status.StartTime = &now
-
-	desiredStatus := awf.Status.DeepCopy()
-	if err := updateStatusWithRetry(ctx, r.Client, awf, func() {
-		awf.Status = *desiredStatus
-	}); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Requeue to monitor the workflow
-	return ctrl.Result{RequeueAfter: workflowPollInterval}, nil
-}
-
-// monitorArgoWorkflow checks the status of the submitted Argo Workflow and updates the AgentWorkflow status.
-func (r *AgentWorkflowReconciler) monitorArgoWorkflow(ctx context.Context, awf *agentv1alpha1.AgentWorkflow) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	// Always reflect the current generation in status (fixes #102)
-	awf.Status.ObservedGeneration = awf.Generation
-
-	// Check for workflow timeout (fixes #101)
-	timeout := defaultWorkflowTimeout
-	if awf.Spec.Timeout != nil {
-		timeout = awf.Spec.Timeout.Duration
-	}
-	if awf.Status.StartTime != nil && time.Since(awf.Status.StartTime.Time) > timeout {
-		logger.Info("Workflow timed out", "timeout", timeout, "startTime", awf.Status.StartTime.Time)
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseFailed
-		now := metav1.Now()
-		awf.Status.CompletionTime = &now
-		r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
-			ReasonWorkflowTimeout, fmt.Sprintf("Workflow timed out after %v", timeout))
-		desiredStatus := awf.Status.DeepCopy()
-		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
-			awf.Status = *desiredStatus
-		}); statusErr != nil {
-			logger.Error(statusErr, "Failed to update AgentWorkflow status after timeout")
-		}
-		return ctrl.Result{}, nil
-	}
-
-	argoWf := &wfv1.Workflow{}
-	err := r.Get(ctx, client.ObjectKey{
-		Name:      awf.Status.ArgoWorkflowName,
-		Namespace: awf.Namespace,
-	}, argoWf)
+	// Create or update the Argo WorkflowTemplate
+	existing := &wfv1.WorkflowTemplate{}
+	err = r.Get(ctx, client.ObjectKey{Name: wft.Name, Namespace: wft.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("Argo Workflow not found, may have been deleted", "name", awf.Status.ArgoWorkflowName)
+			logger.Info("Creating Argo WorkflowTemplate", "name", wft.Name)
+			if err := r.Create(ctx, wft); err != nil {
+				logger.Error(err, "Failed to create Argo WorkflowTemplate")
+				r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
+					ReasonApplyFailed, err.Error())
+				awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
+				awf.Status.ObservedGeneration = awf.Generation
+				desiredStatus := awf.Status.DeepCopy()
+				if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
+					awf.Status = *desiredStatus
+				}); statusErr != nil {
+					logger.Error(statusErr, "Failed to update AgentWorkflow status after WorkflowTemplate creation failure")
+				}
+				return ctrl.Result{}, err
+			}
+		} else {
+			return ctrl.Result{}, fmt.Errorf("failed to get existing WorkflowTemplate: %w", err)
+		}
+	} else {
+		// Update the existing WorkflowTemplate
+		existing.Spec = wft.Spec
+		existing.Labels = wft.Labels
+		logger.Info("Updating Argo WorkflowTemplate", "name", wft.Name)
+		if err := r.Update(ctx, existing); err != nil {
+			logger.Error(err, "Failed to update Argo WorkflowTemplate")
 			r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
-				ReasonWorkflowError, "Argo Workflow not found")
+				ReasonApplyFailed, err.Error())
 			awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
+			awf.Status.ObservedGeneration = awf.Generation
 			desiredStatus := awf.Status.DeepCopy()
 			if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
 				awf.Status = *desiredStatus
 			}); statusErr != nil {
-				logger.Error(statusErr, "Failed to update AgentWorkflow status after Argo Workflow not found")
+				logger.Error(statusErr, "Failed to update AgentWorkflow status after WorkflowTemplate update failure")
 			}
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
 	}
 
-	// Map Argo Workflow phase to AgentWorkflow phase
-	previousPhase := awf.Status.Phase
-	switch argoWf.Status.Phase {
-	case wfv1.WorkflowSucceeded:
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseSucceeded
-		now := metav1.Now()
-		awf.Status.CompletionTime = &now
-		r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionTrue,
-			ReasonWorkflowComplete, "Workflow completed successfully")
-	case wfv1.WorkflowFailed:
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseFailed
-		now := metav1.Now()
-		awf.Status.CompletionTime = &now
-		msg := argoWf.Status.Message
-		if msg == "" {
-			msg = "Workflow failed"
-		}
-		r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
-			ReasonWorkflowFailed, msg)
-	case wfv1.WorkflowError:
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		now := metav1.Now()
-		awf.Status.CompletionTime = &now
-		msg := argoWf.Status.Message
-		if msg == "" {
-			msg = "Workflow encountered an error"
-		}
-		r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
-			ReasonWorkflowError, msg)
-	default:
-		// Still running
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseRunning
-		r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
-			ReasonWorkflowRunning, "Workflow is running")
-	}
-
-	// Update task statuses from Argo node statuses
-	awf.Status.TaskStatuses = r.extractTaskStatuses(argoWf)
+	// Update status — template is ready
+	r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionTrue,
+		ReasonApplied, fmt.Sprintf("Argo WorkflowTemplate %q applied", wft.Name))
+	awf.Status.WorkflowTemplateName = wft.Name
+	awf.Status.Phase = agentv1alpha1.WorkflowPhaseReady
+	awf.Status.ObservedGeneration = awf.Generation
 
 	desiredStatus := awf.Status.DeepCopy()
 	if err := updateStatusWithRetry(ctx, r.Client, awf, func() {
@@ -361,59 +265,7 @@ func (r *AgentWorkflowReconciler) monitorArgoWorkflow(ctx context.Context, awf *
 		return ctrl.Result{}, err
 	}
 
-	// If workflow is still running, continue polling
-	if awf.Status.Phase == agentv1alpha1.WorkflowPhaseRunning {
-		return ctrl.Result{RequeueAfter: workflowPollInterval}, nil
-	}
-
-	if previousPhase != awf.Status.Phase {
-		logger.Info("Workflow completed", "phase", awf.Status.Phase)
-	}
-
 	return ctrl.Result{}, nil
-}
-
-// extractTaskStatuses maps Argo Workflow node statuses to AgentWorkflow task statuses.
-func (r *AgentWorkflowReconciler) extractTaskStatuses(argoWf *wfv1.Workflow) []agentv1alpha1.WorkflowTaskStatus {
-	statuses := make([]agentv1alpha1.WorkflowTaskStatus, 0, len(argoWf.Status.Nodes))
-
-	for _, node := range argoWf.Status.Nodes {
-		// Skip non-task nodes (e.g., the DAG root node)
-		if node.Type != wfv1.NodeTypePod && node.Type != wfv1.NodeTypePlugin {
-			continue
-		}
-
-		status := agentv1alpha1.WorkflowTaskStatus{
-			Name:    node.DisplayName,
-			Message: node.Message,
-		}
-
-		switch node.Phase {
-		case wfv1.NodeSucceeded:
-			status.Phase = agentv1alpha1.WorkflowPhaseSucceeded
-		case wfv1.NodeFailed:
-			status.Phase = agentv1alpha1.WorkflowPhaseFailed
-		case wfv1.NodeError:
-			status.Phase = agentv1alpha1.WorkflowPhaseError
-		case wfv1.NodeRunning:
-			status.Phase = agentv1alpha1.WorkflowPhaseRunning
-		default:
-			status.Phase = agentv1alpha1.WorkflowPhasePending
-		}
-
-		if !node.StartedAt.IsZero() {
-			t := metav1.NewTime(node.StartedAt.Time)
-			status.StartTime = &t
-		}
-		if !node.FinishedAt.IsZero() {
-			t := metav1.NewTime(node.FinishedAt.Time)
-			status.CompletionTime = &t
-		}
-
-		statuses = append(statuses, status)
-	}
-
-	return statuses
 }
 
 // setCondition updates or adds a condition to the AgentWorkflow status.
@@ -433,7 +285,7 @@ func (r *AgentWorkflowReconciler) setCondition(awf *agentv1alpha1.AgentWorkflow,
 func (r *AgentWorkflowReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&agentv1alpha1.AgentWorkflow{}).
-		Owns(&wfv1.Workflow{}).
+		Owns(&wfv1.WorkflowTemplate{}).
 		Named("agentworkflow").
 		Complete(r)
 }

@@ -59,17 +59,17 @@ func jsonRaw(s string) *apiextensionsv1.JSON {
 	return &apiextensionsv1.JSON{Raw: []byte(s)}
 }
 
-// wantWorkflow builds the expected compiled Argo Workflow with standard metadata.
+// wantWorkflowTemplate builds the expected compiled Argo WorkflowTemplate with standard metadata.
 // It always prepends the _flokoa_traceparent parameter to match compiler behavior.
-func wantWorkflow(name, namespace string, templates []wfv1.Template, opts ...func(*wfv1.Workflow)) *wfv1.Workflow {
-	wf := &wfv1.Workflow{
+func wantWorkflowTemplate(name, namespace string, templates []wfv1.Template, opts ...func(*wfv1.WorkflowTemplate)) *wfv1.WorkflowTemplate {
+	wft := &wfv1.WorkflowTemplate{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
-			Kind:       "Workflow",
+			Kind:       "WorkflowTemplate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: name + "-",
-			Namespace:    namespace,
+			Name:      name,
+			Namespace: namespace,
 			Labels: map[string]string{
 				"agent.flokoa.ai/agentworkflow-name": name,
 				"app.kubernetes.io/managed-by":       "flokoa-operator",
@@ -86,22 +86,22 @@ func wantWorkflow(name, namespace string, templates []wfv1.Template, opts ...fun
 		},
 	}
 	for _, opt := range opts {
-		opt(wf)
+		opt(wft)
 	}
-	return wf
+	return wft
 }
 
 // withParams adds workflow-level argument parameters after the traceparent parameter.
-func withParams(params ...wfv1.Parameter) func(*wfv1.Workflow) {
-	return func(wf *wfv1.Workflow) {
-		wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, params...)
+func withParams(params ...wfv1.Parameter) func(*wfv1.WorkflowTemplate) {
+	return func(wft *wfv1.WorkflowTemplate) {
+		wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, params...)
 	}
 }
 
 // withTimeout sets the workflow-level active deadline.
-func withTimeout(seconds int64) func(*wfv1.Workflow) {
-	return func(wf *wfv1.Workflow) {
-		wf.Spec.ActiveDeadlineSeconds = &seconds
+func withTimeout(seconds int64) func(*wfv1.WorkflowTemplate) {
+	return func(wft *wfv1.WorkflowTemplate) {
+		wft.Spec.ActiveDeadlineSeconds = &seconds
 	}
 }
 
@@ -157,10 +157,10 @@ func pluginTextMessage(text string) map[string]interface{} {
 }
 
 // assertDiff fails the test if want and got differ.
-func assertDiff(t *testing.T, want, got *wfv1.Workflow) {
+func assertDiff(t *testing.T, want, got *wfv1.WorkflowTemplate) {
 	t.Helper()
 	if diff := cmp.Diff(want, got, cmpOpts...); diff != "" {
-		t.Errorf("compiled workflow mismatch (-want +got):\n%s", diff)
+		t.Errorf("compiled workflow template mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -195,12 +195,12 @@ func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("test-workflow", "default",
+	want := wantWorkflowTemplate("test-workflow", "default",
 		[]wfv1.Template{
 			dagTmpl(
 				wfv1.DAGTask{Name: "research", Template: "research"},
@@ -241,12 +241,12 @@ func TestCompileToArgoWorkflow_AgentTemplate(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("test", "default",
+	want := wantWorkflowTemplate("test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "call-agent", Template: "call-agent"}),
 			{
@@ -298,12 +298,12 @@ func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("test", "default",
+	want := wantWorkflowTemplate("test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "multi-part", Template: "multi-part"}),
 			{
@@ -364,12 +364,12 @@ func TestCompileToArgoWorkflow_AgentTaskRun(t *testing.T) {
 	resolved := map[string]*resolvedAgentTaskInfo{
 		"research": {},
 	}
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("run-test", "ml",
+	want := wantWorkflowTemplate("run-test", "ml",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "research", Template: "research"}),
 			{
@@ -422,12 +422,12 @@ func TestCompileToArgoWorkflow_AgentTaskClassify(t *testing.T) {
 	resolved := map[string]*resolvedAgentTaskInfo{
 		"classify": {},
 	}
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("classify-test", "default",
+	want := wantWorkflowTemplate("classify-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "classify", Template: "classify"}),
 			{
@@ -478,12 +478,12 @@ func TestCompileToArgoWorkflow_AgentTaskExtract(t *testing.T) {
 	resolved := map[string]*resolvedAgentTaskInfo{
 		"extract-names": {},
 	}
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("extract-test", "default",
+	want := wantWorkflowTemplate("extract-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "extract-names", Template: "extract-names"}),
 			{
@@ -539,12 +539,12 @@ func TestCompileToArgoWorkflow_AgentTaskCast(t *testing.T) {
 	resolved := map[string]*resolvedAgentTaskInfo{
 		"cast-data": {},
 	}
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("cast-test", "default",
+	want := wantWorkflowTemplate("cast-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "cast-data", Template: "cast-data"}),
 			{
@@ -602,12 +602,12 @@ func TestCompileToArgoWorkflow_AgentTaskGenerate(t *testing.T) {
 	resolved := map[string]*resolvedAgentTaskInfo{
 		"generate-examples": {},
 	}
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("gen-test", "default",
+	want := wantWorkflowTemplate("gen-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "generate-examples", Template: "generate-examples"}),
 			{
@@ -662,12 +662,12 @@ func TestCompileToArgoWorkflow_AgentTaskWithInlineAgent(t *testing.T) {
 	resolved := map[string]*resolvedAgentTaskInfo{
 		"agent-run": {},
 	}
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("agent-test", "default",
+	want := wantWorkflowTemplate("agent-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "agent-run", Template: "agent-run"}),
 			{
@@ -720,12 +720,12 @@ func TestCompileToArgoWorkflow_AgentTaskCustomImage(t *testing.T) {
 	resolved := map[string]*resolvedAgentTaskInfo{
 		"custom": {},
 	}
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("custom-test", "default",
+	want := wantWorkflowTemplate("custom-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "custom", Template: "custom"}),
 			{
@@ -795,12 +795,12 @@ func TestCompileToArgoWorkflow_AgentTaskWithResolvedVolumes(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("resolved-test", "production",
+	want := wantWorkflowTemplate("resolved-test", "production",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "with-model", Template: "with-model"}),
 			{
@@ -868,12 +868,12 @@ func TestCompileToArgoWorkflow_AgentTaskModelOnly(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, resolved, "")
+	got, err := compileToArgoWorkflowTemplate(awf, resolved)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("model-only", "default",
+	want := wantWorkflowTemplate("model-only", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "task", Template: "task"}),
 			{
@@ -921,14 +921,14 @@ func TestCompileToArgoWorkflow_RetryStrategy(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	limit := intstr.FromInt32(3)
 	backoffFactor := intstr.FromInt32(2)
-	want := wantWorkflow("retry-test", "default",
+	want := wantWorkflowTemplate("retry-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "task1", Template: "task1"}),
 			{
@@ -961,12 +961,12 @@ func TestCompileToArgoWorkflow_WorkflowTimeout(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("timeout-test", "default",
+	want := wantWorkflowTemplate("timeout-test", "default",
 		[]wfv1.Template{
 			dagTmpl(wfv1.DAGTask{Name: "task1", Template: "task1"}),
 			{
@@ -998,12 +998,12 @@ func TestCompileToArgoWorkflow_FanOutFanIn(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("fan-out", "default",
+	want := wantWorkflowTemplate("fan-out", "default",
 		[]wfv1.Template{
 			dagTmpl(
 				wfv1.DAGTask{Name: "a", Template: "a"},
@@ -1037,12 +1037,12 @@ func TestCompileToArgoWorkflow_Condition(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflow(awf, nil, "")
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := wantWorkflow("cond-test", "default",
+	want := wantWorkflowTemplate("cond-test", "default",
 		[]wfv1.Template{
 			dagTmpl(
 				wfv1.DAGTask{Name: "classify", Template: "classify"},

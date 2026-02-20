@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"time"
 
-	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -322,19 +321,12 @@ func waitForAgentWorkflowPhase(name, ns string, targetPhase agentv1alpha1.Workfl
 		}
 		// Fast-fail if workflow reached a terminal phase different from target
 		switch awf.Status.Phase {
-		case agentv1alpha1.WorkflowPhaseSucceeded, agentv1alpha1.WorkflowPhaseFailed, agentv1alpha1.WorkflowPhaseError:
+		case agentv1alpha1.WorkflowPhaseReady, agentv1alpha1.WorkflowPhaseError:
 			return false, fmt.Errorf("AgentWorkflow %s/%s reached terminal phase %q instead of %q",
 				ns, name, awf.Status.Phase, targetPhase)
 		}
 		return false, nil
 	})
-}
-
-// getWorkflow retrieves a workflow by name
-func getWorkflow(name, ns string) (*wfv1.Workflow, error) {
-	wf := &wfv1.Workflow{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, wf)
-	return wf, err
 }
 
 // createClusterRoleBinding creates a ClusterRoleBinding

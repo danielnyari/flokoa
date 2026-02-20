@@ -20,8 +20,8 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.argoWorkflowName
-      name: Argo Workflow
+    - jsonPath: .status.workflowTemplateName
+      name: Template
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -869,16 +869,11 @@ spec:
             - tasks
             type: object
           status:
-            description: AgentWorkflowStatus defines the observed state of AgentWorkflow.
+            description: |-
+              AgentWorkflowStatus defines the observed state of AgentWorkflow.
+              The AgentWorkflow compiles to an Argo WorkflowTemplate; individual runs
+              are Argo Workflow CRs created from the template and tracked separately.
             properties:
-              argoWorkflowName:
-                description: ArgoWorkflowName is the name of the generated Argo Workflow
-                  CR.
-                type: string
-              completionTime:
-                description: CompletionTime is when the workflow execution completed.
-                format: date-time
-                type: string
               conditions:
                 description: Conditions represent the latest available observations
                   of the workflow's state.
@@ -943,54 +938,18 @@ spec:
                 format: int64
                 type: integer
               phase:
-                description: Phase represents the current lifecycle phase of the workflow.
+                description: Phase represents the current lifecycle phase of the workflow
+                  template.
                 enum:
                 - Pending
                 - Compiling
-                - Running
-                - Succeeded
-                - Failed
+                - Ready
                 - Error
                 type: string
-              startTime:
-                description: StartTime is when the workflow execution started.
-                format: date-time
+              workflowTemplateName:
+                description: WorkflowTemplateName is the name of the generated Argo
+                  WorkflowTemplate CR.
                 type: string
-              taskStatuses:
-                description: TaskStatuses contains the status of individual tasks.
-                items:
-                  description: WorkflowTaskStatus contains the status of an individual
-                    task.
-                  properties:
-                    completionTime:
-                      description: CompletionTime is when the task completed.
-                      format: date-time
-                      type: string
-                    message:
-                      description: Message is a human-readable message about the task
-                        status.
-                      type: string
-                    name:
-                      description: Name is the task name.
-                      type: string
-                    phase:
-                      description: Phase is the current phase of this task.
-                      enum:
-                      - Pending
-                      - Compiling
-                      - Running
-                      - Succeeded
-                      - Failed
-                      - Error
-                      type: string
-                    startTime:
-                      description: StartTime is when the task started.
-                      format: date-time
-                      type: string
-                  required:
-                  - name
-                  type: object
-                type: array
             type: object
         type: object
     served: true

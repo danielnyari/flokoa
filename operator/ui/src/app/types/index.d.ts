@@ -237,6 +237,102 @@ export interface AgentToolList {
   items: AgentTool[]
 }
 
+// ─── AgentWorkflow CRD ──────────────────────────────────────────────
+
+export type WorkflowPhase
+  = 'WORKFLOW_PHASE_UNSPECIFIED'
+    | 'WORKFLOW_PHASE_PENDING'
+    | 'WORKFLOW_PHASE_COMPILING'
+    | 'WORKFLOW_PHASE_READY'
+    | 'WORKFLOW_PHASE_ERROR'
+
+export interface WorkflowParam {
+  name: string
+  value: string
+}
+
+export interface WorkflowTask {
+  name: string
+  type: string // "agent", "agentTask", "switch"
+  dependsOn?: string[]
+  condition?: string
+}
+
+export interface AgentWorkflowSpec {
+  description?: string
+  params?: WorkflowParam[]
+  tasks: WorkflowTask[]
+  timeout?: string
+}
+
+export interface AgentWorkflowStatus {
+  phase?: WorkflowPhase
+  workflowTemplateName?: string
+  conditions?: Condition[]
+  observedGeneration?: number
+}
+
+export interface AgentWorkflow {
+  metadata: ObjectMeta
+  spec: AgentWorkflowSpec
+  status?: AgentWorkflowStatus
+}
+
+export interface AgentWorkflowList {
+  items: AgentWorkflow[]
+}
+
+// ─── Workflow Run (Argo Workflow) ───────────────────────────────────
+
+export type RunPhase
+  = 'RUN_PHASE_UNSPECIFIED'
+    | 'RUN_PHASE_PENDING'
+    | 'RUN_PHASE_RUNNING'
+    | 'RUN_PHASE_SUCCEEDED'
+    | 'RUN_PHASE_FAILED'
+    | 'RUN_PHASE_ERROR'
+
+export type NodeType
+  = 'NODE_TYPE_UNSPECIFIED'
+    | 'NODE_TYPE_POD'
+    | 'NODE_TYPE_STEPS'
+    | 'NODE_TYPE_DAG'
+    | 'NODE_TYPE_TASK_GROUP'
+    | 'NODE_TYPE_RETRY'
+    | 'NODE_TYPE_SKIPPED'
+    | 'NODE_TYPE_SUSPEND'
+    | 'NODE_TYPE_PLUGIN'
+
+export interface WorkflowRunNode {
+  id: string
+  name: string
+  displayName: string
+  type: NodeType
+  phase: RunPhase
+  startedAt?: string
+  finishedAt?: string
+  message?: string
+  templateName?: string
+  children?: string[]
+  inputs?: Record<string, string>
+  outputs?: Record<string, string>
+}
+
+export interface WorkflowRun {
+  metadata: ObjectMeta
+  phase: RunPhase
+  startedAt?: string
+  finishedAt?: string
+  progress?: string
+  message?: string
+  nodes?: WorkflowRunNode[]
+  parameters?: Record<string, string>
+}
+
+export interface WorkflowRunList {
+  items: WorkflowRun[]
+}
+
 // ─── Dashboard types ────────────────────────────────────────────────
 
 export interface Stat {

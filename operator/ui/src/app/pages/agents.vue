@@ -79,7 +79,7 @@ function getRowItems(row: { original: Agent }) {
 const columns: TableColumn<Agent>[] = [
   {
     id: 'name',
-    accessorFn: (row) => row.metadata.name,
+    accessorFn: row => row.metadata.name,
     header: 'Name',
     cell: ({ row }) => {
       return h('div', { class: 'flex items-center gap-2' }, [
@@ -92,7 +92,7 @@ const columns: TableColumn<Agent>[] = [
   },
   {
     id: 'phase',
-    accessorFn: (row) => row.status?.phase,
+    accessorFn: row => row.status?.phase,
     header: 'Phase',
     filterFn: 'equals',
     cell: ({ row }) => {
@@ -108,7 +108,7 @@ const columns: TableColumn<Agent>[] = [
   },
   {
     id: 'framework',
-    accessorFn: (row) => row.spec.framework ?? row.status?.detectedFramework,
+    accessorFn: row => row.spec.framework ?? row.status?.detectedFramework,
     header: 'Framework',
     cell: ({ row }) => {
       const fw = row.original.spec.framework ?? row.original.status?.detectedFramework
@@ -118,7 +118,7 @@ const columns: TableColumn<Agent>[] = [
   },
   {
     id: 'runtime',
-    accessorFn: (row) => row.spec.runtime?.type,
+    accessorFn: row => row.spec.runtime?.type,
     header: 'Runtime',
     cell: ({ row }) => row.original.spec.runtime?.type ?? '—'
   },
@@ -133,7 +133,7 @@ const columns: TableColumn<Agent>[] = [
   },
   {
     id: 'url',
-    accessorFn: (row) => row.status?.url,
+    accessorFn: row => row.status?.url,
     header: 'URL',
     cell: ({ row }) => {
       const url = row.original.status?.url
@@ -143,7 +143,7 @@ const columns: TableColumn<Agent>[] = [
   },
   {
     id: 'age',
-    accessorFn: (row) => row.metadata.creationTimestamp,
+    accessorFn: row => row.metadata.creationTimestamp,
     header: 'Age',
     cell: ({ row }) => {
       const ts = row.original.metadata.creationTimestamp

@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,9 +29,13 @@ func main() {
 	// Load configuration
 	cfg := config.LoadServerConfig()
 
-	// Register scheme
+	// Register schemes
 	if err := agentv1alpha1.AddToScheme(scheme.Scheme); err != nil {
-		log.Error(err, "Failed to add scheme")
+		log.Error(err, "Failed to add Flokoa scheme")
+		os.Exit(1)
+	}
+	if err := wfv1.AddToScheme(scheme.Scheme); err != nil {
+		log.Error(err, "Failed to add Argo Workflows scheme")
 		os.Exit(1)
 	}
 
@@ -75,6 +80,7 @@ func main() {
 	modelService := server.NewModelService(k8sClient)
 	modelProviderService := server.NewModelProviderService(k8sClient)
 	agentToolService := server.NewAgentToolService(k8sClient)
+	agentWorkflowService := server.NewAgentWorkflowService(k8sClient)
 
 	// Create and start gRPC server
 	grpcServer := server.NewServer(
@@ -87,6 +93,7 @@ func main() {
 		modelService,
 		modelProviderService,
 		agentToolService,
+		agentWorkflowService,
 	)
 
 	if err := grpcServer.Start(ctx); err != nil {

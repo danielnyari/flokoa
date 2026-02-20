@@ -12,6 +12,9 @@
       "name": "AgentToolService"
     },
     {
+      "name": "AgentWorkflowService"
+    },
+    {
       "name": "ModelService"
     },
     {
@@ -135,6 +138,63 @@
         ],
         "tags": [
           "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/agentworkflows": {
+      "get": {
+        "summary": "ListAgentWorkflows lists AgentWorkflows in a namespace or across all namespaces.",
+        "operationId": "AgentWorkflowService_ListAgentWorkflows",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentWorkflowList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "description": "Empty namespace means all namespaces",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentWorkflowService"
         ]
       }
     },
@@ -893,6 +953,248 @@
         ],
         "tags": [
           "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agentworkflows": {
+      "get": {
+        "summary": "ListAgentWorkflows lists AgentWorkflows in a namespace or across all namespaces.",
+        "operationId": "AgentWorkflowService_ListAgentWorkflows2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentWorkflowList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "description": "Empty namespace means all namespaces",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentWorkflowService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agentworkflows/{name}": {
+      "get": {
+        "summary": "GetAgentWorkflow retrieves an AgentWorkflow by name and namespace.",
+        "operationId": "AgentWorkflowService_GetAgentWorkflow",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentWorkflow"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentWorkflowService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agentworkflows/{workflowName}/runs": {
+      "get": {
+        "summary": "ListWorkflowRuns lists workflow runs for a specific AgentWorkflow.",
+        "operationId": "AgentWorkflowService_ListWorkflowRuns",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1WorkflowRunList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "workflowName",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentWorkflowService"
+        ]
+      },
+      "post": {
+        "summary": "SubmitWorkflowRun creates a new workflow run from the AgentWorkflow's template.",
+        "operationId": "AgentWorkflowService_SubmitWorkflowRun",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1WorkflowRun"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "workflowName",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentWorkflowServiceSubmitWorkflowRunBody"
+            }
+          }
+        ],
+        "tags": [
+          "AgentWorkflowService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agentworkflows/{workflowName}/runs/{runName}": {
+      "get": {
+        "summary": "GetWorkflowRun retrieves a specific workflow run with full node details.",
+        "operationId": "AgentWorkflowService_GetWorkflowRun",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1WorkflowRun"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "workflowName",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "runName",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentWorkflowService"
         ]
       }
     },
@@ -1868,6 +2170,18 @@
     }
   },
   "definitions": {
+    "AgentWorkflowServiceSubmitWorkflowRunBody": {
+      "type": "object",
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "SubmitWorkflowRunRequest is the request for SubmitWorkflowRun."
+    },
     "protobufAny": {
       "type": "object",
       "properties": {
@@ -2234,6 +2548,86 @@
       ],
       "default": "AGENT_TOOL_TYPE_UNSPECIFIED",
       "description": "AgentToolType represents the type of tool."
+    },
+    "v1alpha1AgentWorkflow": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ObjectMeta"
+        },
+        "spec": {
+          "$ref": "#/definitions/v1alpha1AgentWorkflowSpec"
+        },
+        "status": {
+          "$ref": "#/definitions/v1alpha1AgentWorkflowStatus"
+        }
+      },
+      "description": "AgentWorkflow is the top-level AgentWorkflow resource."
+    },
+    "v1alpha1AgentWorkflowList": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ListMeta"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1AgentWorkflow"
+          }
+        }
+      },
+      "description": "AgentWorkflowList contains a list of AgentWorkflow resources."
+    },
+    "v1alpha1AgentWorkflowSpec": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1WorkflowParam"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1WorkflowTask"
+          }
+        },
+        "timeout": {
+          "type": "string"
+        }
+      },
+      "description": "AgentWorkflowSpec defines the desired state of AgentWorkflow."
+    },
+    "v1alpha1AgentWorkflowStatus": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "#/definitions/v1alpha1WorkflowPhase"
+        },
+        "workflowTemplateName": {
+          "type": "string"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Condition"
+          }
+        },
+        "observedGeneration": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "description": "AgentWorkflowStatus defines the observed state of AgentWorkflow."
     },
     "v1alpha1AnthropicContainerConfig": {
       "type": "object",
@@ -3292,6 +3686,22 @@
       },
       "description": "NodeSelectorTerm defines node selector requirements."
     },
+    "v1alpha1NodeType": {
+      "type": "string",
+      "enum": [
+        "NODE_TYPE_UNSPECIFIED",
+        "NODE_TYPE_POD",
+        "NODE_TYPE_STEPS",
+        "NODE_TYPE_DAG",
+        "NODE_TYPE_TASK_GROUP",
+        "NODE_TYPE_RETRY",
+        "NODE_TYPE_SKIPPED",
+        "NODE_TYPE_SUSPEND",
+        "NODE_TYPE_PLUGIN"
+      ],
+      "default": "NODE_TYPE_UNSPECIFIED",
+      "description": "NodeType represents the type of a workflow run node."
+    },
     "v1alpha1ObjectFieldSelector": {
       "type": "object",
       "properties": {
@@ -3769,6 +4179,19 @@
         }
       },
       "description": "ResourceRequirements describes compute resource requirements."
+    },
+    "v1alpha1RunPhase": {
+      "type": "string",
+      "enum": [
+        "RUN_PHASE_UNSPECIFIED",
+        "RUN_PHASE_PENDING",
+        "RUN_PHASE_RUNNING",
+        "RUN_PHASE_SUCCEEDED",
+        "RUN_PHASE_FAILED",
+        "RUN_PHASE_ERROR"
+      ],
+      "default": "RUN_PHASE_UNSPECIFIED",
+      "description": "RunPhase represents the current phase of a workflow run."
     },
     "v1alpha1RuntimeSpec": {
       "type": "object",
@@ -4310,6 +4733,161 @@
         }
       },
       "description": "WeightedPodAffinityTerm is a weighted pod affinity term."
+    },
+    "v1alpha1WorkflowParam": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "description": "WorkflowParam defines a workflow-level parameter."
+    },
+    "v1alpha1WorkflowPhase": {
+      "type": "string",
+      "enum": [
+        "WORKFLOW_PHASE_UNSPECIFIED",
+        "WORKFLOW_PHASE_PENDING",
+        "WORKFLOW_PHASE_COMPILING",
+        "WORKFLOW_PHASE_READY",
+        "WORKFLOW_PHASE_ERROR"
+      ],
+      "default": "WORKFLOW_PHASE_UNSPECIFIED",
+      "description": "WorkflowPhase represents the current phase of the AgentWorkflow template lifecycle."
+    },
+    "v1alpha1WorkflowRun": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ObjectMeta"
+        },
+        "phase": {
+          "$ref": "#/definitions/v1alpha1RunPhase"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "progress": {
+          "type": "string",
+          "title": "e.g. \"2/5\""
+        },
+        "message": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1WorkflowRunNode"
+          }
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "WorkflowRun represents a single execution of an AgentWorkflow (an Argo Workflow)."
+    },
+    "v1alpha1WorkflowRunList": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ListMeta"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1WorkflowRun"
+          }
+        }
+      },
+      "description": "WorkflowRunList contains a list of WorkflowRun resources."
+    },
+    "v1alpha1WorkflowRunNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/v1alpha1NodeType"
+        },
+        "phase": {
+          "$ref": "#/definitions/v1alpha1RunPhase"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "message": {
+          "type": "string"
+        },
+        "templateName": {
+          "type": "string"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "WorkflowRunNode represents a single node in a workflow run."
+    },
+    "v1alpha1WorkflowTask": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "title": "\"agent\", \"agentTask\", or \"switch\""
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "condition": {
+          "type": "string"
+        }
+      },
+      "description": "WorkflowTask defines a single task in the workflow."
     }
   }
 }

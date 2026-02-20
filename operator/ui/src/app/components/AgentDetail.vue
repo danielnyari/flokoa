@@ -46,8 +46,8 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
           <UBadge
             :color="
               agent.status?.phase === 'Running' ? 'success'
-                : agent.status?.phase === 'Failed' ? 'error'
-                  : 'warning'
+              : agent.status?.phase === 'Failed' ? 'error'
+                : 'warning'
             "
             variant="subtle"
             class="capitalize ml-auto"
@@ -176,7 +176,13 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
                 {{ skill.description }}
               </p>
               <div v-if="skill.tags?.length" class="flex flex-wrap gap-1 mt-1.5">
-                <UBadge v-for="tag in skill.tags" :key="tag" variant="subtle" color="neutral" size="xs">
+                <UBadge
+                  v-for="tag in skill.tags"
+                  :key="tag"
+                  variant="subtle"
+                  color="neutral"
+                  size="xs"
+                >
                   {{ tag }}
                 </UBadge>
               </div>

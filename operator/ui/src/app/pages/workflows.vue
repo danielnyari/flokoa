@@ -3,33 +3,35 @@ import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { ModelProvider } from '~/types'
+import type { AgentWorkflow, WorkflowPhase } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
 
 const toast = useToast()
+const router = useRouter()
 const table = useTemplateRef('table')
 
-const selectedProvider = ref<ModelProvider | null>(null)
-const detailOpen = ref(false)
+const { listAgentWorkflows } = useFlokoa()
+const { data: workflowList, status, refresh } = await listAgentWorkflows()
 
-function openDetail(provider: ModelProvider) {
-  selectedProvider.value = provider
-  detailOpen.value = true
-}
-
-const { listModelProviders } = useFlokoa()
-const { data: providerList, status, refresh } = await listModelProviders()
-
-const providers = computed(() => providerList.value?.items ?? [])
+const workflows = computed(() => workflowList.value?.items ?? [])
 
 const columnFilters = ref([{
   id: 'name',
   value: ''
 }])
 const columnVisibility = ref()
+
+const phaseFilter = ref('all')
+
+watch(() => phaseFilter.value, (newVal) => {
+  if (!table?.value?.tableApi) return
+  const col = table.value.tableApi.getColumn('phase')
+  if (!col) return
+  col.setFilterValue(newVal === 'all' ? undefined : newVal)
+})
 
 const nameSearch = computed({
   get: (): string => {
@@ -40,40 +42,32 @@ const nameSearch = computed({
   }
 })
 
-const providerTypeFilter = ref('all')
-
-watch(() => providerTypeFilter.value, (newVal) => {
-  if (!table?.value?.tableApi) return
-  const col = table.value.tableApi.getColumn('providerType')
-  if (!col) return
-  col.setFilterValue(newVal === 'all' ? undefined : newVal)
-})
-
 const pagination = ref({
   pageIndex: 0,
   pageSize: 10
 })
 
-function getProviderType(provider: ModelProvider): string {
-  if (provider.status?.provider) return provider.status.provider
-  if (provider.spec.openai) return 'openai'
-  if (provider.spec.anthropic) return 'anthropic'
-  if (provider.spec.google) return 'google'
-  if (provider.spec.bedrock) return 'bedrock'
-  return 'unknown'
-}
-
-function getProviderIcon(type: string): string {
-  const icons: Record<string, string> = {
-    openai: 'i-simple-icons-openai',
-    anthropic: 'i-simple-icons-anthropic',
-    google: 'i-simple-icons-google',
-    bedrock: 'i-simple-icons-amazonaws'
+function phaseColor(phase?: WorkflowPhase): 'success' | 'error' | 'warning' | 'neutral' | 'info' {
+  switch (phase) {
+    case 'WORKFLOW_PHASE_READY': return 'success'
+    case 'WORKFLOW_PHASE_COMPILING': return 'warning'
+    case 'WORKFLOW_PHASE_ERROR': return 'error'
+    case 'WORKFLOW_PHASE_PENDING': return 'neutral'
+    default: return 'neutral'
   }
-  return icons[type] ?? 'i-lucide-cloud'
 }
 
-function getRowItems(row: { original: ModelProvider }) {
+function phaseLabel(phase?: WorkflowPhase): string {
+  switch (phase) {
+    case 'WORKFLOW_PHASE_READY': return 'Ready'
+    case 'WORKFLOW_PHASE_COMPILING': return 'Compiling'
+    case 'WORKFLOW_PHASE_ERROR': return 'Error'
+    case 'WORKFLOW_PHASE_PENDING': return 'Pending'
+    default: return 'Unknown'
+  }
+}
+
+function getRowItems(row: { original: AgentWorkflow }) {
   return [
     { type: 'label' as const, label: 'Actions' },
     {
@@ -81,7 +75,7 @@ function getRowItems(row: { original: ModelProvider }) {
       icon: 'i-lucide-copy',
       onSelect() {
         navigator.clipboard.writeText(row.original.metadata.name)
-        toast.add({ title: 'Copied', description: 'Provider name copied to clipboard' })
+        toast.add({ title: 'Copied', description: 'Workflow name copied to clipboard' })
       }
     },
     { type: 'separator' as const },
@@ -89,79 +83,50 @@ function getRowItems(row: { original: ModelProvider }) {
       label: 'View details',
       icon: 'i-lucide-eye',
       onSelect() {
-        openDetail(row.original)
+        router.push(`/workflows/${row.original.metadata.namespace}/${row.original.metadata.name}`)
       }
     }
   ]
 }
 
-const columns: TableColumn<ModelProvider>[] = [
+const columns: TableColumn<AgentWorkflow>[] = [
   {
     id: 'name',
     accessorFn: row => row.metadata.name,
     header: 'Name',
     cell: ({ row }) => {
-      return h('div', undefined, [
-        h('p', { class: 'font-medium text-highlighted' }, row.original.metadata.name),
-        h('p', { class: 'text-sm text-muted' }, row.original.metadata.namespace)
+      return h('div', { class: 'flex items-center gap-2' }, [
+        h('div', undefined, [
+          h('p', { class: 'font-medium text-highlighted' }, row.original.metadata.name),
+          h('p', { class: 'text-sm text-muted' }, row.original.metadata.namespace)
+        ])
       ])
     }
   },
   {
-    id: 'providerType',
-    accessorFn: row => getProviderType(row),
-    header: 'Provider',
+    id: 'phase',
+    accessorFn: row => row.status?.phase,
+    header: 'Phase',
     filterFn: 'equals',
     cell: ({ row }) => {
-      const type = getProviderType(row.original)
-      return h('div', { class: 'flex items-center gap-2' }, [
-        h(resolveComponent('UIcon'), { name: getProviderIcon(type), class: 'size-4' }),
-        h(UBadge, { variant: 'subtle', color: 'neutral', class: 'capitalize' }, () => type)
-      ])
+      const phase = row.original.status?.phase
+      return h(UBadge, { variant: 'subtle', color: phaseColor(phase) }, () => phaseLabel(phase))
     }
   },
   {
-    id: 'endpoint',
-    header: 'Endpoint',
-    cell: ({ row }) => {
-      const spec = row.original.spec
-      const baseURL = spec.openai?.baseURL ?? spec.anthropic?.baseURL
-      if (baseURL) return h('span', { class: 'text-sm font-mono truncate max-w-48 block' }, baseURL)
-      if (spec.google) {
-        const parts = [spec.google.project, spec.google.location].filter(Boolean)
-        return parts.length ? h('span', { class: 'text-sm text-muted' }, parts.join(' / ')) : h('span', { class: 'text-muted' }, 'Default')
-      }
-      if (spec.bedrock?.region) return h('span', { class: 'text-sm text-muted' }, spec.bedrock.region)
-      return h('span', { class: 'text-muted' }, 'Default')
-    }
+    id: 'tasks',
+    accessorFn: row => row.spec.tasks?.length ?? 0,
+    header: 'Tasks',
+    cell: ({ row }) => `${row.original.spec.tasks?.length ?? 0}`
   },
   {
-    id: 'apiKey',
-    header: 'API Key',
+    id: 'template',
+    accessorFn: row => row.status?.workflowTemplateName,
+    header: 'Template',
     cell: ({ row }) => {
-      const ref = row.original.spec.apiKeySecretRef
-      if (!ref) return h('span', { class: 'text-muted' }, '—')
-      return h('span', { class: 'text-sm font-mono' }, `${ref.name}`)
-    }
-  },
-  {
-    id: 'tls',
-    header: 'TLS',
-    cell: ({ row }) => {
-      const tls = row.original.spec.tls
-      if (!tls) return h('span', { class: 'text-muted' }, 'Default')
-      if (tls.insecureSkipVerify) return h(UBadge, { variant: 'subtle', color: 'warning' }, () => 'Insecure')
-      return h(UBadge, { variant: 'subtle', color: 'success' }, () => 'Verified')
-    }
-  },
-  {
-    id: 'ready',
-    header: 'Ready',
-    cell: ({ row }) => {
-      const ready = row.original.status?.ready
-      if (ready === undefined) return h('span', { class: 'text-muted' }, '—')
-      const color = ready ? 'success' as const : 'error' as const
-      return h(UBadge, { variant: 'subtle', color }, () => ready ? 'Ready' : 'Not Ready')
+      const name = row.original.status?.workflowTemplateName
+      if (!name) return h('span', { class: 'text-muted' }, '\u2014')
+      return h('span', { class: 'text-sm font-mono truncate max-w-48 block' }, name)
     }
   },
   {
@@ -170,7 +135,7 @@ const columns: TableColumn<ModelProvider>[] = [
     header: 'Age',
     cell: ({ row }) => {
       const ts = row.original.metadata.creationTimestamp
-      if (!ts) return '—'
+      if (!ts) return '\u2014'
       return useTimeAgo(ts).value
     }
   },
@@ -192,9 +157,9 @@ const columns: TableColumn<ModelProvider>[] = [
 </script>
 
 <template>
-  <UDashboardPanel id="providers">
+  <UDashboardPanel id="workflows">
     <template #header>
-      <UDashboardNavbar title="Model Providers" icon="i-lucide-cloud">
+      <UDashboardNavbar title="Workflows" icon="i-lucide-git-branch">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -216,21 +181,21 @@ const columns: TableColumn<ModelProvider>[] = [
           v-model="nameSearch"
           class="max-w-sm"
           icon="i-lucide-search"
-          placeholder="Filter providers..."
+          placeholder="Filter workflows..."
         />
 
         <div class="flex flex-wrap items-center gap-1.5">
           <USelect
-            v-model="providerTypeFilter"
+            v-model="phaseFilter"
             :items="[
               { label: 'All', value: 'all' },
-              { label: 'OpenAI', value: 'openai' },
-              { label: 'Anthropic', value: 'anthropic' },
-              { label: 'Google', value: 'google' },
-              { label: 'Bedrock', value: 'bedrock' }
+              { label: 'Ready', value: 'WORKFLOW_PHASE_READY' },
+              { label: 'Compiling', value: 'WORKFLOW_PHASE_COMPILING' },
+              { label: 'Error', value: 'WORKFLOW_PHASE_ERROR' },
+              { label: 'Pending', value: 'WORKFLOW_PHASE_PENDING' }
             ]"
             :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-            placeholder="Filter provider"
+            placeholder="Filter phase"
             class="min-w-28"
           />
           <UDropdownMenu
@@ -269,7 +234,7 @@ const columns: TableColumn<ModelProvider>[] = [
         v-model:pagination="pagination"
         :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
         class="shrink-0"
-        :data="providers"
+        :data="workflows"
         :columns="columns"
         :loading="status === 'pending'"
         :ui="{
@@ -280,11 +245,12 @@ const columns: TableColumn<ModelProvider>[] = [
           td: 'border-b border-default',
           separator: 'h-0'
         }"
+        @select="(_e: Event, row: { original: AgentWorkflow }) => router.push(`/workflows/${row.original.metadata.namespace}/${row.original.metadata.name}`)"
       />
 
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
         <div class="text-sm text-muted">
-          {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} provider(s)
+          {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} workflow(s)
         </div>
 
         <div class="flex items-center gap-1.5">
@@ -298,6 +264,4 @@ const columns: TableColumn<ModelProvider>[] = [
       </div>
     </template>
   </UDashboardPanel>
-
-  <ProviderDetail v-if="selectedProvider" v-model:open="detailOpen" :provider="selectedProvider" />
 </template>

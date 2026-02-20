@@ -65,20 +65,19 @@ const (
 // expressionRe matches {{...}} template expressions in DSL fields.
 var expressionRe = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
-// compileToArgoWorkflow translates an AgentWorkflow DSL into an Argo Workflow CR.
+// compileToArgoWorkflowTemplate translates an AgentWorkflow DSL into an Argo WorkflowTemplate CR.
+// Each AgentWorkflow compiles to a single WorkflowTemplate; individual runs are Argo Workflow CRs
+// created from the template via WorkflowTemplateRef.
 // resolvedTasks contains pre-resolved Model/Tool ConfigMap info for agentTask tasks, keyed by task name.
-// traceparent is the W3C traceparent header value from the controller's current span; it is
-// injected as a workflow-level parameter so that every task (container or plugin) can
-// propagate the distributed trace.
-func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo, traceparent string) (*wfv1.Workflow, error) {
-	wf := &wfv1.Workflow{
+func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo) (*wfv1.WorkflowTemplate, error) {
+	wft := &wfv1.WorkflowTemplate{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
-			Kind:       "Workflow",
+			Kind:       "WorkflowTemplate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: awf.Name + "-",
-			Namespace:    awf.Namespace,
+			Name:      awf.Name,
+			Namespace: awf.Namespace,
 			Labels: map[string]string{
 				"agent.flokoa.ai/agentworkflow-name": awf.Name,
 				"app.kubernetes.io/managed-by":       "flokoa-operator",
@@ -91,9 +90,10 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 
 	// Inject traceparent as a workflow-level parameter so it is available to
 	// all templates via {{workflow.parameters._flokoa_traceparent}}.
-	wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, wfv1.Parameter{
+	// The actual value is provided at run submission time.
+	wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, wfv1.Parameter{
 		Name:  traceparentWorkflowParam,
-		Value: wfv1.AnyStringPtr(traceparent),
+		Value: wfv1.AnyStringPtr(""),
 	})
 
 	// Workflow-level parameters
@@ -103,14 +103,14 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 				Name:  p.Name,
 				Value: wfv1.AnyStringPtr(p.Value),
 			}
-			wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, param)
+			wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, param)
 		}
 	}
 
 	// Workflow-level timeout
 	if awf.Spec.Timeout != nil {
 		seconds := int64(awf.Spec.Timeout.Seconds())
-		wf.Spec.ActiveDeadlineSeconds = &seconds
+		wft.Spec.ActiveDeadlineSeconds = &seconds
 	}
 
 	// Build templates and DAG tasks
@@ -173,9 +173,9 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 	}
 	templates = append([]wfv1.Template{dagTemplate}, templates...)
 
-	wf.Spec.Templates = templates
+	wft.Spec.Templates = templates
 
-	return wf, nil
+	return wft, nil
 }
 
 // buildTemplate creates an Argo template for a single workflow task.

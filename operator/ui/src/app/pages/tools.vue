@@ -80,7 +80,7 @@ function getRowItems(row: { original: AgentTool }) {
 const columns: TableColumn<AgentTool>[] = [
   {
     id: 'name',
-    accessorFn: (row) => row.metadata.name,
+    accessorFn: row => row.metadata.name,
     header: 'Name',
     cell: ({ row }) => {
       return h('div', undefined, [
@@ -91,7 +91,7 @@ const columns: TableColumn<AgentTool>[] = [
   },
   {
     id: 'type',
-    accessorFn: (row) => row.spec.type,
+    accessorFn: row => row.spec.type,
     header: 'Type',
     cell: ({ row }) => {
       return h(UBadge, { variant: 'outline', color: 'neutral', class: 'uppercase text-xs' }, () => row.original.spec.type)
@@ -99,7 +99,7 @@ const columns: TableColumn<AgentTool>[] = [
   },
   {
     id: 'description',
-    accessorFn: (row) => row.spec.description,
+    accessorFn: row => row.spec.description,
     header: 'Description',
     cell: ({ row }) => {
       const desc = row.original.spec.description
@@ -131,7 +131,7 @@ const columns: TableColumn<AgentTool>[] = [
   },
   {
     id: 'age',
-    accessorFn: (row) => row.metadata.creationTimestamp,
+    accessorFn: row => row.metadata.creationTimestamp,
     header: 'Age',
     cell: ({ row }) => {
       const ts = row.original.metadata.creationTimestamp

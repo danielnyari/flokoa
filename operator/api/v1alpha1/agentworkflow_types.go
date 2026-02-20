@@ -22,16 +22,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// WorkflowPhase represents the current phase of the workflow execution.
-// +kubebuilder:validation:Enum=Pending;Compiling;Running;Succeeded;Failed;Error
+// WorkflowPhase represents the current phase of the AgentWorkflow template lifecycle.
+// +kubebuilder:validation:Enum=Pending;Compiling;Ready;Error
 type WorkflowPhase string
 
 const (
 	WorkflowPhasePending   WorkflowPhase = "Pending"
 	WorkflowPhaseCompiling WorkflowPhase = "Compiling"
-	WorkflowPhaseRunning   WorkflowPhase = "Running"
-	WorkflowPhaseSucceeded WorkflowPhase = "Succeeded"
-	WorkflowPhaseFailed    WorkflowPhase = "Failed"
+	WorkflowPhaseReady     WorkflowPhase = "Ready"
 	WorkflowPhaseError     WorkflowPhase = "Error"
 )
 
@@ -469,26 +467,16 @@ type WorkflowBackoff struct {
 }
 
 // AgentWorkflowStatus defines the observed state of AgentWorkflow.
+// The AgentWorkflow compiles to an Argo WorkflowTemplate; individual runs
+// are Argo Workflow CRs created from the template and tracked separately.
 type AgentWorkflowStatus struct {
-	// Phase represents the current lifecycle phase of the workflow.
+	// Phase represents the current lifecycle phase of the workflow template.
 	// +optional
 	Phase WorkflowPhase `json:"phase,omitempty"`
 
-	// ArgoWorkflowName is the name of the generated Argo Workflow CR.
+	// WorkflowTemplateName is the name of the generated Argo WorkflowTemplate CR.
 	// +optional
-	ArgoWorkflowName string `json:"argoWorkflowName,omitempty"`
-
-	// StartTime is when the workflow execution started.
-	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-
-	// CompletionTime is when the workflow execution completed.
-	// +optional
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-
-	// TaskStatuses contains the status of individual tasks.
-	// +optional
-	TaskStatuses []WorkflowTaskStatus `json:"taskStatuses,omitempty"`
+	WorkflowTemplateName string `json:"workflowTemplateName,omitempty"`
 
 	// Conditions represent the latest available observations of the workflow's state.
 	// +optional
@@ -499,33 +487,11 @@ type AgentWorkflowStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// WorkflowTaskStatus contains the status of an individual task.
-type WorkflowTaskStatus struct {
-	// Name is the task name.
-	Name string `json:"name"`
-
-	// Phase is the current phase of this task.
-	// +optional
-	Phase WorkflowPhase `json:"phase,omitempty"`
-
-	// StartTime is when the task started.
-	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-
-	// CompletionTime is when the task completed.
-	// +optional
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-
-	// Message is a human-readable message about the task status.
-	// +optional
-	Message string `json:"message,omitempty"`
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=awf
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
-// +kubebuilder:printcolumn:name="Argo Workflow",type="string",JSONPath=".status.argoWorkflowName"
+// +kubebuilder:printcolumn:name="Template",type="string",JSONPath=".status.workflowTemplateName"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // AgentWorkflow is the Schema for the agentworkflows API.

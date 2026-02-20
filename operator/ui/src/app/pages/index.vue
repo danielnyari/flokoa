@@ -1,21 +1,24 @@
 <script setup lang="ts">
-const { listAgents, listModels, listModelProviders, listAgentTools } = useFlokoa()
+const { listAgents, listModels, listModelProviders, listAgentTools, listAgentWorkflows } = useFlokoa()
 
 const { data: agentList, status: agentStatus, refresh: refreshAgents } = await listAgents()
 const { data: modelList, status: modelStatus, refresh: refreshModels } = await listModels()
 const { data: providerList, status: providerStatus, refresh: refreshProviders } = await listModelProviders()
 const { data: toolList, status: toolStatus, refresh: refreshTools } = await listAgentTools()
+const { data: workflowList, status: workflowStatus, refresh: refreshWorkflows } = await listAgentWorkflows()
 
 const agents = computed(() => agentList.value?.items ?? [])
 const models = computed(() => modelList.value?.items ?? [])
 const providers = computed(() => providerList.value?.items ?? [])
 const tools = computed(() => toolList.value?.items ?? [])
+const workflows = computed(() => workflowList.value?.items ?? [])
 
 const loading = computed(() =>
   agentStatus.value === 'pending'
   || modelStatus.value === 'pending'
   || providerStatus.value === 'pending'
   || toolStatus.value === 'pending'
+  || workflowStatus.value === 'pending'
 )
 
 function refreshAll() {
@@ -23,6 +26,7 @@ function refreshAll() {
   refreshModels()
   refreshProviders()
   refreshTools()
+  refreshWorkflows()
 }
 
 const runningAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Running').length)
@@ -30,6 +34,7 @@ const pendingAgents = computed(() => agents.value.filter(a => a.status?.phase ==
 const failedAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Failed').length)
 const readyModels = computed(() => models.value.filter(m => m.status?.ready).length)
 const readyProviders = computed(() => providers.value.filter(p => p.status?.ready).length)
+const readyWorkflows = computed(() => workflows.value.filter(w => w.status?.phase === 'WORKFLOW_PHASE_READY').length)
 
 const stats = computed(() => [
   {
@@ -59,6 +64,13 @@ const stats = computed(() => [
     value: tools.value.length,
     description: `${tools.value.length} configured`,
     to: '/tools'
+  },
+  {
+    title: 'Workflows',
+    icon: 'i-lucide-git-branch',
+    value: workflows.value.length,
+    description: `${readyWorkflows.value} ready`,
+    to: '/workflows'
   }
 ])
 
@@ -120,7 +132,7 @@ const providerBreakdown = computed(() => {
 
     <template #body>
       <!-- Stats cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <NuxtLink
           v-for="stat in stats"
           :key="stat.title"
@@ -271,8 +283,8 @@ const providerBreakdown = computed(() => {
               <UBadge
                 :color="
                   agent.status?.phase === 'Running' ? 'success'
-                    : agent.status?.phase === 'Failed' ? 'error'
-                      : 'warning'
+                  : agent.status?.phase === 'Failed' ? 'error'
+                    : 'warning'
                 "
                 variant="subtle"
                 class="capitalize"
