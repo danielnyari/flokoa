@@ -13,7 +13,4 @@ spec:
     - name: list-pets
       agent:
         name: petstore-agent
-        message:
-          parts:
-            - text:
-                text: "{{params.prompt}}"
+        text: "{{params.prompt}}"

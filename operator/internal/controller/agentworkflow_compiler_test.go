@@ -45,9 +45,9 @@ var cmpOpts = cmp.Options{
 
 // --- Test helpers ---
 
-// textMessage creates an AgentMessage with a single text part.
-func textMessage(text string) agentv1alpha1.AgentMessage {
-	return agentv1alpha1.AgentMessage{
+// textMessage creates an AgentMessage pointer with a single text part.
+func textMessage(text string) *agentv1alpha1.AgentMessage {
+	return &agentv1alpha1.AgentMessage{
 		Parts: []agentv1alpha1.MessagePart{
 			{Text: &agentv1alpha1.TextPart{Text: text}},
 		},
@@ -320,6 +320,62 @@ func TestCompileToArgoWorkflow_AgentMessageExpressionTranslation(t *testing.T) {
 	assertDiff(t, want, got)
 }
 
+func TestCompileToArgoWorkflow_AgentTextShorthand(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "text-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{
+				{Name: "topic", Value: "AI safety"},
+			},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "research",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "researcher-agent",
+						Text: "Find papers on {{params.topic}}",
+					},
+				},
+				{
+					Name: "summarize",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "summarizer-agent",
+						Text: "Summarize: {{tasks.research.output}}",
+					},
+					DependsOn: []string{"research"},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The text shorthand should produce the same compiled output as the full message form.
+	want := wantWorkflowTemplate("text-test", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "research", Template: "research"},
+				wfv1.DAGTask{Name: "summarize", Template: "summarize", Dependencies: []string{"research"}},
+			),
+			{
+				Name:    "research",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "researcher-agent", "message": pluginTextMessage("Find papers on {{workflow.parameters.topic}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+			},
+			{
+				Name:    "summarize",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "summarizer-agent", "message": pluginTextMessage("Summarize: {{tasks.research.outputs.parameters.result}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+			},
+		},
+		withParams(wfv1.Parameter{Name: "topic", Value: wfv1.AnyStringPtr("AI safety")}),
+	)
+
+	assertDiff(t, want, got)
+}
+
 func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
 	awf := &agentv1alpha1.AgentWorkflow{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
@@ -329,7 +385,7 @@ func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
 					Name: "multi-part",
 					Agent: &agentv1alpha1.AgentCall{
 						Name: "my-agent",
-						Message: agentv1alpha1.AgentMessage{
+						Message: &agentv1alpha1.AgentMessage{
 							Role: agentv1alpha1.MessageRoleUser,
 							Parts: []agentv1alpha1.MessagePart{
 								{Text: &agentv1alpha1.TextPart{Text: "Analyze this data"}},

@@ -176,7 +176,10 @@ spec:
                               type: object
                           type: object
                         message:
-                          description: Message is the A2A message to send to the agent.
+                          description: |-
+                            Message is the full A2A message to send to the agent.
+                            Mutually exclusive with Text. Use this for multi-part messages,
+                            file attachments, or advanced message options.
                           properties:
                             contextId:
                               description: |-
@@ -302,8 +305,14 @@ spec:
                             Namespace is the namespace of the Agent CR.
                             Defaults to the workflow namespace.
                           type: string
+                        text:
+                          description: |-
+                            Text is a shorthand for sending a simple text message.
+                            Mutually exclusive with Message. When set, a single-part
+                            AgentMessage with this text is constructed automatically.
+                            Supports expressions like {{params.topic}} or {{tasks.prev.output}}.
+                          type: string
                       required:
-                      - message
                       - name
                       type: object
                     agentTask:

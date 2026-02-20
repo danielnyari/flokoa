@@ -11,36 +11,24 @@ spec:
     - name: technical-review
       agent:
         name: technical-advisor
-        message:
-          parts:
-            - text:
-                text: "Evaluate the technical feasibility: {{params.proposal}}"
+        text: "Evaluate the technical feasibility: {{params.proposal}}"
 
     - name: cost-review
       agent:
         name: cost-analyst
-        message:
-          parts:
-            - text:
-                text: "Estimate costs and ROI: {{params.proposal}}"
+        text: "Estimate costs and ROI: {{params.proposal}}"
 
     - name: risk-review
       agent:
         name: risk-assessor
-        message:
-          parts:
-            - text:
-                text: "Identify risks and mitigations: {{params.proposal}}"
+        text: "Identify risks and mitigations: {{params.proposal}}"
 
     - name: synthesize
       agent:
         name: executive-summarizer
-        message:
-          parts:
-            - text:
-                text: |
-                  Synthesize these three reviews into a recommendation:
-                  Technical: {{tasks.technical-review.output}}
-                  Cost: {{tasks.cost-review.output}}
-                  Risk: {{tasks.risk-review.output}}
+        text: |
+          Synthesize these three reviews into a recommendation:
+          Technical: {{tasks.technical-review.output}}
+          Cost: {{tasks.cost-review.output}}
+          Risk: {{tasks.risk-review.output}}
       dependsOn: [technical-review, cost-review, risk-review]

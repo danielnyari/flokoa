@@ -37,8 +37,5 @@ spec:
     - name: summarize
       agent:
         name: executive-summarizer
-        message:
-          parts:
-            - text:
-                text: "Create an executive summary from: {{tasks.analyze.output}}"
+        text: "Create an executive summary from: {{tasks.analyze.output}}"
       dependsOn: [analyze]

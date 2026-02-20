@@ -231,9 +231,19 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 
 // buildAgentTemplate populates a template with the A2A plugin spec for calling a deployed agent.
 func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) error {
+	// Normalize: expand text shorthand to a full AgentMessage if needed.
+	msg := agent.Message
+	if msg == nil {
+		msg = &agentv1alpha1.AgentMessage{
+			Parts: []agentv1alpha1.MessagePart{
+				{Text: &agentv1alpha1.TextPart{Text: agent.Text}},
+			},
+		}
+	}
+
 	// Translate DSL expressions (e.g. {{params.x}}, {{tasks.y.output}}) in message
 	// text parts to Argo workflow syntax before embedding in the plugin spec.
-	translatedMessage := translateAgentMessage(&agent.Message)
+	translatedMessage := translateAgentMessage(msg)
 
 	a2aSpec := map[string]interface{}{
 		"agent":   agent.Name,

@@ -116,9 +116,18 @@ type AgentCall struct {
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 
-	// Message is the A2A message to send to the agent.
-	// +kubebuilder:validation:Required
-	Message AgentMessage `json:"message"`
+	// Text is a shorthand for sending a simple text message.
+	// Mutually exclusive with Message. When set, a single-part
+	// AgentMessage with this text is constructed automatically.
+	// Supports expressions like {{params.topic}} or {{tasks.prev.output}}.
+	// +optional
+	Text string `json:"text,omitempty"`
+
+	// Message is the full A2A message to send to the agent.
+	// Mutually exclusive with Text. Use this for multi-part messages,
+	// file attachments, or advanced message options.
+	// +optional
+	Message *AgentMessage `json:"message,omitempty"`
 
 	// Config configures how the message is sent to the agent.
 	// +optional

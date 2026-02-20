@@ -57,11 +57,7 @@ var _ = Describe("AgentWorkflow Controller", func() {
 								Name: "test-task",
 								Agent: &agentv1alpha1.AgentCall{
 									Name: "test-agent",
-									Message: agentv1alpha1.AgentMessage{
-										Parts: []agentv1alpha1.MessagePart{
-											{Text: &agentv1alpha1.TextPart{Text: "hello"}},
-										},
-									},
+									Text: "hello",
 								},
 							},
 						},
