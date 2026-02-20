@@ -4,6 +4,7 @@ const API_BASE = '/api/v1alpha1'
 
 export function useFlokoa() {
   const auth = useAuth()
+  const { current: currentNamespace } = useNamespace()
 
   // Build fetch options with auth header when available.
   // Returns a getter so that useFetch re-evaluates the token on each request,
@@ -24,10 +25,17 @@ export function useFlokoa() {
     }
   }
 
+  // Build path with optional namespace override.
+  // If no explicit namespace is passed, falls back to the global namespace filter.
+  function namespacedPath(resource: string, namespace?: string): string {
+    const ns = namespace ?? currentNamespace.value
+    return ns
+      ? `${API_BASE}/namespaces/${ns}/${resource}`
+      : `${API_BASE}/${resource}`
+  }
+
   function listAgents(namespace?: string) {
-    const path = namespace
-      ? `${API_BASE}/namespaces/${namespace}/agents`
-      : `${API_BASE}/agents`
+    const path = computed(() => namespacedPath('agents', namespace))
     return useFetch<AgentList>(path, {
       lazy: true,
       headers: computed(() => authHeaders()),
@@ -36,9 +44,7 @@ export function useFlokoa() {
   }
 
   function listModels(namespace?: string) {
-    const path = namespace
-      ? `${API_BASE}/namespaces/${namespace}/models`
-      : `${API_BASE}/models`
+    const path = computed(() => namespacedPath('models', namespace))
     return useFetch<ModelList>(path, {
       lazy: true,
       headers: computed(() => authHeaders()),
@@ -47,9 +53,7 @@ export function useFlokoa() {
   }
 
   function listModelProviders(namespace?: string) {
-    const path = namespace
-      ? `${API_BASE}/namespaces/${namespace}/modelproviders`
-      : `${API_BASE}/modelproviders`
+    const path = computed(() => namespacedPath('modelproviders', namespace))
     return useFetch<ModelProviderList>(path, {
       lazy: true,
       headers: computed(() => authHeaders()),
@@ -58,9 +62,7 @@ export function useFlokoa() {
   }
 
   function listAgentTools(namespace?: string) {
-    const path = namespace
-      ? `${API_BASE}/namespaces/${namespace}/agenttools`
-      : `${API_BASE}/agenttools`
+    const path = computed(() => namespacedPath('agenttools', namespace))
     return useFetch<AgentToolList>(path, {
       lazy: true,
       headers: computed(() => authHeaders()),
