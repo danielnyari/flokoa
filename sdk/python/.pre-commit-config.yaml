@@ -21,7 +21,7 @@ repos:
     rev: "v0.14.8"
     hooks:
       - id: ruff-check
-        args: [ --fix, --config=pyproject.toml ]
+        args: [ --fix, --config=sdk/python/pyproject.toml ]
         exclude: (^sdk/python/flokoa/tests/|^sdk/python/flokoa/src/flokoa/tools|^sdk/python/flokoa/src/flokoa/auth|^sdk/python/flokoa/src/flokoa/utils)
       - id: ruff-format
         args: [ --config=pyproject.toml ]
