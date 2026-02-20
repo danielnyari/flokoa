@@ -7,15 +7,6 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
 
-// WorkflowPhase represents the current phase of the AgentWorkflow template lifecycle.
-enum WorkflowPhase {
-  WORKFLOW_PHASE_UNSPECIFIED = 0;
-  WORKFLOW_PHASE_PENDING = 1;
-  WORKFLOW_PHASE_COMPILING = 2;
-  WORKFLOW_PHASE_READY = 3;
-  WORKFLOW_PHASE_ERROR = 4;
-}
-
 // RunPhase represents the current phase of a workflow run.
 enum RunPhase {
   RUN_PHASE_UNSPECIFIED = 0;
@@ -50,7 +41,8 @@ message AgentWorkflowSpec {
 // WorkflowParam defines a workflow-level parameter.
 message WorkflowParam {
   string name = 1;
-  string value = 2;
+  string description = 2;
+  string value = 3;
 }
 
 // WorkflowTask defines a single task in the workflow.
@@ -63,10 +55,11 @@ message WorkflowTask {
 
 // AgentWorkflowStatus defines the observed state of AgentWorkflow.
 message AgentWorkflowStatus {
-  WorkflowPhase phase = 1;
+  bool ready = 1;
   string workflow_template_name = 2;
-  repeated Condition conditions = 3;
-  int64 observed_generation = 4;
+  string spec_hash = 3;
+  repeated Condition conditions = 4;
+  int64 observed_generation = 5;
 }
 
 // AgentWorkflow is the top-level AgentWorkflow resource.

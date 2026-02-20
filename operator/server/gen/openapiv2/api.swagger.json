@@ -2609,10 +2609,13 @@
     "v1alpha1AgentWorkflowStatus": {
       "type": "object",
       "properties": {
-        "phase": {
-          "$ref": "#/definitions/v1alpha1WorkflowPhase"
+        "ready": {
+          "type": "boolean"
         },
         "workflowTemplateName": {
+          "type": "string"
+        },
+        "specHash": {
           "type": "string"
         },
         "conditions": {
@@ -4740,23 +4743,14 @@
         "name": {
           "type": "string"
         },
+        "description": {
+          "type": "string"
+        },
         "value": {
           "type": "string"
         }
       },
       "description": "WorkflowParam defines a workflow-level parameter."
-    },
-    "v1alpha1WorkflowPhase": {
-      "type": "string",
-      "enum": [
-        "WORKFLOW_PHASE_UNSPECIFIED",
-        "WORKFLOW_PHASE_PENDING",
-        "WORKFLOW_PHASE_COMPILING",
-        "WORKFLOW_PHASE_READY",
-        "WORKFLOW_PHASE_ERROR"
-      ],
-      "default": "WORKFLOW_PHASE_UNSPECIFIED",
-      "description": "WorkflowPhase represents the current phase of the AgentWorkflow template lifecycle."
     },
     "v1alpha1WorkflowRun": {
       "type": "object",

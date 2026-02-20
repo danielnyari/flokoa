@@ -128,16 +128,14 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Created AgentWorkflow: e2e-petstore-workflow\n")
 
 			By("waiting for AgentWorkflow to be ready (template compiled)")
-			err = waitForAgentWorkflowPhase(
-				"e2e-petstore-workflow", namespace,
-				agentv1alpha1.WorkflowPhaseReady, 5*time.Minute)
-			Expect(err).NotTo(HaveOccurred(), "AgentWorkflow did not reach Ready phase")
+			err = waitForAgentWorkflowReady("e2e-petstore-workflow", namespace, 5*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "AgentWorkflow did not become ready")
 
 			By("verifying AgentWorkflow status")
 			awf := &agentv1alpha1.AgentWorkflow{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "e2e-petstore-workflow", Namespace: namespace}, awf)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get AgentWorkflow")
-			_, _ = fmt.Fprintf(GinkgoWriter, "AgentWorkflow phase: %s\n", awf.Status.Phase)
+			_, _ = fmt.Fprintf(GinkgoWriter, "AgentWorkflow ready: %v\n", awf.Status.Ready)
 
 			Expect(awf.Status.WorkflowTemplateName).NotTo(BeEmpty(), "Should have created a WorkflowTemplate")
 			_, _ = fmt.Fprintf(GinkgoWriter, "WorkflowTemplate name: %s\n", awf.Status.WorkflowTemplateName)
@@ -197,20 +195,24 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			err := applyManifestFile("test/e2e/testdata/argo/agentworkflow-fail.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AgentWorkflow")
 
-			By("waiting for AgentWorkflow to reach Ready or Error phase")
+			By("waiting for AgentWorkflow to reach a terminal state")
 			// The template may compile successfully (agent ref is resolved at runtime by the A2A plugin)
 			// or error if model/tool resolution fails. Either is acceptable for this test.
 			var awf agentv1alpha1.AgentWorkflow
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKey{Name: "e2e-fail-workflow", Namespace: namespace}, &awf)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(awf.Status.Phase).To(SatisfyAny(
-					Equal(agentv1alpha1.WorkflowPhaseReady),
-					Equal(agentv1alpha1.WorkflowPhaseError),
-				))
+				// Terminal: either ready, or has a failed Compiled condition
+				hasTerminal := awf.Status.Ready
+				for _, c := range awf.Status.Conditions {
+					if c.Type == "Compiled" && c.Status == metav1.ConditionFalse {
+						hasTerminal = true
+					}
+				}
+				g.Expect(hasTerminal).To(BeTrue(), "AgentWorkflow should reach a terminal state")
 			}, 2*time.Minute).Should(Succeed())
 
-			_, _ = fmt.Fprintf(GinkgoWriter, "AgentWorkflow phase: %s\n", awf.Status.Phase)
+			_, _ = fmt.Fprintf(GinkgoWriter, "AgentWorkflow ready: %v\n", awf.Status.Ready)
 
 			By("cleaning up failed AgentWorkflow")
 			deleteManifestFile("test/e2e/testdata/argo/agentworkflow-fail.yaml")

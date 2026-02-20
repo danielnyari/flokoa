@@ -5,6 +5,10 @@ metadata:
   namespace: flokoa-system
 spec:
   description: "E2E test: call petstore agent via AgentWorkflow DSL"
+  params:
+    - name: prompt
+      description: "The message to send to the petstore agent"
+      value: "List a few available pets and include their IDs and names."
   tasks:
     - name: list-pets
       agent:
@@ -12,4 +16,4 @@ spec:
         message:
           parts:
             - text:
-                text: "List a few available pets and include their IDs and names."
+                text: "{{params.prompt}}"

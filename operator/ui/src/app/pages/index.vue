@@ -34,7 +34,7 @@ const pendingAgents = computed(() => agents.value.filter(a => a.status?.phase ==
 const failedAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Failed').length)
 const readyModels = computed(() => models.value.filter(m => m.status?.ready).length)
 const readyProviders = computed(() => providers.value.filter(p => p.status?.ready).length)
-const readyWorkflows = computed(() => workflows.value.filter(w => w.status?.phase === 'WORKFLOW_PHASE_READY').length)
+const readyWorkflows = computed(() => workflows.value.filter(w => w.status?.ready).length)
 
 const stats = computed(() => [
   {

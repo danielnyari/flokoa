@@ -239,16 +239,10 @@ export interface AgentToolList {
 
 // ─── AgentWorkflow CRD ──────────────────────────────────────────────
 
-export type WorkflowPhase
-  = 'WORKFLOW_PHASE_UNSPECIFIED'
-    | 'WORKFLOW_PHASE_PENDING'
-    | 'WORKFLOW_PHASE_COMPILING'
-    | 'WORKFLOW_PHASE_READY'
-    | 'WORKFLOW_PHASE_ERROR'
-
 export interface WorkflowParam {
   name: string
-  value: string
+  description?: string
+  value?: string
 }
 
 export interface WorkflowTask {
@@ -266,8 +260,9 @@ export interface AgentWorkflowSpec {
 }
 
 export interface AgentWorkflowStatus {
-  phase?: WorkflowPhase
+  ready?: boolean
   workflowTemplateName?: string
+  specHash?: string
   conditions?: Condition[]
   observedGeneration?: number
 }

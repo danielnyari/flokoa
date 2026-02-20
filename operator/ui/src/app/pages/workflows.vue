@@ -3,7 +3,7 @@ import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { AgentWorkflow, WorkflowPhase } from '~/types'
+import type { AgentWorkflow } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -24,13 +24,17 @@ const columnFilters = ref([{
 }])
 const columnVisibility = ref()
 
-const phaseFilter = ref('all')
+const readyFilter = ref('all')
 
-watch(() => phaseFilter.value, (newVal) => {
+watch(() => readyFilter.value, (newVal) => {
   if (!table?.value?.tableApi) return
-  const col = table.value.tableApi.getColumn('phase')
+  const col = table.value.tableApi.getColumn('ready')
   if (!col) return
-  col.setFilterValue(newVal === 'all' ? undefined : newVal)
+  if (newVal === 'all') {
+    col.setFilterValue(undefined)
+  } else {
+    col.setFilterValue(newVal === 'true')
+  }
 })
 
 const nameSearch = computed({
@@ -47,24 +51,16 @@ const pagination = ref({
   pageSize: 10
 })
 
-function phaseColor(phase?: WorkflowPhase): 'success' | 'error' | 'warning' | 'neutral' | 'info' {
-  switch (phase) {
-    case 'WORKFLOW_PHASE_READY': return 'success'
-    case 'WORKFLOW_PHASE_COMPILING': return 'warning'
-    case 'WORKFLOW_PHASE_ERROR': return 'error'
-    case 'WORKFLOW_PHASE_PENDING': return 'neutral'
-    default: return 'neutral'
-  }
+function readyColor(ready?: boolean): 'success' | 'error' | 'neutral' {
+  if (ready === true) return 'success'
+  if (ready === false) return 'error'
+  return 'neutral'
 }
 
-function phaseLabel(phase?: WorkflowPhase): string {
-  switch (phase) {
-    case 'WORKFLOW_PHASE_READY': return 'Ready'
-    case 'WORKFLOW_PHASE_COMPILING': return 'Compiling'
-    case 'WORKFLOW_PHASE_ERROR': return 'Error'
-    case 'WORKFLOW_PHASE_PENDING': return 'Pending'
-    default: return 'Unknown'
-  }
+function readyLabel(ready?: boolean): string {
+  if (ready === true) return 'Ready'
+  if (ready === false) return 'Not Ready'
+  return 'Unknown'
 }
 
 function getRowItems(row: { original: AgentWorkflow }) {
@@ -104,13 +100,13 @@ const columns: TableColumn<AgentWorkflow>[] = [
     }
   },
   {
-    id: 'phase',
-    accessorFn: row => row.status?.phase,
-    header: 'Phase',
+    id: 'ready',
+    accessorFn: row => row.status?.ready,
+    header: 'Ready',
     filterFn: 'equals',
     cell: ({ row }) => {
-      const phase = row.original.status?.phase
-      return h(UBadge, { variant: 'subtle', color: phaseColor(phase) }, () => phaseLabel(phase))
+      const ready = row.original.status?.ready
+      return h(UBadge, { variant: 'subtle', color: readyColor(ready) }, () => readyLabel(ready))
     }
   },
   {
@@ -186,16 +182,14 @@ const columns: TableColumn<AgentWorkflow>[] = [
 
         <div class="flex flex-wrap items-center gap-1.5">
           <USelect
-            v-model="phaseFilter"
+            v-model="readyFilter"
             :items="[
               { label: 'All', value: 'all' },
-              { label: 'Ready', value: 'WORKFLOW_PHASE_READY' },
-              { label: 'Compiling', value: 'WORKFLOW_PHASE_COMPILING' },
-              { label: 'Error', value: 'WORKFLOW_PHASE_ERROR' },
-              { label: 'Pending', value: 'WORKFLOW_PHASE_PENDING' }
+              { label: 'Ready', value: 'true' },
+              { label: 'Not Ready', value: 'false' }
             ]"
             :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-            placeholder="Filter phase"
+            placeholder="Filter status"
             class="min-w-28"
           />
           <UDropdownMenu

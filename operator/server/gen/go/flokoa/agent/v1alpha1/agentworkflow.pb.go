@@ -22,62 +22,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// WorkflowPhase represents the current phase of the AgentWorkflow template lifecycle.
-type WorkflowPhase int32
-
-const (
-	WorkflowPhase_WORKFLOW_PHASE_UNSPECIFIED WorkflowPhase = 0
-	WorkflowPhase_WORKFLOW_PHASE_PENDING     WorkflowPhase = 1
-	WorkflowPhase_WORKFLOW_PHASE_COMPILING   WorkflowPhase = 2
-	WorkflowPhase_WORKFLOW_PHASE_READY       WorkflowPhase = 3
-	WorkflowPhase_WORKFLOW_PHASE_ERROR       WorkflowPhase = 4
-)
-
-// Enum value maps for WorkflowPhase.
-var (
-	WorkflowPhase_name = map[int32]string{
-		0: "WORKFLOW_PHASE_UNSPECIFIED",
-		1: "WORKFLOW_PHASE_PENDING",
-		2: "WORKFLOW_PHASE_COMPILING",
-		3: "WORKFLOW_PHASE_READY",
-		4: "WORKFLOW_PHASE_ERROR",
-	}
-	WorkflowPhase_value = map[string]int32{
-		"WORKFLOW_PHASE_UNSPECIFIED": 0,
-		"WORKFLOW_PHASE_PENDING":     1,
-		"WORKFLOW_PHASE_COMPILING":   2,
-		"WORKFLOW_PHASE_READY":       3,
-		"WORKFLOW_PHASE_ERROR":       4,
-	}
-)
-
-func (x WorkflowPhase) Enum() *WorkflowPhase {
-	p := new(WorkflowPhase)
-	*p = x
-	return p
-}
-
-func (x WorkflowPhase) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (WorkflowPhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[0].Descriptor()
-}
-
-func (WorkflowPhase) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[0]
-}
-
-func (x WorkflowPhase) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use WorkflowPhase.Descriptor instead.
-func (WorkflowPhase) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescGZIP(), []int{0}
-}
-
 // RunPhase represents the current phase of a workflow run.
 type RunPhase int32
 
@@ -121,11 +65,11 @@ func (x RunPhase) String() string {
 }
 
 func (RunPhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[1].Descriptor()
+	return file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[0].Descriptor()
 }
 
 func (RunPhase) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[1]
+	return &file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[0]
 }
 
 func (x RunPhase) Number() protoreflect.EnumNumber {
@@ -134,7 +78,7 @@ func (x RunPhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RunPhase.Descriptor instead.
 func (RunPhase) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescGZIP(), []int{1}
+	return file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescGZIP(), []int{0}
 }
 
 // NodeType represents the type of a workflow run node.
@@ -189,11 +133,11 @@ func (x NodeType) String() string {
 }
 
 func (NodeType) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[2].Descriptor()
+	return file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[1].Descriptor()
 }
 
 func (NodeType) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[2]
+	return &file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes[1]
 }
 
 func (x NodeType) Number() protoreflect.EnumNumber {
@@ -202,7 +146,7 @@ func (x NodeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use NodeType.Descriptor instead.
 func (NodeType) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescGZIP(), []int{2}
+	return file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescGZIP(), []int{1}
 }
 
 // AgentWorkflowSpec defines the desired state of AgentWorkflow.
@@ -278,7 +222,8 @@ func (x *AgentWorkflowSpec) GetTimeout() string {
 type WorkflowParam struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -316,6 +261,13 @@ func (*WorkflowParam) Descriptor() ([]byte, []int) {
 func (x *WorkflowParam) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *WorkflowParam) GetDescription() string {
+	if x != nil {
+		return x.Description
 	}
 	return ""
 }
@@ -399,10 +351,11 @@ func (x *WorkflowTask) GetCondition() string {
 // AgentWorkflowStatus defines the observed state of AgentWorkflow.
 type AgentWorkflowStatus struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
-	Phase                WorkflowPhase          `protobuf:"varint,1,opt,name=phase,proto3,enum=flokoa.agent.v1alpha1.WorkflowPhase" json:"phase,omitempty"`
+	Ready                bool                   `protobuf:"varint,1,opt,name=ready,proto3" json:"ready,omitempty"`
 	WorkflowTemplateName string                 `protobuf:"bytes,2,opt,name=workflow_template_name,json=workflowTemplateName,proto3" json:"workflow_template_name,omitempty"`
-	Conditions           []*Condition           `protobuf:"bytes,3,rep,name=conditions,proto3" json:"conditions,omitempty"`
-	ObservedGeneration   int64                  `protobuf:"varint,4,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"`
+	SpecHash             string                 `protobuf:"bytes,3,opt,name=spec_hash,json=specHash,proto3" json:"spec_hash,omitempty"`
+	Conditions           []*Condition           `protobuf:"bytes,4,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	ObservedGeneration   int64                  `protobuf:"varint,5,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -437,16 +390,23 @@ func (*AgentWorkflowStatus) Descriptor() ([]byte, []int) {
 	return file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *AgentWorkflowStatus) GetPhase() WorkflowPhase {
+func (x *AgentWorkflowStatus) GetReady() bool {
 	if x != nil {
-		return x.Phase
+		return x.Ready
 	}
-	return WorkflowPhase_WORKFLOW_PHASE_UNSPECIFIED
+	return false
 }
 
 func (x *AgentWorkflowStatus) GetWorkflowTemplateName() string {
 	if x != nil {
 		return x.WorkflowTemplateName
+	}
+	return ""
+}
+
+func (x *AgentWorkflowStatus) GetSpecHash() string {
+	if x != nil {
+		return x.SpecHash
 	}
 	return ""
 }
@@ -875,23 +835,25 @@ const file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDesc = "" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12<\n" +
 	"\x06params\x18\x02 \x03(\v2$.flokoa.agent.v1alpha1.WorkflowParamR\x06params\x129\n" +
 	"\x05tasks\x18\x03 \x03(\v2#.flokoa.agent.v1alpha1.WorkflowTaskR\x05tasks\x12\x18\n" +
-	"\atimeout\x18\x04 \x01(\tR\atimeout\"9\n" +
+	"\atimeout\x18\x04 \x01(\tR\atimeout\"[\n" +
 	"\rWorkflowParam\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"s\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\"s\n" +
 	"\fWorkflowTask\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1d\n" +
 	"\n" +
 	"depends_on\x18\x03 \x03(\tR\tdependsOn\x12\x1c\n" +
-	"\tcondition\x18\x04 \x01(\tR\tcondition\"\xfa\x01\n" +
-	"\x13AgentWorkflowStatus\x12:\n" +
-	"\x05phase\x18\x01 \x01(\x0e2$.flokoa.agent.v1alpha1.WorkflowPhaseR\x05phase\x124\n" +
-	"\x16workflow_template_name\x18\x02 \x01(\tR\x14workflowTemplateName\x12@\n" +
+	"\tcondition\x18\x04 \x01(\tR\tcondition\"\xf1\x01\n" +
+	"\x13AgentWorkflowStatus\x12\x14\n" +
+	"\x05ready\x18\x01 \x01(\bR\x05ready\x124\n" +
+	"\x16workflow_template_name\x18\x02 \x01(\tR\x14workflowTemplateName\x12\x1b\n" +
+	"\tspec_hash\x18\x03 \x01(\tR\bspecHash\x12@\n" +
 	"\n" +
-	"conditions\x18\x03 \x03(\v2 .flokoa.agent.v1alpha1.ConditionR\n" +
+	"conditions\x18\x04 \x03(\v2 .flokoa.agent.v1alpha1.ConditionR\n" +
 	"conditions\x12/\n" +
-	"\x13observed_generation\x18\x04 \x01(\x03R\x12observedGeneration\"\xd0\x01\n" +
+	"\x13observed_generation\x18\x05 \x01(\x03R\x12observedGeneration\"\xd0\x01\n" +
 	"\rAgentWorkflow\x12=\n" +
 	"\bmetadata\x18\x01 \x01(\v2!.flokoa.agent.v1alpha1.ObjectMetaR\bmetadata\x12<\n" +
 	"\x04spec\x18\x02 \x01(\v2(.flokoa.agent.v1alpha1.AgentWorkflowSpecR\x04spec\x12B\n" +
@@ -939,13 +901,7 @@ const file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a:\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x9d\x01\n" +
-	"\rWorkflowPhase\x12\x1e\n" +
-	"\x1aWORKFLOW_PHASE_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16WORKFLOW_PHASE_PENDING\x10\x01\x12\x1c\n" +
-	"\x18WORKFLOW_PHASE_COMPILING\x10\x02\x12\x18\n" +
-	"\x14WORKFLOW_PHASE_READY\x10\x03\x12\x18\n" +
-	"\x14WORKFLOW_PHASE_ERROR\x10\x04*\x97\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x97\x01\n" +
 	"\bRunPhase\x12\x19\n" +
 	"\x15RUN_PHASE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11RUN_PHASE_PENDING\x10\x01\x12\x15\n" +
@@ -977,58 +933,56 @@ func file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescGZIP() []byte {
 	return file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDescData
 }
 
-var file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_flokoa_agent_v1alpha1_agentworkflow_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_flokoa_agent_v1alpha1_agentworkflow_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_flokoa_agent_v1alpha1_agentworkflow_proto_goTypes = []any{
-	(WorkflowPhase)(0),            // 0: flokoa.agent.v1alpha1.WorkflowPhase
-	(RunPhase)(0),                 // 1: flokoa.agent.v1alpha1.RunPhase
-	(NodeType)(0),                 // 2: flokoa.agent.v1alpha1.NodeType
-	(*AgentWorkflowSpec)(nil),     // 3: flokoa.agent.v1alpha1.AgentWorkflowSpec
-	(*WorkflowParam)(nil),         // 4: flokoa.agent.v1alpha1.WorkflowParam
-	(*WorkflowTask)(nil),          // 5: flokoa.agent.v1alpha1.WorkflowTask
-	(*AgentWorkflowStatus)(nil),   // 6: flokoa.agent.v1alpha1.AgentWorkflowStatus
-	(*AgentWorkflow)(nil),         // 7: flokoa.agent.v1alpha1.AgentWorkflow
-	(*AgentWorkflowList)(nil),     // 8: flokoa.agent.v1alpha1.AgentWorkflowList
-	(*WorkflowRun)(nil),           // 9: flokoa.agent.v1alpha1.WorkflowRun
-	(*WorkflowRunList)(nil),       // 10: flokoa.agent.v1alpha1.WorkflowRunList
-	(*WorkflowRunNode)(nil),       // 11: flokoa.agent.v1alpha1.WorkflowRunNode
-	nil,                           // 12: flokoa.agent.v1alpha1.WorkflowRun.ParametersEntry
-	nil,                           // 13: flokoa.agent.v1alpha1.WorkflowRunNode.InputsEntry
-	nil,                           // 14: flokoa.agent.v1alpha1.WorkflowRunNode.OutputsEntry
-	(*Condition)(nil),             // 15: flokoa.agent.v1alpha1.Condition
-	(*ObjectMeta)(nil),            // 16: flokoa.agent.v1alpha1.ObjectMeta
-	(*ListMeta)(nil),              // 17: flokoa.agent.v1alpha1.ListMeta
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
+	(RunPhase)(0),                 // 0: flokoa.agent.v1alpha1.RunPhase
+	(NodeType)(0),                 // 1: flokoa.agent.v1alpha1.NodeType
+	(*AgentWorkflowSpec)(nil),     // 2: flokoa.agent.v1alpha1.AgentWorkflowSpec
+	(*WorkflowParam)(nil),         // 3: flokoa.agent.v1alpha1.WorkflowParam
+	(*WorkflowTask)(nil),          // 4: flokoa.agent.v1alpha1.WorkflowTask
+	(*AgentWorkflowStatus)(nil),   // 5: flokoa.agent.v1alpha1.AgentWorkflowStatus
+	(*AgentWorkflow)(nil),         // 6: flokoa.agent.v1alpha1.AgentWorkflow
+	(*AgentWorkflowList)(nil),     // 7: flokoa.agent.v1alpha1.AgentWorkflowList
+	(*WorkflowRun)(nil),           // 8: flokoa.agent.v1alpha1.WorkflowRun
+	(*WorkflowRunList)(nil),       // 9: flokoa.agent.v1alpha1.WorkflowRunList
+	(*WorkflowRunNode)(nil),       // 10: flokoa.agent.v1alpha1.WorkflowRunNode
+	nil,                           // 11: flokoa.agent.v1alpha1.WorkflowRun.ParametersEntry
+	nil,                           // 12: flokoa.agent.v1alpha1.WorkflowRunNode.InputsEntry
+	nil,                           // 13: flokoa.agent.v1alpha1.WorkflowRunNode.OutputsEntry
+	(*Condition)(nil),             // 14: flokoa.agent.v1alpha1.Condition
+	(*ObjectMeta)(nil),            // 15: flokoa.agent.v1alpha1.ObjectMeta
+	(*ListMeta)(nil),              // 16: flokoa.agent.v1alpha1.ListMeta
+	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
 }
 var file_flokoa_agent_v1alpha1_agentworkflow_proto_depIdxs = []int32{
-	4,  // 0: flokoa.agent.v1alpha1.AgentWorkflowSpec.params:type_name -> flokoa.agent.v1alpha1.WorkflowParam
-	5,  // 1: flokoa.agent.v1alpha1.AgentWorkflowSpec.tasks:type_name -> flokoa.agent.v1alpha1.WorkflowTask
-	0,  // 2: flokoa.agent.v1alpha1.AgentWorkflowStatus.phase:type_name -> flokoa.agent.v1alpha1.WorkflowPhase
-	15, // 3: flokoa.agent.v1alpha1.AgentWorkflowStatus.conditions:type_name -> flokoa.agent.v1alpha1.Condition
-	16, // 4: flokoa.agent.v1alpha1.AgentWorkflow.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
-	3,  // 5: flokoa.agent.v1alpha1.AgentWorkflow.spec:type_name -> flokoa.agent.v1alpha1.AgentWorkflowSpec
-	6,  // 6: flokoa.agent.v1alpha1.AgentWorkflow.status:type_name -> flokoa.agent.v1alpha1.AgentWorkflowStatus
-	17, // 7: flokoa.agent.v1alpha1.AgentWorkflowList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
-	7,  // 8: flokoa.agent.v1alpha1.AgentWorkflowList.items:type_name -> flokoa.agent.v1alpha1.AgentWorkflow
-	16, // 9: flokoa.agent.v1alpha1.WorkflowRun.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
-	1,  // 10: flokoa.agent.v1alpha1.WorkflowRun.phase:type_name -> flokoa.agent.v1alpha1.RunPhase
-	18, // 11: flokoa.agent.v1alpha1.WorkflowRun.started_at:type_name -> google.protobuf.Timestamp
-	18, // 12: flokoa.agent.v1alpha1.WorkflowRun.finished_at:type_name -> google.protobuf.Timestamp
-	11, // 13: flokoa.agent.v1alpha1.WorkflowRun.nodes:type_name -> flokoa.agent.v1alpha1.WorkflowRunNode
-	12, // 14: flokoa.agent.v1alpha1.WorkflowRun.parameters:type_name -> flokoa.agent.v1alpha1.WorkflowRun.ParametersEntry
-	17, // 15: flokoa.agent.v1alpha1.WorkflowRunList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
-	9,  // 16: flokoa.agent.v1alpha1.WorkflowRunList.items:type_name -> flokoa.agent.v1alpha1.WorkflowRun
-	2,  // 17: flokoa.agent.v1alpha1.WorkflowRunNode.type:type_name -> flokoa.agent.v1alpha1.NodeType
-	1,  // 18: flokoa.agent.v1alpha1.WorkflowRunNode.phase:type_name -> flokoa.agent.v1alpha1.RunPhase
-	18, // 19: flokoa.agent.v1alpha1.WorkflowRunNode.started_at:type_name -> google.protobuf.Timestamp
-	18, // 20: flokoa.agent.v1alpha1.WorkflowRunNode.finished_at:type_name -> google.protobuf.Timestamp
-	13, // 21: flokoa.agent.v1alpha1.WorkflowRunNode.inputs:type_name -> flokoa.agent.v1alpha1.WorkflowRunNode.InputsEntry
-	14, // 22: flokoa.agent.v1alpha1.WorkflowRunNode.outputs:type_name -> flokoa.agent.v1alpha1.WorkflowRunNode.OutputsEntry
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	3,  // 0: flokoa.agent.v1alpha1.AgentWorkflowSpec.params:type_name -> flokoa.agent.v1alpha1.WorkflowParam
+	4,  // 1: flokoa.agent.v1alpha1.AgentWorkflowSpec.tasks:type_name -> flokoa.agent.v1alpha1.WorkflowTask
+	14, // 2: flokoa.agent.v1alpha1.AgentWorkflowStatus.conditions:type_name -> flokoa.agent.v1alpha1.Condition
+	15, // 3: flokoa.agent.v1alpha1.AgentWorkflow.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
+	2,  // 4: flokoa.agent.v1alpha1.AgentWorkflow.spec:type_name -> flokoa.agent.v1alpha1.AgentWorkflowSpec
+	5,  // 5: flokoa.agent.v1alpha1.AgentWorkflow.status:type_name -> flokoa.agent.v1alpha1.AgentWorkflowStatus
+	16, // 6: flokoa.agent.v1alpha1.AgentWorkflowList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
+	6,  // 7: flokoa.agent.v1alpha1.AgentWorkflowList.items:type_name -> flokoa.agent.v1alpha1.AgentWorkflow
+	15, // 8: flokoa.agent.v1alpha1.WorkflowRun.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
+	0,  // 9: flokoa.agent.v1alpha1.WorkflowRun.phase:type_name -> flokoa.agent.v1alpha1.RunPhase
+	17, // 10: flokoa.agent.v1alpha1.WorkflowRun.started_at:type_name -> google.protobuf.Timestamp
+	17, // 11: flokoa.agent.v1alpha1.WorkflowRun.finished_at:type_name -> google.protobuf.Timestamp
+	10, // 12: flokoa.agent.v1alpha1.WorkflowRun.nodes:type_name -> flokoa.agent.v1alpha1.WorkflowRunNode
+	11, // 13: flokoa.agent.v1alpha1.WorkflowRun.parameters:type_name -> flokoa.agent.v1alpha1.WorkflowRun.ParametersEntry
+	16, // 14: flokoa.agent.v1alpha1.WorkflowRunList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
+	8,  // 15: flokoa.agent.v1alpha1.WorkflowRunList.items:type_name -> flokoa.agent.v1alpha1.WorkflowRun
+	1,  // 16: flokoa.agent.v1alpha1.WorkflowRunNode.type:type_name -> flokoa.agent.v1alpha1.NodeType
+	0,  // 17: flokoa.agent.v1alpha1.WorkflowRunNode.phase:type_name -> flokoa.agent.v1alpha1.RunPhase
+	17, // 18: flokoa.agent.v1alpha1.WorkflowRunNode.started_at:type_name -> google.protobuf.Timestamp
+	17, // 19: flokoa.agent.v1alpha1.WorkflowRunNode.finished_at:type_name -> google.protobuf.Timestamp
+	12, // 20: flokoa.agent.v1alpha1.WorkflowRunNode.inputs:type_name -> flokoa.agent.v1alpha1.WorkflowRunNode.InputsEntry
+	13, // 21: flokoa.agent.v1alpha1.WorkflowRunNode.outputs:type_name -> flokoa.agent.v1alpha1.WorkflowRunNode.OutputsEntry
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_flokoa_agent_v1alpha1_agentworkflow_proto_init() }
@@ -1042,7 +996,7 @@ func file_flokoa_agent_v1alpha1_agentworkflow_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDesc), len(file_flokoa_agent_v1alpha1_agentworkflow_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      2,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,

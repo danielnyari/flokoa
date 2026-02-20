@@ -12,6 +12,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/internal/converter"
+	"github.com/danielnyari/flokoa/internal/telemetry"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
 )
 
@@ -148,8 +149,8 @@ func (s *AgentWorkflowService) SubmitWorkflowRun(ctx context.Context, req *pb.Su
 		return nil, mapKubernetesError(ctx, err, "agentworkflow")
 	}
 
-	if awf.Status.Phase != agentv1alpha1.WorkflowPhaseReady {
-		return nil, status.Errorf(codes.FailedPrecondition, "agentworkflow %q is not ready (phase: %s)", req.WorkflowName, awf.Status.Phase)
+	if !awf.Status.Ready {
+		return nil, status.Errorf(codes.FailedPrecondition, "agentworkflow %q is not ready", req.WorkflowName)
 	}
 
 	if awf.Status.WorkflowTemplateName == "" {
@@ -157,11 +158,19 @@ func (s *AgentWorkflowService) SubmitWorkflowRun(ctx context.Context, req *pb.Su
 	}
 
 	// Build workflow-level parameters
-	params := make([]wfv1.Parameter, 0, len(req.Parameters))
+	params := make([]wfv1.Parameter, 0, len(req.Parameters)+1)
 	for k, v := range req.Parameters {
 		params = append(params, wfv1.Parameter{
 			Name:  k,
 			Value: wfv1.AnyStringPtr(v),
+		})
+	}
+
+	// Inject traceparent from the current gRPC request context
+	if tp := telemetry.ExtractTraceparent(ctx); tp != "" {
+		params = append(params, wfv1.Parameter{
+			Name:  "_flokoa_traceparent",
+			Value: wfv1.AnyStringPtr(tp),
 		})
 	}
 

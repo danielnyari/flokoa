@@ -150,11 +150,25 @@ func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agen
 
 	logger := log.FromContext(ctx)
 
-	// Set phase to Compiling
-	awf.Status.Phase = agentv1alpha1.WorkflowPhaseCompiling
+	// Compute spec hash for drift detection
+	newSpecHash, err := hash.JSONStruct(awf.Spec)
+	if err != nil {
+		span.RecordError(err)
+		return ctrl.Result{}, fmt.Errorf("failed to hash spec: %w", err)
+	}
+
+	// Skip recompilation if spec hasn't changed
+	if awf.Status.SpecHash == newSpecHash && awf.Status.Ready {
+		logger.Info("Spec unchanged, skipping recompilation", "specHash", newSpecHash)
+		span.SetAttributes(attribute.Bool("workflow.skipped", true))
+		return ctrl.Result{}, nil
+	}
+
+	// Mark as not ready while compiling
+	awf.Status.Ready = false
 	awf.Status.ObservedGeneration = awf.Generation
 	if err := updateStatusWithRetry(ctx, r.Client, awf, func() {
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseCompiling
+		awf.Status.Ready = false
 		awf.Status.ObservedGeneration = awf.Generation
 	}); err != nil {
 		span.RecordError(err)
@@ -167,7 +181,7 @@ func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agen
 		logger.Error(err, "Failed to resolve agent task dependencies")
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
 			ReasonCompileFailed, fmt.Sprintf("Failed to resolve dependencies: %v", err))
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
+		awf.Status.Ready = false
 		awf.Status.ObservedGeneration = awf.Generation
 		desiredStatus := awf.Status.DeepCopy()
 		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
@@ -186,7 +200,7 @@ func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agen
 		logger.Error(err, "Failed to compile AgentWorkflow")
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
 			ReasonCompileFailed, err.Error())
-		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
+		awf.Status.Ready = false
 		awf.Status.ObservedGeneration = awf.Generation
 		desiredStatus := awf.Status.DeepCopy()
 		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
@@ -217,7 +231,7 @@ func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agen
 				logger.Error(err, "Failed to create Argo WorkflowTemplate")
 				r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
 					ReasonApplyFailed, err.Error())
-				awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
+				awf.Status.Ready = false
 				awf.Status.ObservedGeneration = awf.Generation
 				desiredStatus := awf.Status.DeepCopy()
 				if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
@@ -239,7 +253,7 @@ func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agen
 			logger.Error(err, "Failed to update Argo WorkflowTemplate")
 			r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
 				ReasonApplyFailed, err.Error())
-			awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
+			awf.Status.Ready = false
 			awf.Status.ObservedGeneration = awf.Generation
 			desiredStatus := awf.Status.DeepCopy()
 			if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
@@ -255,7 +269,8 @@ func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agen
 	r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionTrue,
 		ReasonApplied, fmt.Sprintf("Argo WorkflowTemplate %q applied", wft.Name))
 	awf.Status.WorkflowTemplateName = wft.Name
-	awf.Status.Phase = agentv1alpha1.WorkflowPhaseReady
+	awf.Status.Ready = true
+	awf.Status.SpecHash = newSpecHash
 	awf.Status.ObservedGeneration = awf.Generation
 
 	desiredStatus := awf.Status.DeepCopy()

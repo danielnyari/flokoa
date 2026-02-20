@@ -22,17 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// WorkflowPhase represents the current phase of the AgentWorkflow template lifecycle.
-// +kubebuilder:validation:Enum=Pending;Compiling;Ready;Error
-type WorkflowPhase string
-
-const (
-	WorkflowPhasePending   WorkflowPhase = "Pending"
-	WorkflowPhaseCompiling WorkflowPhase = "Compiling"
-	WorkflowPhaseReady     WorkflowPhase = "Ready"
-	WorkflowPhaseError     WorkflowPhase = "Error"
-)
-
 // AgentWorkflowSpec defines the desired state of AgentWorkflow.
 type AgentWorkflowSpec struct {
 	// Description is a human-readable description of the workflow.
@@ -65,7 +54,12 @@ type WorkflowParam struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Value is the parameter value.
+	// Description of what this parameter is used for.
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Value is the default parameter value. If empty, the parameter must be
+	// provided at workflow submission time.
 	// +optional
 	Value string `json:"value,omitempty"`
 }
@@ -470,13 +464,17 @@ type WorkflowBackoff struct {
 // The AgentWorkflow compiles to an Argo WorkflowTemplate; individual runs
 // are Argo Workflow CRs created from the template and tracked separately.
 type AgentWorkflowStatus struct {
-	// Phase represents the current lifecycle phase of the workflow template.
-	// +optional
-	Phase WorkflowPhase `json:"phase,omitempty"`
+	// Ready indicates the WorkflowTemplate has been successfully compiled and applied.
+	Ready bool `json:"ready"`
 
 	// WorkflowTemplateName is the name of the generated Argo WorkflowTemplate CR.
 	// +optional
 	WorkflowTemplateName string `json:"workflowTemplateName,omitempty"`
+
+	// SpecHash is a hash of the AgentWorkflow spec, used for drift detection.
+	// If the spec has not changed since last reconcile, recompilation is skipped.
+	// +optional
+	SpecHash string `json:"specHash,omitempty"`
 
 	// Conditions represent the latest available observations of the workflow's state.
 	// +optional
@@ -490,7 +488,7 @@ type AgentWorkflowStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=awf
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
 // +kubebuilder:printcolumn:name="Template",type="string",JSONPath=".status.workflowTemplateName"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 

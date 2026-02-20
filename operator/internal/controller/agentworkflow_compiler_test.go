@@ -80,7 +80,7 @@ func wantWorkflowTemplate(name, namespace string, templates []wfv1.Template, opt
 			Templates:  templates,
 			Arguments: wfv1.Arguments{
 				Parameters: []wfv1.Parameter{
-					{Name: "_flokoa_traceparent", Value: wfv1.AnyStringPtr("")},
+					{Name: "_flokoa_traceparent"},
 				},
 			},
 		},
@@ -208,13 +208,13 @@ func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 			),
 			{
 				Name:                  "research",
-				Plugin:                makePlugin(map[string]interface{}{"agent": "researcher-agent", "message": pluginTextMessage("Find papers on {{params.topic}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Plugin:                makePlugin(map[string]interface{}{"agent": "researcher-agent", "message": pluginTextMessage("Find papers on {{workflow.parameters.topic}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
 				ActiveDeadlineSeconds: &intstr.IntOrString{Type: intstr.Int, IntVal: 600},
 				Outputs:               pluginOutputs(),
 			},
 			{
 				Name:    "summarize",
-				Plugin:  makePlugin(map[string]interface{}{"agent": "summarizer-agent", "message": pluginTextMessage("Summarize: {{tasks.research.output}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Plugin:  makePlugin(map[string]interface{}{"agent": "summarizer-agent", "message": pluginTextMessage("Summarize: {{tasks.research.outputs.parameters.result}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
 				Outputs: pluginOutputs(),
 			},
 		},
@@ -260,6 +260,61 @@ func TestCompileToArgoWorkflow_AgentTemplate(t *testing.T) {
 				Outputs: pluginOutputs(),
 			},
 		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompileToArgoWorkflow_AgentMessageExpressionTranslation(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "expr-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{
+				{Name: "question", Description: "The user's question", Value: "What is AI?"},
+			},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "ask",
+					Agent: &agentv1alpha1.AgentCall{
+						Name:    "qa-agent",
+						Message: textMessage("Answer this: {{params.question}}"),
+					},
+				},
+				{
+					Name: "review",
+					Agent: &agentv1alpha1.AgentCall{
+						Name:    "reviewer-agent",
+						Message: textMessage("Review this answer: {{tasks.ask.output}}"),
+					},
+					DependsOn: []string{"ask"},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("expr-test", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "ask", Template: "ask"},
+				wfv1.DAGTask{Name: "review", Template: "review", Dependencies: []string{"ask"}},
+			),
+			{
+				Name:    "ask",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "qa-agent", "message": pluginTextMessage("Answer this: {{workflow.parameters.question}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+			},
+			{
+				Name:    "review",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "reviewer-agent", "message": pluginTextMessage("Review this answer: {{tasks.ask.outputs.parameters.result}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+			},
+		},
+		withParams(wfv1.Parameter{Name: "question", Description: wfv1.AnyStringPtr("The user's question"), Value: wfv1.AnyStringPtr("What is AI?")}),
 	)
 
 	assertDiff(t, want, got)

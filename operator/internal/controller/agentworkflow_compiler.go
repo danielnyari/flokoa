@@ -92,8 +92,7 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 	// all templates via {{workflow.parameters._flokoa_traceparent}}.
 	// The actual value is provided at run submission time.
 	wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, wfv1.Parameter{
-		Name:  traceparentWorkflowParam,
-		Value: wfv1.AnyStringPtr(""),
+		Name: traceparentWorkflowParam,
 	})
 
 	// Workflow-level parameters
@@ -102,6 +101,9 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 			param := wfv1.Parameter{
 				Name:  p.Name,
 				Value: wfv1.AnyStringPtr(p.Value),
+			}
+			if p.Description != "" {
+				param.Description = wfv1.AnyStringPtr(p.Description)
 			}
 			wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, param)
 		}
@@ -229,9 +231,13 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 
 // buildAgentTemplate populates a template with the A2A plugin spec for calling a deployed agent.
 func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) error {
+	// Translate DSL expressions (e.g. {{params.x}}, {{tasks.y.output}}) in message
+	// text parts to Argo workflow syntax before embedding in the plugin spec.
+	translatedMessage := translateAgentMessage(&agent.Message)
+
 	a2aSpec := map[string]interface{}{
 		"agent":   agent.Name,
-		"message": buildPluginMessage(&agent.Message),
+		"message": buildPluginMessage(translatedMessage),
 		// Argo substitutes the workflow parameter reference at runtime so the
 		// A2A plugin receives the actual traceparent value.
 		"traceparent": fmt.Sprintf("{{workflow.parameters.%s}}", traceparentWorkflowParam),
@@ -674,6 +680,18 @@ func translateExpression(expr string) string {
 
 	// Unknown expression - pass through
 	return "{{" + expr + "}}"
+}
+
+// translateAgentMessage returns a copy of the message with DSL expressions
+// in text parts translated to Argo workflow syntax.
+func translateAgentMessage(msg *agentv1alpha1.AgentMessage) *agentv1alpha1.AgentMessage {
+	translated := msg.DeepCopy()
+	for i := range translated.Parts {
+		if translated.Parts[i].Text != nil {
+			translated.Parts[i].Text.Text = TranslateExpressions(translated.Parts[i].Text.Text)
+		}
+	}
+	return translated
 }
 
 // TranslateExpressions replaces all DSL expressions in a string with Argo-compatible references.

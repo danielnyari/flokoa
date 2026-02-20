@@ -35,8 +35,9 @@ func AgentWorkflowSpecToProto(spec *agentv1alpha1.AgentWorkflowSpec) *pb.AgentWo
 
 	for _, p := range spec.Params {
 		pbSpec.Params = append(pbSpec.Params, &pb.WorkflowParam{
-			Name:  p.Name,
-			Value: p.Value,
+			Name:        p.Name,
+			Description: p.Description,
+			Value:       p.Value,
 		})
 	}
 
@@ -82,8 +83,9 @@ func AgentWorkflowStatusToProto(status *agentv1alpha1.AgentWorkflowStatus) *pb.A
 	}
 
 	return &pb.AgentWorkflowStatus{
-		Phase:                WorkflowPhaseToProto(status.Phase),
+		Ready:                status.Ready,
 		WorkflowTemplateName: status.WorkflowTemplateName,
+		SpecHash:             status.SpecHash,
 		Conditions:           ConditionsToProto(status.Conditions),
 		ObservedGeneration:   status.ObservedGeneration,
 	}
@@ -104,22 +106,6 @@ func AgentWorkflowListToProto(list *agentv1alpha1.AgentWorkflowList) *pb.AgentWo
 	}
 
 	return pbList
-}
-
-// WorkflowPhaseToProto converts WorkflowPhase enum to proto.
-func WorkflowPhaseToProto(phase agentv1alpha1.WorkflowPhase) pb.WorkflowPhase {
-	switch phase {
-	case agentv1alpha1.WorkflowPhasePending:
-		return pb.WorkflowPhase_WORKFLOW_PHASE_PENDING
-	case agentv1alpha1.WorkflowPhaseCompiling:
-		return pb.WorkflowPhase_WORKFLOW_PHASE_COMPILING
-	case agentv1alpha1.WorkflowPhaseReady:
-		return pb.WorkflowPhase_WORKFLOW_PHASE_READY
-	case agentv1alpha1.WorkflowPhaseError:
-		return pb.WorkflowPhase_WORKFLOW_PHASE_ERROR
-	default:
-		return pb.WorkflowPhase_WORKFLOW_PHASE_UNSPECIFIED
-	}
 }
 
 // ArgoWorkflowToRunProto converts an Argo Workflow to a WorkflowRun proto.

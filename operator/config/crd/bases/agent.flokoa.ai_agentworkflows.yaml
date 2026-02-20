@@ -17,9 +17,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
     - jsonPath: .status.workflowTemplateName
       name: Template
       type: string
@@ -62,12 +62,17 @@ spec:
                 items:
                   description: WorkflowParam defines a workflow-level parameter.
                   properties:
+                    description:
+                      description: Description of what this parameter is used for.
+                      type: string
                     name:
                       description: Name of the parameter.
                       minLength: 1
                       type: string
                     value:
-                      description: Value is the parameter value.
+                      description: |-
+                        Value is the default parameter value. If empty, the parameter must be
+                        provided at workflow submission time.
                       type: string
                   required:
                   - name
@@ -937,19 +942,21 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
-              phase:
-                description: Phase represents the current lifecycle phase of the workflow
-                  template.
-                enum:
-                - Pending
-                - Compiling
-                - Ready
-                - Error
+              ready:
+                description: Ready indicates the WorkflowTemplate has been successfully
+                  compiled and applied.
+                type: boolean
+              specHash:
+                description: |-
+                  SpecHash is a hash of the AgentWorkflow spec, used for drift detection.
+                  If the spec has not changed since last reconcile, recompilation is skipped.
                 type: string
               workflowTemplateName:
                 description: WorkflowTemplateName is the name of the generated Argo
                   WorkflowTemplate CR.
                 type: string
+            required:
+            - ready
             type: object
         type: object
     served: true

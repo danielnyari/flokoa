@@ -49,25 +49,6 @@ function runPhaseLabel(phase?: RunPhase): string {
   }
 }
 
-function workflowPhaseLabel(phase?: string): string {
-  switch (phase) {
-    case 'WORKFLOW_PHASE_READY': return 'Ready'
-    case 'WORKFLOW_PHASE_COMPILING': return 'Compiling'
-    case 'WORKFLOW_PHASE_ERROR': return 'Error'
-    case 'WORKFLOW_PHASE_PENDING': return 'Pending'
-    default: return 'Unknown'
-  }
-}
-
-function workflowPhaseColor(phase?: string): 'success' | 'error' | 'warning' | 'neutral' {
-  switch (phase) {
-    case 'WORKFLOW_PHASE_READY': return 'success'
-    case 'WORKFLOW_PHASE_COMPILING': return 'warning'
-    case 'WORKFLOW_PHASE_ERROR': return 'error'
-    default: return 'neutral'
-  }
-}
-
 function formatDuration(run: WorkflowRun): string {
   if (!run.startedAt) return '\u2014'
   const start = new Date(run.startedAt)
@@ -129,14 +110,14 @@ function refreshAll() {
       <div v-if="workflow" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="p-3 rounded-lg border border-default bg-elevated/50">
           <p class="text-xs text-muted">
-            Phase
+            Status
           </p>
           <UBadge
-            :color="workflowPhaseColor(workflow.status?.phase)"
+            :color="workflow.status?.ready ? 'success' : 'error'"
             variant="subtle"
             class="mt-1"
           >
-            {{ workflowPhaseLabel(workflow.status?.phase) }}
+            {{ workflow.status?.ready ? 'Ready' : 'Not Ready' }}
           </UBadge>
         </div>
         <div class="p-3 rounded-lg border border-default bg-elevated/50">
@@ -184,7 +165,7 @@ function refreshAll() {
           icon="i-lucide-play"
           size="sm"
           :loading="submitting"
-          :disabled="workflow?.status?.phase !== 'WORKFLOW_PHASE_READY'"
+          :disabled="!workflow?.status?.ready"
           @click="handleSubmitRun"
         />
       </div>
