@@ -34,13 +34,26 @@ const displayLabel = computed(() => current.value || 'All namespaces')
   </div>
   <div v-else class="flex justify-center mb-2">
     <UTooltip :text="displayLabel">
-      <UButton
-        icon="i-lucide-layers"
-        color="neutral"
-        variant="ghost"
-        square
-        size="sm"
-      />
+      <UPopover>
+        <UButton
+          icon="i-lucide-layers"
+          color="neutral"
+          variant="ghost"
+          square
+          size="sm"
+        />
+        <template #panel>
+          <div class="p-2 w-48">
+            <USelect
+              v-model="current"
+              :items="namespaces.map(ns => ({ label: ns || 'All namespaces', value: ns }))"
+              size="sm"
+              icon="i-lucide-layers"
+              class="w-full"
+            />
+          </div>
+        </template>
+      </UPopover>
     </UTooltip>
   </div>
 </template>
