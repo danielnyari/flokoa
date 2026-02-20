@@ -44,8 +44,8 @@ const (
 	// agentTaskOutputParam is the output parameter name for task results.
 	agentTaskOutputParam = "result"
 
-	// agentTaskResponseParam is the output parameter name for the full A2A response.
-	agentTaskResponseParam = "taskResponse"
+	// agentTaskArtifactParam is the output parameter name for the A2A Artifact JSON.
+	agentTaskArtifactParam = "artifact"
 
 	// taskConfigEnvVar is the environment variable name for the serialized task config.
 	taskConfigEnvVar = "FLOKOA_TASK_CONFIG"
@@ -275,7 +275,7 @@ func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) err
 	tmpl.Outputs = wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
 			{Name: agentTaskOutputParam},
-			{Name: agentTaskResponseParam},
+			{Name: agentTaskArtifactParam},
 		},
 	}
 
@@ -586,13 +586,19 @@ func buildAgentTaskTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.AgentT
 		tmpl.Volumes = volumes
 	}
 
-	// Output parameter: the container writes its result to /tmp/output
+	// Output parameters: the container writes plain text to /tmp/result and A2A Artifact JSON to /tmp/artifact
 	tmpl.Outputs = wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
 			{
 				Name: agentTaskOutputParam,
 				ValueFrom: &wfv1.ValueFrom{
-					Path: "/tmp/output",
+					Path: "/tmp/result",
+				},
+			},
+			{
+				Name: agentTaskArtifactParam,
+				ValueFrom: &wfv1.ValueFrom{
+					Path: "/tmp/artifact",
 				},
 			},
 		},
@@ -663,6 +669,11 @@ func translateConditionExpr(expr string) string {
 
 // translateExpression converts a single DSL expression body to its Argo equivalent.
 func translateExpression(expr string) string {
+	// Pass through Argo evaluation expressions ({{=...}})
+	if strings.HasPrefix(expr, "=") {
+		return "{{" + expr + "}}"
+	}
+
 	// params.<name> -> {{workflow.parameters.<name>}}
 	if strings.HasPrefix(expr, "params.") {
 		paramName := strings.TrimPrefix(expr, "params.")
@@ -670,8 +681,8 @@ func translateExpression(expr string) string {
 	}
 
 	// tasks.<name>.output -> {{tasks.<name>.outputs.parameters.result}}
-	// tasks.<name>.output.<field> -> {{tasks.<name>.outputs.parameters.result}}
-	// tasks.<name>.taskResponse -> {{tasks.<name>.outputs.parameters.taskResponse}}
+	// tasks.<name>.output.<field> -> Argo expression with fromJson for field access
+	// tasks.<name>.artifact -> {{tasks.<name>.outputs.parameters.artifact}}
 	if strings.HasPrefix(expr, "tasks.") {
 		rest := strings.TrimPrefix(expr, "tasks.")
 		parts := strings.SplitN(rest, ".", 2)
@@ -681,11 +692,26 @@ func translateExpression(expr string) string {
 		taskName := parts[0]
 		suffix := parts[1]
 
-		if suffix == "taskResponse" {
-			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskResponseParam)
+		// tasks.<name>.artifact → raw artifact parameter
+		if suffix == "artifact" {
+			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskArtifactParam)
 		}
-		// output or output.<field> both map to the result parameter
-		return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskOutputParam)
+
+		// tasks.<name>.output → plain text result parameter
+		if suffix == "output" {
+			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskOutputParam)
+		}
+
+		// tasks.<name>.output.<path> → Argo expression with fromJson for field access
+		if strings.HasPrefix(suffix, "output.") {
+			fieldPath := strings.TrimPrefix(suffix, "output.")
+			return fmt.Sprintf(
+				"{{=sprig.fromJson(tasks['%s'].outputs.parameters['%s']).parts[0].data.%s}}",
+				taskName, agentTaskArtifactParam, fieldPath,
+			)
+		}
+
+		return "{{" + expr + "}}"
 	}
 
 	// Unknown expression - pass through

@@ -117,7 +117,8 @@ func dagTmpl(tasks ...wfv1.DAGTask) wfv1.Template {
 func containerOutputs() wfv1.Outputs {
 	return wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
-			{Name: "result", ValueFrom: &wfv1.ValueFrom{Path: "/tmp/output"}},
+			{Name: "result", ValueFrom: &wfv1.ValueFrom{Path: "/tmp/result"}},
+			{Name: "artifact", ValueFrom: &wfv1.ValueFrom{Path: "/tmp/artifact"}},
 		},
 	}
 }
@@ -127,7 +128,7 @@ func pluginOutputs() wfv1.Outputs {
 	return wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
 			{Name: "result"},
-			{Name: "taskResponse"},
+			{Name: "artifact"},
 		},
 	}
 }
@@ -371,6 +372,57 @@ func TestCompileToArgoWorkflow_AgentTextShorthand(t *testing.T) {
 			},
 		},
 		withParams(wfv1.Parameter{Name: "topic", Value: wfv1.AnyStringPtr("AI safety")}),
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompileToArgoWorkflow_FieldAccessExpression(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "field-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "research",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "researcher-agent",
+						Text: "Find papers",
+					},
+				},
+				{
+					Name: "extract",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "extractor-agent",
+						Text: "Extract findings: {{tasks.research.output.findings}}",
+					},
+					DependsOn: []string{"research"},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("field-test", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "research", Template: "research"},
+				wfv1.DAGTask{Name: "extract", Template: "extract", Dependencies: []string{"research"}},
+			),
+			{
+				Name:    "research",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "researcher-agent", "message": pluginTextMessage("Find papers"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+			},
+			{
+				Name:    "extract",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "extractor-agent", "message": pluginTextMessage("Extract findings: {{=sprig.fromJson(tasks['research'].outputs.parameters['artifact']).parts[0].data.findings}}"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+			},
+		},
 	)
 
 	assertDiff(t, want, got)
@@ -1161,7 +1213,7 @@ func TestCompileToArgoWorkflow_Condition(t *testing.T) {
 					Name:         "technical",
 					Template:     "technical",
 					Dependencies: []string{"classify"},
-					When:         "{{tasks.classify.outputs.parameters.result}} == technical",
+					When:         "{{=sprig.fromJson(tasks['classify'].outputs.parameters['artifact']).parts[0].data.category}} == technical",
 				},
 			),
 			{Name: "classify", Plugin: makePlugin(map[string]interface{}{"agent": "classifier", "message": pluginTextMessage("classify"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
@@ -1191,12 +1243,27 @@ func TestTranslateExpressions(t *testing.T) {
 		{
 			name:     "task output field access",
 			input:    "Category: {{tasks.classify.output.category}}",
-			expected: "Category: {{tasks.classify.outputs.parameters.result}}",
+			expected: "Category: {{=sprig.fromJson(tasks['classify'].outputs.parameters['artifact']).parts[0].data.category}}",
 		},
 		{
-			name:     "task response reference",
-			input:    "Response: {{tasks.call.taskResponse}}",
-			expected: "Response: {{tasks.call.outputs.parameters.taskResponse}}",
+			name:     "task artifact reference",
+			input:    "Artifact: {{tasks.call.artifact}}",
+			expected: "Artifact: {{tasks.call.outputs.parameters.artifact}}",
+		},
+		{
+			name:     "field access with nested path",
+			input:    "Value: {{tasks.x.output.a.b}}",
+			expected: "Value: {{=sprig.fromJson(tasks['x'].outputs.parameters['artifact']).parts[0].data.a.b}}",
+		},
+		{
+			name:     "field access with hyphenated task name",
+			input:    "Field: {{tasks.my-task.output.field}}",
+			expected: "Field: {{=sprig.fromJson(tasks['my-task'].outputs.parameters['artifact']).parts[0].data.field}}",
+		},
+		{
+			name:     "Argo expression passthrough",
+			input:    "{{=some.expr}}",
+			expected: "{{=some.expr}}",
 		},
 		{
 			name:     "multiple expressions",

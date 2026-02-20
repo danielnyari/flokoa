@@ -282,13 +282,18 @@ func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, 
 
 // isValidExpression checks if an expression body is a valid reference.
 func isValidExpression(expr string, taskNames map[string]int, paramNames map[string]bool) bool {
+	// Argo evaluation expressions ({{=...}}) pass through
+	if strings.HasPrefix(expr, "=") {
+		return true
+	}
+
 	// Check params.<name>
 	if strings.HasPrefix(expr, "params.") {
 		paramName := strings.TrimPrefix(expr, "params.")
 		return paramNames[paramName]
 	}
 
-	// Check tasks.<name>.output[.<field>] or tasks.<name>.taskResponse
+	// Check tasks.<name>.output[.<field>] or tasks.<name>.artifact
 	if strings.HasPrefix(expr, "tasks.") {
 		rest := strings.TrimPrefix(expr, "tasks.")
 		parts := strings.SplitN(rest, ".", 2)
@@ -300,7 +305,7 @@ func isValidExpression(expr string, taskNames map[string]int, paramNames map[str
 			return false
 		}
 		suffix := parts[1]
-		if suffix == "output" || suffix == "taskResponse" || strings.HasPrefix(suffix, "output.") {
+		if suffix == "output" || suffix == "artifact" || strings.HasPrefix(suffix, "output.") {
 			return true
 		}
 		return false

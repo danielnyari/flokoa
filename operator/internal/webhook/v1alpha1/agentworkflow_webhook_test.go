@@ -426,3 +426,81 @@ func TestValidateAgentWorkflow_TextShorthandExpressionValidation(t *testing.T) {
 		t.Error("expected error for invalid expression in text shorthand")
 	}
 }
+
+func TestValidateAgentWorkflow_ArtifactReference(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "research", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "find things"}},
+				{
+					Name:      "use-artifact",
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent2", Text: "Process: {{tasks.research.artifact}}"},
+					DependsOn: []string{"research"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("unexpected error for artifact reference: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_TaskResponseRejected(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "call", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "hello"}},
+				{
+					Name:      "use-response",
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent2", Text: "Response: {{tasks.call.taskResponse}}"},
+					DependsOn: []string{"call"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for taskResponse reference (removed)")
+	}
+}
+
+func TestValidateAgentWorkflow_FieldAccessExpression(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "research", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "find things"}},
+				{
+					Name:      "extract",
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent2", Text: "Field: {{tasks.research.output.findings.summary}}"},
+					DependsOn: []string{"research"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("unexpected error for field access expression: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_ArgoExpressionPassthrough(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:  "task1",
+					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "{{=sprig.fromJson(tasks['x'].outputs.parameters['artifact']).parts[0].data.field}}"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("unexpected error for Argo expression passthrough: %v", err)
+	}
+}

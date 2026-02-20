@@ -456,11 +456,9 @@ func (p *Plugin) taskToReply(task *a2a.Task) *executor.ExecuteTemplateReply {
 		message = fmt.Sprintf("A2A task in unexpected terminal state: %s", task.Status.State)
 	}
 
-	// Extract result text from task
+	// Extract result text and artifact JSON from task
 	result := extractResultFromTask(task)
-
-	// Marshal full task response as JSON
-	taskJSON, _ := json.Marshal(task)
+	artifact := extractArtifactJSON(task)
 
 	return &executor.ExecuteTemplateReply{
 		Node: &wfv1.NodeResult{
@@ -473,8 +471,8 @@ func (p *Plugin) taskToReply(task *a2a.Task) *executor.ExecuteTemplateReply {
 						Value: wfv1.AnyStringPtr(result),
 					},
 					{
-						Name:  "taskResponse",
-						Value: wfv1.AnyStringPtr(string(taskJSON)),
+						Name:  "artifact",
+						Value: wfv1.AnyStringPtr(artifact),
 					},
 				},
 			},
@@ -522,6 +520,17 @@ func failedReply(message string) *executor.ExecuteTemplateReply {
 			Message: message,
 		},
 	}
+}
+
+// extractArtifactJSON returns the first artifact from a task as JSON, or "{}" if none.
+func extractArtifactJSON(task *a2a.Task) string {
+	if len(task.Artifacts) > 0 {
+		data, err := json.Marshal(task.Artifacts[0])
+		if err == nil {
+			return string(data)
+		}
+	}
+	return "{}"
 }
 
 // extractResultFromTask extracts the response text from a completed task
