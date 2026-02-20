@@ -79,5 +79,17 @@ func validateModelProvider(mp *ModelProvider) error {
 		allErrs = append(allErrs, err)
 	}
 
+	// P2: Validate BaseURL fields use HTTP/HTTPS (prevents SSRF via file://, gopher://, etc.)
+	if mp.Spec.OpenAI != nil && mp.Spec.OpenAI.BaseURL != "" {
+		if err := validateHTTPURL(specPath.Child("openai", "baseURL"), mp.Spec.OpenAI.BaseURL); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+	if mp.Spec.Anthropic != nil && mp.Spec.Anthropic.BaseURL != "" {
+		if err := validateHTTPURL(specPath.Child("anthropic", "baseURL"), mp.Spec.Anthropic.BaseURL); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
 	return aggregateErrors("ModelProvider", mp.Name, allErrs)
 }

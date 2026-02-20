@@ -50,8 +50,11 @@ func init() {
 		}
 		argoToken = string(token)
 		log.Printf("Loaded Argo token for authorization")
+	} else if os.Getenv("FLOKOA_DEV_MODE") == "true" {
+		log.Printf("Warning: Argo token file not found at %s — running without auth (FLOKOA_DEV_MODE=true)", tokenPath)
 	} else {
-		log.Printf("Warning: Argo token file not found at %s — running without auth (development mode only)", tokenPath)
+		log.Fatalf("FATAL: Argo token file not found at %s and FLOKOA_DEV_MODE is not enabled. "+
+			"Set FLOKOA_DEV_MODE=true to run without authentication (development only).", tokenPath)
 	}
 }
 

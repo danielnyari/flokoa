@@ -97,6 +97,13 @@ func validateOpenApiToolSpec(spec *OpenApiToolSpec, fldPath *field.Path) field.E
 		allErrs = append(allErrs, err)
 	}
 
+	// T5: URL must be a valid HTTP/HTTPS URL (prevents SSRF via file://, gopher://, etc.)
+	if spec.URL != "" {
+		if err := validateHTTPURL(fldPath.Child("url"), spec.URL); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
 	// T3: Exactly one of value, valueFrom, or endpointPath
 	if err := validateExactlyOneOf(
 		fldPath.Child("openApiSchema"),
