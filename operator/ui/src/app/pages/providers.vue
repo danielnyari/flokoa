@@ -12,8 +12,16 @@ const UDropdownMenu = resolveComponent('UDropdownMenu')
 const toast = useToast()
 const table = useTemplateRef('table')
 
+const selectedProvider = ref<ModelProvider | null>(null)
+const detailOpen = ref(false)
+
+function openDetail(provider: ModelProvider) {
+  selectedProvider.value = provider
+  detailOpen.value = true
+}
+
 const { listModelProviders } = useFlokoa()
-const { data: providerList, status } = await listModelProviders()
+const { data: providerList, status, refresh } = await listModelProviders()
 
 const providers = computed(() => providerList.value?.items ?? [])
 
@@ -79,7 +87,10 @@ function getRowItems(row: { original: ModelProvider }) {
     { type: 'separator' as const },
     {
       label: 'View details',
-      icon: 'i-lucide-eye'
+      icon: 'i-lucide-eye',
+      onSelect() {
+        openDetail(row.original)
+      }
     }
   ]
 }
@@ -187,6 +198,15 @@ const columns: TableColumn<ModelProvider>[] = [
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #trailing>
+          <UButton
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            :loading="status === 'pending'"
+            @click="refresh()"
+          />
+        </template>
       </UDashboardNavbar>
     </template>
 
@@ -278,4 +298,6 @@ const columns: TableColumn<ModelProvider>[] = [
       </div>
     </template>
   </UDashboardPanel>
+
+  <ProviderDetail v-if="selectedProvider" v-model:open="detailOpen" :provider="selectedProvider" />
 </template>

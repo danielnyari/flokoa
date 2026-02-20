@@ -12,8 +12,16 @@ const UDropdownMenu = resolveComponent('UDropdownMenu')
 const toast = useToast()
 const table = useTemplateRef('table')
 
+const selectedAgent = ref<Agent | null>(null)
+const detailOpen = ref(false)
+
+function openDetail(agent: Agent) {
+  selectedAgent.value = agent
+  detailOpen.value = true
+}
+
 const { listAgents } = useFlokoa()
-const { data: agentList, status } = await listAgents()
+const { data: agentList, status, refresh } = await listAgents()
 
 const agents = computed(() => agentList.value?.items ?? [])
 
@@ -60,7 +68,10 @@ function getRowItems(row: { original: Agent }) {
     { type: 'separator' as const },
     {
       label: 'View details',
-      icon: 'i-lucide-eye'
+      icon: 'i-lucide-eye',
+      onSelect() {
+        openDetail(row.original)
+      }
     }
   ]
 }
@@ -164,6 +175,15 @@ const columns: TableColumn<Agent>[] = [
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #trailing>
+          <UButton
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            :loading="status === 'pending'"
+            @click="refresh()"
+          />
+        </template>
       </UDashboardNavbar>
     </template>
 
@@ -254,4 +274,6 @@ const columns: TableColumn<Agent>[] = [
       </div>
     </template>
   </UDashboardPanel>
+
+  <AgentDetail v-if="selectedAgent" v-model:open="detailOpen" :agent="selectedAgent" />
 </template>
