@@ -12,8 +12,16 @@ const UDropdownMenu = resolveComponent('UDropdownMenu')
 const toast = useToast()
 const table = useTemplateRef('table')
 
+const selectedTool = ref<AgentTool | null>(null)
+const detailOpen = ref(false)
+
+function openDetail(tool: AgentTool) {
+  selectedTool.value = tool
+  detailOpen.value = true
+}
+
 const { listAgentTools } = useFlokoa()
-const { data: toolList, status } = await listAgentTools()
+const { data: toolList, status, refresh } = await listAgentTools()
 
 const tools = computed(() => toolList.value?.items ?? [])
 
@@ -61,7 +69,10 @@ function getRowItems(row: { original: AgentTool }) {
     { type: 'separator' as const },
     {
       label: 'View details',
-      icon: 'i-lucide-eye'
+      icon: 'i-lucide-eye',
+      onSelect() {
+        openDetail(row.original)
+      }
     }
   ]
 }
@@ -152,6 +163,15 @@ const columns: TableColumn<AgentTool>[] = [
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #trailing>
+          <UButton
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            :loading="status === 'pending'"
+            @click="refresh()"
+          />
+        </template>
       </UDashboardNavbar>
     </template>
 
@@ -230,4 +250,6 @@ const columns: TableColumn<AgentTool>[] = [
       </div>
     </template>
   </UDashboardPanel>
+
+  <ToolDetail v-if="selectedTool" v-model:open="detailOpen" :tool="selectedTool" />
 </template>

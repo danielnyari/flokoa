@@ -60,10 +60,10 @@ func (t *ToolReconciler) Reconcile(ctx context.Context, agent *agentv1alpha1.Age
 
 			// Get the ConfigMap to compute hash
 			cm, err := t.configMaps.GetConfigMap(ctx, types.NamespacedName{Name: cmName, Namespace: agent.Namespace})
-			dataHash := ""
-			if err == nil {
-				dataHash = hash.ConfigMapData(cm.Data)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get ConfigMap for inline tool %s: %w", toolName, err)
 			}
+			dataHash := hash.ConfigMapData(cm.Data)
 
 			logger.Info("Reconciled inline tool", "toolName", toolName, "configMap", cmName)
 			toolConfigMaps = append(toolConfigMaps, toolConfigMapInfo{

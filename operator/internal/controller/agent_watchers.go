@@ -66,8 +66,11 @@ func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Obj
 		return nil
 	}
 
+	logger := log.FromContext(ctx)
+
 	var agents agentv1alpha1.AgentList
 	if err := r.List(ctx, &agents, client.InNamespace(model.Namespace)); err != nil {
+		logger.Error(err, "Failed to list Agents for Model watch")
 		return nil
 	}
 
@@ -99,9 +102,11 @@ func (r *AgentReconciler) findAgentsForModelProvider(ctx context.Context, obj cl
 		log.FromContext(ctx).Error(nil, "findAgentsForModelProvider received unexpected object type", "type", fmt.Sprintf("%T", obj))
 		return nil
 	}
+	logger := log.FromContext(ctx)
 
 	modelList := &agentv1alpha1.ModelList{}
 	if err := r.List(ctx, modelList); err != nil {
+		logger.Error(err, "Failed to list Models for ModelProvider watch")
 		return nil
 	}
 
@@ -122,6 +127,7 @@ func (r *AgentReconciler) findAgentsForModelProvider(ctx context.Context, obj cl
 
 	agentList := &agentv1alpha1.AgentList{}
 	if err := r.List(ctx, agentList); err != nil {
+		logger.Error(err, "Failed to list Agents for ModelProvider watch")
 		return nil
 	}
 
@@ -149,9 +155,11 @@ func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Ob
 		log.FromContext(ctx).Error(nil, "findAgentsForSecret received unexpected object type", "type", fmt.Sprintf("%T", obj))
 		return nil
 	}
+	logger := log.FromContext(ctx)
 
 	providerList := &agentv1alpha1.ModelProviderList{}
 	if err := r.List(ctx, providerList, client.InNamespace(secret.Namespace)); err != nil {
+		logger.Error(err, "Failed to list ModelProviders for Secret watch")
 		return nil
 	}
 
@@ -171,6 +179,7 @@ func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Ob
 
 	modelList := &agentv1alpha1.ModelList{}
 	if err := r.List(ctx, modelList); err != nil {
+		logger.Error(err, "Failed to list Models for Secret watch")
 		return nil
 	}
 
@@ -194,6 +203,7 @@ func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Ob
 
 	agentList := &agentv1alpha1.AgentList{}
 	if err := r.List(ctx, agentList); err != nil {
+		logger.Error(err, "Failed to list Agents for Secret watch")
 		return nil
 	}
 

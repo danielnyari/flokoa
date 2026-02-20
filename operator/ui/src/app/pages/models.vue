@@ -12,8 +12,16 @@ const UDropdownMenu = resolveComponent('UDropdownMenu')
 const toast = useToast()
 const table = useTemplateRef('table')
 
+const selectedModel = ref<Model | null>(null)
+const detailOpen = ref(false)
+
+function openDetail(model: Model) {
+  selectedModel.value = model
+  detailOpen.value = true
+}
+
 const { listModels } = useFlokoa()
-const { data: modelList, status } = await listModels()
+const { data: modelList, status, refresh } = await listModels()
 
 const models = computed(() => modelList.value?.items ?? [])
 
@@ -51,7 +59,10 @@ function getRowItems(row: { original: Model }) {
     { type: 'separator' as const },
     {
       label: 'View details',
-      icon: 'i-lucide-eye'
+      icon: 'i-lucide-eye',
+      onSelect() {
+        openDetail(row.original)
+      }
     }
   ]
 }
@@ -148,6 +159,15 @@ const columns: TableColumn<Model>[] = [
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #trailing>
+          <UButton
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            :loading="status === 'pending'"
+            @click="refresh()"
+          />
+        </template>
       </UDashboardNavbar>
     </template>
 
@@ -226,4 +246,6 @@ const columns: TableColumn<Model>[] = [
       </div>
     </template>
   </UDashboardPanel>
+
+  <ModelDetail v-if="selectedModel" v-model:open="detailOpen" :model="selectedModel" />
 </template>

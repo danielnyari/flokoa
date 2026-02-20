@@ -121,6 +121,8 @@ const groups = computed(() => [{
       <template #default="{ collapsed }">
         <UDashboardSearchButton :collapsed="collapsed" class="bg-transparent ring-default" />
 
+        <NamespaceSelect :collapsed="collapsed" />
+
         <UNavigationMenu
           :collapsed="collapsed"
           :items="links[0]"
@@ -144,6 +146,8 @@ const groups = computed(() => [{
     </UDashboardSidebar>
 
     <UDashboardSearch :groups="groups" />
+
+    <ShortcutHelp />
 
     <slot />
   </UDashboardGroup>
