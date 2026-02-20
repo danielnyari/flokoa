@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import google.auth
 import google.oauth2.credentials
 from google.auth.transport.requests import Request
@@ -39,7 +37,7 @@ class ServiceAccountCredentialExchanger(BaseAuthCredentialExchanger):
     def exchange_credential(
         self,
         auth_scheme: AuthScheme,
-        auth_credential: Optional[AuthCredential] = None,
+        auth_credential: AuthCredential | None = None,
     ) -> AuthCredential:
         """Exchanges the service account auth credential for an access token.
 

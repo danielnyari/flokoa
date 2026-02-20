@@ -63,14 +63,14 @@ dev = [
 
 [tool.ty.environment]
 python = ".venv"
-python-version = "3.10"
+python-version = "3.13"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py313"
 line-length = 120
 fix = true
 
@@ -114,10 +114,19 @@ ignore = [
     "E731",
     # Avoid specifying long messages outside the exception class
     "TRY003",
+    # Function complexity — tracked separately
+    "C901",
+    # Consider moving return to else block
+    "TRY300",
+    # Do not raise vanilla Exception
+    "TRY002",
+    # Generic class type parameter style (PEP 695)
+    "UP046",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "S105", "S106", "B017"]
+"tests/*" = ["S101", "S105", "S106", "B017", "F403", "RUF012", "RUF043", "E402", "SIM117"]
+"src/*" = ["S105"]
 
 [tool.ruff.format]
 preview = true

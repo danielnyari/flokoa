@@ -1,9 +1,9 @@
 """Tests for ToolsetFactory — builder registration, dispatch, and edge cases."""
 
-import pytest
+
+from flokoa_types import IntegrationType, ToolDefinition, ToolType
 
 from flokoa.tools.toolset_factory import ToolsetFactory
-from flokoa_types import IntegrationType, ToolDefinition, ToolType
 
 
 def _make_tool_definition(name="test_tool", url="https://api.test.com"):

@@ -1,15 +1,14 @@
 """Tests for flokoa.config.agent_config — AgentConfig discriminated union."""
 
 import pytest
+from flokoa_types import IntegrationType
 from pydantic import ValidationError
 
 from flokoa.config.agent_config import (
     AgentConfig,
-    BaseAgentConfig,
     LlmAgentConfig,
     TaskAgentConfig,
 )
-from flokoa_types import IntegrationType
 
 
 class TestAgentConfigDiscrimination:

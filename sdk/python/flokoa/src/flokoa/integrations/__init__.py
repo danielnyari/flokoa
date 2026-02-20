@@ -1,5 +1,6 @@
-from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa_types import IntegrationType
+
+from flokoa.agent_executor import FlokoaAgentExecutor
 
 _EXTRA_NAMES: dict[IntegrationType, str] = {
     IntegrationType.PYDANTIC_AI: "pydantic-ai",

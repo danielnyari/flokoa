@@ -3,10 +3,8 @@
 import json
 
 import pytest
-
 from flokoa_types import ToolDefinition
 from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
-
 
 WEATHER_API_SPEC = {
     "openapi": "3.0.0",

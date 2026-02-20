@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import abc
-from typing import Optional
 
 from .....auth.auth_credential import AuthCredential
 from .....auth.auth_schemes import AuthScheme
@@ -36,7 +35,7 @@ class BaseAuthCredentialExchanger:
     def exchange_credential(
         self,
         auth_scheme: AuthScheme,
-        auth_credential: Optional[AuthCredential] = None,
+        auth_credential: AuthCredential | None = None,
     ) -> AuthCredential:
         """Exchanges the provided authentication credential for a usable token/credential.
 

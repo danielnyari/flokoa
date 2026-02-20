@@ -7,8 +7,8 @@ metadata:
     {{- include "flokoa.dex.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["dex.coreos.com"]
-    resources: ["*"]
-    verbs: ["*"]
+    resources: ["authcodes", "authrequests", "connectors", "oauth2clients", "offlinesessionses", "passwords", "refreshtokens", "signingkeies", "devicerequests", "devicetokens"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["create"]

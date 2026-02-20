@@ -8,6 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from flokoa_types import IntegrationType, ToolDefinition, ToolType
+from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool
 from google.genai import types as genai_types
@@ -19,8 +21,6 @@ from flokoa.integrations.google_adk.agent_executor import (
 )
 from flokoa.integrations.google_adk.toolset import FlokoaToolset
 from flokoa.tools import ToolsetFactory
-from flokoa_types import IntegrationType, ToolDefinition, ToolType
-from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 
 pytestmark = pytest.mark.anyio
 
@@ -393,7 +393,7 @@ class TestGoogleADKAgentExecutorExecute:
         async def fake_run_async(**kwargs):
             captured_kwargs.update(kwargs)
             return
-            yield  # make it an async generator  # noqa: RUF027
+            yield  # make it an async generator
 
         mock_context = MagicMock()
         mock_context.get_user_input.return_value = "Tell me about Flokoa"

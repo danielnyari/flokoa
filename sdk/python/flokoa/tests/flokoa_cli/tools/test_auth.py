@@ -31,12 +31,13 @@ from flokoa.auth.auth_credential import (
     HttpAuth,
     HttpCredentials,
     OAuth2Auth,
+    ServiceAccount,
+    ServiceAccountCredential,
 )
 from flokoa.auth.auth_schemes import (
     OpenIdConnectWithConfig,
 )
 from flokoa.tools.openapi import OpenAPIDeps, create_rest_api_callable
-from flokoa.auth.auth_credential import ServiceAccount, ServiceAccountCredential
 from flokoa.tools.openapi.auth.auth_helpers import (
     credential_to_param,
     dict_to_auth_scheme,
@@ -884,7 +885,7 @@ class TestTokenToSchemeCredential:
         assert cred is None
 
     def test_oauth2_token(self):
-        scheme, cred = token_to_scheme_credential("oauth2Token", "header", "Authorization", "tok")
+        _scheme, cred = token_to_scheme_credential("oauth2Token", "header", "Authorization", "tok")
         assert cred.auth_type == AuthCredentialTypes.HTTP
         assert cred.http.credentials.token == "tok"
 
@@ -915,7 +916,7 @@ class TestServiceAccountHelpers:
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
         }
-        scheme, cred = service_account_dict_to_scheme_credential(
+        _scheme, cred = service_account_dict_to_scheme_credential(
             config, scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
         assert cred.auth_type == AuthCredentialTypes.SERVICE_ACCOUNT
@@ -939,7 +940,7 @@ class TestServiceAccountHelpers:
             ),
             scopes=["openid"],
         )
-        scheme, cred = service_account_scheme_credential(sa)
+        _scheme, cred = service_account_scheme_credential(sa)
         assert cred.auth_type == AuthCredentialTypes.SERVICE_ACCOUNT
         assert cred.service_account is sa
 
@@ -978,7 +979,7 @@ class TestOpenIdHelpers:
                 "client_secret": "wrapped-secret",
             }
         }
-        scheme, cred = openid_dict_to_scheme_credential(config_dict, ["openid"], cred_dict)
+        _scheme, cred = openid_dict_to_scheme_credential(config_dict, ["openid"], cred_dict)
         assert cred.oauth2.client_id == "wrapped-client"
 
     def test_openid_dict_missing_fields_raises(self):
@@ -1096,7 +1097,6 @@ class TestCredentialToParamEdgeCases:
             credential_to_param(scheme, cred)
 
     def test_apikey_query_location(self):
-        from fastapi.openapi.models import APIKeyIn
 
         scheme = APIKey(**{"type": "apiKey", "in": "query", "name": "api_key"})
         cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY, api_key="qk")
@@ -1107,5 +1107,5 @@ class TestCredentialToParamEdgeCases:
     def test_apikey_cookie_location(self):
         scheme = APIKey(**{"type": "apiKey", "in": "cookie", "name": "token"})
         cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY, api_key="ck")
-        param, kwargs = credential_to_param(scheme, cred)
+        param, _kwargs = credential_to_param(scheme, cred)
         assert param.param_location == "cookie"

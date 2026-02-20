@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from flokoa.config.agent_config import AgentConfig, LlmAgentConfig, TaskAgentConfig
+from flokoa.config.agent_config import LlmAgentConfig, TaskAgentConfig
 from flokoa.config.loader import (
     load_agent_config,
     load_agent_config_from_dict,

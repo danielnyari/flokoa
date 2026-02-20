@@ -7,10 +7,10 @@ ModelConfig schema (provider with type field, parameters structure, etc.).
 import json
 
 import pytest
-
-import flokoa.utils as utils_module
 from flokoa_types import ModelConfig
 from flokoa_types.modelconfig import ProviderType
+
+import flokoa.utils as utils_module
 from flokoa.utils import load_model_config
 
 

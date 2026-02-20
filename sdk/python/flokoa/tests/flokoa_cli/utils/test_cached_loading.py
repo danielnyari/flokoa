@@ -23,7 +23,6 @@ MINIMAL_OPENAPI_SPEC = {
 }
 from flokoa.cache import (
     CACHE_KEY_MODEL_CONFIG,
-    CACHE_KEY_TOOLS,
     ConfigCache,
     reset_global_cache,
 )

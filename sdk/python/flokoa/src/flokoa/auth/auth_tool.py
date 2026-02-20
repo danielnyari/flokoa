@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Optional
+from warnings import deprecated
 
 from pydantic import BaseModel
-from typing_extensions import deprecated
 
 from .auth_credential import AuthCredential, BaseModelWithConfig
 from .auth_schemes import AuthScheme
@@ -55,12 +54,12 @@ class AuthConfig(BaseModelWithConfig):
 
     auth_scheme: AuthScheme
     """The auth scheme used to collect credentials"""
-    raw_auth_credential: Optional[AuthCredential] = None
+    raw_auth_credential: AuthCredential | None = None
     """The raw auth credential used to collect credentials. The raw auth
   credentials are used in some auth scheme that needs to exchange auth
   credentials. e.g. OAuth2 and OIDC. For other auth scheme, it could be None.
   """
-    exchanged_auth_credential: Optional[AuthCredential] = None
+    exchanged_auth_credential: AuthCredential | None = None
     """The exchanged auth credential used to collect credentials. adk and client
   will work together to fill it. For those auth scheme that doesn't need to
   exchange auth credentials, e.g. API key, service account etc. It's filled by
@@ -73,7 +72,7 @@ class AuthConfig(BaseModelWithConfig):
   this field to guide the user through the OAuth2 flow and fill auth response in
   this field"""
 
-    credential_key: Optional[str] = None
+    credential_key: str | None = None
     """A user specified key used to load and save this credential in a credential
   service.
   """

@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING, Any, override
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
+from flokoa_types import IntegrationType, ToolType
+from flokoa_types import ToolDefinition as FlokoaToolDefinition
 
 from flokoa.agent_executor import FlokoaAgentExecutor
 from flokoa.cache import ConfigCache
 from flokoa.exceptions import CancelNotSupportedError
 from flokoa.tools import ToolsetFactory, default_factory
-from flokoa_types import IntegrationType, ToolType
-from flokoa_types import ToolDefinition as FlokoaToolDefinition
 
 from .toolset import FlokoaToolset
 

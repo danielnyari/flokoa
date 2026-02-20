@@ -1,3 +1,4 @@
+from flokoa_types.modelconfig import ProviderType
 from pydantic_ai.models import Model
 from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.models.bedrock import BedrockConverseModel, BedrockModelSettings
@@ -10,8 +11,6 @@ from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 from typing_extensions import TypedDict
-
-from flokoa_types.modelconfig import ProviderType
 
 
 class ProviderModelMapEntry(TypedDict):

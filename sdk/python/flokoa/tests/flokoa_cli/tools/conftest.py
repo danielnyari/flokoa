@@ -1,9 +1,7 @@
 
-from ..fixtures import *
-
-
 import pytest
 
+from ..fixtures import *
 
 MINIMAL_OPENAPI_SPEC = {
     "openapi": "3.0.0",

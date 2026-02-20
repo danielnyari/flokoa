@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import logging
 import ssl
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
 
 import httpx
 from fastapi.openapi.models import Operation, Schema
@@ -25,6 +26,7 @@ from pydantic_ai import RunContext, Tool
 
 from ...auth.auth_credential import AuthCredential
 from ...auth.auth_schemes import AuthScheme
+from ...utils.url_validation import SSRFError, validate_url
 from ..utils import _to_snake_case
 from .auth.auth_helpers import credential_to_param
 from .auth.credential_exchangers.auto_auth_credential_exchanger import AutoAuthCredentialExchanger
@@ -51,7 +53,7 @@ class OpenAPIDeps:
     """
 
     client: httpx.AsyncClient
-    header_provider: Callable[[], Dict[str, str]] | None = None
+    header_provider: Callable[[], dict[str, str]] | None = None
 
 
 @dataclass
@@ -71,16 +73,14 @@ class RestApiToolConfig:
     auth_scheme: AuthScheme | None = None
     auth_credential: AuthCredential | None = None
     ssl_verify: bool | str | ssl.SSLContext | None = None
-    default_headers: Dict[str, str] = field(default_factory=dict)
-    credential_exchanger: AutoAuthCredentialExchanger = field(
-        default_factory=AutoAuthCredentialExchanger
-    )
+    default_headers: dict[str, str] = field(default_factory=dict)
+    credential_exchanger: AutoAuthCredentialExchanger = field(default_factory=AutoAuthCredentialExchanger)
 
     @classmethod
     def from_parsed_operation(
         cls,
         parsed: ParsedOperation,
-        ssl_verify: Optional[Union[bool, str, ssl.SSLContext]] = None,
+        ssl_verify: bool | str | ssl.SSLContext | None = None,
     ) -> RestApiToolConfig:
         """Create a RestApiToolConfig from a ParsedOperation.
 
@@ -91,9 +91,7 @@ class RestApiToolConfig:
         Returns:
             A RestApiToolConfig instance.
         """
-        operation_parser = OperationParser.load(
-            parsed.operation, parsed.parameters, parsed.return_value
-        )
+        operation_parser = OperationParser.load(parsed.operation, parsed.parameters, parsed.return_value)
         tool_name = _to_snake_case(operation_parser.get_function_name())[:60]
 
         return cls(
@@ -111,12 +109,12 @@ class RestApiToolConfig:
 def _prepare_request_params(
     endpoint: OperationEndpoint,
     operation: Operation,
-    default_headers: Dict[str, str],
+    default_headers: dict[str, str],
     tool_name: str,
-    parameters: List[ApiParameter],
-    kwargs: Dict[str, Any],
-    auth_additional_headers: Dict[str, str] | None = None,
-) -> Dict[str, Any]:
+    parameters: list[ApiParameter],
+    kwargs: dict[str, Any],
+    auth_additional_headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Build httpx request parameters from operation config and call arguments.
 
     This is a pure function extracted from the original RestApiTool method.
@@ -139,17 +137,17 @@ def _prepare_request_params(
     if not method:
         raise ValueError("Operation method not found.")
 
-    path_params: Dict[str, Any] = {}
-    query_params: Dict[str, Any] = {}
-    header_params: Dict[str, Any] = {}
-    cookie_params: Dict[str, Any] = {}
+    path_params: dict[str, Any] = {}
+    query_params: dict[str, Any] = {}
+    header_params: dict[str, Any] = {}
+    cookie_params: dict[str, Any] = {}
 
     header_params["User-Agent"] = f"flokoa (tool: {tool_name})"
 
     if auth_additional_headers:
         header_params.update(auth_additional_headers)
 
-    params_map: Dict[str, ApiParameter] = {p.py_name: p for p in parameters}
+    params_map: dict[str, ApiParameter] = {p.py_name: p for p in parameters}
 
     for param_k, v in kwargs.items():
         param_obj = params_map.get(param_k)
@@ -175,7 +173,7 @@ def _prepare_request_params(
     url = f"{base_url}{endpoint.path.format(**path_params)}"
 
     # Construct body
-    body_kwargs: Dict[str, Any] = {}
+    body_kwargs: dict[str, Any] = {}
     request_body = operation.requestBody
     if request_body:
         for mime_type, media_type_object in request_body.content.items():
@@ -213,9 +211,7 @@ def _prepare_request_params(
                 header_params["Content-Type"] = mime_type
             break  # Process only the first mime_type
 
-    filtered_query_params: Dict[str, Any] = {
-        k: v for k, v in query_params.items() if v is not None
-    }
+    filtered_query_params: dict[str, Any] = {k: v for k, v in query_params.items() if v is not None}
 
     for key, value in default_headers.items():
         header_params.setdefault(key, value)
@@ -244,15 +240,13 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
         An async function suitable for use with Tool.from_schema(takes_ctx=True).
     """
 
-    async def rest_api_call(ctx: RunContext[OpenAPIDeps], **kwargs: Any) -> Dict[str, Any]:
+    async def rest_api_call(ctx: RunContext[OpenAPIDeps], **kwargs: Any) -> dict[str, Any]:
         # Exchange auth credentials (e.g. OAuth2 token refresh, service account)
         auth_scheme = config.auth_scheme
         auth_credential = config.auth_credential
 
         if auth_credential and auth_scheme:
-            auth_credential = config.credential_exchanger.exchange_credential(
-                auth_scheme, auth_credential
-            )
+            auth_credential = config.credential_exchanger.exchange_credential(auth_scheme, auth_credential)
 
         # Build parameter list from operation parser
         api_params = config.operation_parser.get_parameters().copy()
@@ -260,16 +254,15 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
 
         # Fill in missing required args with defaults
         for api_param in api_params:
-            if api_param.py_name not in api_args:
-                if (
-                    api_param.required
-                    and isinstance(api_param.param_schema, Schema)
-                    and api_param.param_schema.default is not None
-                ):
-                    api_args[api_param.py_name] = api_param.param_schema.default
+            if api_param.py_name not in api_args and (
+                api_param.required
+                and isinstance(api_param.param_schema, Schema)
+                and api_param.param_schema.default is not None
+            ):
+                api_args[api_param.py_name] = api_param.param_schema.default
 
         # Collect auth additional headers
-        auth_additional_headers: Dict[str, str] | None = None
+        auth_additional_headers: dict[str, str] | None = None
         if auth_credential and auth_credential.http and auth_credential.http.additional_headers:
             auth_additional_headers = dict(auth_credential.http.additional_headers)
 
@@ -277,7 +270,7 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
         if auth_credential and auth_scheme:
             auth_param, auth_args = credential_to_param(auth_scheme, auth_credential)
             if auth_param and auth_args:
-                api_params = [auth_param] + api_params
+                api_params = [auth_param, *api_params]
                 api_args.update(auth_args)
 
         # Build request params
@@ -290,6 +283,13 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
             kwargs=api_args,
             auth_additional_headers=auth_additional_headers,
         )
+
+        # Validate the constructed URL against SSRF attacks
+        try:
+            validate_url(request_params["url"])
+        except SSRFError as e:
+            logger.warning("SSRF validation failed for tool %s: %s", config.name, e)
+            return {"error": f"Tool {config.name} request blocked: URL failed security validation"}
 
         # Apply SSL verification
         if config.ssl_verify is not None:
@@ -322,19 +322,17 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError:
-            error_details = response.content.decode("utf-8")
+            # Log truncated error details server-side only; avoid leaking
+            # full upstream response bodies to the caller.
+            raw = response.content.decode("utf-8", errors="replace")
+            truncated = (raw[:500] + "...") if len(raw) > 500 else raw
             logger.warning(
                 "API call failed for tool %s: Status %d - %s",
                 config.name,
                 response.status_code,
-                error_details,
+                truncated,
             )
-            return {
-                "error": (
-                    f"Tool {config.name} execution failed."
-                    f" Status Code: {response.status_code}, {error_details}"
-                )
-            }
+            return {"error": (f"Tool {config.name} execution failed. Status Code: {response.status_code}")}
 
         # Route based on Content-Type header
         content_type = response.headers.get("content-type", "")

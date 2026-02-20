@@ -55,6 +55,7 @@ controller:
   # -- Controller container security context
   securityContext:
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -119,7 +120,7 @@ controller:
       scheme: https
       # -- TLS config for the metrics endpoint
       tlsConfig:
-        insecureSkipVerify: true
+        insecureSkipVerify: false
 
     networkPolicy:
       # -- Create a NetworkPolicy for metrics traffic
@@ -339,7 +340,8 @@ argo:
 
     # -- Plugin container security context
     securityContext:
-      runAsNonRoot: false
+      runAsNonRoot: true
+      runAsUser: 65532
       allowPrivilegeEscalation: false
       capabilities:
         drop:

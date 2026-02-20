@@ -10,6 +10,9 @@ on:
       - 'sdk/python/**'
       - '.github/workflows/test-python.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Run Python SDK Tests

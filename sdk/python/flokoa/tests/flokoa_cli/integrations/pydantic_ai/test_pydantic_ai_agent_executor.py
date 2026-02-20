@@ -4,6 +4,8 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from flokoa_types import IntegrationType, ToolDefinition, ToolType
+from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 from pydantic_ai import Agent, models
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -11,8 +13,6 @@ from pydantic_ai.models.test import TestModel
 
 from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
 from flokoa.tools import ToolsetFactory
-from flokoa_types import IntegrationType, ToolDefinition, ToolType
-from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 
 # Block real model requests during testing
 models.ALLOW_MODEL_REQUESTS = False

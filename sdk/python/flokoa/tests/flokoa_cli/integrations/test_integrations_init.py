@@ -1,9 +1,9 @@
 """Tests for the integrations registry (get_executor_cls)."""
 
 import pytest
+from flokoa_types import IntegrationType
 
 from flokoa.integrations import get_executor_cls
-from flokoa_types import IntegrationType
 
 
 class TestGetExecutorCls:
