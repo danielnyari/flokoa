@@ -21,8 +21,10 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -30,31 +32,38 @@ import (
 // +kubebuilder:webhook:path=/validate-agent-flokoa-ai-v1alpha1-model,mutating=false,failurePolicy=fail,sideEffects=None,groups=agent.flokoa.ai,resources=models,verbs=create;update,versions=v1alpha1,name=vmodel-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // ModelCustomValidator validates Model resources.
-type ModelCustomValidator struct{}
+// Reader is used for cross-resource reference validation (fixes #94).
+//
+// +kubebuilder:object:generate=false
+type ModelCustomValidator struct {
+	Reader client.Reader
+}
 
 var _ webhook.CustomValidator = &ModelCustomValidator{}
 
 func SetupModelWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&Model{}).
-		WithValidator(&ModelCustomValidator{}).
+		WithValidator(&ModelCustomValidator{Reader: mgr.GetClient()}).
 		Complete()
 }
 
-func (v *ModelCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *ModelCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	model, ok := obj.(*Model)
 	if !ok {
 		return nil, fmt.Errorf("expected a Model but got %T", obj)
 	}
-	return nil, validateModel(model)
+	warnings := v.validateReferences(ctx, model)
+	return warnings, validateModel(model)
 }
 
-func (v *ModelCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (v *ModelCustomValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
 	model, ok := newObj.(*Model)
 	if !ok {
 		return nil, fmt.Errorf("expected a Model but got %T", newObj)
 	}
-	return nil, validateModel(model)
+	warnings := v.validateReferences(ctx, model)
+	return warnings, validateModel(model)
 }
 
 func (v *ModelCustomValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
@@ -109,4 +118,27 @@ func validateModel(model *Model) error {
 	}
 
 	return aggregateErrors("Model", model.Name, allErrs)
+}
+
+// validateReferences checks that cross-resource references exist.
+// These are returned as warnings (not errors) to avoid ordering issues (fixes #94).
+func (v *ModelCustomValidator) validateReferences(ctx context.Context, model *Model) admission.Warnings {
+	if v.Reader == nil {
+		return nil
+	}
+
+	var warnings admission.Warnings
+
+	// Check ModelProvider reference
+	ns := model.Spec.ProviderRef.Namespace
+	if ns == "" {
+		ns = model.Namespace
+	}
+	provider := &ModelProvider{}
+	if err := v.Reader.Get(ctx, types.NamespacedName{Name: model.Spec.ProviderRef.Name, Namespace: ns}, provider); err != nil {
+		warnings = append(warnings,
+			fmt.Sprintf("referenced ModelProvider %s/%s not found — the model will not become ready until it exists", ns, model.Spec.ProviderRef.Name))
+	}
+
+	return warnings
 }

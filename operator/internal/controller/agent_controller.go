@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +17,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	agentapp "github.com/danielnyari/flokoa/internal/app/agent"
+	flokoaerrors "github.com/danielnyari/flokoa/internal/errors"
 )
 
 const (
@@ -80,13 +82,30 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	result := r.AppService.Reconcile(ctx, agent)
 
 	// 5. Persist status (always, even on error — conditions are set by the app service)
-	if err := r.Status().Update(ctx, agent); err != nil {
-		logger.Error(err, "Failed to update Agent status")
-		return ctrl.Result{}, err
+	// Use retry on conflict to handle concurrent updates (fixes #95)
+	desiredStatus := agent.Status.DeepCopy()
+	statusErr := updateStatusWithRetry(ctx, r.Client, agent, func() {
+		agent.Status = *desiredStatus
+	})
+	if statusErr != nil {
+		logger.Error(statusErr, "Failed to update Agent status")
 	}
 
-	if result.Error != nil {
-		return ctrl.Result{}, result.Error
+	// Combine both errors so neither is lost (fixes #100)
+	if err := errors.Join(result.Error, statusErr); err != nil {
+		// Determine requeue behavior based on error type (fixes #96)
+		switch {
+		case flokoaerrors.IsPermanent(err):
+			// Permanent errors should not be requeued
+			logger.Error(err, "Permanent reconciliation error, will not requeue")
+			return ctrl.Result{}, nil
+		case flokoaerrors.IsDependency(err):
+			// Dependency errors: requeue after a fixed interval
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		default:
+			// Transient/unknown errors: let controller-runtime backoff handle it
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil

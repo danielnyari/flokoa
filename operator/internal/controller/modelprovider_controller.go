@@ -92,8 +92,11 @@ func (r *ModelProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		modelProvider.Status.Provider = ""
 		modelProvider.Status.ObservedGeneration = modelProvider.Generation
 
-		if err := r.Status().Update(ctx, &modelProvider); err != nil {
-			return ctrl.Result{}, err
+		desiredStatus := modelProvider.Status.DeepCopy()
+		if updateErr := updateStatusWithRetry(ctx, r.Client, &modelProvider, func() {
+			modelProvider.Status = *desiredStatus
+		}); updateErr != nil {
+			return ctrl.Result{}, updateErr
 		}
 		return ctrl.Result{}, nil
 	}
@@ -118,7 +121,10 @@ func (r *ModelProviderReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		Message:            "ModelProvider is ready",
 	})
 
-	if err := r.Status().Update(ctx, &modelProvider); err != nil {
+	desiredStatus := modelProvider.Status.DeepCopy()
+	if err := updateStatusWithRetry(ctx, r.Client, &modelProvider, func() {
+		modelProvider.Status = *desiredStatus
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

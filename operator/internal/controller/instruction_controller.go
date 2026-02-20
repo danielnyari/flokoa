@@ -99,7 +99,9 @@ func (r *InstructionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile ConfigMap")
 		r.setCondition(instruction, ConditionTypeInstructionStored, metav1.ConditionFalse, ReasonInstructionStoreFailed, err.Error())
-		if statusErr := r.Status().Update(ctx, instruction); statusErr != nil {
+		if statusErr := updateStatusWithRetry(ctx, r.Client, instruction, func() {
+			r.setCondition(instruction, ConditionTypeInstructionStored, metav1.ConditionFalse, ReasonInstructionStoreFailed, err.Error())
+		}); statusErr != nil {
 			logger.Error(statusErr, "Failed to update Instruction status after ConfigMap reconciliation failure")
 		}
 		return ctrl.Result{}, err
@@ -110,7 +112,10 @@ func (r *InstructionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	instruction.Status.ConfigMapName = configMapName
 	instruction.Status.ObservedGeneration = instruction.Generation
 
-	if err := r.Status().Update(ctx, instruction); err != nil {
+	desiredStatus := instruction.Status.DeepCopy()
+	if err := updateStatusWithRetry(ctx, r.Client, instruction, func() {
+		instruction.Status = *desiredStatus
+	}); err != nil {
 		logger.Error(err, "Failed to update Instruction status")
 		return ctrl.Result{}, err
 	}

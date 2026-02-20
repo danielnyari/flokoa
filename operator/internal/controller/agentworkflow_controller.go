@@ -62,6 +62,12 @@ const (
 
 	// Requeue interval for monitoring running workflows
 	workflowPollInterval = 15 * time.Second
+
+	// defaultWorkflowTimeout is used when spec.timeout is not set (fixes #101)
+	defaultWorkflowTimeout = 1 * time.Hour
+
+	// Reason for timeout
+	ReasonWorkflowTimeout = "WorkflowTimeout"
 )
 
 // AgentWorkflowReconciler reconciles a AgentWorkflow object
@@ -169,7 +175,10 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 	// Set phase to Compiling
 	awf.Status.Phase = agentv1alpha1.WorkflowPhaseCompiling
 	awf.Status.ObservedGeneration = awf.Generation
-	if err := r.Status().Update(ctx, awf); err != nil {
+	if err := updateStatusWithRetry(ctx, r.Client, awf, func() {
+		awf.Status.Phase = agentv1alpha1.WorkflowPhaseCompiling
+		awf.Status.ObservedGeneration = awf.Generation
+	}); err != nil {
 		span.RecordError(err)
 		return ctrl.Result{}, err
 	}
@@ -181,7 +190,11 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
 			ReasonCompileFailed, fmt.Sprintf("Failed to resolve dependencies: %v", err))
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+		awf.Status.ObservedGeneration = awf.Generation
+		desiredStatus := awf.Status.DeepCopy()
+		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
+			awf.Status = *desiredStatus
+		}); statusErr != nil {
 			logger.Error(statusErr, "Failed to update AgentWorkflow status after dependency resolution failure")
 		}
 		span.RecordError(err)
@@ -196,7 +209,11 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,
 			ReasonCompileFailed, err.Error())
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+		awf.Status.ObservedGeneration = awf.Generation
+		desiredStatus := awf.Status.DeepCopy()
+		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
+			awf.Status = *desiredStatus
+		}); statusErr != nil {
 			logger.Error(statusErr, "Failed to update AgentWorkflow status after compilation failure")
 		}
 		span.RecordError(err)
@@ -219,7 +236,11 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 		r.setCondition(awf, ConditionTypeWorkflowSubmitted, metav1.ConditionFalse,
 			ReasonSubmitFailed, err.Error())
 		awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-		if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+		awf.Status.ObservedGeneration = awf.Generation
+		desiredStatus := awf.Status.DeepCopy()
+		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
+			awf.Status = *desiredStatus
+		}); statusErr != nil {
 			logger.Error(statusErr, "Failed to update AgentWorkflow status after Argo Workflow creation failure")
 		}
 		return ctrl.Result{}, err
@@ -233,7 +254,10 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 	now := metav1.Now()
 	awf.Status.StartTime = &now
 
-	if err := r.Status().Update(ctx, awf); err != nil {
+	desiredStatus := awf.Status.DeepCopy()
+	if err := updateStatusWithRetry(ctx, r.Client, awf, func() {
+		awf.Status = *desiredStatus
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -244,6 +268,30 @@ func (r *AgentWorkflowReconciler) compileAndSubmit(ctx context.Context, awf *age
 // monitorArgoWorkflow checks the status of the submitted Argo Workflow and updates the AgentWorkflow status.
 func (r *AgentWorkflowReconciler) monitorArgoWorkflow(ctx context.Context, awf *agentv1alpha1.AgentWorkflow) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+
+	// Always reflect the current generation in status (fixes #102)
+	awf.Status.ObservedGeneration = awf.Generation
+
+	// Check for workflow timeout (fixes #101)
+	timeout := defaultWorkflowTimeout
+	if awf.Spec.Timeout != nil {
+		timeout = awf.Spec.Timeout.Duration
+	}
+	if awf.Status.StartTime != nil && time.Since(awf.Status.StartTime.Time) > timeout {
+		logger.Info("Workflow timed out", "timeout", timeout, "startTime", awf.Status.StartTime.Time)
+		awf.Status.Phase = agentv1alpha1.WorkflowPhaseFailed
+		now := metav1.Now()
+		awf.Status.CompletionTime = &now
+		r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
+			ReasonWorkflowTimeout, fmt.Sprintf("Workflow timed out after %v", timeout))
+		desiredStatus := awf.Status.DeepCopy()
+		if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
+			awf.Status = *desiredStatus
+		}); statusErr != nil {
+			logger.Error(statusErr, "Failed to update AgentWorkflow status after timeout")
+		}
+		return ctrl.Result{}, nil
+	}
 
 	argoWf := &wfv1.Workflow{}
 	err := r.Get(ctx, client.ObjectKey{
@@ -256,7 +304,10 @@ func (r *AgentWorkflowReconciler) monitorArgoWorkflow(ctx context.Context, awf *
 			r.setCondition(awf, ConditionTypeWorkflowReady, metav1.ConditionFalse,
 				ReasonWorkflowError, "Argo Workflow not found")
 			awf.Status.Phase = agentv1alpha1.WorkflowPhaseError
-			if statusErr := r.Status().Update(ctx, awf); statusErr != nil {
+			desiredStatus := awf.Status.DeepCopy()
+			if statusErr := updateStatusWithRetry(ctx, r.Client, awf, func() {
+				awf.Status = *desiredStatus
+			}); statusErr != nil {
 				logger.Error(statusErr, "Failed to update AgentWorkflow status after Argo Workflow not found")
 			}
 			return ctrl.Result{}, nil
@@ -303,7 +354,10 @@ func (r *AgentWorkflowReconciler) monitorArgoWorkflow(ctx context.Context, awf *
 	// Update task statuses from Argo node statuses
 	awf.Status.TaskStatuses = r.extractTaskStatuses(argoWf)
 
-	if err := r.Status().Update(ctx, awf); err != nil {
+	desiredStatus := awf.Status.DeepCopy()
+	if err := updateStatusWithRetry(ctx, r.Client, awf, func() {
+		awf.Status = *desiredStatus
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 

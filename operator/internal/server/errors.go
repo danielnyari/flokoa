@@ -1,16 +1,22 @@
 package server
 
 import (
+	"context"
+
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // mapKubernetesError converts Kubernetes API errors to appropriate gRPC status codes.
-func mapKubernetesError(err error, resourceKind string) error {
+// Sensitive error details are logged server-side and not exposed to clients (fixes #104).
+func mapKubernetesError(ctx context.Context, err error, resourceKind string) error {
 	if err == nil {
 		return nil
 	}
+
+	logger := logr.FromContextOrDiscard(ctx)
 
 	switch {
 	case apierrors.IsNotFound(err):
@@ -18,18 +24,23 @@ func mapKubernetesError(err error, resourceKind string) error {
 	case apierrors.IsAlreadyExists(err):
 		return status.Errorf(codes.AlreadyExists, "%s already exists", resourceKind)
 	case apierrors.IsConflict(err):
-		return status.Errorf(codes.Aborted, "conflict: %s has been modified, please retry", resourceKind)
+		return status.Errorf(codes.Aborted, "%s has been modified, please retry", resourceKind)
 	case apierrors.IsInvalid(err):
 		return status.Errorf(codes.InvalidArgument, "invalid %s: %s", resourceKind, err.Error())
 	case apierrors.IsForbidden(err):
-		return status.Errorf(codes.PermissionDenied, "forbidden: %s", err.Error())
+		logger.Error(err, "Forbidden access to Kubernetes resource", "resource", resourceKind)
+		return status.Errorf(codes.PermissionDenied, "insufficient permissions for %s", resourceKind)
 	case apierrors.IsUnauthorized(err):
-		return status.Errorf(codes.Unauthenticated, "unauthorized: %s", err.Error())
+		logger.Error(err, "Unauthorized access to Kubernetes resource", "resource", resourceKind)
+		return status.Errorf(codes.Unauthenticated, "authentication required")
 	case apierrors.IsServiceUnavailable(err):
-		return status.Errorf(codes.Unavailable, "service unavailable: %s", err.Error())
+		logger.Error(err, "Kubernetes service unavailable", "resource", resourceKind)
+		return status.Errorf(codes.Unavailable, "service temporarily unavailable")
 	case apierrors.IsTooManyRequests(err):
-		return status.Errorf(codes.ResourceExhausted, "too many requests: %s", err.Error())
+		logger.Error(err, "Kubernetes rate limited", "resource", resourceKind)
+		return status.Errorf(codes.ResourceExhausted, "too many requests, please retry later")
 	default:
-		return status.Errorf(codes.Internal, "internal error: %s", err.Error())
+		logger.Error(err, "Internal Kubernetes API error", "resource", resourceKind)
+		return status.Errorf(codes.Internal, "internal server error")
 	}
 }

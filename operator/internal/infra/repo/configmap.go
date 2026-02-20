@@ -38,6 +38,15 @@ func (r *ConfigMapRepoImpl) EnsureConfigMap(ctx context.Context, desired *corev1
 
 	existing.Data = desired.Data
 	existing.Labels = desired.Labels
+	// Merge annotations: preserve existing, add/update from desired (fixes #105)
+	if desired.Annotations != nil {
+		if existing.Annotations == nil {
+			existing.Annotations = make(map[string]string, len(desired.Annotations))
+		}
+		for k, v := range desired.Annotations {
+			existing.Annotations[k] = v
+		}
+	}
 	if err := r.Client.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update ConfigMap %s: %w", desired.Name, err)
 	}

@@ -11,6 +11,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/internal/domain/hash"
+	flokoaerrors "github.com/danielnyari/flokoa/internal/errors"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
 )
 
@@ -78,14 +79,14 @@ func (t *ToolReconciler) Reconcile(ctx context.Context, agent *agentv1alpha1.Age
 
 			agentTool, err := t.agentTools.GetAgentTool(ctx, types.NamespacedName{Name: tool.ToolRef.Name, Namespace: namespace})
 			if err != nil {
-				return nil, fmt.Errorf("failed to get referenced AgentTool %s/%s: %w", namespace, tool.ToolRef.Name, err)
+				return nil, flokoaerrors.NewDependency(fmt.Errorf("failed to get referenced AgentTool %s/%s: %w", namespace, tool.ToolRef.Name, err))
 			}
 
 			cmName := fmt.Sprintf("%s-spec", agentTool.Name)
 
 			cm, err := t.configMaps.GetConfigMap(ctx, types.NamespacedName{Name: cmName, Namespace: namespace})
 			if err != nil {
-				return nil, fmt.Errorf("ConfigMap for AgentTool %s not found: %w", tool.ToolRef.Name, err)
+				return nil, flokoaerrors.NewDependency(fmt.Errorf("ConfigMap for AgentTool %s not found: %w", tool.ToolRef.Name, err))
 			}
 
 			toolName := tool.Name
