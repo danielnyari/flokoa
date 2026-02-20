@@ -17,11 +17,11 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
-    - jsonPath: .status.argoWorkflowName
-      name: Argo Workflow
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    - jsonPath: .status.workflowTemplateName
+      name: Template
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -62,12 +62,17 @@ spec:
                 items:
                   description: WorkflowParam defines a workflow-level parameter.
                   properties:
+                    description:
+                      description: Description of what this parameter is used for.
+                      type: string
                     name:
                       description: Name of the parameter.
                       minLength: 1
                       type: string
                     value:
-                      description: Value is the parameter value.
+                      description: |-
+                        Value is the default parameter value. If empty, the parameter must be
+                        provided at workflow submission time.
                       type: string
                   required:
                   - name
@@ -171,7 +176,10 @@ spec:
                               type: object
                           type: object
                         message:
-                          description: Message is the A2A message to send to the agent.
+                          description: |-
+                            Message is the full A2A message to send to the agent.
+                            Mutually exclusive with Text. Use this for multi-part messages,
+                            file attachments, or advanced message options.
                           properties:
                             contextId:
                               description: |-
@@ -297,8 +305,14 @@ spec:
                             Namespace is the namespace of the Agent CR.
                             Defaults to the workflow namespace.
                           type: string
+                        text:
+                          description: |-
+                            Text is a shorthand for sending a simple text message.
+                            Mutually exclusive with Message. When set, a single-part
+                            AgentMessage with this text is constructed automatically.
+                            Supports expressions like {{params.topic}} or {{tasks.prev.output}}.
+                          type: string
                       required:
-                      - message
                       - name
                       type: object
                     agentTask:
@@ -869,16 +883,11 @@ spec:
             - tasks
             type: object
           status:
-            description: AgentWorkflowStatus defines the observed state of AgentWorkflow.
+            description: |-
+              AgentWorkflowStatus defines the observed state of AgentWorkflow.
+              The AgentWorkflow compiles to an Argo WorkflowTemplate; individual runs
+              are Argo Workflow CRs created from the template and tracked separately.
             properties:
-              argoWorkflowName:
-                description: ArgoWorkflowName is the name of the generated Argo Workflow
-                  CR.
-                type: string
-              completionTime:
-                description: CompletionTime is when the workflow execution completed.
-                format: date-time
-                type: string
               conditions:
                 description: Conditions represent the latest available observations
                   of the workflow's state.
@@ -942,55 +951,21 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
-              phase:
-                description: Phase represents the current lifecycle phase of the workflow.
-                enum:
-                - Pending
-                - Compiling
-                - Running
-                - Succeeded
-                - Failed
-                - Error
+              ready:
+                description: Ready indicates the WorkflowTemplate has been successfully
+                  compiled and applied.
+                type: boolean
+              specHash:
+                description: |-
+                  SpecHash is a hash of the AgentWorkflow spec, used for drift detection.
+                  If the spec has not changed since last reconcile, recompilation is skipped.
                 type: string
-              startTime:
-                description: StartTime is when the workflow execution started.
-                format: date-time
+              workflowTemplateName:
+                description: WorkflowTemplateName is the name of the generated Argo
+                  WorkflowTemplate CR.
                 type: string
-              taskStatuses:
-                description: TaskStatuses contains the status of individual tasks.
-                items:
-                  description: WorkflowTaskStatus contains the status of an individual
-                    task.
-                  properties:
-                    completionTime:
-                      description: CompletionTime is when the task completed.
-                      format: date-time
-                      type: string
-                    message:
-                      description: Message is a human-readable message about the task
-                        status.
-                      type: string
-                    name:
-                      description: Name is the task name.
-                      type: string
-                    phase:
-                      description: Phase is the current phase of this task.
-                      enum:
-                      - Pending
-                      - Compiling
-                      - Running
-                      - Succeeded
-                      - Failed
-                      - Error
-                      type: string
-                    startTime:
-                      description: StartTime is when the task started.
-                      format: date-time
-                      type: string
-                  required:
-                  - name
-                  type: object
-                type: array
+            required:
+            - ready
             type: object
         type: object
     served: true

@@ -136,29 +136,9 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 				"only one of agent, agentTask, or switch may be specified"))
 		}
 
-		// W4: Validate message parts — exactly one of text/data/file per part
+		// W4+W5: Validate AgentCall (text/message exclusivity + message parts)
 		if task.Agent != nil {
-			for j, part := range task.Agent.Message.Parts {
-				partPath := taskPath.Child("agent", "message", "parts").Index(j)
-				partTypeCount := 0
-				if part.Text != nil {
-					partTypeCount++
-				}
-				if part.Data != nil {
-					partTypeCount++
-				}
-				if part.File != nil {
-					partTypeCount++
-				}
-				if partTypeCount == 0 {
-					allErrs = append(allErrs, field.Required(partPath,
-						"exactly one of text, data, or file must be set"))
-				}
-				if partTypeCount > 1 {
-					allErrs = append(allErrs, field.Forbidden(partPath,
-						"only one of text, data, or file may be set per part"))
-				}
-			}
+			allErrs = append(allErrs, validateAgentCall(taskPath.Child("agent"), task.Agent)...)
 		}
 
 		// W6: Valid dependsOn references
@@ -202,6 +182,48 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 }
 
 // validateExpressions validates all {{...}} expressions in a task.
+// validateAgentCall checks text/message mutual exclusivity and message part types.
+func validateAgentCall(agentPath *field.Path, agent *agentv1alpha1.AgentCall) field.ErrorList {
+	var allErrs field.ErrorList
+
+	hasText := agent.Text != ""
+	hasMessage := agent.Message != nil
+	if !hasText && !hasMessage {
+		allErrs = append(allErrs, field.Required(agentPath,
+			"one of text or message must be specified"))
+	}
+	if hasText && hasMessage {
+		allErrs = append(allErrs, field.Forbidden(agentPath,
+			"text and message are mutually exclusive"))
+	}
+
+	if hasMessage {
+		for j, part := range agent.Message.Parts {
+			partPath := agentPath.Child("message", "parts").Index(j)
+			partTypeCount := 0
+			if part.Text != nil {
+				partTypeCount++
+			}
+			if part.Data != nil {
+				partTypeCount++
+			}
+			if part.File != nil {
+				partTypeCount++
+			}
+			if partTypeCount == 0 {
+				allErrs = append(allErrs, field.Required(partPath,
+					"exactly one of text, data, or file must be set"))
+			}
+			if partTypeCount > 1 {
+				allErrs = append(allErrs, field.Forbidden(partPath,
+					"only one of text, data, or file may be set per part"))
+			}
+		}
+	}
+
+	return allErrs
+}
+
 func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, taskNames map[string]int, paramNames map[string]bool) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -213,13 +235,22 @@ func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, 
 	var fields []exprField
 
 	if task.Agent != nil {
-		// Scan all text parts for expressions
-		for i, part := range task.Agent.Message.Parts {
-			if part.Text != nil {
-				fields = append(fields, exprField{
-					taskPath.Child("agent", "message", "parts").Index(i).Child("text", "text"),
-					part.Text.Text,
-				})
+		// Scan text shorthand for expressions
+		if task.Agent.Text != "" {
+			fields = append(fields, exprField{
+				taskPath.Child("agent", "text"),
+				task.Agent.Text,
+			})
+		}
+		// Scan all message text parts for expressions
+		if task.Agent.Message != nil {
+			for i, part := range task.Agent.Message.Parts {
+				if part.Text != nil {
+					fields = append(fields, exprField{
+						taskPath.Child("agent", "message", "parts").Index(i).Child("text", "text"),
+						part.Text.Text,
+					})
+				}
 			}
 		}
 	}
@@ -251,13 +282,18 @@ func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, 
 
 // isValidExpression checks if an expression body is a valid reference.
 func isValidExpression(expr string, taskNames map[string]int, paramNames map[string]bool) bool {
+	// Argo evaluation expressions ({{=...}}) pass through
+	if strings.HasPrefix(expr, "=") {
+		return true
+	}
+
 	// Check params.<name>
 	if strings.HasPrefix(expr, "params.") {
 		paramName := strings.TrimPrefix(expr, "params.")
 		return paramNames[paramName]
 	}
 
-	// Check tasks.<name>.output[.<field>] or tasks.<name>.taskResponse
+	// Check tasks.<name>.output[.<field>] or tasks.<name>.artifact
 	if strings.HasPrefix(expr, "tasks.") {
 		rest := strings.TrimPrefix(expr, "tasks.")
 		parts := strings.SplitN(rest, ".", 2)
@@ -269,7 +305,7 @@ func isValidExpression(expr string, taskNames map[string]int, paramNames map[str
 			return false
 		}
 		suffix := parts[1]
-		if suffix == "output" || suffix == "taskResponse" || strings.HasPrefix(suffix, "output.") {
+		if suffix == "output" || suffix == "artifact" || strings.HasPrefix(suffix, "output.") {
 			return true
 		}
 		return false

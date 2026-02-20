@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { mockNuxtImport } from '@nuxt/test-utils/runtime'
+import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import CallbackPage from '~/pages/auth/callback.vue'
 
 const handleCallbackMock = vi.fn()

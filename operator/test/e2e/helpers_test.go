@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"time"
 
-	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -308,33 +307,26 @@ func findCondition(conditions []metav1.Condition, condType string) *metav1.Condi
 	return nil
 }
 
-// waitForAgentWorkflowPhase waits for an AgentWorkflow to reach a specific phase.
-// It fast-fails if the workflow reaches a different terminal phase.
-func waitForAgentWorkflowPhase(name, ns string, targetPhase agentv1alpha1.WorkflowPhase, timeout time.Duration) error {
+// waitForAgentWorkflowReady waits for an AgentWorkflow to become ready.
+// It fast-fails if the workflow has a failed Compiled condition.
+func waitForAgentWorkflowReady(name, ns string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
 		awf := &agentv1alpha1.AgentWorkflow{}
 		err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, awf)
 		if err != nil {
 			return false, nil
 		}
-		if awf.Status.Phase == targetPhase {
+		if awf.Status.Ready {
 			return true, nil
 		}
-		// Fast-fail if workflow reached a terminal phase different from target
-		switch awf.Status.Phase {
-		case agentv1alpha1.WorkflowPhaseSucceeded, agentv1alpha1.WorkflowPhaseFailed, agentv1alpha1.WorkflowPhaseError:
-			return false, fmt.Errorf("AgentWorkflow %s/%s reached terminal phase %q instead of %q",
-				ns, name, awf.Status.Phase, targetPhase)
+		// Fast-fail if compilation failed
+		for _, c := range awf.Status.Conditions {
+			if c.Type == "Compiled" && c.Status == metav1.ConditionFalse {
+				return false, fmt.Errorf("AgentWorkflow %s/%s failed compilation: %s", ns, name, c.Message)
+			}
 		}
 		return false, nil
 	})
-}
-
-// getWorkflow retrieves a workflow by name
-func getWorkflow(name, ns string) (*wfv1.Workflow, error) {
-	wf := &wfv1.Workflow{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, wf)
-	return wf, err
 }
 
 // createClusterRoleBinding creates a ClusterRoleBinding

@@ -98,7 +98,7 @@ function getRowItems(row: { original: ModelProvider }) {
 const columns: TableColumn<ModelProvider>[] = [
   {
     id: 'name',
-    accessorFn: (row) => row.metadata.name,
+    accessorFn: row => row.metadata.name,
     header: 'Name',
     cell: ({ row }) => {
       return h('div', undefined, [
@@ -109,7 +109,7 @@ const columns: TableColumn<ModelProvider>[] = [
   },
   {
     id: 'providerType',
-    accessorFn: (row) => getProviderType(row),
+    accessorFn: row => getProviderType(row),
     header: 'Provider',
     filterFn: 'equals',
     cell: ({ row }) => {
@@ -166,7 +166,7 @@ const columns: TableColumn<ModelProvider>[] = [
   },
   {
     id: 'age',
-    accessorFn: (row) => row.metadata.creationTimestamp,
+    accessorFn: row => row.metadata.creationTimestamp,
     header: 'Age',
     cell: ({ row }) => {
       const ts = row.original.metadata.creationTimestamp

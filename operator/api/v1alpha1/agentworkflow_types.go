@@ -22,19 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// WorkflowPhase represents the current phase of the workflow execution.
-// +kubebuilder:validation:Enum=Pending;Compiling;Running;Succeeded;Failed;Error
-type WorkflowPhase string
-
-const (
-	WorkflowPhasePending   WorkflowPhase = "Pending"
-	WorkflowPhaseCompiling WorkflowPhase = "Compiling"
-	WorkflowPhaseRunning   WorkflowPhase = "Running"
-	WorkflowPhaseSucceeded WorkflowPhase = "Succeeded"
-	WorkflowPhaseFailed    WorkflowPhase = "Failed"
-	WorkflowPhaseError     WorkflowPhase = "Error"
-)
-
 // AgentWorkflowSpec defines the desired state of AgentWorkflow.
 type AgentWorkflowSpec struct {
 	// Description is a human-readable description of the workflow.
@@ -67,7 +54,12 @@ type WorkflowParam struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Value is the parameter value.
+	// Description of what this parameter is used for.
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Value is the default parameter value. If empty, the parameter must be
+	// provided at workflow submission time.
 	// +optional
 	Value string `json:"value,omitempty"`
 }
@@ -124,9 +116,18 @@ type AgentCall struct {
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 
-	// Message is the A2A message to send to the agent.
-	// +kubebuilder:validation:Required
-	Message AgentMessage `json:"message"`
+	// Text is a shorthand for sending a simple text message.
+	// Mutually exclusive with Message. When set, a single-part
+	// AgentMessage with this text is constructed automatically.
+	// Supports expressions like {{params.topic}} or {{tasks.prev.output}}.
+	// +optional
+	Text string `json:"text,omitempty"`
+
+	// Message is the full A2A message to send to the agent.
+	// Mutually exclusive with Text. Use this for multi-part messages,
+	// file attachments, or advanced message options.
+	// +optional
+	Message *AgentMessage `json:"message,omitempty"`
 
 	// Config configures how the message is sent to the agent.
 	// +optional
@@ -469,26 +470,20 @@ type WorkflowBackoff struct {
 }
 
 // AgentWorkflowStatus defines the observed state of AgentWorkflow.
+// The AgentWorkflow compiles to an Argo WorkflowTemplate; individual runs
+// are Argo Workflow CRs created from the template and tracked separately.
 type AgentWorkflowStatus struct {
-	// Phase represents the current lifecycle phase of the workflow.
-	// +optional
-	Phase WorkflowPhase `json:"phase,omitempty"`
+	// Ready indicates the WorkflowTemplate has been successfully compiled and applied.
+	Ready bool `json:"ready"`
 
-	// ArgoWorkflowName is the name of the generated Argo Workflow CR.
+	// WorkflowTemplateName is the name of the generated Argo WorkflowTemplate CR.
 	// +optional
-	ArgoWorkflowName string `json:"argoWorkflowName,omitempty"`
+	WorkflowTemplateName string `json:"workflowTemplateName,omitempty"`
 
-	// StartTime is when the workflow execution started.
+	// SpecHash is a hash of the AgentWorkflow spec, used for drift detection.
+	// If the spec has not changed since last reconcile, recompilation is skipped.
 	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-
-	// CompletionTime is when the workflow execution completed.
-	// +optional
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-
-	// TaskStatuses contains the status of individual tasks.
-	// +optional
-	TaskStatuses []WorkflowTaskStatus `json:"taskStatuses,omitempty"`
+	SpecHash string `json:"specHash,omitempty"`
 
 	// Conditions represent the latest available observations of the workflow's state.
 	// +optional
@@ -499,33 +494,11 @@ type AgentWorkflowStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// WorkflowTaskStatus contains the status of an individual task.
-type WorkflowTaskStatus struct {
-	// Name is the task name.
-	Name string `json:"name"`
-
-	// Phase is the current phase of this task.
-	// +optional
-	Phase WorkflowPhase `json:"phase,omitempty"`
-
-	// StartTime is when the task started.
-	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-
-	// CompletionTime is when the task completed.
-	// +optional
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-
-	// Message is a human-readable message about the task status.
-	// +optional
-	Message string `json:"message,omitempty"`
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=awf
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
-// +kubebuilder:printcolumn:name="Argo Workflow",type="string",JSONPath=".status.argoWorkflowName"
+// +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
+// +kubebuilder:printcolumn:name="Template",type="string",JSONPath=".status.workflowTemplateName"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // AgentWorkflow is the Schema for the agentworkflows API.

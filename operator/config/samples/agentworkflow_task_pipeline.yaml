@@ -46,8 +46,5 @@ spec:
     - name: report
       agent:
         name: report-writer-agent
-        message:
-          parts:
-            - text:
-                text: "Generate report from: {{tasks.classify-findings.output}}"
+        text: "Generate report from: {{tasks.classify-findings.output}}"
       dependsOn: [classify-findings]

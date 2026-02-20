@@ -127,71 +127,34 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AgentWorkflow")
 			_, _ = fmt.Fprintf(GinkgoWriter, "Created AgentWorkflow: e2e-petstore-workflow\n")
 
-			By("waiting for AgentWorkflow to complete")
-			err = waitForAgentWorkflowPhase(
-				"e2e-petstore-workflow", namespace,
-				agentv1alpha1.WorkflowPhaseSucceeded, 5*time.Minute)
-			Expect(err).NotTo(HaveOccurred(), "AgentWorkflow did not succeed")
+			By("waiting for AgentWorkflow to be ready (template compiled)")
+			err = waitForAgentWorkflowReady("e2e-petstore-workflow", namespace, 5*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "AgentWorkflow did not become ready")
 
 			By("verifying AgentWorkflow status")
 			awf := &agentv1alpha1.AgentWorkflow{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "e2e-petstore-workflow", Namespace: namespace}, awf)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get AgentWorkflow")
-			_, _ = fmt.Fprintf(GinkgoWriter, "AgentWorkflow phase: %s\n", awf.Status.Phase)
+			_, _ = fmt.Fprintf(GinkgoWriter, "AgentWorkflow ready: %v\n", awf.Status.Ready)
 
-			Expect(awf.Status.ArgoWorkflowName).NotTo(BeEmpty(), "Should have created an Argo Workflow")
-			Expect(awf.Status.StartTime).NotTo(BeNil(), "Should have a start time")
-			Expect(awf.Status.CompletionTime).NotTo(BeNil(), "Should have a completion time")
-			_, _ = fmt.Fprintf(GinkgoWriter, "Argo Workflow name: %s\n", awf.Status.ArgoWorkflowName)
+			Expect(awf.Status.WorkflowTemplateName).NotTo(BeEmpty(), "Should have created a WorkflowTemplate")
+			_, _ = fmt.Fprintf(GinkgoWriter, "WorkflowTemplate name: %s\n", awf.Status.WorkflowTemplateName)
 
 			By("verifying AgentWorkflow conditions")
 			compiled := findCondition(awf.Status.Conditions, "Compiled")
 			Expect(compiled).NotTo(BeNil(), "Should have Compiled condition")
 			Expect(compiled.Status).To(Equal(metav1.ConditionTrue))
 
-			submitted := findCondition(awf.Status.Conditions, "Submitted")
-			Expect(submitted).NotTo(BeNil(), "Should have Submitted condition")
-			Expect(submitted.Status).To(Equal(metav1.ConditionTrue))
-
 			ready := findCondition(awf.Status.Conditions, "Ready")
 			Expect(ready).NotTo(BeNil(), "Should have Ready condition")
 			Expect(ready.Status).To(Equal(metav1.ConditionTrue))
 
-			By("verifying Argo Workflow was created with expected properties")
-			argoWf, err := getWorkflow(awf.Status.ArgoWorkflowName, namespace)
-			Expect(err).NotTo(HaveOccurred(), "Failed to get Argo Workflow")
-			Expect(argoWf.Labels).To(HaveKeyWithValue("agent.flokoa.ai/agentworkflow-name", "e2e-petstore-workflow"))
-			Expect(argoWf.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flokoa-operator"))
-			Expect(argoWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded))
-
-			By("verifying workflow outputs")
-			var taskResponse string
-			for _, node := range argoWf.Status.Nodes {
-				if node.Outputs != nil && len(node.Outputs.Parameters) > 0 {
-					for _, param := range node.Outputs.Parameters {
-						if param.Name == "taskResponse" && param.Value != nil {
-							taskResponse = param.Value.String()
-							_, _ = fmt.Fprintf(GinkgoWriter, "Workflow taskResponse: %s\n", taskResponse)
-						}
-					}
-				}
-			}
-			Expect(taskResponse).NotTo(BeEmpty(), "Should have taskResponse output from agent")
-			Expect(taskResponse).To(ContainSubstring(`"state":"completed"`), "Workflow response should indicate completed state")
-
-			By("verifying AgentWorkflow task statuses")
-			Expect(awf.Status.TaskStatuses).NotTo(BeEmpty(), "Should have task statuses")
-			var foundTaskStatus bool
-			for _, ts := range awf.Status.TaskStatuses {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Task status: name=%s phase=%s\n", ts.Name, ts.Phase)
-				if ts.Name == "list-pets" {
-					foundTaskStatus = true
-					Expect(ts.Phase).To(Equal(agentv1alpha1.WorkflowPhaseSucceeded))
-					Expect(ts.StartTime).NotTo(BeNil())
-					Expect(ts.CompletionTime).NotTo(BeNil())
-				}
-			}
-			Expect(foundTaskStatus).To(BeTrue(), "Should have task status for 'list-pets'")
+			By("verifying Argo WorkflowTemplate was created with expected properties")
+			argoWft := &wfv1.WorkflowTemplate{}
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: awf.Status.WorkflowTemplateName, Namespace: namespace}, argoWft)
+			Expect(err).NotTo(HaveOccurred(), "Failed to get Argo WorkflowTemplate")
+			Expect(argoWft.Labels).To(HaveKeyWithValue("agent.flokoa.ai/agentworkflow-name", "e2e-petstore-workflow"))
+			Expect(argoWft.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flokoa-operator"))
 		})
 
 		AfterAll(func() {
@@ -225,21 +188,31 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			}
 		})
 
-		It("should handle missing agent gracefully", func() {
+		It("should reach Ready state even for workflow targeting non-existent agent", func() {
+			// With the WorkflowTemplate model, compilation succeeds even if the agent doesn't exist.
+			// The actual failure will happen at run time (when a Workflow is submitted from the template).
 			By("creating an AgentWorkflow targeting a non-existent agent")
 			err := applyManifestFile("test/e2e/testdata/argo/agentworkflow-fail.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AgentWorkflow")
 
-			By("waiting for AgentWorkflow to fail")
-			err = waitForAgentWorkflowPhase("e2e-fail-workflow", namespace, agentv1alpha1.WorkflowPhaseFailed, 2*time.Minute)
-			Expect(err).NotTo(HaveOccurred(), "AgentWorkflow should have failed")
+			By("waiting for AgentWorkflow to reach a terminal state")
+			// The template may compile successfully (agent ref is resolved at runtime by the A2A plugin)
+			// or error if model/tool resolution fails. Either is acceptable for this test.
+			var awf agentv1alpha1.AgentWorkflow
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: "e2e-fail-workflow", Namespace: namespace}, &awf)
+				g.Expect(err).NotTo(HaveOccurred())
+				// Terminal: either ready, or has a failed Compiled condition
+				hasTerminal := awf.Status.Ready
+				for _, c := range awf.Status.Conditions {
+					if c.Type == "Compiled" && c.Status == metav1.ConditionFalse {
+						hasTerminal = true
+					}
+				}
+				g.Expect(hasTerminal).To(BeTrue(), "AgentWorkflow should reach a terminal state")
+			}, 2*time.Minute).Should(Succeed())
 
-			By("verifying AgentWorkflow failure status")
-			awf := &agentv1alpha1.AgentWorkflow{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "e2e-fail-workflow", Namespace: namespace}, awf)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(awf.Status.Phase).To(Equal(agentv1alpha1.WorkflowPhaseFailed))
-			Expect(awf.Status.ArgoWorkflowName).NotTo(BeEmpty(), "Should have attempted to create Argo Workflow")
+			_, _ = fmt.Fprintf(GinkgoWriter, "AgentWorkflow ready: %v\n", awf.Status.Ready)
 
 			By("cleaning up failed AgentWorkflow")
 			deleteManifestFile("test/e2e/testdata/argo/agentworkflow-fail.yaml")

@@ -70,7 +70,7 @@ function getRowItems(row: { original: Model }) {
 const columns: TableColumn<Model>[] = [
   {
     id: 'name',
-    accessorFn: (row) => row.metadata.name,
+    accessorFn: row => row.metadata.name,
     header: 'Name',
     cell: ({ row }) => {
       return h('div', undefined, [
@@ -81,7 +81,7 @@ const columns: TableColumn<Model>[] = [
   },
   {
     id: 'model',
-    accessorFn: (row) => row.spec.model,
+    accessorFn: row => row.spec.model,
     header: 'Model ID',
     cell: ({ row }) => {
       return h('span', { class: 'font-mono text-sm' }, row.original.spec.model)
@@ -127,7 +127,7 @@ const columns: TableColumn<Model>[] = [
   },
   {
     id: 'age',
-    accessorFn: (row) => row.metadata.creationTimestamp,
+    accessorFn: row => row.metadata.creationTimestamp,
     header: 'Age',
     cell: ({ row }) => {
       const ts = row.original.metadata.creationTimestamp

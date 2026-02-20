@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// RunPhase represents the current phase of a workflow run.
+enum RunPhase {
+  RUN_PHASE_UNSPECIFIED = 0;
+  RUN_PHASE_PENDING = 1;
+  RUN_PHASE_RUNNING = 2;
+  RUN_PHASE_SUCCEEDED = 3;
+  RUN_PHASE_FAILED = 4;
+  RUN_PHASE_ERROR = 5;
+}
+
+// NodeType represents the type of a workflow run node.
+enum NodeType {
+  NODE_TYPE_UNSPECIFIED = 0;
+  NODE_TYPE_POD = 1;
+  NODE_TYPE_STEPS = 2;
+  NODE_TYPE_DAG = 3;
+  NODE_TYPE_TASK_GROUP = 4;
+  NODE_TYPE_RETRY = 5;
+  NODE_TYPE_SKIPPED = 6;
+  NODE_TYPE_SUSPEND = 7;
+  NODE_TYPE_PLUGIN = 8;
+}
+
+// AgentWorkflowSpec defines the desired state of AgentWorkflow.
+message AgentWorkflowSpec {
+  string description = 1;
+  repeated WorkflowParam params = 2;
+  repeated WorkflowTask tasks = 3;
+  string timeout = 4;
+}
+
+// WorkflowParam defines a workflow-level parameter.
+message WorkflowParam {
+  string name = 1;
+  string description = 2;
+  string value = 3;
+}
+
+// WorkflowTask defines a single task in the workflow.
+message WorkflowTask {
+  string name = 1;
+  string type = 2;  // "agent", "agentTask", or "switch"
+  repeated string depends_on = 3;
+  string condition = 4;
+}
+
+// AgentWorkflowStatus defines the observed state of AgentWorkflow.
+message AgentWorkflowStatus {
+  bool ready = 1;
+  string workflow_template_name = 2;
+  string spec_hash = 3;
+  repeated Condition conditions = 4;
+  int64 observed_generation = 5;
+}
+
+// AgentWorkflow is the top-level AgentWorkflow resource.
+message AgentWorkflow {
+  ObjectMeta metadata = 1;
+  AgentWorkflowSpec spec = 2;
+  AgentWorkflowStatus status = 3;
+}
+
+// AgentWorkflowList contains a list of AgentWorkflow resources.
+message AgentWorkflowList {
+  ListMeta metadata = 1;
+  repeated AgentWorkflow items = 2;
+}
+
+// WorkflowRun represents a single execution of an AgentWorkflow (an Argo Workflow).
+message WorkflowRun {
+  ObjectMeta metadata = 1;
+  RunPhase phase = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  string progress = 5;  // e.g. "2/5"
+  string message = 6;
+  repeated WorkflowRunNode nodes = 7;
+  map<string, string> parameters = 8;
+}
+
+// WorkflowRunList contains a list of WorkflowRun resources.
+message WorkflowRunList {
+  ListMeta metadata = 1;
+  repeated WorkflowRun items = 2;
+}
+
+// WorkflowRunNode represents a single node in a workflow run.
+message WorkflowRunNode {
+  string id = 1;
+  string name = 2;
+  string display_name = 3;
+  NodeType type = 4;
+  RunPhase phase = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp finished_at = 7;
+  string message = 8;
+  string template_name = 9;
+  repeated string children = 10;
+  map<string, string> inputs = 11;
+  map<string, string> outputs = 12;
+}

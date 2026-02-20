@@ -44,8 +44,8 @@ const (
 	// agentTaskOutputParam is the output parameter name for task results.
 	agentTaskOutputParam = "result"
 
-	// agentTaskResponseParam is the output parameter name for the full A2A response.
-	agentTaskResponseParam = "taskResponse"
+	// agentTaskArtifactParam is the output parameter name for the A2A Artifact JSON.
+	agentTaskArtifactParam = "artifact"
 
 	// taskConfigEnvVar is the environment variable name for the serialized task config.
 	taskConfigEnvVar = "FLOKOA_TASK_CONFIG"
@@ -65,20 +65,19 @@ const (
 // expressionRe matches {{...}} template expressions in DSL fields.
 var expressionRe = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
-// compileToArgoWorkflow translates an AgentWorkflow DSL into an Argo Workflow CR.
+// compileToArgoWorkflowTemplate translates an AgentWorkflow DSL into an Argo WorkflowTemplate CR.
+// Each AgentWorkflow compiles to a single WorkflowTemplate; individual runs are Argo Workflow CRs
+// created from the template via WorkflowTemplateRef.
 // resolvedTasks contains pre-resolved Model/Tool ConfigMap info for agentTask tasks, keyed by task name.
-// traceparent is the W3C traceparent header value from the controller's current span; it is
-// injected as a workflow-level parameter so that every task (container or plugin) can
-// propagate the distributed trace.
-func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo, traceparent string) (*wfv1.Workflow, error) {
-	wf := &wfv1.Workflow{
+func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo) (*wfv1.WorkflowTemplate, error) {
+	wft := &wfv1.WorkflowTemplate{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
-			Kind:       "Workflow",
+			Kind:       "WorkflowTemplate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: awf.Name + "-",
-			Namespace:    awf.Namespace,
+			Name:      awf.Name,
+			Namespace: awf.Namespace,
 			Labels: map[string]string{
 				"agent.flokoa.ai/agentworkflow-name": awf.Name,
 				"app.kubernetes.io/managed-by":       "flokoa-operator",
@@ -91,9 +90,9 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 
 	// Inject traceparent as a workflow-level parameter so it is available to
 	// all templates via {{workflow.parameters._flokoa_traceparent}}.
-	wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, wfv1.Parameter{
-		Name:  traceparentWorkflowParam,
-		Value: wfv1.AnyStringPtr(traceparent),
+	// The actual value is provided at run submission time.
+	wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, wfv1.Parameter{
+		Name: traceparentWorkflowParam,
 	})
 
 	// Workflow-level parameters
@@ -103,14 +102,17 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 				Name:  p.Name,
 				Value: wfv1.AnyStringPtr(p.Value),
 			}
-			wf.Spec.Arguments.Parameters = append(wf.Spec.Arguments.Parameters, param)
+			if p.Description != "" {
+				param.Description = wfv1.AnyStringPtr(p.Description)
+			}
+			wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, param)
 		}
 	}
 
 	// Workflow-level timeout
 	if awf.Spec.Timeout != nil {
 		seconds := int64(awf.Spec.Timeout.Seconds())
-		wf.Spec.ActiveDeadlineSeconds = &seconds
+		wft.Spec.ActiveDeadlineSeconds = &seconds
 	}
 
 	// Build templates and DAG tasks
@@ -173,9 +175,9 @@ func compileToArgoWorkflow(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[s
 	}
 	templates = append([]wfv1.Template{dagTemplate}, templates...)
 
-	wf.Spec.Templates = templates
+	wft.Spec.Templates = templates
 
-	return wf, nil
+	return wft, nil
 }
 
 // buildTemplate creates an Argo template for a single workflow task.
@@ -229,9 +231,23 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 
 // buildAgentTemplate populates a template with the A2A plugin spec for calling a deployed agent.
 func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) error {
+	// Normalize: expand text shorthand to a full AgentMessage if needed.
+	msg := agent.Message
+	if msg == nil {
+		msg = &agentv1alpha1.AgentMessage{
+			Parts: []agentv1alpha1.MessagePart{
+				{Text: &agentv1alpha1.TextPart{Text: agent.Text}},
+			},
+		}
+	}
+
+	// Translate DSL expressions (e.g. {{params.x}}, {{tasks.y.output}}) in message
+	// text parts to Argo workflow syntax before embedding in the plugin spec.
+	translatedMessage := translateAgentMessage(msg)
+
 	a2aSpec := map[string]interface{}{
 		"agent":   agent.Name,
-		"message": buildPluginMessage(&agent.Message),
+		"message": buildPluginMessage(translatedMessage),
 		// Argo substitutes the workflow parameter reference at runtime so the
 		// A2A plugin receives the actual traceparent value.
 		"traceparent": fmt.Sprintf("{{workflow.parameters.%s}}", traceparentWorkflowParam),
@@ -259,7 +275,7 @@ func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) err
 	tmpl.Outputs = wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
 			{Name: agentTaskOutputParam},
-			{Name: agentTaskResponseParam},
+			{Name: agentTaskArtifactParam},
 		},
 	}
 
@@ -570,13 +586,19 @@ func buildAgentTaskTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.AgentT
 		tmpl.Volumes = volumes
 	}
 
-	// Output parameter: the container writes its result to /tmp/output
+	// Output parameters: the container writes plain text to /tmp/result and A2A Artifact JSON to /tmp/artifact
 	tmpl.Outputs = wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
 			{
 				Name: agentTaskOutputParam,
 				ValueFrom: &wfv1.ValueFrom{
-					Path: "/tmp/output",
+					Path: "/tmp/result",
+				},
+			},
+			{
+				Name: agentTaskArtifactParam,
+				ValueFrom: &wfv1.ValueFrom{
+					Path: "/tmp/artifact",
 				},
 			},
 		},
@@ -647,6 +669,11 @@ func translateConditionExpr(expr string) string {
 
 // translateExpression converts a single DSL expression body to its Argo equivalent.
 func translateExpression(expr string) string {
+	// Pass through Argo evaluation expressions ({{=...}})
+	if strings.HasPrefix(expr, "=") {
+		return "{{" + expr + "}}"
+	}
+
 	// params.<name> -> {{workflow.parameters.<name>}}
 	if strings.HasPrefix(expr, "params.") {
 		paramName := strings.TrimPrefix(expr, "params.")
@@ -654,8 +681,8 @@ func translateExpression(expr string) string {
 	}
 
 	// tasks.<name>.output -> {{tasks.<name>.outputs.parameters.result}}
-	// tasks.<name>.output.<field> -> {{tasks.<name>.outputs.parameters.result}}
-	// tasks.<name>.taskResponse -> {{tasks.<name>.outputs.parameters.taskResponse}}
+	// tasks.<name>.output.<field> -> Argo expression with fromJson for field access
+	// tasks.<name>.artifact -> {{tasks.<name>.outputs.parameters.artifact}}
 	if strings.HasPrefix(expr, "tasks.") {
 		rest := strings.TrimPrefix(expr, "tasks.")
 		parts := strings.SplitN(rest, ".", 2)
@@ -665,15 +692,42 @@ func translateExpression(expr string) string {
 		taskName := parts[0]
 		suffix := parts[1]
 
-		if suffix == "taskResponse" {
-			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskResponseParam)
+		// tasks.<name>.artifact → raw artifact parameter
+		if suffix == "artifact" {
+			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskArtifactParam)
 		}
-		// output or output.<field> both map to the result parameter
-		return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskOutputParam)
+
+		// tasks.<name>.output → plain text result parameter
+		if suffix == "output" {
+			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskOutputParam)
+		}
+
+		// tasks.<name>.output.<path> → Argo expression with fromJson for field access
+		if strings.HasPrefix(suffix, "output.") {
+			fieldPath := strings.TrimPrefix(suffix, "output.")
+			return fmt.Sprintf(
+				"{{=sprig.fromJson(tasks['%s'].outputs.parameters['%s']).parts[0].data.%s}}",
+				taskName, agentTaskArtifactParam, fieldPath,
+			)
+		}
+
+		return "{{" + expr + "}}"
 	}
 
 	// Unknown expression - pass through
 	return "{{" + expr + "}}"
+}
+
+// translateAgentMessage returns a copy of the message with DSL expressions
+// in text parts translated to Argo workflow syntax.
+func translateAgentMessage(msg *agentv1alpha1.AgentMessage) *agentv1alpha1.AgentMessage {
+	translated := msg.DeepCopy()
+	for i := range translated.Parts {
+		if translated.Parts[i].Text != nil {
+			translated.Parts[i].Text.Text = TranslateExpressions(translated.Parts[i].Text.Text)
+		}
+	}
+	return translated
 }
 
 // TranslateExpressions replaces all DSL expressions in a string with Argo-compatible references.

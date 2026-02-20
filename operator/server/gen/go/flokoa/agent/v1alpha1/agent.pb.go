@@ -4584,7 +4584,7 @@ var File_flokoa_agent_v1alpha1_agent_proto protoreflect.FileDescriptor
 
 const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
-	"!flokoa/agent/v1alpha1/agent.proto\x12\x15flokoa.agent.v1alpha1\x1a\"flokoa/agent/v1alpha1/common.proto\x1a%flokoa/agent/v1alpha1/agenttool.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8e\x02\n" +
+	"!flokoa/agent/v1alpha1/agent.proto\x12\x15flokoa.agent.v1alpha1\x1a%flokoa/agent/v1alpha1/agenttool.proto\x1a\"flokoa/agent/v1alpha1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8e\x02\n" +
 	"\n" +
 	"AgentSkill\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -5171,8 +5171,8 @@ func file_flokoa_agent_v1alpha1_agent_proto_init() {
 	if File_flokoa_agent_v1alpha1_agent_proto != nil {
 		return
 	}
-	file_flokoa_agent_v1alpha1_common_proto_init()
 	file_flokoa_agent_v1alpha1_agenttool_proto_init()
+	file_flokoa_agent_v1alpha1_common_proto_init()
 	file_flokoa_agent_v1alpha1_agent_proto_msgTypes[8].OneofWrappers = []any{
 		(*ToolEntry_Inline)(nil),
 		(*ToolEntry_ToolRef)(nil),

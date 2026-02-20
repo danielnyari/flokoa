@@ -80,6 +80,53 @@ func TestConfigMapData_DifferentDataDifferentHash(t *testing.T) {
 	}
 }
 
+func TestJSONStruct(t *testing.T) {
+	type sample struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+
+	t.Run("deterministic across calls", func(t *testing.T) {
+		s := sample{Name: "test", Count: 42}
+		h1, err := JSONStruct(s)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		h2, err := JSONStruct(s)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if h1 != h2 {
+			t.Errorf("not deterministic: %q != %q", h1, h2)
+		}
+	})
+
+	t.Run("16-character hex string", func(t *testing.T) {
+		h, err := JSONStruct(sample{Name: "a", Count: 1})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(h) != 16 {
+			t.Errorf("length = %d, want 16", len(h))
+		}
+	})
+
+	t.Run("different structs produce different hashes", func(t *testing.T) {
+		h1, _ := JSONStruct(sample{Name: "a", Count: 1})
+		h2, _ := JSONStruct(sample{Name: "b", Count: 2})
+		if h1 == h2 {
+			t.Errorf("different structs should produce different hashes: both = %q", h1)
+		}
+	})
+
+	t.Run("error on unmarshalable value", func(t *testing.T) {
+		_, err := JSONStruct(func() {})
+		if err == nil {
+			t.Error("expected error for unmarshalable value, got nil")
+		}
+	})
+}
+
 func TestSecretVersions(t *testing.T) {
 	tests := []struct {
 		name     string

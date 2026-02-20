@@ -9,10 +9,16 @@ Usage:
     python -m flokoa_managed_task
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
+from typing import Any
 
+from a2a.types import Artifact
 from flokoa.config import TaskAgentConfig
+
 from flokoa_managed_task.bootstrap import execute_task, execute_task_from_config
 from flokoa_managed_task.config import (
     load_instruction,
@@ -21,9 +27,30 @@ from flokoa_managed_task.config import (
     load_task_config,
 )
 
-OUTPUT_PATH = "/tmp/output"  # noqa: S108
+RESULT_PATH = "/tmp/result"  # noqa: S108
+ARTIFACT_PATH = "/tmp/artifact"  # noqa: S108
 
 logger = logging.getLogger(__name__)
+
+
+def extract_text(artifact: Artifact) -> str:
+    """Extract plain text content from an A2A Artifact.
+
+    Returns the text from the first TextPart, or a JSON representation
+    of the first DataPart's data if no text parts are found.
+    """
+    for part in artifact.parts:
+        if hasattr(part, "text") and isinstance(part.text, str):
+            return part.text
+    for part in artifact.parts:
+        if hasattr(part, "data"):
+            return json.dumps(part.data, default=_json_default)
+    return ""
+
+
+def _json_default(obj: Any) -> Any:
+    """Fallback serializer for non-standard types."""
+    return str(obj)
 
 
 def main() -> None:
@@ -41,9 +68,7 @@ def main() -> None:
             logger.info("Using unified AgentConfig (task_type=%s)", agent_config.root.task_type.value)
             artifact = execute_task_from_config(agent_config)
         else:
-            raise TypeError(
-                f"Expected TaskAgentConfig in unified config, got {type(agent_config.root).__name__}"
-            )
+            raise TypeError(f"Expected TaskAgentConfig in unified config, got {type(agent_config.root).__name__}")
     else:
         # Legacy path
         task_config = load_task_config()
@@ -63,11 +88,17 @@ def main() -> None:
 
         artifact = execute_task(task_config, model_config, instruction)
 
-    output = artifact.model_dump_json()
-    logger.info("Task completed, writing A2A artifact (%d chars)", len(output))
+    # Write A2A Artifact JSON (for field-level access via {{tasks.x.output.field}})
+    artifact_json = artifact.model_dump_json()
+    logger.info("Task completed, writing A2A artifact (%d chars)", len(artifact_json))
+    with open(ARTIFACT_PATH, "w") as f:
+        f.write(artifact_json)
 
-    with open(OUTPUT_PATH, "w") as f:
-        f.write(output)
+    # Write plain text result (for {{tasks.x.output}})
+    result_text = extract_text(artifact)
+    logger.info("Writing plain text result (%d chars)", len(result_text))
+    with open(RESULT_PATH, "w") as f:
+        f.write(result_text)
 
 
 if __name__ == "__main__":

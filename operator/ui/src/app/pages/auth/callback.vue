@@ -38,7 +38,9 @@ onMounted(async () => {
       <template v-else>
         <div class="flex flex-col items-center gap-4 p-6">
           <UIcon name="i-lucide-loader-2" class="size-8 text-primary animate-spin" />
-          <p class="text-sm text-muted">Completing sign in...</p>
+          <p class="text-sm text-muted">
+            Completing sign in...
+          </p>
         </div>
       </template>
     </UPageCard>

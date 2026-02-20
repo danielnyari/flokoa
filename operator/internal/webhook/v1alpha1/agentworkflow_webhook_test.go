@@ -24,9 +24,9 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// textMessage creates an AgentMessage with a single text part.
-func textMessage(text string) agentv1alpha1.AgentMessage {
-	return agentv1alpha1.AgentMessage{
+// textMessage creates an AgentMessage pointer with a single text part.
+func textMessage(text string) *agentv1alpha1.AgentMessage {
+	return &agentv1alpha1.AgentMessage{
 		Parts: []agentv1alpha1.MessagePart{
 			{Text: &agentv1alpha1.TextPart{Text: text}},
 		},
@@ -243,7 +243,7 @@ func TestValidateAgentWorkflow_MultiPartMessage(t *testing.T) {
 					Name: "analyze",
 					Agent: &agentv1alpha1.AgentCall{
 						Name: "analyzer",
-						Message: agentv1alpha1.AgentMessage{
+						Message: &agentv1alpha1.AgentMessage{
 							Parts: []agentv1alpha1.MessagePart{
 								{Text: &agentv1alpha1.TextPart{Text: "Analyze: {{params.query}}"}},
 								{File: &agentv1alpha1.FilePart{
@@ -272,7 +272,7 @@ func TestValidateAgentWorkflow_InvalidPartNoType(t *testing.T) {
 					Name: "task1",
 					Agent: &agentv1alpha1.AgentCall{
 						Name: "agent1",
-						Message: agentv1alpha1.AgentMessage{
+						Message: &agentv1alpha1.AgentMessage{
 							Parts: []agentv1alpha1.MessagePart{
 								{}, // empty part — no text, data, or file
 							},
@@ -297,7 +297,7 @@ func TestValidateAgentWorkflow_InvalidPartMultipleTypes(t *testing.T) {
 					Name: "task1",
 					Agent: &agentv1alpha1.AgentCall{
 						Name: "agent1",
-						Message: agentv1alpha1.AgentMessage{
+						Message: &agentv1alpha1.AgentMessage{
 							Parts: []agentv1alpha1.MessagePart{
 								{
 									Text: &agentv1alpha1.TextPart{Text: "hello"},
@@ -325,7 +325,7 @@ func TestValidateAgentWorkflow_ExpressionInMultiPart(t *testing.T) {
 					Name: "task1",
 					Agent: &agentv1alpha1.AgentCall{
 						Name: "agent1",
-						Message: agentv1alpha1.AgentMessage{
+						Message: &agentv1alpha1.AgentMessage{
 							Parts: []agentv1alpha1.MessagePart{
 								{Text: &agentv1alpha1.TextPart{Text: "Valid plain text"}},
 								{Text: &agentv1alpha1.TextPart{Text: "Bad ref: {{tasks.nonexistent.output}}"}},
@@ -339,5 +339,168 @@ func TestValidateAgentWorkflow_ExpressionInMultiPart(t *testing.T) {
 
 	if err := ValidateAgentWorkflow(wf); err == nil {
 		t.Error("expected error for invalid expression in second text part")
+	}
+}
+
+func TestValidateAgentWorkflow_AgentTextShorthand(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "topic", Value: "AI"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "agent1",
+						Text: "Research {{params.topic}}",
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid workflow with text shorthand, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_AgentTextAndMessage(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Agent: &agentv1alpha1.AgentCall{
+						Name:    "agent1",
+						Text:    "hello",
+						Message: textMessage("hello"),
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for agent with both text and message")
+	}
+}
+
+func TestValidateAgentWorkflow_AgentNeitherTextNorMessage(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "agent1",
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for agent with neither text nor message")
+	}
+}
+
+func TestValidateAgentWorkflow_TextShorthandExpressionValidation(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "agent1",
+						Text: "Data: {{tasks.nonexistent.output}}",
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for invalid expression in text shorthand")
+	}
+}
+
+func TestValidateAgentWorkflow_ArtifactReference(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "research", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "find things"}},
+				{
+					Name:      "use-artifact",
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent2", Text: "Process: {{tasks.research.artifact}}"},
+					DependsOn: []string{"research"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("unexpected error for artifact reference: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_TaskResponseRejected(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "call", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "hello"}},
+				{
+					Name:      "use-response",
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent2", Text: "Response: {{tasks.call.taskResponse}}"},
+					DependsOn: []string{"call"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for taskResponse reference (removed)")
+	}
+}
+
+func TestValidateAgentWorkflow_FieldAccessExpression(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "research", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "find things"}},
+				{
+					Name:      "extract",
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent2", Text: "Field: {{tasks.research.output.findings.summary}}"},
+					DependsOn: []string{"research"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("unexpected error for field access expression: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_ArgoExpressionPassthrough(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:  "task1",
+					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "{{=sprig.fromJson(tasks['x'].outputs.parameters['artifact']).parts[0].data.field}}"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("unexpected error for Argo expression passthrough: %v", err)
 	}
 }
