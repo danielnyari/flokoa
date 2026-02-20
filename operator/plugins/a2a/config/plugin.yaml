@@ -11,6 +11,11 @@ spec:
       image: ghcr.io/danielnyari/flokoa-a2a-plugin:latest
       command:
         - /a2a-plugin
+      env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
       ports:
         - containerPort: 4355
           protocol: TCP

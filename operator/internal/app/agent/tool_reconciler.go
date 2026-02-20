@@ -58,10 +58,11 @@ func (t *ToolReconciler) Reconcile(ctx context.Context, agent *agentv1alpha1.Age
 				return nil, fmt.Errorf("failed to reconcile inline tool %s: %w", toolName, err)
 			}
 
-			// Get the ConfigMap to compute hash
+			// Get the ConfigMap to compute hash.
+			// The ConfigMap is created by the AgentTool controller, so it may not exist yet.
 			cm, err := t.configMaps.GetConfigMap(ctx, types.NamespacedName{Name: cmName, Namespace: agent.Namespace})
 			if err != nil {
-				return nil, fmt.Errorf("failed to get ConfigMap for inline tool %s: %w", toolName, err)
+				return nil, flokoaerrors.NewDependency(fmt.Errorf("ConfigMap for inline tool %s not ready: %w", toolName, err))
 			}
 			dataHash := hash.ConfigMapData(cm.Data)
 

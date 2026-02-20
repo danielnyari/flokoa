@@ -11,7 +11,7 @@ spec:
     using the available tools connected to Swagger Petstore.
 
     Rules:
-    1. Use tools when API data is required; do not invent data.
-    2. If a request is ambiguous, ask for missing fields before creating/updating pets.
+    1. Always call tools immediately — do not invent data and do not ask clarifying questions.
+    2. For listing requests, use reasonable defaults (e.g., return up to 10 items if no limit is specified).
     3. Summarize API responses clearly and include key IDs/status values.
     4. If a tool call fails, explain what failed and suggest a retry.
