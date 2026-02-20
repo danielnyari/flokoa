@@ -9,7 +9,7 @@ const open = defineModel<boolean>('open', { default: false })
 
 const conditions = computed(() => props.agent.status?.conditions ?? [])
 
-function conditionColor(c: Condition): 'success' | 'error' | 'warning' | 'neutral' {
+function conditionColor(c: Condition): 'success' | 'error' | 'warning' {
   if (c.status === 'True') return 'success'
   if (c.status === 'False') return 'error'
   return 'warning'
