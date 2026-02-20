@@ -26,6 +26,9 @@ subjects:
   - kind: ServiceAccount
     name: flokoa-controller
     namespace: flokoa-system
+  - kind: ServiceAccount
+    name: a2a-executor-plugin
+    namespace: flokoa-system
 roleRef:
   kind: ClusterRole
   name: argo-agent-reader
@@ -64,6 +67,9 @@ subjects:
   - kind: ServiceAccount
     name: argo-workflow
     namespace: flokoa-system
+  - kind: ServiceAccount
+    name: a2a-executor-plugin
+    namespace: flokoa-system
 roleRef:
   kind: ClusterRole
   name: argo-agent-reader
@@ -83,6 +89,10 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["workflowtasksets/status", "workflows/status"]
     verbs: ["get", "update", "patch"]
+  # A2A plugin state ConfigMap persistence
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -93,6 +103,9 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: argo-workflow
+    namespace: flokoa-system
+  - kind: ServiceAccount
+    name: a2a-executor-plugin
     namespace: flokoa-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io

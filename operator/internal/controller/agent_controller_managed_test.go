@@ -466,5 +466,196 @@ var _ = Describe("Agent Controller - Managed Runtime", func() {
 			Expect(k8sClient.Delete(ctx, model)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, modelProvider)).To(Succeed())
 		})
+
+		It("should add template-config-hash annotation to pod template", func() {
+			By("Creating prerequisite Model and ModelProvider")
+			modelProvider := &agentv1alpha1.ModelProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("hash-provider-%s", agentName),
+					Namespace: agentNamespace,
+				},
+				Spec: agentv1alpha1.ModelProviderSpec{
+					Anthropic: &agentv1alpha1.AnthropicProviderSpec{},
+					APIKeySecretRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: fmt.Sprintf("hash-secret-%s", agentName),
+						},
+						Key: "api-key",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, modelProvider)).To(Succeed())
+			modelProvider.Status.Ready = true
+			modelProvider.Status.Provider = agentv1alpha1.ProviderTypeAnthropic
+			Expect(k8sClient.Status().Update(ctx, modelProvider)).To(Succeed())
+
+			model := &agentv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("hash-model-%s", agentName),
+					Namespace: agentNamespace,
+				},
+				Spec: agentv1alpha1.ModelSpec{
+					Model: "claude-sonnet-4-20250514",
+					ProviderRef: agentv1alpha1.ProviderRef{
+						Name: modelProvider.Name,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, model)).To(Succeed())
+			model.Status.Ready = true
+			model.Status.ResolvedProvider = &agentv1alpha1.ResolvedProviderInfo{
+				Provider:  agentv1alpha1.ProviderTypeAnthropic,
+				Namespace: agentNamespace,
+				Name:      modelProvider.Name,
+			}
+			Expect(k8sClient.Status().Update(ctx, model)).To(Succeed())
+
+			By("Creating a managed Agent with outputSchema")
+			agent := &agentv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: agentNamespace,
+				},
+				Spec: agentv1alpha1.AgentSpec{
+					CardOverride: minimalCard(),
+					Instruction: &agentv1alpha1.InstructionEntry{
+						Template: "You are a test agent.",
+					},
+					Runtime: agentv1alpha1.RuntimeSpec{
+						Type: agentv1alpha1.RuntimeTypeTemplate,
+						Template: &agentv1alpha1.TemplatedRuntimeSpec{
+							Config: &agentv1alpha1.TemplatedAgentConfig{
+								OutputSchema: &agentv1alpha1.StructuredIOSchema{
+									Name:        "original-schema",
+									Description: "Original schema",
+									JSONSchema:  &apiextensionsv1.JSON{Raw: []byte(`{"type":"object"}`)},
+								},
+							},
+						},
+					},
+					Model: &agentv1alpha1.AgentModelRef{
+						Name: model.Name,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+			By("Reconciling the Agent")
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
+
+			By("Verifying pod template has template-config-hash annotation")
+			deployment := getDeployment(ctx, typeNamespacedName)
+			Expect(deployment.Spec.Template.Annotations).To(HaveKey("flokoa.ai/template-config-hash"))
+			initialHash := deployment.Spec.Template.Annotations["flokoa.ai/template-config-hash"]
+			Expect(initialHash).NotTo(BeEmpty())
+
+			By("Cleanup model and provider")
+			Expect(k8sClient.Delete(ctx, model)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, modelProvider)).To(Succeed())
+		})
+
+		It("should update template-config-hash when outputSchema changes", func() {
+			By("Creating prerequisite Model and ModelProvider")
+			modelProvider := &agentv1alpha1.ModelProvider{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("update-provider-%s", agentName),
+					Namespace: agentNamespace,
+				},
+				Spec: agentv1alpha1.ModelProviderSpec{
+					Anthropic: &agentv1alpha1.AnthropicProviderSpec{},
+					APIKeySecretRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: fmt.Sprintf("update-secret-%s", agentName),
+						},
+						Key: "api-key",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, modelProvider)).To(Succeed())
+			modelProvider.Status.Ready = true
+			modelProvider.Status.Provider = agentv1alpha1.ProviderTypeAnthropic
+			Expect(k8sClient.Status().Update(ctx, modelProvider)).To(Succeed())
+
+			model := &agentv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("update-model-%s", agentName),
+					Namespace: agentNamespace,
+				},
+				Spec: agentv1alpha1.ModelSpec{
+					Model: "claude-sonnet-4-20250514",
+					ProviderRef: agentv1alpha1.ProviderRef{
+						Name: modelProvider.Name,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, model)).To(Succeed())
+			model.Status.Ready = true
+			model.Status.ResolvedProvider = &agentv1alpha1.ResolvedProviderInfo{
+				Provider:  agentv1alpha1.ProviderTypeAnthropic,
+				Namespace: agentNamespace,
+				Name:      modelProvider.Name,
+			}
+			Expect(k8sClient.Status().Update(ctx, model)).To(Succeed())
+
+			By("Creating a managed Agent with outputSchema")
+			agent := &agentv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: agentNamespace,
+				},
+				Spec: agentv1alpha1.AgentSpec{
+					CardOverride: minimalCard(),
+					Instruction: &agentv1alpha1.InstructionEntry{
+						Template: "You are a test agent.",
+					},
+					Runtime: agentv1alpha1.RuntimeSpec{
+						Type: agentv1alpha1.RuntimeTypeTemplate,
+						Template: &agentv1alpha1.TemplatedRuntimeSpec{
+							Config: &agentv1alpha1.TemplatedAgentConfig{
+								OutputSchema: &agentv1alpha1.StructuredIOSchema{
+									Name:        "original-schema",
+									Description: "Original schema",
+									JSONSchema:  &apiextensionsv1.JSON{Raw: []byte(`{"type":"object"}`)},
+								},
+							},
+						},
+					},
+					Model: &agentv1alpha1.AgentModelRef{
+						Name: model.Name,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+			By("Reconciling the Agent")
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, typeNamespacedName)
+
+			By("Getting the initial template-config-hash")
+			deployment := getDeployment(ctx, typeNamespacedName)
+			initialHash := deployment.Spec.Template.Annotations["flokoa.ai/template-config-hash"]
+			Expect(initialHash).NotTo(BeEmpty())
+
+			By("Updating the Agent's outputSchema")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, agent)).To(Succeed())
+			agent.Spec.Runtime.Template.Config.OutputSchema.JSONSchema = &apiextensionsv1.JSON{Raw: []byte(`{"type":"object","properties":{"dogs":{"type":"array"}}}`)}
+			agent.Spec.Runtime.Template.Config.OutputSchema.Description = "Updated schema"
+			Expect(k8sClient.Update(ctx, agent)).To(Succeed())
+
+			By("Reconciling the Agent again")
+			_, err := reconcileOnce(ctx, r, typeNamespacedName)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the template-config-hash has changed")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, deployment)).To(Succeed())
+			updatedHash := deployment.Spec.Template.Annotations["flokoa.ai/template-config-hash"]
+			Expect(updatedHash).NotTo(BeEmpty())
+			Expect(updatedHash).NotTo(Equal(initialHash))
+
+			By("Cleanup model and provider")
+			Expect(k8sClient.Delete(ctx, model)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, modelProvider)).To(Succeed())
+		})
 	})
 })

@@ -235,27 +235,40 @@ var _ = Describe("Agent Controller - Tools", func() {
 				}
 				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-				By("Reconciling the Agent")
 				r := newAgentReconciler()
-				reconcileAgent(ctx, r, typeNamespacedName)
+
+				By("Reconciling until all inline AgentTool CRs are created, simulating ConfigMap creation between iterations")
+				// The tool reconciler processes tools sequentially. Each inline tool
+				// creates an AgentTool CR, then immediately tries to read its ConfigMap
+				// (created by the AgentTool controller). Without that ConfigMap the
+				// reconciler returns a DependencyError, so the next tool is never reached.
+				// We simulate the AgentTool controller by creating the ConfigMap after
+				// each reconcile for any newly-created AgentTool CRs.
+				createdCMs := map[string]bool{}
+				for range 10 {
+					_, _ = reconcileOnce(ctx, r, typeNamespacedName)
+					for _, at := range listAgentToolsByAgent(agentName) {
+						cmName := at.Name + "-spec"
+						if createdCMs[cmName] {
+							continue
+						}
+						cm := &corev1.ConfigMap{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      cmName,
+								Namespace: agentNamespace,
+							},
+							Data: map[string]string{"spec.json": `{"type":"openapi"}`},
+						}
+						Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+						createdCMs[cmName] = true
+					}
+				}
 
 				By("Verifying both AgentTool CRs were created")
 				agentTools := listAgentToolsByAgent(agentName)
 				Expect(agentTools).To(HaveLen(2))
 
-				By("Simulating AgentTool controller creating ConfigMaps")
-				for _, at := range agentTools {
-					cm := &corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      at.Name + "-spec",
-							Namespace: agentNamespace,
-						},
-						Data: map[string]string{"spec.json": `{"type":"openapi"}`},
-					}
-					Expect(k8sClient.Create(ctx, cm)).To(Succeed())
-				}
-
-				By("Reconciling again to create deployment with volume mounts")
+				By("Final reconcile to create deployment with volume mounts")
 				_, err := reconcileOnce(ctx, r, typeNamespacedName)
 				Expect(err).NotTo(HaveOccurred())
 

@@ -14,5 +14,8 @@ spec:
         a2a:
           agent: petstore-agent
           namespace: flokoa-system
-          message: "List a few available pets and include their IDs and names."
+          message:
+            parts:
+              - text:
+                  text: "List a few available pets and include their IDs and names."
           timeout: 2m

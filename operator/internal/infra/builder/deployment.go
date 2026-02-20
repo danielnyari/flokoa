@@ -49,15 +49,16 @@ type ModelMount struct {
 
 // DeploymentParams captures all inputs needed to build an agent Deployment.
 type DeploymentParams struct {
-	AgentName         string
-	AgentNamespace    string
-	Labels            map[string]string
-	Runtime           agentv1alpha1.RuntimeSpec
-	ToolMounts        []ToolMount
-	AgentCardCM       string
-	ModelInfo         *ModelMount
-	TemplateCMName    string
-	InstructionCMName string
+	AgentName          string
+	AgentNamespace     string
+	Labels             map[string]string
+	Runtime            agentv1alpha1.RuntimeSpec
+	ToolMounts         []ToolMount
+	AgentCardCM        string
+	ModelInfo          *ModelMount
+	TemplateCMName     string
+	TemplateCMDataHash string
+	InstructionCMName  string
 }
 
 // BuildDeployment constructs a Kubernetes Deployment for an agent.
@@ -193,6 +194,13 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 			podAnnotations = map[string]string{}
 		}
 		podAnnotations["flokoa.ai/model-secrets-hash"] = params.ModelInfo.SecretRefsHash
+	}
+
+	if params.TemplateCMDataHash != "" {
+		if podAnnotations == nil {
+			podAnnotations = map[string]string{}
+		}
+		podAnnotations["flokoa.ai/template-config-hash"] = params.TemplateCMDataHash
 	}
 
 	// Default to restricted PSS-compliant pod security context if none provided

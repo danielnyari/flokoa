@@ -12,6 +12,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	agentdomain "github.com/danielnyari/flokoa/internal/domain/agent"
+	"github.com/danielnyari/flokoa/internal/domain/hash"
 	modeldomain "github.com/danielnyari/flokoa/internal/domain/model"
 	"github.com/danielnyari/flokoa/internal/infra/builder"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
@@ -148,8 +149,9 @@ func (s *Service) Reconcile(ctx context.Context, agent *agentv1alpha1.Agent) Rec
 
 	// Reconcile template config ConfigMap (if managed runtime)
 	var templateConfigMapName string
+	var templateConfigHash string
 	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeTemplate {
-		templateConfigMapName, err = s.reconcileTemplateConfigMap(ctx, agent)
+		templateConfigMapName, templateConfigHash, err = s.reconcileTemplateConfigMap(ctx, agent)
 		if err != nil {
 			logger.Error(err, "Failed to reconcile managed config ConfigMap")
 			agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
@@ -158,7 +160,7 @@ func (s *Service) Reconcile(ctx context.Context, agent *agentv1alpha1.Agent) Rec
 	}
 
 	// Build and ensure Deployment
-	deployment, err := s.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, templateConfigMapName, instructionConfigMapName)
+	deployment, err := s.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, templateConfigMapName, templateConfigHash, instructionConfigMapName)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
@@ -190,7 +192,7 @@ func (s *Service) Reconcile(ctx context.Context, agent *agentv1alpha1.Agent) Rec
 	return ReconcileResult{}
 }
 
-func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, templateConfigMapName string, instructionConfigMapName string) (*appsv1.Deployment, error) {
+func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, templateConfigMapName string, templateConfigHash string, instructionConfigMapName string) (*appsv1.Deployment, error) {
 	toolMounts := make([]builder.ToolMount, 0, len(toolConfigMaps))
 	for _, t := range toolConfigMaps {
 		toolMounts = append(toolMounts, builder.ToolMount{
@@ -211,15 +213,16 @@ func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.
 	}
 
 	desired := builder.BuildDeployment(builder.DeploymentParams{
-		AgentName:         agent.Name,
-		AgentNamespace:    agent.Namespace,
-		Labels:            agentdomain.Labels(agent),
-		Runtime:           agent.Spec.Runtime,
-		ToolMounts:        toolMounts,
-		AgentCardCM:       agentCardConfigMap,
-		ModelInfo:         modelMount,
-		TemplateCMName:    templateConfigMapName,
-		InstructionCMName: instructionConfigMapName,
+		AgentName:          agent.Name,
+		AgentNamespace:     agent.Namespace,
+		Labels:             agentdomain.Labels(agent),
+		Runtime:            agent.Spec.Runtime,
+		ToolMounts:         toolMounts,
+		AgentCardCM:        agentCardConfigMap,
+		ModelInfo:          modelMount,
+		TemplateCMName:     templateConfigMapName,
+		TemplateCMDataHash: templateConfigHash,
+		InstructionCMName:  instructionConfigMapName,
 	})
 
 	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
@@ -276,12 +279,13 @@ func (s *Service) reconcileAgentCardConfigMap(ctx context.Context, agent *agentv
 }
 
 // reconcileTemplateConfigMap creates or updates the ConfigMap containing the managed agent configuration.
-func (s *Service) reconcileTemplateConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
+// It returns the ConfigMap name and a hash of its data for change detection.
+func (s *Service) reconcileTemplateConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, string, error) {
 	configMapName := fmt.Sprintf("%s-template-config", agent.Name)
 
 	managed := agent.Spec.Runtime.Template
 	if managed == nil {
-		return "", fmt.Errorf("managed spec is nil")
+		return "", "", fmt.Errorf("managed spec is nil")
 	}
 
 	config := templateConfig{}
@@ -293,7 +297,11 @@ func (s *Service) reconcileTemplateConfigMap(ctx context.Context, agent *agentv1
 
 	configJSON, err := json.Marshal(config)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal managed config to JSON: %w", err)
+		return "", "", fmt.Errorf("failed to marshal managed config to JSON: %w", err)
+	}
+
+	cmData := map[string]string{
+		builder.TemplateConfigConfigMapKey: string(configJSON),
 	}
 
 	desired := &corev1.ConfigMap{
@@ -307,20 +315,18 @@ func (s *Service) reconcileTemplateConfigMap(ctx context.Context, agent *agentv1
 				"flokoa.ai/agent":              agent.Name,
 			},
 		},
-		Data: map[string]string{
-			builder.TemplateConfigConfigMapKey: string(configJSON),
-		},
+		Data: cmData,
 	}
 
 	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
-		return "", fmt.Errorf("failed to set owner reference: %w", err)
+		return "", "", fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	if err := s.deps.ConfigMaps.EnsureConfigMap(ctx, desired); err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return configMapName, nil
+	return configMapName, hash.ConfigMapData(cmData), nil
 }
 
 // templateConfig represents the configuration written to the managed agent's ConfigMap.
