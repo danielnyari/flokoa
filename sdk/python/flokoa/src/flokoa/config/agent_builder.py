@@ -18,10 +18,11 @@ import inspect
 import logging
 from typing import Any, ClassVar, final
 
-from flokoa.config.agent_config import BaseAgentConfig, LlmAgentConfig, TaskAgentConfig
-from flokoa.config.code_ref import CodeRef, resolve_code_ref, resolve_qualified_name
-from flokoa.config.tool_config import ToolConfig, ToolRefType
 from flokoa_types import IntegrationType
+
+from flokoa.config.agent_config import BaseAgentConfig, LlmAgentConfig, TaskAgentConfig
+from flokoa.config.code_ref import resolve_code_ref
+from flokoa.config.tool_config import ToolConfig, ToolRefType
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +75,9 @@ class BaseAgentBuilder:
         if config.tools:
             kwargs["tools"] = cls._resolve_tools(config.tools)
         if config.before_agent_callbacks:
-            kwargs["before_agent_callbacks"] = [
-                resolve_code_ref(ref) for ref in config.before_agent_callbacks
-            ]
+            kwargs["before_agent_callbacks"] = [resolve_code_ref(ref) for ref in config.before_agent_callbacks]
         if config.after_agent_callbacks:
-            kwargs["after_agent_callbacks"] = [
-                resolve_code_ref(ref) for ref in config.after_agent_callbacks
-            ]
+            kwargs["after_agent_callbacks"] = [resolve_code_ref(ref) for ref in config.after_agent_callbacks]
         return kwargs
 
     @classmethod
@@ -119,9 +116,7 @@ class BaseAgentBuilder:
         Raises:
             NotImplementedError: If not overridden by a subclass.
         """
-        raise NotImplementedError(
-            f"{cls.__name__}._build() must be implemented by subclasses."
-        )
+        raise NotImplementedError(f"{cls.__name__}._build() must be implemented by subclasses.")
 
     @classmethod
     def _resolve_tools(cls, tool_configs: list[ToolConfig]) -> list[Any]:
@@ -152,9 +147,7 @@ class BaseAgentBuilder:
                 case ToolRefType.FUNCTION:
                     tool = resolve_code_ref(tc.code)  # type: ignore[arg-type]
                     if not callable(tool):
-                        raise TypeError(
-                            f"Function tool '{tc.name}' resolved to a non-callable: {type(tool)}"
-                        )
+                        raise TypeError(f"Function tool '{tc.name}' resolved to a non-callable: {type(tool)}")
                     resolved.append(tool)
 
                 case ToolRefType.CLASS:
@@ -166,7 +159,11 @@ class BaseAgentBuilder:
                     resolved.append(tool)
 
                 case _:
-                    logger.warning("Unknown tool type '%s' for tool '%s', skipping.", tc.type, tc.name)
+                    logger.warning(
+                        "Unknown tool type '%s' for tool '%s', skipping.",
+                        tc.type,
+                        tc.name,
+                    )
 
         return resolved
 
@@ -182,20 +179,17 @@ class PydanticAIAgentBuilder(BaseAgentBuilder):
         config: BaseAgentConfig,
         kwargs: dict[str, Any],
     ) -> dict[str, Any]:
-        assert isinstance(config, LlmAgentConfig)
+        if not isinstance(config, LlmAgentConfig):
+            raise TypeError(f"Expected LlmAgentConfig, got {type(config)}")
 
         if config.output_schema is not None:
             kwargs["output_schema"] = config.output_schema
         if config.input_schema is not None:
             kwargs["input_schema"] = config.input_schema
         if config.before_model_callbacks:
-            kwargs["before_model_callbacks"] = [
-                resolve_code_ref(ref) for ref in config.before_model_callbacks
-            ]
+            kwargs["before_model_callbacks"] = [resolve_code_ref(ref) for ref in config.before_model_callbacks]
         if config.after_model_callbacks:
-            kwargs["after_model_callbacks"] = [
-                resolve_code_ref(ref) for ref in config.after_model_callbacks
-            ]
+            kwargs["after_model_callbacks"] = [resolve_code_ref(ref) for ref in config.after_model_callbacks]
         if config.agent_class:
             kwargs["agent_class"] = resolve_code_ref(config.agent_class)
 
@@ -205,7 +199,8 @@ class PydanticAIAgentBuilder(BaseAgentBuilder):
     def _build(cls, config: BaseAgentConfig, kwargs: dict[str, Any]) -> Any:
         from pydantic_ai import Agent, StructuredDict
 
-        assert isinstance(config, LlmAgentConfig)
+        if not isinstance(config, LlmAgentConfig):
+            raise TypeError(f"Expected LlmAgentConfig, got {type(config)}")
 
         agent_kwargs: dict[str, Any] = {}
 
@@ -223,9 +218,7 @@ class PydanticAIAgentBuilder(BaseAgentBuilder):
         if custom_cls is not None:
             if inspect.isclass(custom_cls) and issubclass(custom_cls, Agent):
                 return custom_cls(**agent_kwargs)
-            raise TypeError(
-                f"agent_class must be a subclass of pydantic_ai.Agent, got: {custom_cls}"
-            )
+            raise TypeError(f"agent_class must be a subclass of pydantic_ai.Agent, got: {custom_cls}")
 
         return Agent(**agent_kwargs)
 
@@ -241,16 +234,13 @@ class GoogleADKAgentBuilder(BaseAgentBuilder):
         config: BaseAgentConfig,
         kwargs: dict[str, Any],
     ) -> dict[str, Any]:
-        assert isinstance(config, LlmAgentConfig)
+        if not isinstance(config, LlmAgentConfig):
+            raise TypeError(f"Expected LlmAgentConfig, got {type(config)}")
 
         if config.before_model_callbacks:
-            kwargs["before_model_callbacks"] = [
-                resolve_code_ref(ref) for ref in config.before_model_callbacks
-            ]
+            kwargs["before_model_callbacks"] = [resolve_code_ref(ref) for ref in config.before_model_callbacks]
         if config.after_model_callbacks:
-            kwargs["after_model_callbacks"] = [
-                resolve_code_ref(ref) for ref in config.after_model_callbacks
-            ]
+            kwargs["after_model_callbacks"] = [resolve_code_ref(ref) for ref in config.after_model_callbacks]
         if config.agent_class:
             kwargs["agent_class"] = resolve_code_ref(config.agent_class)
 
@@ -260,7 +250,8 @@ class GoogleADKAgentBuilder(BaseAgentBuilder):
     def _build(cls, config: BaseAgentConfig, kwargs: dict[str, Any]) -> Any:
         from google.adk.agents import LlmAgent
 
-        assert isinstance(config, LlmAgentConfig)
+        if not isinstance(config, LlmAgentConfig):
+            raise TypeError(f"Expected LlmAgentConfig, got {type(config)}")
 
         agent_kwargs: dict[str, Any] = {
             "name": kwargs["name"],
@@ -274,9 +265,7 @@ class GoogleADKAgentBuilder(BaseAgentBuilder):
         if custom_cls is not None:
             if inspect.isclass(custom_cls) and issubclass(custom_cls, LlmAgent):
                 return custom_cls(**agent_kwargs)
-            raise TypeError(
-                f"agent_class must be a subclass of google.adk.agents.LlmAgent, got: {custom_cls}"
-            )
+            raise TypeError(f"agent_class must be a subclass of google.adk.agents.LlmAgent, got: {custom_cls}")
 
         return LlmAgent(**agent_kwargs)
 
@@ -297,7 +286,8 @@ class MarvinTaskBuilder(BaseAgentBuilder):
         config: BaseAgentConfig,
         kwargs: dict[str, Any],
     ) -> dict[str, Any]:
-        assert isinstance(config, TaskAgentConfig)
+        if not isinstance(config, TaskAgentConfig):
+            raise TypeError(f"Expected TaskAgentConfig, got {type(config)}")
 
         kwargs["task_type"] = config.task_type
         if config.result_type is not None:
