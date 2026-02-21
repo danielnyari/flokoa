@@ -18,6 +18,7 @@ package controller
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,10 +127,11 @@ func containerOutputs() wfv1.Outputs {
 
 // pluginOutputs returns the standard output parameters for A2A plugin templates.
 func pluginOutputs() wfv1.Outputs {
+	supplied := &wfv1.ValueFrom{Supplied: &wfv1.SuppliedValueFrom{}}
 	return wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
-			{Name: "result"},
-			{Name: "artifact"},
+			{Name: "result", ValueFrom: supplied},
+			{Name: "artifact", ValueFrom: supplied},
 		},
 	}
 }
@@ -158,6 +160,9 @@ func pluginTextMessage(text string) map[string]interface{} {
 	}
 }
 
+// int32Ptr returns a pointer to an int32 value.
+func int32Ptr(v int32) *int32 { return &v }
+
 // parseQuantity parses a resource quantity string.
 func parseQuantity(s string) *resource.Quantity {
 	q := resource.MustParse(s)
@@ -165,8 +170,18 @@ func parseQuantity(s string) *resource.Quantity {
 }
 
 // assertDiff fails the test if want and got differ.
+// The _flokoa_traceparent default is randomly generated (UUID7-based), so we
+// verify it is non-empty and then copy it from got→want before the full diff.
 func assertDiff(t *testing.T, want, got *wfv1.WorkflowTemplate) {
 	t.Helper()
+	if len(got.Spec.Arguments.Parameters) > 0 && got.Spec.Arguments.Parameters[0].Name == traceparentWorkflowParam {
+		if got.Spec.Arguments.Parameters[0].Default == nil || string(*got.Spec.Arguments.Parameters[0].Default) == "" {
+			t.Error("expected _flokoa_traceparent parameter to have a non-empty default")
+		}
+		if len(want.Spec.Arguments.Parameters) > 0 && want.Spec.Arguments.Parameters[0].Name == traceparentWorkflowParam {
+			want.Spec.Arguments.Parameters[0].Default = got.Spec.Arguments.Parameters[0].Default
+		}
+	}
 	if diff := cmp.Diff(want, got, cmpOpts...); diff != "" {
 		t.Errorf("compiled workflow template mismatch (-want +got):\n%s", diff)
 	}
@@ -1966,4 +1981,1047 @@ func TestCompile_MixedTaskTypes(t *testing.T) {
 	)
 
 	assertDiff(t, want, got)
+}
+
+// --- Switch task tests ---
+
+func TestCompile_SwitchBasic(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "switch-basic", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "classifier", Text: "classify this"}},
+				{
+					Name: "route",
+					Switch: []agentv1alpha1.SwitchCase{
+						{Condition: "{{tasks.classify.output}} == positive", Then: "celebrate"},
+						{Condition: "{{tasks.classify.output}} == negative", Then: "escalate"},
+					},
+					DependsOn: []string{"classify"},
+				},
+				{Name: "celebrate", Agent: &agentv1alpha1.AgentCall{Name: "happy-agent", Text: "celebrate!"}},
+				{Name: "escalate", Agent: &agentv1alpha1.AgentCall{Name: "support-agent", Text: "help needed"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("switch-basic", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "classify", Template: "classify"},
+				wfv1.DAGTask{Name: "route", Template: "route", Dependencies: []string{"classify"}},
+				// Switch-generated DAG tasks
+				wfv1.DAGTask{Name: "route-celebrate", Template: "celebrate", Dependencies: []string{"route"}, When: "{{tasks.classify.outputs.parameters.result}} == positive"},
+				wfv1.DAGTask{Name: "route-escalate", Template: "escalate", Dependencies: []string{"route"}, When: "{{tasks.classify.outputs.parameters.result}} == negative"},
+				wfv1.DAGTask{Name: "celebrate", Template: "celebrate"},
+				wfv1.DAGTask{Name: "escalate", Template: "escalate"},
+			),
+			{Name: "classify", Plugin: makePlugin(map[string]interface{}{"agent": "classifier", "message": pluginTextMessage("classify this"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{
+				Name: "route",
+				Script: &wfv1.ScriptTemplate{
+					Container: corev1.Container{
+						Image:   "alpine:3.18",
+						Command: []string{"echo"},
+						Args:    []string{"switch-router"},
+					},
+				},
+			},
+			{Name: "celebrate", Plugin: makePlugin(map[string]interface{}{"agent": "happy-agent", "message": pluginTextMessage("celebrate!"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "escalate", Plugin: makePlugin(map[string]interface{}{"agent": "support-agent", "message": pluginTextMessage("help needed"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_SwitchWithDefault(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "switch-default", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "check", Agent: &agentv1alpha1.AgentCall{Name: "checker", Text: "check priority"}},
+				{
+					Name: "route",
+					Switch: []agentv1alpha1.SwitchCase{
+						{Condition: "{{tasks.check.output}} == urgent", Then: "fast-track"},
+						{Default: "normal-queue"},
+					},
+					DependsOn: []string{"check"},
+				},
+				{Name: "fast-track", Agent: &agentv1alpha1.AgentCall{Name: "priority-agent", Text: "handle urgently"}},
+				{Name: "normal-queue", Agent: &agentv1alpha1.AgentCall{Name: "queue-agent", Text: "queue it"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("switch-default", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "check", Template: "check"},
+				wfv1.DAGTask{Name: "route", Template: "route", Dependencies: []string{"check"}},
+				wfv1.DAGTask{Name: "route-fast-track", Template: "fast-track", Dependencies: []string{"route"}, When: "{{tasks.check.outputs.parameters.result}} == urgent"},
+				wfv1.DAGTask{Name: "route-normal-queue", Template: "normal-queue", Dependencies: []string{"route"}},
+				wfv1.DAGTask{Name: "fast-track", Template: "fast-track"},
+				wfv1.DAGTask{Name: "normal-queue", Template: "normal-queue"},
+			),
+			{Name: "check", Plugin: makePlugin(map[string]interface{}{"agent": "checker", "message": pluginTextMessage("check priority"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{
+				Name: "route",
+				Script: &wfv1.ScriptTemplate{
+					Container: corev1.Container{
+						Image:   "alpine:3.18",
+						Command: []string{"echo"},
+						Args:    []string{"switch-router"},
+					},
+				},
+			},
+			{Name: "fast-track", Plugin: makePlugin(map[string]interface{}{"agent": "priority-agent", "message": pluginTextMessage("handle urgently"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "normal-queue", Plugin: makePlugin(map[string]interface{}{"agent": "queue-agent", "message": pluginTextMessage("queue it"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_SwitchMultipleConditionsAndDefault(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "switch-multi", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "classifier", Text: "classify sentiment"}},
+				{
+					Name: "route",
+					Switch: []agentv1alpha1.SwitchCase{
+						{Condition: "{{tasks.classify.output}} == positive", Then: "celebrate"},
+						{Condition: "{{tasks.classify.output}} == negative", Then: "escalate"},
+						{Condition: "{{tasks.classify.output}} == neutral", Then: "archive"},
+						{Default: "review"},
+					},
+					DependsOn: []string{"classify"},
+				},
+				{Name: "celebrate", Agent: &agentv1alpha1.AgentCall{Name: "agent-a", Text: "a"}},
+				{Name: "escalate", Agent: &agentv1alpha1.AgentCall{Name: "agent-b", Text: "b"}},
+				{Name: "archive", Agent: &agentv1alpha1.AgentCall{Name: "agent-c", Text: "c"}},
+				{Name: "review", Agent: &agentv1alpha1.AgentCall{Name: "agent-d", Text: "d"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	dagTemplate := got.Spec.Templates[0]
+	if dagTemplate.DAG == nil {
+		t.Fatal("expected DAG template")
+	}
+
+	switchTasks := make(map[string]string)
+	for _, dt := range dagTemplate.DAG.Tasks {
+		if len(dt.Dependencies) == 1 && dt.Dependencies[0] == "route" && dt.Name != "route" {
+			switchTasks[dt.Name] = dt.When
+		}
+	}
+
+	if when, ok := switchTasks["route-celebrate"]; !ok {
+		t.Error("missing route-celebrate DAG task")
+	} else if when == "" {
+		t.Error("route-celebrate should have a When expression")
+	}
+	if when, ok := switchTasks["route-escalate"]; !ok {
+		t.Error("missing route-escalate DAG task")
+	} else if when == "" {
+		t.Error("route-escalate should have a When expression")
+	}
+	if when, ok := switchTasks["route-archive"]; !ok {
+		t.Error("missing route-archive DAG task")
+	} else if when == "" {
+		t.Error("route-archive should have a When expression")
+	}
+	if when, ok := switchTasks["route-review"]; !ok {
+		t.Error("missing route-review DAG task")
+	} else if when != "" {
+		t.Errorf("route-review (default) should not have When, got %q", when)
+	}
+	if len(switchTasks) != 4 {
+		t.Errorf("expected 4 switch-generated DAG tasks, got %d", len(switchTasks))
+	}
+}
+
+// --- Agent message advanced features tests ---
+
+func TestCompile_AgentMessageWithDataPart(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "data-part-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "analyze",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "analyzer-agent",
+						Message: &agentv1alpha1.AgentMessage{
+							Parts: []agentv1alpha1.MessagePart{
+								{Text: &agentv1alpha1.TextPart{Text: "Analyze with constraints"}},
+								{Data: &agentv1alpha1.DataPart{
+									Data: apiextensionsv1.JSON{Raw: []byte(`{"budget":500000,"timeline":"6 months"}`)},
+								}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("data-part-test", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "analyze", Template: "analyze"}),
+			{
+				Name: "analyze",
+				Plugin: makePlugin(map[string]interface{}{
+					"agent":       "analyzer-agent",
+					"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
+					"message": map[string]interface{}{
+						"parts": []map[string]interface{}{
+							{"text": map[string]interface{}{"text": "Analyze with constraints"}},
+							{"data": map[string]interface{}{
+								"data": []byte(`{"budget":500000,"timeline":"6 months"}`),
+							}},
+						},
+					},
+				}),
+				Outputs: pluginOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_AgentMessageFullMetadata(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "metadata-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "full-msg",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "my-agent",
+						Message: &agentv1alpha1.AgentMessage{
+							Role: agentv1alpha1.MessageRoleAgent,
+							Parts: []agentv1alpha1.MessagePart{
+								{Text: &agentv1alpha1.TextPart{Text: "continue"}},
+							},
+							ContextID:        "ctx-abc",
+							TaskID:           "task-xyz",
+							ReferenceTaskIDs: []string{"ref-1", "ref-2"},
+							Extensions:       []string{"urn:a2a:ext:streaming"},
+							Metadata: map[string]apiextensionsv1.JSON{
+								"source":   {Raw: []byte(`"workflow"`)},
+								"priority": {Raw: []byte(`1`)},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("metadata-test", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "full-msg", Template: "full-msg"}),
+			{
+				Name: "full-msg",
+				Plugin: makePlugin(map[string]interface{}{
+					"agent":       "my-agent",
+					"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
+					"message": map[string]interface{}{
+						"role": "agent",
+						"parts": []map[string]interface{}{
+							{"text": map[string]interface{}{"text": "continue"}},
+						},
+						"contextId":        "ctx-abc",
+						"taskId":           "task-xyz",
+						"referenceTaskIds": []string{"ref-1", "ref-2"},
+						"extensions":       []string{"urn:a2a:ext:streaming"},
+						"metadata": map[string]interface{}{
+							"source":   "workflow",
+							"priority": float64(1),
+						},
+					},
+				}),
+				Outputs: pluginOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- Agent config tests ---
+
+func TestCompile_AgentConfigHistoryLength(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "config-hl", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "my-agent",
+						Text: "hello",
+						Config: &agentv1alpha1.MessageSendConfig{
+							HistoryLength: int32Ptr(10),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("config-hl", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "task", Template: "task"}),
+			{
+				Name: "task",
+				Plugin: makePlugin(map[string]interface{}{
+					"agent":       "my-agent",
+					"message":     pluginTextMessage("hello"),
+					"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
+					"config": map[string]interface{}{
+						"historyLength": int32(10),
+					},
+				}),
+				Outputs: pluginOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_AgentConfigPushNotification(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "config-push", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "my-agent",
+						Text: "hello",
+						Config: &agentv1alpha1.MessageSendConfig{
+							PushNotificationConfig: &agentv1alpha1.PushNotificationConfig{
+								URL:   "https://hooks.example.com/notify",
+								ID:    "wf-123",
+								Token: "verify-me",
+								Authentication: &agentv1alpha1.PushNotificationAuth{
+									Schemes:     []string{"Bearer"},
+									Credentials: "secret-token",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("config-push", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "task", Template: "task"}),
+			{
+				Name: "task",
+				Plugin: makePlugin(map[string]interface{}{
+					"agent":       "my-agent",
+					"message":     pluginTextMessage("hello"),
+					"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
+					"config": map[string]interface{}{
+						"pushNotificationConfig": map[string]interface{}{
+							"url":   "https://hooks.example.com/notify",
+							"id":    "wf-123",
+							"token": "verify-me",
+							"authentication": map[string]interface{}{
+								"schemes":     []string{"Bearer"},
+								"credentials": "secret-token",
+							},
+						},
+					},
+				}),
+				Outputs: pluginOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_AgentConfigFull(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "config-full", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "my-agent",
+						Text: "hello",
+						Config: &agentv1alpha1.MessageSendConfig{
+							AcceptedOutputModes: []string{"text", "application/json"},
+							Blocking:            boolPtr(true),
+							HistoryLength:       int32Ptr(5),
+							PushNotificationConfig: &agentv1alpha1.PushNotificationConfig{
+								URL:   "https://hooks.example.com/notify",
+								Token: "token123",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("config-full", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "task", Template: "task"}),
+			{
+				Name: "task",
+				Plugin: makePlugin(map[string]interface{}{
+					"agent":       "my-agent",
+					"message":     pluginTextMessage("hello"),
+					"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
+					"config": map[string]interface{}{
+						"acceptedOutputModes": []string{"text", "application/json"},
+						"blocking":            true,
+						"historyLength":       int32(5),
+						"pushNotificationConfig": map[string]interface{}{
+							"url":   "https://hooks.example.com/notify",
+							"token": "token123",
+						},
+					},
+				}),
+				Outputs: pluginOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- Retry and timeout tests ---
+
+func TestCompile_PerTaskRetryOverridesWorkflow(t *testing.T) {
+	wfFactor := int32(2)
+	taskFactor := int32(3)
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "retry-override", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			RetryStrategy: &agentv1alpha1.WorkflowRetryStrategy{
+				Limit:   5,
+				Backoff: &agentv1alpha1.WorkflowBackoff{Duration: "1m", Factor: &wfFactor},
+			},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "task-a", Agent: &agentv1alpha1.AgentCall{Name: "agent-a", Text: "a"}},
+				{
+					Name:  "task-b",
+					Agent: &agentv1alpha1.AgentCall{Name: "agent-b", Text: "b"},
+					RetryStrategy: &agentv1alpha1.WorkflowRetryStrategy{
+						Limit:   2,
+						Backoff: &agentv1alpha1.WorkflowBackoff{Duration: "10s", Factor: &taskFactor},
+					},
+					DependsOn: []string{"task-a"},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wfLimit := intstr.FromInt32(5)
+	wfBackoffFactor := intstr.FromInt32(2)
+	taskLimit := intstr.FromInt32(2)
+	taskBackoffFactor := intstr.FromInt32(3)
+
+	want := wantWorkflowTemplate("retry-override", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "task-a", Template: "task-a"},
+				wfv1.DAGTask{Name: "task-b", Template: "task-b", Dependencies: []string{"task-a"}},
+			),
+			{
+				Name:    "task-a",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "agent-a", "message": pluginTextMessage("a"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+				RetryStrategy: &wfv1.RetryStrategy{
+					Limit:   &wfLimit,
+					Backoff: &wfv1.Backoff{Duration: "1m", Factor: &wfBackoffFactor},
+				},
+			},
+			{
+				Name:    "task-b",
+				Plugin:  makePlugin(map[string]interface{}{"agent": "agent-b", "message": pluginTextMessage("b"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}),
+				Outputs: pluginOutputs(),
+				RetryStrategy: &wfv1.RetryStrategy{
+					Limit:   &taskLimit,
+					Backoff: &wfv1.Backoff{Duration: "10s", Factor: &taskBackoffFactor},
+				},
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_ContainerTimeout(t *testing.T) {
+	timeout := metav1.Duration{Duration: 5 * time.Minute}
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "container-timeout", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:      "process",
+					Container: &agentv1alpha1.ContainerTask{Image: "python:3.12"},
+					Timeout:   &timeout,
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("container-timeout", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "process", Template: "process"}),
+			{
+				Name:                  "process",
+				ActiveDeadlineSeconds: &intstr.IntOrString{Type: intstr.Int, IntVal: 300},
+				Container: &corev1.Container{
+					Image: "python:3.12",
+					Env:   []corev1.EnvVar{{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"}},
+				},
+				Outputs: containerTaskOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_HTTPTimeout(t *testing.T) {
+	timeout := metav1.Duration{Duration: 2 * time.Minute}
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "http-timeout", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:    "fetch",
+					HTTP:    &agentv1alpha1.HTTPTask{URL: "https://api.example.com/data"},
+					Timeout: &timeout,
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("http-timeout", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "fetch", Template: "fetch"}),
+			{
+				Name:                  "fetch",
+				ActiveDeadlineSeconds: &intstr.IntOrString{Type: intstr.Int, IntVal: 120},
+				HTTP:                  &wfv1.HTTP{URL: "https://api.example.com/data", Method: "GET"},
+				Outputs:               httpOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- DAG pattern tests ---
+
+func TestCompile_DiamondDAG(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "diamond", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "A", Agent: &agentv1alpha1.AgentCall{Name: "agent-a", Text: "start"}},
+				{Name: "B", Agent: &agentv1alpha1.AgentCall{Name: "agent-b", Text: "left"}, DependsOn: []string{"A"}},
+				{Name: "C", Agent: &agentv1alpha1.AgentCall{Name: "agent-c", Text: "right"}, DependsOn: []string{"A"}},
+				{Name: "D", Agent: &agentv1alpha1.AgentCall{Name: "agent-d", Text: "merge"}, DependsOn: []string{"B", "C"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("diamond", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "A", Template: "A"},
+				wfv1.DAGTask{Name: "B", Template: "B", Dependencies: []string{"A"}},
+				wfv1.DAGTask{Name: "C", Template: "C", Dependencies: []string{"A"}},
+				wfv1.DAGTask{Name: "D", Template: "D", Dependencies: []string{"B", "C"}},
+			),
+			{Name: "A", Plugin: makePlugin(map[string]interface{}{"agent": "agent-a", "message": pluginTextMessage("start"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "B", Plugin: makePlugin(map[string]interface{}{"agent": "agent-b", "message": pluginTextMessage("left"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "C", Plugin: makePlugin(map[string]interface{}{"agent": "agent-c", "message": pluginTextMessage("right"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "D", Plugin: makePlugin(map[string]interface{}{"agent": "agent-d", "message": pluginTextMessage("merge"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- Condition on non-agent task types ---
+
+func TestCompile_ConditionOnContainerTask(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "cond-container", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "check", Agent: &agentv1alpha1.AgentCall{Name: "checker", Text: "check"}},
+				{
+					Name:      "process",
+					Container: &agentv1alpha1.ContainerTask{Image: "python:3.12"},
+					DependsOn: []string{"check"},
+					Condition: "{{tasks.check.output}} == proceed",
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("cond-container", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "check", Template: "check"},
+				wfv1.DAGTask{Name: "process", Template: "process", Dependencies: []string{"check"}, When: "{{tasks.check.outputs.parameters.result}} == proceed"},
+			),
+			{Name: "check", Plugin: makePlugin(map[string]interface{}{"agent": "checker", "message": pluginTextMessage("check"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{
+				Name:      "process",
+				Container: &corev1.Container{Image: "python:3.12", Env: []corev1.EnvVar{{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"}}},
+				Outputs:   containerTaskOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_ConditionOnHTTPTask(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "cond-http", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "check", Agent: &agentv1alpha1.AgentCall{Name: "checker", Text: "check approval"}},
+				{
+					Name:      "submit",
+					HTTP:      &agentv1alpha1.HTTPTask{URL: "https://api.example.com/submit", Method: "POST"},
+					DependsOn: []string{"check"},
+					Condition: "{{tasks.check.output}} == approved",
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("cond-http", "default",
+		[]wfv1.Template{
+			dagTmpl(
+				wfv1.DAGTask{Name: "check", Template: "check"},
+				wfv1.DAGTask{Name: "submit", Template: "submit", Dependencies: []string{"check"}, When: "{{tasks.check.outputs.parameters.result}} == approved"},
+			),
+			{Name: "check", Plugin: makePlugin(map[string]interface{}{"agent": "checker", "message": pluginTextMessage("check approval"), "traceparent": "{{workflow.parameters._flokoa_traceparent}}"}), Outputs: pluginOutputs()},
+			{Name: "submit", HTTP: &wfv1.HTTP{URL: "https://api.example.com/submit", Method: "POST"}, Outputs: httpOutputs()},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- Artifact I/O for agent and HTTP tasks ---
+
+func TestCompile_ArtifactIO_AgentPlugin(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "artifact-agent", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "task", Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "hello"}},
+			},
+		},
+	}
+
+	opts := CompilerOptions{ArtifactIOEnabled: true, ArtifactGCStrategy: "OnWorkflowCompletion"}
+	got, err := compileToArgoWorkflowTemplate(awf, nil, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// A2A plugin tasks still use parameter outputs even in artifact mode.
+	tmpl := got.Spec.Templates[1]
+	if len(tmpl.Outputs.Parameters) != 2 {
+		t.Errorf("expected 2 parameter outputs for agent plugin in artifact mode, got %d", len(tmpl.Outputs.Parameters))
+	}
+	if len(tmpl.Outputs.Artifacts) != 0 {
+		t.Errorf("expected no artifact outputs for agent plugin, got %d", len(tmpl.Outputs.Artifacts))
+	}
+}
+
+func TestCompile_ArtifactIO_HTTPTask(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "artifact-http", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "fetch", HTTP: &agentv1alpha1.HTTPTask{URL: "https://api.example.com/data"}},
+			},
+		},
+	}
+
+	opts := CompilerOptions{ArtifactIOEnabled: true, ArtifactGCStrategy: "OnWorkflowCompletion"}
+	got, err := compileToArgoWorkflowTemplate(awf, nil, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// HTTP tasks still use parameter outputs even in artifact mode.
+	tmpl := got.Spec.Templates[1]
+	if len(tmpl.Outputs.Parameters) != 2 {
+		t.Errorf("expected 2 parameter outputs for HTTP in artifact mode, got %d", len(tmpl.Outputs.Parameters))
+	}
+	if len(tmpl.Outputs.Artifacts) != 0 {
+		t.Errorf("expected no artifact outputs for HTTP, got %d", len(tmpl.Outputs.Artifacts))
+	}
+}
+
+// --- Container volume mounts test ---
+
+func TestCompile_ContainerWithVolumeMounts(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "container-vols", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					Container: &agentv1alpha1.ContainerTask{
+						Image:   "python:3.12",
+						Command: []string{"python", "run.py"},
+						VolumeMounts: []corev1.VolumeMount{
+							{Name: "data", MountPath: "/data", ReadOnly: true},
+							{Name: "config", MountPath: "/config"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("container-vols", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "process", Template: "process"}),
+			{
+				Name: "process",
+				Container: &corev1.Container{
+					Image:   "python:3.12",
+					Command: []string{"python", "run.py"},
+					Env:     []corev1.EnvVar{{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"}},
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: "data", MountPath: "/data", ReadOnly: true},
+						{Name: "config", MountPath: "/config"},
+					},
+				},
+				Outputs: containerTaskOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- HTTP mixed headers test ---
+
+func TestCompile_HTTPMixedHeaders(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "http-mixed-headers", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL:    "https://api.example.com/data",
+						Method: "GET",
+						Headers: []agentv1alpha1.HTTPHeader{
+							{Name: "Accept", Value: "application/json"},
+							{Name: "Authorization", ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "api-creds"}, Key: "token"}}},
+							{Name: "X-Api-Version", ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "api-config"}, Key: "version"}}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("http-mixed-headers", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "fetch", Template: "fetch"}),
+			{
+				Name: "fetch",
+				HTTP: &wfv1.HTTP{
+					URL:    "https://api.example.com/data",
+					Method: "GET",
+					Headers: []wfv1.HTTPHeader{
+						{Name: "Accept", Value: "application/json"},
+						{Name: "Authorization", ValueFrom: &wfv1.HTTPHeaderSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "api-creds"}, Key: "token"}}},
+						{Name: "X-Api-Version", Value: "{{workflow.parameters._cm_api-config_version}}"},
+					},
+				},
+				Outputs: httpOutputs(),
+			},
+		},
+		withParams(wfv1.Parameter{
+			Name:      "_cm_api-config_version",
+			ValueFrom: &wfv1.ValueFrom{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "api-config"}, Key: "version"}},
+		}),
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- AgentTask with resources test ---
+
+func TestCompile_AgentTaskWithResources(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "agenttask-resources", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "heavy-task",
+					AgentTask: &agentv1alpha1.AgentTask{
+						Type:        agentv1alpha1.MarvinTaskTypeRun,
+						Instruction: &agentv1alpha1.InstructionEntry{Template: "Process data"},
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("2Gi"), corev1.ResourceCPU: *parseQuantity("1")},
+							Limits:   corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("4Gi")},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	resolved := map[string]*resolvedAgentTaskInfo{"heavy-task": {}}
+	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("agenttask-resources", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "heavy-task", Template: "heavy-task"}),
+			{
+				Name: "heavy-task",
+				Container: &corev1.Container{
+					Image:   defaultManagedTaskImage,
+					Command: []string{"python", "-m", "flokoa_managed_task"},
+					Env: []corev1.EnvVar{
+						taskConfigEnv(agentTaskConfig{Type: "run", Instructions: "Process data"}),
+						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("2Gi"), corev1.ResourceCPU: *parseQuantity("1")},
+						Limits:   corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("4Gi")},
+					},
+				},
+				Outputs: containerOutputs(),
+			},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+// --- Complete pipeline integration test ---
+
+func TestCompile_CompletePipelineWithSwitch(t *testing.T) {
+	timeout2m := metav1.Duration{Duration: 2 * time.Minute}
+	timeout5m := metav1.Duration{Duration: 5 * time.Minute}
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "full-pipeline", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "api_url", Value: "https://data.example.com/v2"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:    "fetch",
+					HTTP:    &agentv1alpha1.HTTPTask{URL: "{{params.api_url}}/records", Method: "GET", Headers: []agentv1alpha1.HTTPHeader{{Name: "Accept", Value: "application/json"}, {Name: "Authorization", ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "data-api-creds"}, Key: "token"}}}}},
+					Timeout: &timeout2m,
+				},
+				{
+					Name:      "preprocess",
+					Container: &agentv1alpha1.ContainerTask{Image: "python:3.13-slim", Command: []string{"python", "preprocess.py"}, Env: []corev1.EnvVar{{Name: "RAW_DATA", Value: "{{tasks.fetch.output}}"}}},
+					DependsOn: []string{"fetch"},
+					Timeout:   &timeout5m,
+				},
+				{
+					Name:      "classify",
+					AgentTask: &agentv1alpha1.AgentTask{Type: agentv1alpha1.MarvinTaskTypeClassify, Input: "{{tasks.preprocess.output}}", Labels: []string{"actionable", "informational", "noise"}},
+					DependsOn: []string{"preprocess"},
+				},
+				{
+					Name:      "route",
+					Switch:    []agentv1alpha1.SwitchCase{{Condition: "{{tasks.classify.output}} == actionable", Then: "act"}, {Condition: "{{tasks.classify.output}} == informational", Then: "archive"}, {Default: "discard"}},
+					DependsOn: []string{"classify"},
+				},
+				{Name: "act", Agent: &agentv1alpha1.AgentCall{Name: "action-agent", Text: "Process: {{tasks.preprocess.output}}"}},
+				{Name: "archive", HTTP: &agentv1alpha1.HTTPTask{URL: "{{params.api_url}}/archive", Method: "POST", Headers: []agentv1alpha1.HTTPHeader{{Name: "Content-Type", Value: "application/json"}}, Body: `{"data": "{{tasks.preprocess.output}}", "label": "informational"}`}},
+				{Name: "discard", Container: &agentv1alpha1.ContainerTask{Image: "alpine:3.20", Command: []string{"sh", "-c"}, Args: []string{"echo 'Discarded' >> /tmp/result"}}},
+			},
+		},
+	}
+
+	resolved := map[string]*resolvedAgentTaskInfo{"classify": {}}
+	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify structure: 8 templates (1 DAG + 7 task), 10 DAG tasks (7 tasks + 3 switch branches)
+	if len(got.Spec.Templates) != 8 {
+		t.Errorf("expected 8 templates, got %d", len(got.Spec.Templates))
+	}
+
+	dagTmplGot := got.Spec.Templates[0]
+	if dagTmplGot.DAG == nil {
+		t.Fatal("expected DAG template at index 0")
+	}
+	if len(dagTmplGot.DAG.Tasks) != 10 {
+		t.Errorf("expected 10 DAG tasks (7 tasks + 3 switch branches), got %d", len(dagTmplGot.DAG.Tasks))
+	}
+
+	// Verify switch-generated tasks
+	dagTaskMap := make(map[string]wfv1.DAGTask)
+	for _, dt := range dagTmplGot.DAG.Tasks {
+		dagTaskMap[dt.Name] = dt
+	}
+
+	if dt, ok := dagTaskMap["route-act"]; !ok {
+		t.Error("missing route-act DAG task")
+	} else {
+		if dt.When == "" {
+			t.Error("route-act should have a When expression")
+		}
+		if len(dt.Dependencies) != 1 || dt.Dependencies[0] != "route" {
+			t.Errorf("route-act should depend on route, got %v", dt.Dependencies)
+		}
+	}
+	if dt, ok := dagTaskMap["route-archive"]; !ok {
+		t.Error("missing route-archive DAG task")
+	} else if dt.When == "" {
+		t.Error("route-archive should have a When expression")
+	}
+	if dt, ok := dagTaskMap["route-discard"]; !ok {
+		t.Error("missing route-discard DAG task")
+	} else if dt.When != "" {
+		t.Errorf("route-discard (default) should not have When, got %q", dt.When)
+	}
+
+	// Verify expression translations
+	preprocessTmpl := got.Spec.Templates[2]
+	if preprocessTmpl.Container == nil {
+		t.Fatal("expected container template for preprocess")
+	}
+	for _, env := range preprocessTmpl.Container.Env {
+		if env.Name == "RAW_DATA" && env.Value != "{{tasks.fetch.outputs.parameters.result}}" {
+			t.Errorf("RAW_DATA env should be translated, got %q", env.Value)
+		}
+	}
+
+	classifyTmpl := got.Spec.Templates[3]
+	if classifyTmpl.Container == nil {
+		t.Fatal("expected container template for classify")
+	}
+	for _, env := range classifyTmpl.Container.Env {
+		if env.Name == taskConfigEnvVar && !strings.Contains(env.Value, "tasks.preprocess.outputs.parameters.result") {
+			t.Errorf("classify task config should contain translated input expression, got %q", env.Value)
+		}
+	}
+
+	archiveTmpl := got.Spec.Templates[6]
+	if archiveTmpl.HTTP == nil {
+		t.Fatal("expected HTTP template for archive")
+	}
+	if archiveTmpl.HTTP.URL != "{{workflow.parameters.api_url}}/archive" {
+		t.Errorf("archive URL not translated, got %q", archiveTmpl.HTTP.URL)
+	}
+	if !strings.Contains(archiveTmpl.HTTP.Body, "tasks.preprocess.outputs.parameters.result") {
+		t.Errorf("archive body should contain translated expression, got %q", archiveTmpl.HTTP.Body)
+	}
 }

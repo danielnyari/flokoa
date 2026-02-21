@@ -20,8 +20,11 @@ package telemetry
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"os"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -73,6 +76,18 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 // Tracer returns a named tracer from the global TracerProvider.
 func Tracer(name string) trace.Tracer {
 	return otel.Tracer(name)
+}
+
+// NewTraceparent generates a fresh W3C traceparent header value using a UUID7
+// trace ID. This is used when no incoming trace context is available so that
+// every workflow run still gets a unique, time-ordered trace ID.
+func NewTraceparent() string {
+	traceID := uuid.Must(uuid.NewV7())
+	parentID := uuid.Must(uuid.NewV7())
+	return fmt.Sprintf("00-%s-%s-01",
+		hex.EncodeToString(traceID[:]),
+		hex.EncodeToString(parentID[:8]),
+	)
 }
 
 // ExtractTraceparent serializes the current span context into a W3C

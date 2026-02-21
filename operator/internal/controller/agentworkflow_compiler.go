@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	"github.com/danielnyari/flokoa/internal/telemetry"
 )
 
 const (
@@ -98,9 +99,11 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 
 	// Inject traceparent as a workflow-level parameter so it is available to
 	// all templates via {{workflow.parameters._flokoa_traceparent}}.
-	// The actual value is provided at run submission time.
+	// The actual value is provided at run submission time; the default is a
+	// UUID7-based traceparent so direct argo submit / kubectl usage also works.
 	wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, wfv1.Parameter{
-		Name: traceparentWorkflowParam,
+		Name:    traceparentWorkflowParam,
+		Default: wfv1.AnyStringPtr(telemetry.NewTraceparent()),
 	})
 
 	// Workflow-level parameters
@@ -322,11 +325,13 @@ func buildAgentTemplate(tmpl *wfv1.Template, agent *agentv1alpha1.AgentCall) err
 	tmpl.Plugin = &wfv1.Plugin{}
 	tmpl.Plugin.Value = pluginJSON
 
-	// Define output parameters for A2A tasks
+	// Declare output parameters as "supplied" — the A2A executor plugin
+	// fills them via NodeResult at runtime.
+	supplied := &wfv1.ValueFrom{Supplied: &wfv1.SuppliedValueFrom{}}
 	tmpl.Outputs = wfv1.Outputs{
 		Parameters: []wfv1.Parameter{
-			{Name: agentTaskOutputParam},
-			{Name: agentTaskArtifactParam},
+			{Name: agentTaskOutputParam, ValueFrom: supplied},
+			{Name: agentTaskArtifactParam, ValueFrom: supplied},
 		},
 	}
 
