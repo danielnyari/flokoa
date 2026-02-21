@@ -573,7 +573,31 @@ spec:
               expression: "toJson({statusCode: response.statusCode, headers: response.headers, body: response.body})"
 ```
 
-Headers use the same `name`/`value`/`valueFrom` pattern as Kubernetes `env` vars. Simple headers use `value`; secrets use `valueFrom.secretKeyRef` (compiled directly to Argo's native `HTTPHeader.ValueFrom.SecretKeyRef`); ConfigMap values use `valueFrom.configMapKeyRef` (compiled to a workflow parameter with `valueFrom.configMapKeyRef`, then referenced in the header). Expressions in the URL, headers, and body are translated from DSL syntax to Argo syntax. Output parameters are wired automatically.
+Headers use the same `name`/`value`/`valueFrom` pattern as Kubernetes `env` vars. Three forms are supported:
+
+```yaml
+headers:
+  # Inline value
+  - name: Accept
+    value: "application/json"
+
+  # Secret reference (compiled to Argo's native HTTPHeader.ValueFrom.SecretKeyRef)
+  - name: Authorization
+    valueFrom:
+      secretKeyRef:
+        name: api-credentials
+        key: token
+
+  # ConfigMap reference (compiled to a workflow parameter with valueFrom.configMapKeyRef,
+  # then referenced in the header value)
+  - name: X-Api-Version
+    valueFrom:
+      configMapKeyRef:
+        name: api-config
+        key: version
+```
+
+`secretKeyRef` maps directly to Argo's native HTTP header secret support — no intermediate parameters needed. `configMapKeyRef` is not natively supported by Argo HTTP headers, so the compiler creates a workflow parameter sourced from the ConfigMap and injects the resolved value into the header. Expressions in the URL, headers, and body are translated from DSL syntax to Argo syntax. Output parameters are wired automatically.
 
 **HTTP POST with body and chained output:**
 
