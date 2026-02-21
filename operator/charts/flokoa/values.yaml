@@ -209,6 +209,13 @@ server:
     # -- Target memory utilization percentage
     # targetMemoryUtilizationPercentage: 80
 
+  # -- gRPC server reflection configuration
+  reflection:
+    # -- Enable gRPC server reflection, allowing clients to discover services
+    # and their schemas at runtime. Disable in production if schema exposure
+    # is a concern.
+    enabled: true
+
   # -- Extra environment variables for the server
   extraEnv: []
 
