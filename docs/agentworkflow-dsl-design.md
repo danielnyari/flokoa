@@ -66,7 +66,7 @@ AgentWorkflow is purpose-built for AI agent orchestration but not artificially c
 **What the DSL drops:**
 - Steps-based sequential workflows (unnecessary — `dependsOn` chains express sequences)
 - Script, resource, and suspend template types
-- Artifacts (inputs/outputs are text or structured JSON, not files on a volume)
+- Artifacts as a user-facing concept (I/O defaults to parameters; artifact-based I/O is an operator-level opt-in — see Artifact I/O Mode)
 - `withItems` / `withParam` loops
 - `exitHandler`, `onExit`, `hooks`
 - Sidecars, init containers, daemon tasks
@@ -526,8 +526,13 @@ The HTTP response body is available as `{{tasks.<name>.output}}` and the full re
     url: "https://api.example.com/data/{{params.dataset_id}}"
     method: GET
     headers:
-      Authorization: "Bearer {{params.api_token}}"
-      Accept: "application/json"
+      - name: Accept
+        value: "application/json"
+      - name: Authorization
+        valueFrom:
+          secretKeyRef:
+            name: api-credentials
+            key: token
     successCondition: "response.statusCode >= 200 && response.statusCode < 300"
   timeout: 2m
 ```
@@ -550,10 +555,13 @@ spec:
         url: "https://api.example.com/data/{{workflow.parameters.dataset_id}}"
         method: GET
         headers:
-          - name: Authorization
-            value: "Bearer {{workflow.parameters.api_token}}"
           - name: Accept
             value: "application/json"
+          - name: Authorization
+            valueFrom:
+              secretKeyRef:
+                name: api-credentials
+                key: token
         successCondition: "response.statusCode >= 200 && response.statusCode < 300"
       outputs:
         parameters:
@@ -565,7 +573,7 @@ spec:
               expression: "toJson({statusCode: response.statusCode, headers: response.headers, body: response.body})"
 ```
 
-The user writes `headers` as a simple map; the compiler translates to Argo's `[]HTTPHeader` format. Expressions in the URL, headers, and body are translated from DSL syntax to Argo syntax. Output parameters are wired automatically.
+Headers use the same `name`/`value`/`valueFrom` pattern as Kubernetes `env` vars. Simple headers use `value`; secrets use `valueFrom.secretKeyRef` (compiled directly to Argo's native `HTTPHeader.ValueFrom.SecretKeyRef`); ConfigMap values use `valueFrom.configMapKeyRef` (compiled to a workflow parameter with `valueFrom.configMapKeyRef`, then referenced in the header). Expressions in the URL, headers, and body are translated from DSL syntax to Argo syntax. Output parameters are wired automatically.
 
 **HTTP POST with body and chained output:**
 
@@ -575,8 +583,13 @@ The user writes `headers` as a simple map; the compiler translates to Argo's `[]
     url: "https://ci.example.com/api/pipelines"
     method: POST
     headers:
-      Content-Type: "application/json"
-      X-Token: "{{params.ci_token}}"
+      - name: Content-Type
+        value: "application/json"
+      - name: X-Token
+        valueFrom:
+          secretKeyRef:
+            name: ci-secrets
+            key: token
     body: |
       {
         "ref": "main",
@@ -643,7 +656,13 @@ spec:
         url: "{{params.api_url}}/records"
         method: GET
         headers:
-          Accept: "application/json"
+          - name: Accept
+            value: "application/json"
+          - name: Authorization
+            valueFrom:
+              secretKeyRef:
+                name: data-api-credentials
+                key: token
       timeout: 2m
 
     # Container: preprocess the raw data
@@ -687,7 +706,13 @@ spec:
         url: "{{params.api_url}}/archive"
         method: POST
         headers:
-          Content-Type: "application/json"
+          - name: Content-Type
+            value: "application/json"
+          - name: Authorization
+            valueFrom:
+              secretKeyRef:
+                name: data-api-credentials
+                key: token
         body: '{"data": "{{tasks.preprocess.output}}", "label": "informational"}'
 
     # Container: log discarded items
@@ -699,6 +724,134 @@ spec:
 ```
 
 This workflow chains HTTP, container, agentTask, switch, agent, and more HTTP/container tasks together. Every task uses the same `dependsOn` and expression syntax. The compiler handles the template type differences.
+
+---
+
+## Artifact I/O Mode
+
+By default, AgentWorkflow compiles task inputs and outputs as Argo **parameters** — lightweight string values stored in the Workflow CR. This works well for text results and small structured data, but parameters are stored in etcd (subject to the ~1 MB Workflow CR size limit) and are not suited for large payloads or binary files.
+
+**Artifact I/O mode** is an operator-level opt-in that switches all task I/O to Argo **artifacts** backed by object storage. When enabled, the compiler emits artifacts instead of parameters, with automatic garbage collection on workflow completion. The DSL syntax does not change — `{{tasks.<name>.output}}` and `{{tasks.<name>.output.field}}` work exactly the same way. Only the compilation target changes.
+
+### Enabling Artifact I/O
+
+This is an operator/Helm chart level setting, not a per-workflow option. It applies to all AgentWorkflow compilations in the cluster:
+
+```yaml
+# values.yaml (Helm chart)
+agentWorkflow:
+  artifactIO:
+    enabled: false                        # Default: parameters mode
+    artifactGC:
+      strategy: OnWorkflowCompletion      # Clean up artifacts when the workflow finishes
+```
+
+When `artifactIO.enabled: true`, the compiler changes how task outputs are wired:
+
+### Default Mode (Parameters)
+
+```yaml
+# Compiled Argo template — parameter outputs (default)
+- name: research
+  plugin:
+    a2a: { ... }
+  outputs:
+    parameters:
+      - name: result
+      - name: artifact
+```
+
+```yaml
+# Compiled Argo template — container outputs (default)
+- name: preprocess
+  container: { ... }
+  outputs:
+    parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
+      - name: artifact
+        valueFrom:
+          path: /tmp/artifact
+          default: "{}"
+```
+
+### Artifact I/O Mode
+
+```yaml
+# Compiled Argo — workflow-level artifact GC
+spec:
+  artifactGC:
+    strategy: OnWorkflowCompletion
+
+# Compiled Argo template — A2A plugin outputs (artifact mode)
+# The A2A plugin writes result/artifact to files; outputs are artifacts
+- name: research
+  plugin:
+    a2a: { ... }
+  outputs:
+    artifacts:
+      - name: result
+        path: /tmp/result
+        artifactGC:
+          strategy: OnWorkflowCompletion
+      - name: artifact
+        path: /tmp/artifact
+        artifactGC:
+          strategy: OnWorkflowCompletion
+```
+
+```yaml
+# Compiled Argo template — container outputs (artifact mode)
+- name: preprocess
+  container: { ... }
+  outputs:
+    artifacts:
+      - name: result
+        path: /tmp/result
+        artifactGC:
+          strategy: OnWorkflowCompletion
+      - name: artifact
+        path: /tmp/artifact
+        optional: true
+        artifactGC:
+          strategy: OnWorkflowCompletion
+```
+
+```yaml
+# Compiled Argo template — HTTP outputs (artifact mode)
+# The compiler wraps the HTTP response into a file via a script template
+- name: fetch-data
+  http: { ... }
+  outputs:
+    artifacts:
+      - name: result
+        path: /tmp/result
+        artifactGC:
+          strategy: OnWorkflowCompletion
+      - name: artifact
+        path: /tmp/artifact
+        artifactGC:
+          strategy: OnWorkflowCompletion
+```
+
+### Expression Translation in Artifact Mode
+
+In parameter mode, `{{tasks.research.output}}` compiles to `{{tasks.research.outputs.parameters.result}}`. In artifact mode, the compiler adjusts references to load from artifacts instead. Argo supports reading artifact contents inline via `{{tasks.research.outputs.artifacts.result}}` when the artifact is small enough, or the compiler can use expression syntax to parse artifact content for field access.
+
+The key guarantee: **the DSL expressions are identical in both modes.** The user writes `{{tasks.research.output}}` regardless of whether the operator is configured for parameter or artifact I/O. The compiler handles the translation.
+
+### When to Enable Artifact I/O
+
+| Scenario | Recommended mode |
+|---|---|
+| Short text results, small JSON payloads | Parameters (default) |
+| Large LLM outputs, documents, multi-KB structured data | Artifact I/O |
+| Workflows that produce files (reports, datasets) | Artifact I/O |
+| Compliance requirement to not store data in etcd | Artifact I/O |
+| Minimal infrastructure (no object storage configured) | Parameters (default) |
+
+Artifact I/O requires an artifact repository (S3, GCS, Azure Blob, or Minio) configured in the Argo Workflows controller. The Helm chart setting tells the Flokoa operator to compile workflows for artifact-based I/O; the actual storage backend is configured on the Argo side.
 
 ---
 
@@ -717,9 +870,10 @@ This workflow chains HTTP, container, agentTask, switch, agent, and more HTTP/co
 | AgentTask configuration | `agentTask.type` + fields | Container spec with image, env vars, volume mounts |
 | Container wiring | `container.image` + `command` | Template with output valueFrom paths, default artifact |
 | HTTP wiring | `http.url` + `method` | HTTP template with `[]HTTPHeader`, response expression outputs |
-| HTTP headers | Simple `map[string]string` | Argo `[]HTTPHeader` with name/value pairs |
+| HTTP headers | `[]Header` with `value` / `valueFrom.secretKeyRef` / `valueFrom.configMapKeyRef` | Argo `[]HTTPHeader` with name/value/valueFrom; configMapKeyRef via workflow parameter |
 | Model/tool resolution | `model.name: gpt-4o` | ConfigMap volumes, secret env vars, provider config |
 | Retry with backoff | `retryStrategy.limit: 3` | Argo `retryStrategy` with `intstr` limit and backoff |
 | Timeout | `timeout: 10m` | `activeDeadlineSeconds: 600` |
 | Switch routing | `switch` with conditions | Multiple DAG tasks with `when` expressions |
 | DAG features | Uniform across all task types | `dependsOn`, `condition`, `timeout`, `retryStrategy` |
+| Artifact I/O mode | Invisible (operator-level Helm setting) | `outputs.artifacts` with `artifactGC.strategy: OnWorkflowCompletion`, workflow-level `artifactGC` |
