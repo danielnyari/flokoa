@@ -13,7 +13,7 @@ The DSL borrows terminology from Argo Workflows wherever the concept maps cleanl
 | AgentWorkflow keyword | Argo equivalent | Purpose |
 |---|---|---|
 | `tasks` | `dag.tasks` | Define the units of work |
-| `dependsOn` | `dag.tasks[].dependencies` | Declare execution order |
+| `dependencies` | `dag.tasks[].dependencies` | Declare execution order |
 | `params` | `arguments.parameters` | Workflow-level inputs |
 | `retryStrategy` | `retryStrategy` | Retry failed tasks |
 | `timeout` | `activeDeadlineSeconds` | Time-bound execution |
@@ -43,10 +43,10 @@ spec:
       agent:
         name: summarizer-agent
         text: "Summarize these findings: {{tasks.research.output}}"
-      dependsOn: [research]
+      dependencies: [research]
 ```
 
-The `tasks`, `dependsOn`, `params`, and `timeout` keywords are immediately recognizable to anyone familiar with Argo. The key difference: in Argo, `tasks` only appears nested under a `dag` template; in AgentWorkflow, `tasks` is the top-level spec because every workflow is an agent DAG by default.
+The `tasks`, `dependencies`, `params`, and `timeout` keywords are immediately recognizable to anyone familiar with Argo. The key difference: in Argo, `tasks` only appears nested under a `dag` template; in AgentWorkflow, `tasks` is the top-level spec because every workflow is an agent DAG by default.
 
 ---
 
@@ -55,7 +55,7 @@ The `tasks`, `dependsOn`, `params`, and `timeout` keywords are immediately recog
 AgentWorkflow is purpose-built for AI agent orchestration but not artificially constrained. It supports four task types: calling a deployed agent via A2A (`agent`), running an ephemeral LLM task (`agentTask`), running an arbitrary container (`container`), and making HTTP requests (`http`). The container and HTTP types provide the same capabilities as their Argo equivalents but with the same simplified syntax and automatic I/O handling that `agent` and `agentTask` enjoy.
 
 **What the DSL keeps:**
-- DAG-based task orchestration with `dependsOn`
+- DAG-based task orchestration with `dependencies`
 - Workflow-level `params` with default values
 - Per-task `timeout` and `retryStrategy` (with backoff)
 - Conditional execution via `condition` and `switch`
@@ -64,7 +64,7 @@ AgentWorkflow is purpose-built for AI agent orchestration but not artificially c
 - HTTP requests for API integration (simplified syntax)
 
 **What the DSL drops:**
-- Steps-based sequential workflows (unnecessary — `dependsOn` chains express sequences)
+- Steps-based sequential workflows (unnecessary — `dependencies` chains express sequences)
 - Script, resource, and suspend template types
 - Artifacts as a user-facing concept (I/O defaults to parameters; artifact-based I/O is an operator-level opt-in — see Artifact I/O Mode)
 - `withItems` / `withParam` loops
@@ -75,7 +75,7 @@ AgentWorkflow is purpose-built for AI agent orchestration but not artificially c
 
 The container and HTTP task types are **simplified in syntax, not in functionality**. Users write a flat container or HTTP spec at the task level; the compiler synthesizes the Argo template, wires up output parameters, injects the traceparent for observability, and translates all DSL expressions. The user never sees the generated template indirection, input/output parameter declarations, or valueFrom paths.
 
-**What uniform means:** every task type — `agent`, `agentTask`, `container`, `http`, `switch` — shares the same task-level features. `dependsOn`, `condition`, `timeout`, and `retryStrategy` work identically regardless of task type. The DAG doesn't care what's inside the task; it only cares about execution order and conditions.
+**What uniform means:** every task type — `agent`, `agentTask`, `container`, `http`, `switch` — shares the same task-level features. `dependencies`, `condition`, `timeout`, and `retryStrategy` work identically regardless of task type. The DAG doesn't care what's inside the task; it only cares about execution order and conditions.
 
 **Example — the same pipeline a user would need in raw Argo:**
 
@@ -175,7 +175,7 @@ spec:
       agent:
         name: agent-b
         text: "follow up: {{tasks.A.output}}"
-      dependsOn: [A]
+      dependencies: [A]
 ```
 
 The compiler synthesizes the `entrypoint: main` and the wrapping DAG template automatically. The user never sees it.
@@ -263,7 +263,7 @@ spec:
           Technical: {{tasks.technical-review.output}}
           Cost: {{tasks.cost-review.output}}
           Risk: {{tasks.risk-review.output}}
-      dependsOn: [technical-review, cost-review, risk-review]
+      dependencies: [technical-review, cost-review, risk-review]
 ```
 
 The compiler generates a separate Argo template for each task behind the scenes, wires up the DAG task references, and maps the expression syntax to Argo's parameter system. The user writes 4 tasks; the compiler produces 5 templates (1 DAG + 4 task templates).
@@ -327,13 +327,13 @@ spec:
         type: classify
         input: "{{tasks.research.output}}"
         labels: ["theoretical", "applied", "benchmark"]
-      dependsOn: [research]
+      dependencies: [research]
 
     - name: report
       agent:
         name: report-writer-agent
         text: "Generate report from: {{tasks.classify.output}}"
-      dependsOn: [classify]
+      dependencies: [classify]
 ```
 
 The expression `{{tasks.research.output}}` becomes `{{tasks.research.outputs.parameters.result}}` in the compiled Argo template. If the user had written `{{tasks.research.output.findings}}`, the compiler would generate:
@@ -348,7 +348,7 @@ The user never needs to see or write that.
 
 ## Principle 6: Four Task Types Plus Routing Cover All Orchestration Needs
 
-AgentWorkflow provides four task types plus a routing primitive. Two are agent-native (`agent`, `agentTask`), two are general-purpose (`container`, `http`), and one handles branching (`switch`). All five share the same DAG features: `dependsOn`, `condition`, `timeout`, `retryStrategy`.
+AgentWorkflow provides four task types plus a routing primitive. Two are agent-native (`agent`, `agentTask`), two are general-purpose (`container`, `http`), and one handles branching (`switch`). All five share the same DAG features: `dependencies`, `condition`, `timeout`, `retryStrategy`.
 
 ### `agent` — Call a Deployed Agent via A2A
 
@@ -436,7 +436,7 @@ The container writes its output to `/tmp/result` (plain text) and optionally `/t
     env:
       - name: INPUT_DATA
         value: "{{tasks.fetch.output}}"
-  dependsOn: [fetch]
+  dependencies: [fetch]
   timeout: 5m
 ```
 
@@ -504,7 +504,7 @@ The user never declares output parameters, valueFrom paths, or the traceparent e
         cpu: "2"
       limits:
         memory: "8Gi"
-  dependsOn: [prepare-data]
+  dependencies: [prepare-data]
   timeout: 30m
   retryStrategy:
     limit: 2
@@ -622,7 +622,7 @@ headers:
         }
       }
     successCondition: "response.statusCode == 201"
-  dependsOn: [generate-report]
+  dependencies: [generate-report]
   retryStrategy:
     limit: 3
     backoff:
@@ -633,7 +633,7 @@ headers:
   agent:
     name: notification-agent
     text: "Pipeline triggered: {{tasks.trigger-pipeline.output}}"
-  dependsOn: [trigger-pipeline]
+  dependencies: [trigger-pipeline]
 ```
 
 ### `switch` — Conditional Routing
@@ -648,7 +648,7 @@ Routes execution to different tasks based on prior task outputs:
     - condition: "{{tasks.classify.output}} == negative"
       then: escalate
     - default: review
-  dependsOn: [classify]
+  dependencies: [classify]
 ```
 
 The compiler translates each branch into a separate Argo DAG task with a `when` expression, all depending on the switch task.
@@ -659,7 +659,7 @@ Every task type participates in the same DAG execution model. The following feat
 
 | Feature | Description | Example |
 |---|---|---|
-| `dependsOn` | Declares execution order | `dependsOn: [step-a, step-b]` |
+| `dependencies` | Declares execution order | `dependencies: [step-a, step-b]` |
 | `condition` | Conditional execution | `condition: "{{tasks.check.output}} == proceed"` |
 | `timeout` | Per-task time limit | `timeout: 10m` |
 | `retryStrategy` | Retry on failure | `retryStrategy: {limit: 3, backoff: {duration: "30s"}}` |
@@ -697,7 +697,7 @@ spec:
         env:
           - name: RAW_DATA
             value: "{{tasks.fetch.output}}"
-      dependsOn: [fetch]
+      dependencies: [fetch]
       timeout: 5m
 
     # AgentTask: classify the preprocessed data
@@ -706,7 +706,7 @@ spec:
         type: classify
         input: "{{tasks.preprocess.output}}"
         labels: ["actionable", "informational", "noise"]
-      dependsOn: [preprocess]
+      dependencies: [preprocess]
 
     # Switch: route based on classification
     - name: route
@@ -716,7 +716,7 @@ spec:
         - condition: "{{tasks.classify.output}} == informational"
           then: archive
         - default: discard
-      dependsOn: [classify]
+      dependencies: [classify]
 
     # Agent: take action on actionable items
     - name: act
@@ -747,7 +747,7 @@ spec:
         args: ["echo 'Discarded: {{tasks.preprocess.output}}' >> /tmp/result"]
 ```
 
-This workflow chains HTTP, container, agentTask, switch, agent, and more HTTP/container tasks together. Every task uses the same `dependsOn` and expression syntax. The compiler handles the template type differences.
+This workflow chains HTTP, container, agentTask, switch, agent, and more HTTP/container tasks together. Every task uses the same `dependencies` and expression syntax. The compiler handles the template type differences.
 
 ---
 
@@ -899,5 +899,5 @@ Artifact I/O requires an artifact repository (S3, GCS, Azure Blob, or Minio) con
 | Retry with backoff | `retryStrategy.limit: 3` | Argo `retryStrategy` with `intstr` limit and backoff |
 | Timeout | `timeout: 10m` | `activeDeadlineSeconds: 600` |
 | Switch routing | `switch` with conditions | Multiple DAG tasks with `when` expressions |
-| DAG features | Uniform across all task types | `dependsOn`, `condition`, `timeout`, `retryStrategy` |
+| DAG features | Uniform across all task types | `dependencies`, `condition`, `timeout`, `retryStrategy` |
 | Artifact I/O mode | Invisible (operator-level Helm setting) | `outputs.artifacts` with `artifactGC.strategy: OnWorkflowCompletion`, workflow-level `artifactGC` |
