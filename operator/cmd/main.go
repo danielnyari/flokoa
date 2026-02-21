@@ -91,6 +91,13 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", false,
 		"Enable admission webhooks. Requires TLS certificates (e.g., from cert-manager).")
+
+	var artifactIOEnabled bool
+	var artifactGCStrategy string
+	flag.BoolVar(&artifactIOEnabled, "artifact-io-enabled", false,
+		"Switch AgentWorkflow task I/O from Argo parameters to artifacts backed by object storage.")
+	flag.StringVar(&artifactGCStrategy, "artifact-gc-strategy", "OnWorkflowCompletion",
+		"Artifact garbage collection strategy when artifact I/O is enabled (e.g., OnWorkflowCompletion, OnWorkflowDeletion).")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -307,6 +314,10 @@ func main() {
 	if err := (&controller.AgentWorkflowReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		CompilerOptions: controller.CompilerOptions{
+			ArtifactIOEnabled:  artifactIOEnabled,
+			ArtifactGCStrategy: artifactGCStrategy,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AgentWorkflow")
 		os.Exit(1)

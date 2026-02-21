@@ -1,0 +1,59 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: mixed-pipeline
+spec:
+  description: "Pipeline combining HTTP, container, agentTask, and agent task types"
+  params:
+    - name: query
+      value: "quarterly revenue trends"
+  tasks:
+    # Step 1: Fetch raw data via HTTP
+    - name: fetch-data
+      http:
+        url: "https://data-api.example.com/metrics"
+        method: POST
+        headers:
+          - name: Content-Type
+            value: "application/json"
+        body: '{"query": "{{params.query}}"}'
+        successCondition: "response.statusCode == 200"
+
+    # Step 2: Preprocess with a container
+    - name: preprocess
+      container:
+        image: python:3.12-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json, os
+            data = os.environ["RAW_DATA"]
+            # Clean and transform the data
+            result = f"Preprocessed: {data[:200]}"
+            with open("/tmp/result", "w") as f:
+                f.write(result)
+        env:
+          - name: RAW_DATA
+            value: "{{tasks.fetch-data.output}}"
+      dependsOn: [fetch-data]
+
+    # Step 3: Classify the data with a Marvin task
+    - name: classify
+      agentTask:
+        type: classify
+        input: "{{tasks.preprocess.output}}"
+        labels: ["financial", "operational", "strategic"]
+        instruction:
+          template: "Classify this business data by category"
+      dependsOn: [preprocess]
+
+    # Step 4: Generate analysis with an agent
+    - name: analyze
+      agent:
+        name: business-analyst
+        text: >
+          Analyze this {{tasks.classify.output}} data:
+          {{tasks.preprocess.output}}
+
+          Original query: {{params.query}}
+      dependsOn: [classify]

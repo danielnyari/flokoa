@@ -65,7 +65,7 @@ type WorkflowParam struct {
 }
 
 // WorkflowTask defines a single task in the workflow.
-// Exactly one of Agent, AgentTask, or Switch must be specified.
+// Exactly one of Agent, AgentTask, Container, HTTP, or Switch must be specified.
 type WorkflowTask struct {
 	// Name is the unique identifier for this task within the workflow.
 	// +kubebuilder:validation:Required
@@ -80,6 +80,17 @@ type WorkflowTask struct {
 	// AgentTask runs a Marvin-powered task in an ephemeral container.
 	// +optional
 	AgentTask *AgentTask `json:"agentTask,omitempty"`
+
+	// Container runs an arbitrary container workload.
+	// The container should write its result to /tmp/result and optional
+	// structured output to /tmp/artifact.
+	// +optional
+	Container *ContainerTask `json:"container,omitempty"`
+
+	// HTTP makes an HTTP request to an external service.
+	// The response body is captured as the task output.
+	// +optional
+	HTTP *HTTPTask `json:"http,omitempty"`
 
 	// Switch routes to different tasks based on the output of a previous task.
 	// +optional
@@ -429,6 +440,100 @@ type MarvinAgentSpec struct {
 	// If not specified, inherits the task-level model.
 	// +optional
 	Model *AgentModelRef `json:"model,omitempty"`
+}
+
+// ContainerTask defines an arbitrary container workload.
+// The container should write its result to /tmp/result (plain text)
+// and optional structured output to /tmp/artifact (JSON).
+type ContainerTask struct {
+	// Image is the container image to run.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// Command is the entrypoint command.
+	// +optional
+	Command []string `json:"command,omitempty"`
+
+	// Args are arguments to the command.
+	// +optional
+	Args []string `json:"args,omitempty"`
+
+	// Env is additional environment variables for the container.
+	// Values support DSL expressions like {{params.x}} or {{tasks.prev.output}}.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources specifies compute resource requirements for the container.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// WorkingDir is the working directory inside the container.
+	// +optional
+	WorkingDir string `json:"workingDir,omitempty"`
+
+	// VolumeMounts are volume mounts for the container.
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+}
+
+// HTTPTask defines an HTTP request task.
+// The response body is captured as the task result output.
+type HTTPTask struct {
+	// URL is the HTTP request URL. Supports DSL expressions.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	URL string `json:"url"`
+
+	// Method is the HTTP method to use.
+	// +optional
+	// +kubebuilder:default=GET
+	// +kubebuilder:validation:Enum=GET;POST;PUT;DELETE;PATCH;HEAD;OPTIONS
+	Method string `json:"method,omitempty"`
+
+	// Headers are HTTP headers to include in the request.
+	// +optional
+	Headers []HTTPHeader `json:"headers,omitempty"`
+
+	// Body is the HTTP request body. Supports DSL expressions.
+	// +optional
+	Body string `json:"body,omitempty"`
+
+	// SuccessCondition is an Argo-native expression evaluated against the HTTP response
+	// to determine if the request was successful (e.g., "response.statusCode == 200").
+	// +optional
+	SuccessCondition string `json:"successCondition,omitempty"`
+}
+
+// HTTPHeader defines an HTTP header with a name and value.
+// Exactly one of Value or ValueFrom must be set.
+type HTTPHeader struct {
+	// Name is the header name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Value is the header value. Supports DSL expressions.
+	// Mutually exclusive with ValueFrom.
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// ValueFrom references a secret or configmap key for the header value.
+	// Mutually exclusive with Value.
+	// +optional
+	ValueFrom *HTTPHeaderValueFrom `json:"valueFrom,omitempty"`
+}
+
+// HTTPHeaderValueFrom defines a reference source for an HTTP header value.
+// Exactly one of SecretKeyRef or ConfigMapKeyRef must be set.
+type HTTPHeaderValueFrom struct {
+	// SecretKeyRef references a key in a Kubernetes Secret.
+	// +optional
+	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
+
+	// ConfigMapKeyRef references a key in a Kubernetes ConfigMap.
+	// +optional
+	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
 // SwitchCase defines a conditional branch in a switch task.

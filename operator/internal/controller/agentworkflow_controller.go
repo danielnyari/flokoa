@@ -59,7 +59,8 @@ const (
 // AgentWorkflowReconciler reconciles a AgentWorkflow object
 type AgentWorkflowReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme          *runtime.Scheme
+	CompilerOptions CompilerOptions
 }
 
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agentworkflows,verbs=get;list;watch;create;update;patch;delete
@@ -195,7 +196,7 @@ func (r *AgentWorkflowReconciler) compileAndApply(ctx context.Context, awf *agen
 	}
 
 	// Compile DSL to Argo WorkflowTemplate
-	wft, err := compileToArgoWorkflowTemplate(awf, resolvedTasks)
+	wft, err := compileToArgoWorkflowTemplate(awf, resolvedTasks, r.CompilerOptions)
 	if err != nil {
 		logger.Error(err, "Failed to compile AgentWorkflow")
 		r.setCondition(awf, ConditionTypeWorkflowCompiled, metav1.ConditionFalse,

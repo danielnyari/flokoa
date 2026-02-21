@@ -124,21 +124,37 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 		if task.AgentTask != nil {
 			typeCount++
 		}
+		if task.Container != nil {
+			typeCount++
+		}
+		if task.HTTP != nil {
+			typeCount++
+		}
 		if len(task.Switch) > 0 {
 			typeCount++
 		}
 		if typeCount == 0 {
 			allErrs = append(allErrs, field.Required(taskPath,
-				"exactly one of agent, agentTask, or switch must be specified"))
+				"exactly one of agent, agentTask, container, http, or switch must be specified"))
 		}
 		if typeCount > 1 {
 			allErrs = append(allErrs, field.Forbidden(taskPath,
-				"only one of agent, agentTask, or switch may be specified"))
+				"only one of agent, agentTask, container, http, or switch may be specified"))
 		}
 
 		// W4+W5: Validate AgentCall (text/message exclusivity + message parts)
 		if task.Agent != nil {
 			allErrs = append(allErrs, validateAgentCall(taskPath.Child("agent"), task.Agent)...)
+		}
+
+		// Validate ContainerTask
+		if task.Container != nil {
+			allErrs = append(allErrs, validateContainerTask(taskPath.Child("container"), task.Container)...)
+		}
+
+		// Validate HTTPTask
+		if task.HTTP != nil {
+			allErrs = append(allErrs, validateHTTPTask(taskPath.Child("http"), task.HTTP)...)
 		}
 
 		// W6: Valid dependsOn references
@@ -224,6 +240,60 @@ func validateAgentCall(agentPath *field.Path, agent *agentv1alpha1.AgentCall) fi
 	return allErrs
 }
 
+// validateContainerTask checks that the container task has a non-empty image.
+func validateContainerTask(containerPath *field.Path, ct *agentv1alpha1.ContainerTask) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if ct.Image == "" {
+		allErrs = append(allErrs, field.Required(containerPath.Child("image"),
+			"image is required"))
+	}
+
+	return allErrs
+}
+
+// validateHTTPTask checks that the HTTP task has a valid URL and well-formed headers.
+func validateHTTPTask(httpPath *field.Path, ht *agentv1alpha1.HTTPTask) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if ht.URL == "" {
+		allErrs = append(allErrs, field.Required(httpPath.Child("url"),
+			"url is required"))
+	}
+
+	for i, header := range ht.Headers {
+		headerPath := httpPath.Child("headers").Index(i)
+
+		hasValue := header.Value != ""
+		hasValueFrom := header.ValueFrom != nil
+
+		if !hasValue && !hasValueFrom {
+			allErrs = append(allErrs, field.Required(headerPath,
+				"one of value or valueFrom must be specified"))
+		}
+		if hasValue && hasValueFrom {
+			allErrs = append(allErrs, field.Forbidden(headerPath,
+				"value and valueFrom are mutually exclusive"))
+		}
+
+		if hasValueFrom {
+			hasSecret := header.ValueFrom.SecretKeyRef != nil
+			hasCM := header.ValueFrom.ConfigMapKeyRef != nil
+
+			if !hasSecret && !hasCM {
+				allErrs = append(allErrs, field.Required(headerPath.Child("valueFrom"),
+					"one of secretKeyRef or configMapKeyRef must be specified"))
+			}
+			if hasSecret && hasCM {
+				allErrs = append(allErrs, field.Forbidden(headerPath.Child("valueFrom"),
+					"secretKeyRef and configMapKeyRef are mutually exclusive"))
+			}
+		}
+	}
+
+	return allErrs
+}
+
 func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, taskNames map[string]int, paramNames map[string]bool) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -256,6 +326,32 @@ func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, 
 	}
 	if task.AgentTask != nil {
 		fields = append(fields, exprField{taskPath.Child("agentTask", "input"), task.AgentTask.Input})
+	}
+	if task.Container != nil {
+		for i, env := range task.Container.Env {
+			if env.Value != "" {
+				fields = append(fields, exprField{
+					taskPath.Child("container", "env").Index(i).Child("value"),
+					env.Value,
+				})
+			}
+		}
+	}
+	if task.HTTP != nil {
+		if task.HTTP.URL != "" {
+			fields = append(fields, exprField{taskPath.Child("http", "url"), task.HTTP.URL})
+		}
+		if task.HTTP.Body != "" {
+			fields = append(fields, exprField{taskPath.Child("http", "body"), task.HTTP.Body})
+		}
+		for i, header := range task.HTTP.Headers {
+			if header.Value != "" {
+				fields = append(fields, exprField{
+					taskPath.Child("http", "headers").Index(i).Child("value"),
+					header.Value,
+				})
+			}
+		}
 	}
 	if task.Condition != "" {
 		fields = append(fields, exprField{taskPath.Child("condition"), task.Condition})

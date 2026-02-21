@@ -62,6 +62,14 @@ const (
 	agentTaskInstructionMountPath = "/etc/flokoa/instruction.txt"
 )
 
+// CompilerOptions holds operator-level settings that affect compilation.
+type CompilerOptions struct {
+	// ArtifactIOEnabled switches task I/O from Argo parameters to artifacts.
+	ArtifactIOEnabled bool
+	// ArtifactGCStrategy is the garbage collection strategy for artifacts (e.g. "OnWorkflowCompletion").
+	ArtifactGCStrategy string
+}
+
 // expressionRe matches {{...}} template expressions in DSL fields.
 var expressionRe = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
@@ -69,7 +77,7 @@ var expressionRe = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 // Each AgentWorkflow compiles to a single WorkflowTemplate; individual runs are Argo Workflow CRs
 // created from the template via WorkflowTemplateRef.
 // resolvedTasks contains pre-resolved Model/Tool ConfigMap info for agentTask tasks, keyed by task name.
-func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo) (*wfv1.WorkflowTemplate, error) {
+func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo, opts CompilerOptions) (*wfv1.WorkflowTemplate, error) {
 	wft := &wfv1.WorkflowTemplate{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
@@ -115,6 +123,15 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 		wft.Spec.ActiveDeadlineSeconds = &seconds
 	}
 
+	// Workflow-level artifact GC when artifact I/O is enabled.
+	if opts.ArtifactIOEnabled && opts.ArtifactGCStrategy != "" {
+		wft.Spec.ArtifactGC = &wfv1.WorkflowLevelArtifactGC{
+			ArtifactGC: wfv1.ArtifactGC{
+				Strategy: wfv1.ArtifactGCStrategy(opts.ArtifactGCStrategy),
+			},
+		}
+	}
+
 	// Build templates and DAG tasks
 	dagTasks := make([]wfv1.DAGTask, 0, len(awf.Spec.Tasks))
 	templates := make([]wfv1.Template, 0, len(awf.Spec.Tasks)+1)
@@ -135,7 +152,7 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 		}
 
 		// Build the template for this task
-		tmpl, err := buildTemplate(awf, task, resolved)
+		tmpl, err := buildTemplate(awf, task, resolved, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build template for task %q: %w", task.Name, err)
 		}
@@ -166,6 +183,36 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 		}
 	}
 
+	// Inject workflow parameters for HTTP configMapKeyRef headers.
+	// Argo's HTTPHeaderSource only supports secretKeyRef natively, so we compile
+	// configMapKeyRef headers to workflow parameters and reference them in header values.
+	cmParamsSeen := map[string]bool{}
+	for _, task := range awf.Spec.Tasks {
+		if task.HTTP == nil {
+			continue
+		}
+		for _, header := range task.HTTP.Headers {
+			if header.ValueFrom == nil || header.ValueFrom.ConfigMapKeyRef == nil {
+				continue
+			}
+			ref := header.ValueFrom.ConfigMapKeyRef
+			paramName := fmt.Sprintf("_cm_%s_%s", ref.Name, ref.Key)
+			if cmParamsSeen[paramName] {
+				continue
+			}
+			cmParamsSeen[paramName] = true
+			wft.Spec.Arguments.Parameters = append(wft.Spec.Arguments.Parameters, wfv1.Parameter{
+				Name: paramName,
+				ValueFrom: &wfv1.ValueFrom{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: ref.Name},
+						Key:                  ref.Key,
+					},
+				},
+			})
+		}
+	}
+
 	// Create the DAG entrypoint template
 	dagTemplate := wfv1.Template{
 		Name: dagEntrypointName,
@@ -181,7 +228,7 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 }
 
 // buildTemplate creates an Argo template for a single workflow task.
-func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.WorkflowTask, resolved *resolvedAgentTaskInfo) (*wfv1.Template, error) {
+func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.WorkflowTask, resolved *resolvedAgentTaskInfo, opts CompilerOptions) (*wfv1.Template, error) {
 	tmpl := &wfv1.Template{
 		Name: task.Name,
 	}
@@ -213,6 +260,10 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 		if err := buildAgentTaskTemplate(tmpl, task.AgentTask, resolved); err != nil {
 			return nil, err
 		}
+	case task.Container != nil:
+		buildContainerTemplate(tmpl, task.Container, opts)
+	case task.HTTP != nil:
+		buildHTTPTemplate(tmpl, task.HTTP)
 	case len(task.Switch) > 0:
 		// Switch tasks are a no-op routing template; branching is in DAG when expressions.
 		tmpl.Script = &wfv1.ScriptTemplate{
@@ -223,7 +274,7 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 			},
 		}
 	default:
-		return nil, fmt.Errorf("task has no recognized type (must set one of agent, agentTask, or switch)")
+		return nil, fmt.Errorf("task has no recognized type (must set one of agent, agentTask, container, http, or switch)")
 	}
 
 	return tmpl, nil
@@ -607,6 +658,142 @@ func buildAgentTaskTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.AgentT
 	return nil
 }
 
+// buildContainerTemplate populates a template for an arbitrary container task.
+func buildContainerTemplate(tmpl *wfv1.Template, ct *agentv1alpha1.ContainerTask, opts CompilerOptions) {
+	// Translate DSL expressions in env var values.
+	env := make([]corev1.EnvVar, 0, len(ct.Env)+1)
+	env = append(env, corev1.EnvVar{
+		Name:  traceparentEnvVar,
+		Value: fmt.Sprintf("{{workflow.parameters.%s}}", traceparentWorkflowParam),
+	})
+	for _, e := range ct.Env {
+		translated := e.DeepCopy()
+		if translated.Value != "" {
+			translated.Value = TranslateExpressions(translated.Value)
+		}
+		env = append(env, *translated)
+	}
+
+	container := corev1.Container{
+		Image:        ct.Image,
+		Command:      ct.Command,
+		Args:         ct.Args,
+		Env:          env,
+		WorkingDir:   ct.WorkingDir,
+		VolumeMounts: ct.VolumeMounts,
+	}
+	if ct.Resources != nil {
+		container.Resources = *ct.Resources
+	}
+
+	tmpl.Container = &container
+
+	// Output parameters: the container writes to /tmp/result and /tmp/artifact.
+	// Artifact gets a default of "{}" since containers may not produce structured output.
+	if opts.ArtifactIOEnabled {
+		tmpl.Outputs = wfv1.Outputs{
+			Artifacts: wfv1.Artifacts{
+				{
+					Name: agentTaskOutputParam,
+					ArtifactLocation: wfv1.ArtifactLocation{
+						Raw: &wfv1.RawArtifact{Data: ""},
+					},
+				},
+				{
+					Name: agentTaskArtifactParam,
+					ArtifactLocation: wfv1.ArtifactLocation{
+						Raw: &wfv1.RawArtifact{Data: "{}"},
+					},
+				},
+			},
+		}
+	} else {
+		emptyDefault := wfv1.AnyStringPtr("{}")
+		tmpl.Outputs = wfv1.Outputs{
+			Parameters: []wfv1.Parameter{
+				{
+					Name: agentTaskOutputParam,
+					ValueFrom: &wfv1.ValueFrom{
+						Path: "/tmp/result",
+					},
+				},
+				{
+					Name:    agentTaskArtifactParam,
+					Default: emptyDefault,
+					ValueFrom: &wfv1.ValueFrom{
+						Path: "/tmp/artifact",
+					},
+				},
+			},
+		}
+	}
+}
+
+// buildHTTPTemplate populates a template for an HTTP request task.
+func buildHTTPTemplate(tmpl *wfv1.Template, ht *agentv1alpha1.HTTPTask) {
+	// Translate DSL expressions in URL, body, and header values.
+	url := TranslateExpressions(ht.URL)
+	body := TranslateExpressions(ht.Body)
+
+	method := ht.Method
+	if method == "" {
+		method = "GET"
+	}
+
+	headers := make([]wfv1.HTTPHeader, 0, len(ht.Headers))
+	for _, h := range ht.Headers {
+		argoHeader := wfv1.HTTPHeader{Name: h.Name}
+
+		switch {
+		case h.ValueFrom != nil && h.ValueFrom.SecretKeyRef != nil:
+			argoHeader.ValueFrom = &wfv1.HTTPHeaderSource{
+				SecretKeyRef: h.ValueFrom.SecretKeyRef.DeepCopy(),
+			}
+		case h.ValueFrom != nil && h.ValueFrom.ConfigMapKeyRef != nil:
+			// ConfigMapKeyRef is compiled to a workflow parameter reference.
+			ref := h.ValueFrom.ConfigMapKeyRef
+			paramName := fmt.Sprintf("_cm_%s_%s", ref.Name, ref.Key)
+			argoHeader.Value = fmt.Sprintf("{{workflow.parameters.%s}}", paramName)
+		default:
+			argoHeader.Value = TranslateExpressions(h.Value)
+		}
+
+		headers = append(headers, argoHeader)
+	}
+
+	httpSpec := &wfv1.HTTP{
+		URL:    url,
+		Method: method,
+		Body:   body,
+	}
+	if len(headers) > 0 {
+		httpSpec.Headers = headers
+	}
+	tmpl.HTTP = httpSpec
+	if ht.SuccessCondition != "" {
+		tmpl.HTTP.SuccessCondition = ht.SuccessCondition
+	}
+
+	// HTTP output parameters: Argo auto-captures response.body to the "result" output.
+	// We use expression-based ValueFrom for custom output extraction.
+	tmpl.Outputs = wfv1.Outputs{
+		Parameters: []wfv1.Parameter{
+			{
+				Name: agentTaskOutputParam,
+				ValueFrom: &wfv1.ValueFrom{
+					Expression: "response.body",
+				},
+			},
+			{
+				Name: agentTaskArtifactParam,
+				ValueFrom: &wfv1.ValueFrom{
+					Expression: "toJson({statusCode: response.statusCode, headers: response.headers, body: response.body})",
+				},
+			},
+		},
+	}
+}
+
 // buildSwitchDAGTasks generates additional DAG tasks for switch routing.
 func buildSwitchDAGTasks(task agentv1alpha1.WorkflowTask) []wfv1.DAGTask {
 	var tasks []wfv1.DAGTask
@@ -669,6 +856,12 @@ func translateConditionExpr(expr string) string {
 
 // translateExpression converts a single DSL expression body to its Argo equivalent.
 func translateExpression(expr string) string {
+	return translateExpressionWithMode(expr, false)
+}
+
+// translateExpressionWithMode converts a single DSL expression body to its Argo equivalent.
+// When artifactIO is true, task output references use outputs.artifacts instead of outputs.parameters.
+func translateExpressionWithMode(expr string, artifactIO bool) string {
 	// Pass through Argo evaluation expressions ({{=...}})
 	if strings.HasPrefix(expr, "=") {
 		return "{{" + expr + "}}"
@@ -678,6 +871,11 @@ func translateExpression(expr string) string {
 	if strings.HasPrefix(expr, "params.") {
 		paramName := strings.TrimPrefix(expr, "params.")
 		return fmt.Sprintf("{{workflow.parameters.%s}}", paramName)
+	}
+
+	outputKind := "parameters"
+	if artifactIO {
+		outputKind = "artifacts"
 	}
 
 	// tasks.<name>.output -> {{tasks.<name>.outputs.parameters.result}}
@@ -694,20 +892,20 @@ func translateExpression(expr string) string {
 
 		// tasks.<name>.artifact → raw artifact parameter
 		if suffix == "artifact" {
-			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskArtifactParam)
+			return fmt.Sprintf("{{tasks.%s.outputs.%s.%s}}", taskName, outputKind, agentTaskArtifactParam)
 		}
 
 		// tasks.<name>.output → plain text result parameter
 		if suffix == "output" {
-			return fmt.Sprintf("{{tasks.%s.outputs.parameters.%s}}", taskName, agentTaskOutputParam)
+			return fmt.Sprintf("{{tasks.%s.outputs.%s.%s}}", taskName, outputKind, agentTaskOutputParam)
 		}
 
 		// tasks.<name>.output.<path> → Argo expression with fromJson for field access
 		if strings.HasPrefix(suffix, "output.") {
 			fieldPath := strings.TrimPrefix(suffix, "output.")
 			return fmt.Sprintf(
-				"{{=sprig.fromJson(tasks['%s'].outputs.parameters['%s']).parts[0].data.%s}}",
-				taskName, agentTaskArtifactParam, fieldPath,
+				"{{=sprig.fromJson(tasks['%s'].outputs.%s['%s']).parts[0].data.%s}}",
+				taskName, outputKind, agentTaskArtifactParam, fieldPath,
 			)
 		}
 
@@ -733,11 +931,17 @@ func translateAgentMessage(msg *agentv1alpha1.AgentMessage) *agentv1alpha1.Agent
 // TranslateExpressions replaces all DSL expressions in a string with Argo-compatible references.
 // Exported for testing.
 func TranslateExpressions(input string) string {
+	return TranslateExpressionsWithMode(input, false)
+}
+
+// TranslateExpressionsWithMode replaces DSL expressions with Argo references.
+// When artifactIO is true, task output references use outputs.artifacts instead of outputs.parameters.
+func TranslateExpressionsWithMode(input string, artifactIO bool) string {
 	return expressionRe.ReplaceAllStringFunc(input, func(match string) string {
 		inner := expressionRe.FindStringSubmatch(match)
 		if len(inner) < 2 {
 			return match
 		}
-		return translateExpression(strings.TrimSpace(inner[1]))
+		return translateExpressionWithMode(strings.TrimSpace(inner[1]), artifactIO)
 	})
 }
