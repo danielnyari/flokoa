@@ -50,9 +50,9 @@ The `tasks`, `dependsOn`, `params`, and `timeout` keywords are immediately recog
 
 ---
 
-## Principle 2: A Simplified Argo for a Specialized Use Case
+## Principle 2: A Simplified Argo, Not a Restricted One
 
-AgentWorkflow supports exactly two kinds of work: calling a deployed agent via A2A (`agent`) and running an ephemeral LLM task (`agentTask`). There are no arbitrary containers, scripts, or resource operations. This narrow scope allows the DSL to drop most of Argo's generality.
+AgentWorkflow is purpose-built for AI agent orchestration but not artificially constrained. It supports four task types: calling a deployed agent via A2A (`agent`), running an ephemeral LLM task (`agentTask`), running an arbitrary container (`container`), and making HTTP requests (`http`). The container and HTTP types provide the same capabilities as their Argo equivalents but with the same simplified syntax and automatic I/O handling that `agent` and `agentTask` enjoy.
 
 **What the DSL keeps:**
 - DAG-based task orchestration with `dependsOn`
@@ -60,18 +60,22 @@ AgentWorkflow supports exactly two kinds of work: calling a deployed agent via A
 - Per-task `timeout` and `retryStrategy` (with backoff)
 - Conditional execution via `condition` and `switch`
 - Expression-based data passing between tasks
+- Container execution for arbitrary workloads (simplified syntax)
+- HTTP requests for API integration (simplified syntax)
 
 **What the DSL drops:**
 - Steps-based sequential workflows (unnecessary — `dependsOn` chains express sequences)
-- Container, script, resource, suspend, and HTTP template types
+- Script, resource, and suspend template types
 - Artifacts (inputs/outputs are text or structured JSON, not files on a volume)
 - `withItems` / `withParam` loops
 - `exitHandler`, `onExit`, `hooks`
-- Volumes, sidecars, init containers, daemon tasks
+- Sidecars, init containers, daemon tasks
 - Memoization, synchronization, mutex/semaphore
 - Node selectors, tolerations, pod metadata
 
-This is not a limitation. Agent workflows don't schedule containers — they send messages to deployed agents or run short-lived LLM function calls. The eliminated features don't apply to this execution model.
+The container and HTTP task types are **simplified in syntax, not in functionality**. Users write a flat container or HTTP spec at the task level; the compiler synthesizes the Argo template, wires up output parameters, injects the traceparent for observability, and translates all DSL expressions. The user never sees the generated template indirection, input/output parameter declarations, or valueFrom paths.
+
+**What uniform means:** every task type — `agent`, `agentTask`, `container`, `http`, `switch` — shares the same task-level features. `dependsOn`, `condition`, `timeout`, and `retryStrategy` work identically regardless of task type. The DAG doesn't care what's inside the task; it only cares about execution order and conditions.
 
 **Example — the same pipeline a user would need in raw Argo:**
 
@@ -342,9 +346,9 @@ The user never needs to see or write that.
 
 ---
 
-## Principle 6: Two Task Types Cover All Agent Orchestration Needs
+## Principle 6: Four Task Types Plus Routing Cover All Orchestration Needs
 
-Rather than Argo's open-ended template type system (container, script, resource, suspend, HTTP, plugin, DAG, steps), AgentWorkflow provides exactly two task types plus a routing primitive:
+AgentWorkflow provides four task types plus a routing primitive. Two are agent-native (`agent`, `agentTask`), two are general-purpose (`container`, `http`), and one handles branching (`switch`). All five share the same DAG features: `dependsOn`, `condition`, `timeout`, `retryStrategy`.
 
 ### `agent` — Call a Deployed Agent via A2A
 
@@ -411,6 +415,190 @@ For stateless LLM operations that don't need a deployed agent. The task runs in 
       name: gpt-4o
 ```
 
+### `container` — Run an Arbitrary Container
+
+For general-purpose compute that doesn't fit the agent or LLM task model: data preprocessing, format conversion, custom scripts, or any containerized workload. The syntax is flat — image, command, args, env — and the compiler handles template creation, output parameter wiring, and traceparent injection.
+
+The container writes its output to `/tmp/result` (plain text) and optionally `/tmp/artifact` (structured JSON). The compiler wires these to output parameters automatically, making the result available to downstream tasks via `{{tasks.<name>.output}}`.
+
+```yaml
+# AgentWorkflow: flat container spec
+- name: preprocess
+  container:
+    image: python:3.13-slim
+    command: ["python", "-c"]
+    args:
+      - |
+        import json
+        data = {"cleaned": True, "records": 42}
+        with open("/tmp/result", "w") as f:
+            f.write(json.dumps(data))
+    env:
+      - name: INPUT_DATA
+        value: "{{tasks.fetch.output}}"
+  dependsOn: [fetch]
+  timeout: 5m
+```
+
+**What the user writes vs. what raw Argo requires:**
+
+```yaml
+# Raw Argo — what this compiles to
+spec:
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: preprocess
+            template: preprocess
+            dependencies: [fetch]
+
+    - name: preprocess
+      activeDeadlineSeconds: 300
+      container:
+        image: python:3.13-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            data = {"cleaned": True, "records": 42}
+            with open("/tmp/result", "w") as f:
+                f.write(json.dumps(data))
+        env:
+          - name: INPUT_DATA
+            value: "{{tasks.fetch.outputs.parameters.result}}"
+          - name: FLOKOA_TRACEPARENT
+            value: "{{workflow.parameters._flokoa_traceparent}}"
+      outputs:
+        parameters:
+          - name: result
+            valueFrom:
+              path: /tmp/result
+          - name: artifact
+            valueFrom:
+              path: /tmp/artifact
+              default: "{}"
+```
+
+The user never declares output parameters, valueFrom paths, or the traceparent env var. They write a container spec; the compiler generates the template with full I/O wiring.
+
+**Container with volumes and resources:**
+
+```yaml
+- name: train-model
+  container:
+    image: ghcr.io/myorg/trainer:v2
+    command: ["python", "train.py"]
+    args: ["--epochs=10", "--output=/tmp/result"]
+    env:
+      - name: DATASET
+        value: "{{tasks.prepare-data.output}}"
+      - name: MODEL_NAME
+        valueFrom:
+          secretKeyRef:
+            name: training-secrets
+            key: model-name
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2"
+      limits:
+        memory: "8Gi"
+  dependsOn: [prepare-data]
+  timeout: 30m
+  retryStrategy:
+    limit: 2
+    backoff:
+      duration: "1m"
+      factor: 2
+```
+
+### `http` — Make an HTTP Request
+
+For calling external APIs, webhooks, or any HTTP endpoint. The DSL provides a clean request spec with method, URL, headers, and body. The compiler translates this into an Argo HTTP template, parses the response into output parameters, and handles expression translation in all fields.
+
+The HTTP response body is available as `{{tasks.<name>.output}}` and the full response (status code, headers, body) as `{{tasks.<name>.artifact}}`.
+
+```yaml
+# AgentWorkflow: flat HTTP spec
+- name: fetch-data
+  http:
+    url: "https://api.example.com/data/{{params.dataset_id}}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{params.api_token}}"
+      Accept: "application/json"
+    successCondition: "response.statusCode >= 200 && response.statusCode < 300"
+  timeout: 2m
+```
+
+**What the user writes vs. what raw Argo requires:**
+
+```yaml
+# Raw Argo — what this compiles to
+spec:
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: fetch-data
+            template: fetch-data
+
+    - name: fetch-data
+      activeDeadlineSeconds: 120
+      http:
+        url: "https://api.example.com/data/{{workflow.parameters.dataset_id}}"
+        method: GET
+        headers:
+          - name: Authorization
+            value: "Bearer {{workflow.parameters.api_token}}"
+          - name: Accept
+            value: "application/json"
+        successCondition: "response.statusCode >= 200 && response.statusCode < 300"
+      outputs:
+        parameters:
+          - name: result
+            valueFrom:
+              expression: "response.body"
+          - name: artifact
+            valueFrom:
+              expression: "toJson({statusCode: response.statusCode, headers: response.headers, body: response.body})"
+```
+
+The user writes `headers` as a simple map; the compiler translates to Argo's `[]HTTPHeader` format. Expressions in the URL, headers, and body are translated from DSL syntax to Argo syntax. Output parameters are wired automatically.
+
+**HTTP POST with body and chained output:**
+
+```yaml
+- name: trigger-pipeline
+  http:
+    url: "https://ci.example.com/api/pipelines"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+      X-Token: "{{params.ci_token}}"
+    body: |
+      {
+        "ref": "main",
+        "variables": {
+          "REPORT": "{{tasks.generate-report.output}}"
+        }
+      }
+    successCondition: "response.statusCode == 201"
+  dependsOn: [generate-report]
+  retryStrategy:
+    limit: 3
+    backoff:
+      duration: "10s"
+      factor: 2
+
+- name: notify
+  agent:
+    name: notification-agent
+    text: "Pipeline triggered: {{tasks.trigger-pipeline.output}}"
+  dependsOn: [trigger-pipeline]
+```
+
 ### `switch` — Conditional Routing
 
 Routes execution to different tasks based on prior task outputs:
@@ -428,6 +616,90 @@ Routes execution to different tasks based on prior task outputs:
 
 The compiler translates each branch into a separate Argo DAG task with a `when` expression, all depending on the switch task.
 
+### Uniform DAG Features Across All Task Types
+
+Every task type participates in the same DAG execution model. The following features work identically regardless of whether the task is an `agent`, `agentTask`, `container`, `http`, or `switch`:
+
+| Feature | Description | Example |
+|---|---|---|
+| `dependsOn` | Declares execution order | `dependsOn: [step-a, step-b]` |
+| `condition` | Conditional execution | `condition: "{{tasks.check.output}} == proceed"` |
+| `timeout` | Per-task time limit | `timeout: 10m` |
+| `retryStrategy` | Retry on failure | `retryStrategy: {limit: 3, backoff: {duration: "30s"}}` |
+| `switch` | Multi-way routing after any task | Routes to different downstream tasks |
+| Output references | Downstream tasks reference outputs | `{{tasks.<name>.output}}` / `{{tasks.<name>.output.field}}` |
+
+**Example — mixed task types in a single workflow:**
+
+```yaml
+spec:
+  params:
+    - name: api_url
+      value: "https://data.example.com/v2"
+  tasks:
+    # HTTP: fetch raw data from external API
+    - name: fetch
+      http:
+        url: "{{params.api_url}}/records"
+        method: GET
+        headers:
+          Accept: "application/json"
+      timeout: 2m
+
+    # Container: preprocess the raw data
+    - name: preprocess
+      container:
+        image: python:3.13-slim
+        command: ["python", "preprocess.py"]
+        env:
+          - name: RAW_DATA
+            value: "{{tasks.fetch.output}}"
+      dependsOn: [fetch]
+      timeout: 5m
+
+    # AgentTask: classify the preprocessed data
+    - name: classify
+      agentTask:
+        type: classify
+        input: "{{tasks.preprocess.output}}"
+        labels: ["actionable", "informational", "noise"]
+      dependsOn: [preprocess]
+
+    # Switch: route based on classification
+    - name: route
+      switch:
+        - condition: "{{tasks.classify.output}} == actionable"
+          then: act
+        - condition: "{{tasks.classify.output}} == informational"
+          then: archive
+        - default: discard
+      dependsOn: [classify]
+
+    # Agent: take action on actionable items
+    - name: act
+      agent:
+        name: action-agent
+        text: "Process this actionable item: {{tasks.preprocess.output}}"
+
+    # HTTP: archive informational items
+    - name: archive
+      http:
+        url: "{{params.api_url}}/archive"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+        body: '{"data": "{{tasks.preprocess.output}}", "label": "informational"}'
+
+    # Container: log discarded items
+    - name: discard
+      container:
+        image: alpine:3.20
+        command: ["sh", "-c"]
+        args: ["echo 'Discarded: {{tasks.preprocess.output}}' >> /tmp/result"]
+```
+
+This workflow chains HTTP, container, agentTask, switch, agent, and more HTTP/container tasks together. Every task uses the same `dependsOn` and expression syntax. The compiler handles the template type differences.
+
 ---
 
 ## Summary: What the Compiler Does So You Don't Have To
@@ -436,14 +708,18 @@ The compiler translates each branch into a separate Argo DAG task with a `when` 
 |---|---|---|
 | Entrypoint | Implicit | `entrypoint: main` with DAG template |
 | Templates | None (tasks are inline) | One template per task + one DAG template |
-| Output parameters | Implicit | `outputs.parameters` with `result` and `artifact` |
+| Output parameters | Implicit for all task types | `outputs.parameters` with `result` and `artifact` |
 | Parameter references | `{{params.x}}` | `{{workflow.parameters.x}}` |
 | Task output references | `{{tasks.y.output}}` | `{{tasks.y.outputs.parameters.result}}` |
 | Structured field access | `{{tasks.y.output.field}}` | `{{=sprig.fromJson(tasks['y'].outputs.parameters['artifact']).parts[0].data.field}}` |
-| Traceparent propagation | Invisible | Injected as workflow parameter + env var |
+| Traceparent propagation | Invisible | Injected as workflow parameter + env var (all task types) |
 | A2A plugin wiring | `agent.name` + `text` | Full plugin JSON with message structure |
-| Container configuration | `agentTask.type` + fields | Container spec with image, env vars, volume mounts |
+| AgentTask configuration | `agentTask.type` + fields | Container spec with image, env vars, volume mounts |
+| Container wiring | `container.image` + `command` | Template with output valueFrom paths, default artifact |
+| HTTP wiring | `http.url` + `method` | HTTP template with `[]HTTPHeader`, response expression outputs |
+| HTTP headers | Simple `map[string]string` | Argo `[]HTTPHeader` with name/value pairs |
 | Model/tool resolution | `model.name: gpt-4o` | ConfigMap volumes, secret env vars, provider config |
 | Retry with backoff | `retryStrategy.limit: 3` | Argo `retryStrategy` with `intstr` limit and backoff |
 | Timeout | `timeout: 10m` | `activeDeadlineSeconds: 600` |
 | Switch routing | `switch` with conditions | Multiple DAG tasks with `when` expressions |
+| DAG features | Uniform across all task types | `dependsOn`, `condition`, `timeout`, `retryStrategy` |
