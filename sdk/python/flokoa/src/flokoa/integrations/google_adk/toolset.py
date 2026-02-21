@@ -2,7 +2,7 @@
 
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 _MISSING_ADK_MESSAGE = (
     "google-adk is not installed or unavailable at runtime. "
@@ -22,7 +22,7 @@ except (ImportError, AttributeError):
 if _BaseToolset is None or not inspect.isclass(_BaseToolset):
 
     class BaseToolset:  # type: ignore[no-redef]
-        async def get_tools(self, readonly_context: Optional[Any] = None) -> list[Any]:
+        async def get_tools(self, readonly_context: Any | None = None) -> list[Any]:
             """Return tools for the given readonly ADK context."""
             raise ImportError(f"Failed to call get_tools: {_MISSING_ADK_MESSAGE}")
 
@@ -63,7 +63,7 @@ class FlokoaToolset(BaseToolset):
         self._tools: list[BaseTool] = tools
         logger.info("FlokoaToolset initialized with %d tools", len(self._tools))
 
-    async def get_tools(self, readonly_context: Optional[Any] = None) -> list["BaseTool"]:
+    async def get_tools(self, readonly_context: Any | None = None) -> list["BaseTool"]:
         """Get the list of tools provided by this toolset.
 
         Args:

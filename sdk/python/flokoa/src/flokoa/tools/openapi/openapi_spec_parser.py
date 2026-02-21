@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from fastapi.openapi.models import Operation
 from pydantic import BaseModel
@@ -29,7 +29,7 @@ from .operation_parser import OperationParser
 # Valid JSON Schema types as per OpenAPI 3.0/3.1 specification.
 #
 # These are the only types accepted by Pydantic 2.11+ for Schema.type.
-_VALID_SCHEMA_TYPES: Set[str] = frozenset({
+_VALID_SCHEMA_TYPES: set[str] = frozenset({
     "array",
     "boolean",
     "integer",
@@ -39,7 +39,7 @@ _VALID_SCHEMA_TYPES: Set[str] = frozenset({
     "string",
 })
 
-_SCHEMA_CONTAINER_KEYS: Set[str] = frozenset({"schema", "schemas"})
+_SCHEMA_CONTAINER_KEYS: set[str] = frozenset({"schema", "schemas"})
 
 
 class OperationEndpoint(BaseModel):
@@ -53,11 +53,11 @@ class ParsedOperation(BaseModel):
     description: str
     endpoint: OperationEndpoint
     operation: Operation
-    parameters: List[ApiParameter]
+    parameters: list[ApiParameter]
     return_value: ApiParameter
-    auth_scheme: Optional[AuthScheme] = None
-    auth_credential: Optional[AuthCredential] = None
-    additional_context: Optional[Any] = None
+    auth_scheme: AuthScheme | None = None
+    auth_credential: AuthCredential | None = None
+    additional_context: Any | None = None
 
 
 class OpenApiSpecParser:
@@ -69,7 +69,7 @@ class OpenApiSpecParser:
     3. A callable Python object (a function) that can execute the operation.
     """
 
-    def parse(self, openapi_spec_dict: Dict[str, Any]) -> List[ParsedOperation]:
+    def parse(self, openapi_spec_dict: dict[str, Any]) -> list[ParsedOperation]:
         """Extracts an OpenAPI spec dict into a list of ParsedOperation objects.
 
         ParsedOperation objects are further used for generating RestApiTool.
@@ -86,7 +86,7 @@ class OpenApiSpecParser:
         operations = self._collect_operations(openapi_spec_dict)
         return operations
 
-    def _sanitize_schema_types(self, openapi_spec: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_schema_types(self, openapi_spec: dict[str, Any]) -> dict[str, Any]:
         """Recursively sanitizes schema types in an OpenAPI specification.
 
         Pydantic 2.11+ strictly validates that schema types are one of:
@@ -104,7 +104,7 @@ class OpenApiSpecParser:
         """
         openapi_spec = copy.deepcopy(openapi_spec)
 
-        def sanitize_type_field(schema_dict: Dict[str, Any]) -> None:
+        def sanitize_type_field(schema_dict: dict[str, Any]) -> None:
             if "type" not in schema_dict:
                 return
 
@@ -155,7 +155,7 @@ class OpenApiSpecParser:
 
         return sanitize_recursive(openapi_spec, in_schema=False)
 
-    def _collect_operations(self, openapi_spec: Dict[str, Any]) -> List[ParsedOperation]:
+    def _collect_operations(self, openapi_spec: dict[str, Any]) -> list[ParsedOperation]:
         """Collects operations from an OpenAPI spec."""
         operations = []
 
@@ -224,7 +224,7 @@ class OpenApiSpecParser:
 
         return operations
 
-    def _resolve_references(self, openapi_spec: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_references(self, openapi_spec: dict[str, Any]) -> dict[str, Any]:
         """Recursively resolves all $ref references in an OpenAPI specification.
 
         Handles circular references correctly.

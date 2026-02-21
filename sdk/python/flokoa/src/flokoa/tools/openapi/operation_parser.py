@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import inspect
 from textwrap import dedent
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.openapi.models import Operation, Parameter, Schema
@@ -34,7 +34,7 @@ class OperationParser:
     name deduplication, and type hint generation.
     """
 
-    def __init__(self, operation: Union[Operation, Dict[str, Any], str], should_parse=True):
+    def __init__(self, operation: Operation | dict[str, Any] | str, should_parse=True):
         """Initializes the OperationParser with an OpenApiOperation.
 
         Args:
@@ -48,8 +48,8 @@ class OperationParser:
         else:
             self._operation = operation
 
-        self._params: List[ApiParameter] = []
-        self._return_value: Optional[ApiParameter] = None
+        self._params: list[ApiParameter] = []
+        self._return_value: ApiParameter | None = None
         if should_parse:
             self._process_operation_parameters()
             self._process_request_body()
@@ -59,9 +59,9 @@ class OperationParser:
     @classmethod
     def load(
         cls,
-        operation: Union[Operation, Dict[str, Any]],
-        params: List[ApiParameter],
-        return_value: Optional[ApiParameter] = None,
+        operation: Operation | dict[str, Any],
+        params: list[ApiParameter],
+        return_value: ApiParameter | None = None,
     ) -> OperationParser:
         parser = cls(operation, should_parse=False)
         parser._params = params
@@ -195,7 +195,7 @@ class OperationParser:
         """Returns the return type value (like str, int, List[str], etc.)."""
         return self._return_value.type_value
 
-    def get_parameters(self) -> List[ApiParameter]:
+    def get_parameters(self) -> list[ApiParameter]:
         """Returns the list of Parameter objects."""
         return self._params
 
@@ -206,7 +206,7 @@ class OperationParser:
     def get_auth_scheme_name(self) -> str:
         """Returns the name of the auth scheme for this operation from the spec."""
         if self._operation.security:
-            scheme_name = list(self._operation.security[0].keys())[0]
+            scheme_name = next(iter(self._operation.security[0].keys()))
             return scheme_name
         return ""
 
@@ -226,7 +226,7 @@ class OperationParser:
         \"\"\"
             """).strip()
 
-    def get_json_schema(self) -> Dict[str, Any]:
+    def get_json_schema(self) -> dict[str, Any]:
         """Returns the JSON schema for the function arguments."""
         properties = {p.py_name: jsonable_encoder(p.param_schema, exclude_none=True) for p in self._params}
         return {
@@ -236,7 +236,7 @@ class OperationParser:
             "type": "object",
         }
 
-    def get_signature_parameters(self) -> List[inspect.Parameter]:
+    def get_signature_parameters(self) -> list[inspect.Parameter]:
         """Returns a list of inspect.Parameter objects for the function."""
         return [
             inspect.Parameter(
@@ -247,7 +247,7 @@ class OperationParser:
             for param in self._params
         ]
 
-    def get_annotations(self) -> Dict[str, Any]:
+    def get_annotations(self) -> dict[str, Any]:
         """Returns a dictionary of parameter annotations for the function."""
         annotations = {p.py_name: p.type_value for p in self._params}
         annotations["return"] = self.get_return_type_value()

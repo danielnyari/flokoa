@@ -14,8 +14,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import List, Optional, Union
+from enum import StrEnum
 
 from fastapi.openapi.models import OAuth2, OAuthFlows, SecurityBase, SecurityScheme, SecuritySchemeType
 from pydantic import Field
@@ -25,18 +24,18 @@ class OpenIdConnectWithConfig(SecurityBase):
     type_: SecuritySchemeType = Field(default=SecuritySchemeType.openIdConnect, alias="type")
     authorization_endpoint: str
     token_endpoint: str
-    userinfo_endpoint: Optional[str] = None
-    revocation_endpoint: Optional[str] = None
-    token_endpoint_auth_methods_supported: Optional[List[str]] = None
-    grant_types_supported: Optional[List[str]] = None
-    scopes: Optional[List[str]] = None
+    userinfo_endpoint: str | None = None
+    revocation_endpoint: str | None = None
+    token_endpoint_auth_methods_supported: list[str] | None = None
+    grant_types_supported: list[str] | None = None
+    scopes: list[str] | None = None
 
 
 # AuthSchemes contains SecuritySchemes from OpenAPI 3.0 and an extra flattened OpenIdConnectWithConfig.
-AuthScheme = Union[SecurityScheme, OpenIdConnectWithConfig]
+AuthScheme = SecurityScheme | OpenIdConnectWithConfig
 
 
-class OAuthGrantType(str, Enum):
+class OAuthGrantType(StrEnum):
     """Represents the OAuth2 flow (or grant type)."""
 
     CLIENT_CREDENTIALS = "client_credentials"
@@ -65,4 +64,4 @@ AuthSchemeType = SecuritySchemeType
 class ExtendedOAuth2(OAuth2):
     """OAuth2 scheme that incorporates auto-discovery for endpoints."""
 
-    issuer_url: Optional[str] = None  # Used for endpoint-discovery
+    issuer_url: str | None = None  # Used for endpoint-discovery

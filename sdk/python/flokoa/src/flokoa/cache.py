@@ -14,7 +14,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -36,7 +36,7 @@ def is_cache_enabled() -> bool:
 
 
 @dataclass
-class CachedEntry(Generic[T]):
+class CachedEntry[T]:
     """A cached entry with TTL and file modification tracking."""
 
     value: T

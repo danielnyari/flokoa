@@ -18,17 +18,17 @@ config is an SDK-level abstraction that composes the generated types.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, RootModel, Tag
-
-from flokoa.config.code_ref import CodeRef
-from flokoa.config.tool_config import ToolConfig
 from flokoa_types import IntegrationType
 from flokoa_types.modelconfig import ModelConfig
 from flokoa_types.taskconfig import TaskResultType
 from flokoa_types.taskconfig import Type as MarvinTaskType
 from flokoa_types.templateconfig import OutputSchema
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, RootModel, Tag
+
+from flokoa.config.code_ref import CodeRef
+from flokoa.config.tool_config import ToolConfig
 
 
 class BaseAgentConfig(BaseModel):
@@ -180,10 +180,7 @@ def _agent_type_discriminator(v: Any) -> str:
 
 
 ConfigsUnion = Annotated[
-    Union[
-        Annotated[LlmAgentConfig, Tag("llm")],
-        Annotated[TaskAgentConfig, Tag("task")],
-    ],
+    Annotated[LlmAgentConfig, Tag("llm")] | Annotated[TaskAgentConfig, Tag("task")],
     Discriminator(_agent_type_discriminator),
 ]
 

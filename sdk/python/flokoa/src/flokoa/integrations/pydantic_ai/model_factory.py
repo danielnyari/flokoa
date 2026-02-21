@@ -7,15 +7,12 @@ that is shared between the flokoa SDK executor and the managed-task runtime.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
 
+from flokoa_types import ModelConfig, ModelParameters
 from pydantic import BaseModel
 from pydantic_ai.models import Model
 from pydantic_ai.providers import Provider, infer_provider_class
 from pydantic_ai.settings import ModelSettings, merge_model_settings
-
-from flokoa_types import ModelConfig, ModelParameters
-from flokoa_types.modelconfig import ProviderType
 
 from .models import PROVIDER_MODEL_MAP
 

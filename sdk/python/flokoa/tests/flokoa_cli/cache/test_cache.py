@@ -3,8 +3,6 @@
 import os
 import time
 
-import pytest
-
 from flokoa.cache import (
     CACHE_KEY_MODEL_CONFIG,
     CACHE_KEY_TOOLS,

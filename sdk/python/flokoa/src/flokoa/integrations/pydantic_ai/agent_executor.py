@@ -4,6 +4,14 @@ from typing import TYPE_CHECKING, Any, override
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
+from flokoa_types import (
+    IntegrationType,
+    ToolType,
+)
+from flokoa_types import (
+    ToolDefinition as FlokoaToolDefinition,
+)
+from flokoa_types.modelconfig import ProviderType
 from pydantic_ai import FunctionToolset
 
 from flokoa.agent_executor import FlokoaAgentExecutor
@@ -14,14 +22,6 @@ from flokoa.exceptions import (
     ProviderNotConfiguredError,
 )
 from flokoa.tools import ToolsetFactory, default_factory
-from flokoa_types import (
-    IntegrationType,
-    ToolType,
-)
-from flokoa_types import (
-    ToolDefinition as FlokoaToolDefinition,
-)
-from flokoa_types.modelconfig import ProviderType
 
 from .model_factory import create_model, create_provider
 
@@ -146,7 +146,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
     @override
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         request = context.get_user_input()
-        logger.info(f"Executing PydanticAI agent with request: {request}")
+        logger.info("Executing PydanticAI agent with request (length=%d)", len(request) if request else 0)
 
         if not self.model_config and not self.model_provider and self.agent.model is None:
             raise ProviderNotConfiguredError("Model provider must be configured to execute agent")

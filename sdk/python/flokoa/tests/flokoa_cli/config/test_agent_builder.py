@@ -1,6 +1,7 @@
 """Tests for flokoa.config.agent_builder — factory method pattern."""
 
 import pytest
+from flokoa_types import IntegrationType
 
 from flokoa.config.agent_builder import (
     BaseAgentBuilder,
@@ -9,8 +10,7 @@ from flokoa.config.agent_builder import (
     get_builder,
     register_builder,
 )
-from flokoa.config.agent_config import AgentConfig, LlmAgentConfig, TaskAgentConfig
-from flokoa_types import IntegrationType
+from flokoa.config.agent_config import LlmAgentConfig, TaskAgentConfig
 
 
 class TestPydanticAIAgentBuilder:
@@ -80,7 +80,6 @@ class TestMarvinTaskBuilder:
 class TestToolResolution:
     def test_openapi_tools_passed_through(self):
         """OpenAPI tools are kept as ToolConfig for executor-level resolution."""
-        from flokoa.config.tool_config import ToolConfig
 
         config = LlmAgentConfig(
             name="test",
@@ -90,7 +89,7 @@ class TestToolResolution:
                 "openApi": {"spec": {}},
             }],
         )
-        result = PydanticAIAgentBuilder.from_config(config)
+        PydanticAIAgentBuilder.from_config(config)
         # We can't easily inspect tools on the agent, but the builder
         # should not raise for OpenAPI tools
 

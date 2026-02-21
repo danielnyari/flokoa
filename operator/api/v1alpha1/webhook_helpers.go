@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -54,6 +55,25 @@ func validateAtMostOneOf(fldPath *field.Path, names []string, set []bool) *field
 	}
 	if count > 1 {
 		return field.Forbidden(fldPath, fmt.Sprintf("only one of %s can be specified", strings.Join(names, ", ")))
+	}
+	return nil
+}
+
+// validateHTTPURL checks that the given string is a valid HTTP or HTTPS URL.
+// Returns a field.Error if the URL is empty, uses a disallowed scheme, or is malformed.
+func validateHTTPURL(fldPath *field.Path, rawURL string) *field.Error {
+	if rawURL == "" {
+		return nil // Empty URLs are handled by required-field checks elsewhere
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return field.Invalid(fldPath, rawURL, fmt.Sprintf("invalid URL: %v", err))
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return field.Invalid(fldPath, rawURL, "URL scheme must be http or https")
+	}
+	if parsed.Host == "" {
+		return field.Invalid(fldPath, rawURL, "URL must contain a valid host")
 	}
 	return nil
 }

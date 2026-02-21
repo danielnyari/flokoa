@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import keyword
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from fastapi.openapi.models import Response, Schema
 from pydantic import BaseModel, Field, model_serializer
@@ -49,9 +49,9 @@ class ApiParameter(BaseModel):
 
     original_name: str
     param_location: str
-    param_schema: Union[str, Schema]
-    description: Optional[str] = ""
-    py_name: Optional[str] = ""
+    param_schema: str | Schema
+    description: str | None = ""
+    py_name: str | None = ""
     type_value: type[Any] = Field(default=None, init_var=False)
     type_hint: str = Field(default=None, init_var=False)
     required: bool = False
@@ -126,19 +126,19 @@ class TypeHintHelper:
                 items_type = schema.items.type
 
             if items_type == "object":
-                return List[Dict[str, Any]]
+                return list[dict[str, Any]]
             else:
                 type_map = {
                     "integer": int,
                     "number": float,
                     "boolean": bool,
                     "string": str,
-                    "object": Dict[str, Any],
-                    "array": List[Any],
+                    "object": dict[str, Any],
+                    "array": list[Any],
                 }
-                return List[type_map.get(items_type, "Any")]
+                return list[type_map.get(items_type, "Any")]
         elif param_type == "object":
-            return Dict[str, Any]
+            return dict[str, Any]
         else:
             return Any
 
@@ -221,7 +221,7 @@ class PydocHelper:
         return doc
 
     @staticmethod
-    def generate_return_doc(responses: Dict[str, Response]) -> str:
+    def generate_return_doc(responses: dict[str, Response]) -> str:
         """Generates a return value documentation string.
 
         When the response declares multiple content types with different
@@ -272,7 +272,7 @@ class PydocHelper:
             return PydocHelper._format_schema_doc(schemas[0], description)
 
         # Schemas differ — document each content type separately.
-        parts: List[str] = []
+        parts: list[str] = []
         for mime_type, schema_details in content_items:
             schema = schema_details.schema_ or Schema()
             part = PydocHelper._format_schema_doc(schema, description)

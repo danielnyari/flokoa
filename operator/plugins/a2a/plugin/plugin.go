@@ -284,6 +284,9 @@ func (p *Plugin) sendTask(ctx context.Context, key string, spec *A2ASpec, endpoi
 			return p.taskToReply(r), nil
 		}
 	case *a2a.Message:
+		if r == nil {
+			return failedReply("received nil message from A2A agent"), nil
+		}
 		// If we got a message back directly, the task might be complete
 		// We need to extract task ID and poll
 		taskID = r.TaskID
@@ -429,6 +432,10 @@ func (p *Plugin) createClient(ctx context.Context, endpoint string) (*a2aclient.
 
 // taskToReply converts an A2A task to an Argo ExecuteTemplateReply
 func (p *Plugin) taskToReply(task *a2a.Task) *executor.ExecuteTemplateReply {
+	if task == nil {
+		return failedReply("received nil task in taskToReply")
+	}
+
 	var phase wfv1.NodePhase
 	var message string
 
@@ -524,6 +531,9 @@ func failedReply(message string) *executor.ExecuteTemplateReply {
 
 // extractArtifactJSON returns the first artifact from a task as JSON, or "{}" if none.
 func extractArtifactJSON(task *a2a.Task) string {
+	if task == nil {
+		return "{}"
+	}
 	if len(task.Artifacts) > 0 {
 		data, err := json.Marshal(task.Artifacts[0])
 		if err == nil {
@@ -535,6 +545,9 @@ func extractArtifactJSON(task *a2a.Task) string {
 
 // extractResultFromTask extracts the response text from a completed task
 func extractResultFromTask(task *a2a.Task) string {
+	if task == nil {
+		return ""
+	}
 	// First try to get from status message
 	if task.Status.Message != nil {
 		if text := extractTextFromParts(task.Status.Message.Parts); text != "" {

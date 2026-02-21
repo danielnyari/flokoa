@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import annotations
-
 """Credential exchanger for OAuth2 and OpenID Connect."""
+
+from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
 
 import httpx
 
-from .....auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
+from .....auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials, OAuth2Auth
 from .....auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
+from .....utils.url_validation import validate_url
 from .base_credential_exchanger import BaseAuthCredentialExchanger
 
 logger = logging.getLogger("flokoa." + __name__)
@@ -41,7 +41,7 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
     def _check_scheme_credential_type(
         self,
         auth_scheme: AuthScheme,
-        auth_credential: Optional[AuthCredential] = None,
+        auth_credential: AuthCredential | None = None,
     ):
         if not auth_credential:
             raise ValueError("auth_credential is empty. Please create AuthCredential using OAuth2Auth.")
@@ -82,7 +82,7 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
         # reliably determine expiry, so we assume the token is still valid.
         return False
 
-    def _get_token_endpoint(self, auth_scheme: AuthScheme) -> Optional[str]:
+    def _get_token_endpoint(self, auth_scheme: AuthScheme) -> str | None:
         """Extracts the token endpoint URL from the auth scheme."""
         if isinstance(auth_scheme, OpenIdConnectWithConfig):
             return auth_scheme.token_endpoint
@@ -102,7 +102,7 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
         return None
 
     @staticmethod
-    def _update_credential_with_tokens(oauth2: "OAuth2Auth", token_response: dict) -> None:
+    def _update_credential_with_tokens(oauth2: OAuth2Auth, token_response: dict) -> None:
         """Updates an OAuth2Auth credential in-place from a token endpoint response."""
         if token_response.get("access_token"):
             oauth2.access_token = token_response["access_token"]
@@ -140,6 +140,8 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
             logger.warning("Cannot refresh token: no token endpoint found in auth scheme.")
             return auth_credential
 
+        validate_url(token_endpoint)
+
         data = {
             "grant_type": "refresh_token",
             "refresh_token": oauth2.refresh_token,
@@ -149,7 +151,7 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
         if oauth2.client_secret:
             data["client_secret"] = oauth2.client_secret
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(_REFRESH_MAX_RETRIES + 1):
             try:
                 response = httpx.post(token_endpoint, data=data, timeout=10)
@@ -178,7 +180,7 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
 
     def generate_auth_token(
         self,
-        auth_credential: Optional[AuthCredential] = None,
+        auth_credential: AuthCredential | None = None,
     ) -> AuthCredential:
         """Generates an auth token from the authorization response.
 
@@ -206,7 +208,7 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
     def exchange_credential(
         self,
         auth_scheme: AuthScheme,
-        auth_credential: Optional[AuthCredential] = None,
+        auth_credential: AuthCredential | None = None,
     ) -> AuthCredential:
         """Exchanges the OpenID Connect auth credential for an access token or an auth URI.
 

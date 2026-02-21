@@ -4,10 +4,10 @@ These tests verify that canonical_tools() returns our injected Flokoa tools.
 """
 
 import pytest
-
-from flokoa.tools import ToolsetFactory
 from flokoa_types import IntegrationType, ToolDefinition, ToolType
 from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
+
+from flokoa.tools import ToolsetFactory
 
 pytestmark = pytest.mark.anyio
 

@@ -14,9 +14,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-from typing import Callable, Generic, Protocol, TypeVar, TypedDict, cast
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Generic, Protocol, TypedDict, TypeVar, cast
 
 from flokoa_types import IntegrationType, ToolDefinition, ToolType
 
@@ -42,7 +43,7 @@ class BuilderRegistry(TypedDict, Generic[ToolObjectT], total=False):
 
 
 @dataclass(slots=True)
-class ToolsetFactory(Generic[ToolObjectT]):
+class ToolsetFactory[ToolObjectT: ToolObject]:
     """Framework-agnostic factory for building tools from Flokoa tool definitions.
 
     Builders are registered per ``(ToolType, IntegrationType)`` pair so each

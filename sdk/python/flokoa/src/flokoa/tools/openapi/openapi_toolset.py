@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import ssl
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 from pydantic_ai import FunctionToolset, Tool
@@ -59,14 +59,14 @@ class OpenAPIToolset:
     def __init__(
         self,
         *,
-        spec_dict: Optional[Dict[str, Any]] = None,
-        spec_str: Optional[str] = None,
+        spec_dict: dict[str, Any] | None = None,
+        spec_str: str | None = None,
         spec_str_type: Literal["json", "yaml"] = "json",
-        auth_scheme: Optional[AuthScheme] = None,
-        auth_credential: Optional[AuthCredential] = None,
-        tool_filter: Optional[List[str]] = None,
-        tool_name_prefix: Optional[str] = None,
-        ssl_verify: Optional[Union[bool, str, ssl.SSLContext]] = None,
+        auth_scheme: AuthScheme | None = None,
+        auth_credential: AuthCredential | None = None,
+        tool_filter: list[str] | None = None,
+        tool_name_prefix: str | None = None,
+        ssl_verify: bool | str | ssl.SSLContext | None = None,
     ):
         """Initialize the OpenAPIToolset.
 
@@ -89,7 +89,7 @@ class OpenAPIToolset:
         if not spec_dict:
             spec_dict = self._load_spec(spec_str, spec_str_type)
 
-        self._configs: List[RestApiToolConfig] = self._parse(
+        self._configs: list[RestApiToolConfig] = self._parse(
             spec_dict, auth_scheme, auth_credential, ssl_verify
         )
 
@@ -135,12 +135,12 @@ class OpenAPIToolset:
 
         return toolset
 
-    def get_tools(self) -> List[Tool]:
+    def get_tools(self) -> list[Tool]:
         """Get all Pydantic AI Tool objects, respecting the tool filter."""
         configs = self._filtered_configs()
         return [create_rest_api_tool(c) for c in configs]
 
-    def get_tool(self, tool_name: str) -> Optional[Tool]:
+    def get_tool(self, tool_name: str) -> Tool | None:
         """Get a single tool by name.
 
         Args:
@@ -171,13 +171,13 @@ class OpenAPIToolset:
             return toolset.prefixed(self._tool_name_prefix)
         return toolset
 
-    def _filtered_configs(self) -> List[RestApiToolConfig]:
+    def _filtered_configs(self) -> list[RestApiToolConfig]:
         if self._tool_filter is None:
             return self._configs
         return [c for c in self._configs if c.name in self._tool_filter]
 
     @staticmethod
-    def _load_spec(spec_str: str, spec_type: Literal["json", "yaml"]) -> Dict[str, Any]:
+    def _load_spec(spec_str: str, spec_type: Literal["json", "yaml"]) -> dict[str, Any]:
         if spec_type == "json":
             return json.loads(spec_str)
         elif spec_type == "yaml":
@@ -187,11 +187,11 @@ class OpenAPIToolset:
 
     @staticmethod
     def _parse(
-        openapi_spec_dict: Dict[str, Any],
-        auth_scheme: Optional[AuthScheme],
-        auth_credential: Optional[AuthCredential],
-        ssl_verify: Optional[Union[bool, str, ssl.SSLContext]],
-    ) -> List[RestApiToolConfig]:
+        openapi_spec_dict: dict[str, Any],
+        auth_scheme: AuthScheme | None,
+        auth_credential: AuthCredential | None,
+        ssl_verify: bool | str | ssl.SSLContext | None,
+    ) -> list[RestApiToolConfig]:
         operations = OpenApiSpecParser().parse(openapi_spec_dict)
 
         configs = []

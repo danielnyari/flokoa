@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
@@ -50,9 +50,9 @@ class AgentCardBuilder:
         self,
         *,
         agent: Any,
-        rpc_url: Optional[str] = None,
-        capabilities: Optional[AgentCapabilities] = None,
-        agent_version: Optional[str] = None,
+        rpc_url: str | None = None,
+        capabilities: AgentCapabilities | None = None,
+        agent_version: str | None = None,
     ) -> None:
         if agent is None:
             raise ValueError("Agent cannot be None.")
@@ -97,14 +97,14 @@ def _is_adk_agent(agent: Any) -> bool:
     return _ADK_AVAILABLE and BaseAgent is not None and isinstance(agent, BaseAgent)
 
 
-async def _build_primary_skills(agent: Any) -> List[AgentSkill]:
+async def _build_primary_skills(agent: Any) -> list[AgentSkill]:
     """Build skills for any agent type."""
     if _is_llm_agent(agent):
         return await _build_llm_agent_skills(agent)
     return await _build_non_llm_agent_skills(agent)
 
 
-async def _build_llm_agent_skills(agent: Any) -> List[AgentSkill]:
+async def _build_llm_agent_skills(agent: Any) -> list[AgentSkill]:
     """Build skills for LLM agent."""
     skills = []
     agent_name = _get_agent_name(agent)
@@ -137,7 +137,7 @@ async def _build_llm_agent_skills(agent: Any) -> List[AgentSkill]:
     return skills
 
 
-async def _build_sub_agent_skills(agent: Any) -> List[AgentSkill]:
+async def _build_sub_agent_skills(agent: Any) -> list[AgentSkill]:
     """Build skills for all sub-agents."""
     sub_agent_skills: list[AgentSkill] = []
     for sub_agent in _get_sub_agents(agent):
@@ -162,7 +162,7 @@ async def _build_sub_agent_skills(agent: Any) -> List[AgentSkill]:
     return sub_agent_skills
 
 
-async def _build_tool_skills(agent: Any) -> List[AgentSkill]:
+async def _build_tool_skills(agent: Any) -> list[AgentSkill]:
     """Build skills for agent tools."""
     tool_skills: list[AgentSkill] = []
     canonical_tools = await agent.canonical_tools()
@@ -214,7 +214,7 @@ def _build_code_executor_skill(agent: Any) -> AgentSkill:
     )
 
 
-async def _build_non_llm_agent_skills(agent: Any) -> List[AgentSkill]:
+async def _build_non_llm_agent_skills(agent: Any) -> list[AgentSkill]:
     """Build skills for non-LLM agents."""
     agent_description = _build_agent_description(agent)
     agent_examples = await _extract_examples_from_agent(agent)
@@ -243,7 +243,7 @@ async def _build_non_llm_agent_skills(agent: Any) -> List[AgentSkill]:
     return skills
 
 
-def _build_orchestration_skill(agent: Any, agent_type: str) -> Optional[AgentSkill]:
+def _build_orchestration_skill(agent: Any, agent_type: str) -> AgentSkill | None:
     """Build orchestration skill for agents with sub-agents."""
     sub_agent_descriptions = []
     for sub_agent in _get_sub_agents(agent):
@@ -337,7 +337,7 @@ def _replace_pronouns(text: str) -> str:
     return _PRONOUN_PATTERN.sub(_replacement, text)
 
 
-def _get_workflow_description(agent: Any) -> Optional[str]:
+def _get_workflow_description(agent: Any) -> str | None:
     """Get workflow-specific description for non-LLM agents."""
     if not _get_sub_agents(agent):
         return None
@@ -415,7 +415,7 @@ def _get_default_description(agent: Any) -> str:
     return "A custom agent"
 
 
-def _extract_inputs_from_examples(examples: Optional[list[dict]]) -> list[str]:
+def _extract_inputs_from_examples(examples: list[dict] | None) -> list[str]:
     """Extract only the input strings so they can be added to an AgentSkill."""
     if examples is None:
         return []
@@ -443,7 +443,7 @@ def _extract_inputs_from_examples(examples: Optional[list[dict]]) -> list[str]:
     return extracted_inputs
 
 
-async def _extract_examples_from_agent(agent: Any) -> Optional[List[Dict]]:
+async def _extract_examples_from_agent(agent: Any) -> list[dict] | None:
     """Extract examples from example_tool if configured; otherwise, from agent instruction."""
     if not _is_llm_agent(agent):
         return None
@@ -463,7 +463,7 @@ async def _extract_examples_from_agent(agent: Any) -> Optional[List[Dict]]:
     return None
 
 
-def _convert_example_tool_examples(tool: Any) -> List[Dict]:
+def _convert_example_tool_examples(tool: Any) -> list[dict]:
     """Convert ExampleTool examples to the expected format."""
     examples = []
     for example in getattr(tool, "examples", []):
@@ -474,7 +474,7 @@ def _convert_example_tool_examples(tool: Any) -> List[Dict]:
     return examples
 
 
-def _extract_examples_from_instruction(instruction: str) -> Optional[List[Dict]]:
+def _extract_examples_from_instruction(instruction: str) -> list[dict] | None:
     """Extract examples from agent instruction text using regex patterns."""
     examples = []
     example_patterns = [
@@ -490,7 +490,7 @@ def _extract_examples_from_instruction(instruction: str) -> Optional[List[Dict]]
     return examples if examples else None
 
 
-def _get_input_modes(agent: Any) -> Optional[List[str]]:
+def _get_input_modes(agent: Any) -> list[str] | None:
     """Get input modes based on agent model."""
     if not _is_llm_agent(agent):
         return None
@@ -499,7 +499,7 @@ def _get_input_modes(agent: Any) -> Optional[List[str]]:
     return input_modes
 
 
-def _get_output_modes(agent: Any) -> Optional[List[str]]:
+def _get_output_modes(agent: Any) -> list[str] | None:
     """Get output modes from agent configuration."""
     if not _is_llm_agent(agent):
         return None
@@ -554,7 +554,7 @@ def _get_generic_agent_description(agent: Any) -> str:
     return "A Flokoa agent"
 
 
-def _coerce_text(value: Any) -> Optional[str]:
+def _coerce_text(value: Any) -> str | None:
     if isinstance(value, str):
         return value.strip() or None
     if isinstance(value, (list, tuple)):

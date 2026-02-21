@@ -14,8 +14,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Type
-
 from .....auth.auth_credential import AuthCredential, AuthCredentialTypes
 from .....auth.auth_schemes import AuthScheme
 from .base_credential_exchanger import BaseAuthCredentialExchanger
@@ -54,7 +52,7 @@ class AutoAuthCredentialExchanger(BaseAuthCredentialExchanger):
 
     def __init__(
         self,
-        custom_exchangers: Optional[Dict[str, Type[BaseAuthCredentialExchanger]]] = None,
+        custom_exchangers: dict[str, type[BaseAuthCredentialExchanger]] | None = None,
     ):
         """Initializes the AutoAuthCredentialExchanger.
 
@@ -75,8 +73,8 @@ class AutoAuthCredentialExchanger(BaseAuthCredentialExchanger):
     def exchange_credential(
         self,
         auth_scheme: AuthScheme,
-        auth_credential: Optional[AuthCredential] = None,
-    ) -> Optional[AuthCredential]:
+        auth_credential: AuthCredential | None = None,
+    ) -> AuthCredential | None:
         """Automatically exchanges for the credential uses the appropriate credential exchanger.
 
         Args:

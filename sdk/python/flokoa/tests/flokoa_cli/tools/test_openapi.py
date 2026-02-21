@@ -961,7 +961,7 @@ class TestEndToEnd:
 
         callable_fn = create_rest_api_callable(config)
         # Call without providing status — should use default "available"
-        result = await callable_fn(ctx)
+        await callable_fn(ctx)
 
         call_kwargs = mock_client.request.call_args
         assert (call_kwargs.kwargs.get("method") or call_kwargs[1].get("method")) == "get"
@@ -985,7 +985,7 @@ class TestEndToEnd:
         ctx = _make_run_context(deps)
 
         callable_fn = create_rest_api_callable(config)
-        result = await callable_fn(ctx, pet_id=42)
+        await callable_fn(ctx, pet_id=42)
 
         call_kwargs = mock_client.request.call_args
         assert (call_kwargs.kwargs.get("method") or call_kwargs[1].get("method")) == "delete"

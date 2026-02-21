@@ -3,8 +3,6 @@ import pytest
 from flokoa.utils.agent_card_builder import (
     AgentCardBuilder,
     _build_orchestration_skill,
-    _build_primary_skills,
-    _build_sub_agent_skills,
     _coerce_text,
     _extract_examples_from_instruction,
     _extract_inputs_from_examples,
@@ -241,7 +239,7 @@ async def test_adk_sequential_agent():
 
     # Check that workflow description contains sequential language
     workflow_skill = next(s for s in card.skills if s.id == "seq_agent")
-    assert "workflow" == workflow_skill.name
+    assert workflow_skill.name == "workflow"
     assert "sequential_workflow" in workflow_skill.tags
 
     # Check orchestration skill exists

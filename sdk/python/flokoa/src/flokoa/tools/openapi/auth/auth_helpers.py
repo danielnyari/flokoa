@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 import httpx
 from fastapi.openapi.models import APIKey, APIKeyIn, HTTPBase, HTTPBearer, OAuth2, OpenIdConnect, Schema
@@ -31,6 +31,7 @@ from ....auth.auth_credential import (
     ServiceAccountCredential,
 )
 from ....auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
+from ....utils.url_validation import validate_url
 from ..common import ApiParameter
 
 logger = logging.getLogger("flokoa." + __name__)
@@ -60,15 +61,15 @@ class OpenIdConfig(BaseModel):
     auth_uri: str
     token_uri: str
     client_secret: str
-    redirect_uri: Optional[str] = None
+    redirect_uri: str | None = None
 
 
 def token_to_scheme_credential(
     token_type: Literal["apikey", "oauth2Token"],
-    location: Optional[Literal["header", "query", "cookie"]] = None,
-    name: Optional[str] = None,
-    credential_value: Optional[str] = None,
-) -> Tuple[AuthScheme, AuthCredential]:
+    location: Literal["header", "query", "cookie"] | None = None,
+    name: str | None = None,
+    credential_value: str | None = None,
+) -> tuple[AuthScheme, AuthCredential]:
     """Creates a AuthScheme and AuthCredential for API key or bearer token.
 
     Examples:
@@ -141,9 +142,9 @@ def token_to_scheme_credential(
 
 
 def service_account_dict_to_scheme_credential(
-    config: Dict[str, Any],
-    scopes: List[str],
-) -> Tuple[AuthScheme, AuthCredential]:
+    config: dict[str, Any],
+    scopes: list[str],
+) -> tuple[AuthScheme, AuthCredential]:
     """Creates AuthScheme and AuthCredential for Google Service Account.
 
     Returns a bearer token scheme, and a service account credential.
@@ -170,7 +171,7 @@ def service_account_dict_to_scheme_credential(
 
 def service_account_scheme_credential(
     config: ServiceAccount,
-) -> Tuple[AuthScheme, AuthCredential]:
+) -> tuple[AuthScheme, AuthCredential]:
     """Creates AuthScheme and AuthCredential for Google Service Account.
 
     Returns a bearer token scheme, and a service account credential.
@@ -188,10 +189,10 @@ def service_account_scheme_credential(
 
 
 def openid_dict_to_scheme_credential(
-    config_dict: Dict[str, Any],
-    scopes: List[str],
-    credential_dict: Dict[str, Any],
-) -> Tuple[OpenIdConnectWithConfig, AuthCredential]:
+    config_dict: dict[str, Any],
+    scopes: list[str],
+    credential_dict: dict[str, Any],
+) -> tuple[OpenIdConnectWithConfig, AuthCredential]:
     """Constructs OpenID scheme and credential from configuration and credential dictionaries.
 
     Args:
@@ -223,7 +224,7 @@ def openid_dict_to_scheme_credential(
     # Attempt to adjust credential_dict if this is a key downloaded from Google
     # OAuth config
     if len(list(credential_dict.values())) == 1:
-        credential_value = list(credential_dict.values())[0]
+        credential_value = next(iter(credential_dict.values()))
         if "client_id" in credential_value and "client_secret" in credential_value:
             credential_dict = credential_value
 
@@ -247,8 +248,8 @@ def openid_dict_to_scheme_credential(
 
 
 def openid_url_to_scheme_credential(
-    openid_url: str, scopes: List[str], credential_dict: Dict[str, Any]
-) -> Tuple[OpenIdConnectWithConfig, AuthCredential]:
+    openid_url: str, scopes: list[str], credential_dict: dict[str, Any]
+) -> tuple[OpenIdConnectWithConfig, AuthCredential]:
     """Constructs OpenID scheme and credential from OpenID URL, scopes, and credential dictionary.
 
     Fetches OpenID configuration from the provided URL.
@@ -269,6 +270,7 @@ def openid_url_to_scheme_credential(
         httpx.HTTPStatusError or httpx.RequestError: If there's an error during the
             HTTP request.
     """
+    validate_url(openid_url)
     try:
         response = httpx.get(openid_url, timeout=10)
         response.raise_for_status()
@@ -290,7 +292,7 @@ INTERNAL_AUTH_PREFIX = "_auth_prefix_vaf_"
 def _bearer_param_and_kwargs(
     token: str,
     description: str = "Bearer token",
-) -> Tuple[ApiParameter, Dict[str, Any]]:
+) -> tuple[ApiParameter, dict[str, Any]]:
     """Creates a Bearer Authorization header parameter and matching kwargs."""
     param = ApiParameter(
         original_name="Authorization",
@@ -306,7 +308,7 @@ def _bearer_param_and_kwargs(
 def credential_to_param(
     auth_scheme: AuthScheme,
     auth_credential: AuthCredential,
-) -> Tuple[Optional[ApiParameter], Optional[Dict[str, Any]]]:
+) -> tuple[ApiParameter | None, dict[str, Any] | None]:
     """Converts AuthCredential and AuthScheme to a Parameter and a dictionary for additional kwargs.
 
     This function supports all credential types returned by the exchangers:
@@ -385,11 +387,7 @@ def credential_to_param(
 
     # --- Native HTTP scheme (Bearer / other) ---
     if auth_credential.auth_type == AuthCredentialTypes.HTTP:
-        if (
-            auth_credential.http
-            and auth_credential.http.credentials
-            and auth_credential.http.credentials.token
-        ):
+        if auth_credential.http and auth_credential.http.credentials and auth_credential.http.credentials.token:
             return _bearer_param_and_kwargs(
                 auth_credential.http.credentials.token,
                 description=auth_scheme.description or "Bearer token",
@@ -427,18 +425,15 @@ def resolve_openid_connect_scheme(
             is missing the required ``authorization_endpoint`` and
             ``token_endpoint`` fields.
     """
+    validate_url(openid_connect_url)
     try:
         response = httpx.get(openid_connect_url, timeout=10)
         response.raise_for_status()
         config = response.json()
     except httpx.RequestError as e:
-        raise ValueError(
-            f"Failed to fetch OpenID Connect discovery document from {openid_connect_url}: {e}"
-        ) from e
+        raise ValueError(f"Failed to fetch OpenID Connect discovery document from {openid_connect_url}: {e}") from e
     except ValueError as e:
-        raise ValueError(
-            f"Invalid JSON in OpenID Connect discovery document from {openid_connect_url}: {e}"
-        ) from e
+        raise ValueError(f"Invalid JSON in OpenID Connect discovery document from {openid_connect_url}: {e}") from e
 
     authorization_endpoint = config.get("authorization_endpoint")
     token_endpoint = config.get("token_endpoint")
@@ -460,7 +455,7 @@ def resolve_openid_connect_scheme(
     )
 
 
-def dict_to_auth_scheme(data: Dict[str, Any]) -> AuthScheme:
+def dict_to_auth_scheme(data: dict[str, Any]) -> AuthScheme:
     """Converts a dictionary to a FastAPI AuthScheme object.
 
     For ``openIdConnect`` schemes that include an ``openIdConnectUrl``, this

@@ -29,7 +29,7 @@ type AuthConfig struct {
 	// ClientID is the OIDC client ID that tokens must be issued for.
 	ClientID string
 	// AllowedOrigins is a comma-separated list of allowed CORS origins.
-	// Defaults to "*" if not set.
+	// Empty by default — operators must explicitly configure allowed origins.
 	AllowedOrigins []string
 }
 
@@ -44,7 +44,7 @@ func LoadServerConfig() *ServerConfig {
 			Enabled:        getEnvBool("AUTH_ENABLED", false),
 			IssuerURL:      getEnvStr("AUTH_OIDC_ISSUER_URL", ""),
 			ClientID:       getEnvStr("AUTH_OIDC_CLIENT_ID", "flokoa"),
-			AllowedOrigins: getEnvList("AUTH_CORS_ALLOWED_ORIGINS", []string{"*"}),
+			AllowedOrigins: getEnvList("AUTH_CORS_ALLOWED_ORIGINS", nil),
 		},
 	}
 }

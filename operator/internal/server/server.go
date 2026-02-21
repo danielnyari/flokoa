@@ -26,11 +26,11 @@ import (
 )
 
 // PublicGRPCMethods lists gRPC methods that skip authentication.
+// Only health checks are public; reflection requires authentication
+// to prevent unauthenticated API schema discovery.
 var PublicGRPCMethods = []string{
 	"/grpc.health.v1.Health/Check",
 	"/grpc.health.v1.Health/Watch",
-	"/grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
-	"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
 }
 
 // Server wraps the gRPC server and its configuration.
@@ -73,8 +73,10 @@ func NewServer(
 		streamInterceptors = append(streamInterceptors, authInterceptor.StreamInterceptor())
 	}
 
-	// Create gRPC server with interceptors
+	// Create gRPC server with interceptors and message size limits
+	const maxRecvMsgSize = 4 * 1024 * 1024 // 4 MB
 	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(maxRecvMsgSize),
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptors...),
 	)
@@ -193,7 +195,8 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// Create HTTP mux
 	mux := http.NewServeMux()
 
-	// Serve Swagger UI from the generated openapiv2 directory
+	// Serve Swagger UI from the generated openapiv2 directory.
+	// Clean the path to prevent directory traversal via the environment variable.
 	swaggerDir := os.Getenv("SWAGGER_DIR")
 	if swaggerDir == "" {
 		swaggerDir = "server/gen/openapiv2"

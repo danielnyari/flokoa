@@ -26,7 +26,8 @@ func mapKubernetesError(ctx context.Context, err error, resourceKind string) err
 	case apierrors.IsConflict(err):
 		return status.Errorf(codes.Aborted, "%s has been modified, please retry", resourceKind)
 	case apierrors.IsInvalid(err):
-		return status.Errorf(codes.InvalidArgument, "invalid %s: %s", resourceKind, err.Error())
+		logger.Error(err, "Invalid Kubernetes resource", "resource", resourceKind)
+		return status.Errorf(codes.InvalidArgument, "invalid %s specification", resourceKind)
 	case apierrors.IsForbidden(err):
 		logger.Error(err, "Forbidden access to Kubernetes resource", "resource", resourceKind)
 		return status.Errorf(codes.PermissionDenied, "insufficient permissions for %s", resourceKind)

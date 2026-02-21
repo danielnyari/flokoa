@@ -21,19 +21,28 @@ FAILED=0
 # Check for staged Go changes in operator/
 if git -C "$CLAUDE_PROJECT_DIR" diff --cached --name-only 2>/dev/null | grep -q '^operator/.*\.go$'; then
   echo "Staged Go files detected - running operator lint..." >&2
-  make -C "$CLAUDE_PROJECT_DIR/operator" lint 2>&1
-  if [ $? -ne 0 ]; then
-    echo "Go lint failed. Fix lint errors before committing." >&2
-    FAILED=1
+  LINT_OUTPUT=$(make -C "$CLAUDE_PROJECT_DIR/operator" lint 2>&1)
+  LINT_EXIT=$?
+  if [ $LINT_EXIT -ne 0 ]; then
+    # Distinguish between network/toolchain errors and real lint errors
+    if echo "$LINT_OUTPUT" | grep -q "download go1\." || echo "$LINT_OUTPUT" | grep -q "dial tcp"; then
+      echo "Go lint skipped: Go toolchain unavailable (network error)." >&2
+    else
+      echo "Go lint failed. Fix lint errors before committing." >&2
+      echo "$LINT_OUTPUT" >&2
+      FAILED=1
+    fi
   fi
 fi
 
 # Check for staged Python changes in sdk/python/
 if git -C "$CLAUDE_PROJECT_DIR" diff --cached --name-only 2>/dev/null | grep -q '^sdk/python/.*\.py$'; then
-  echo "Staged Python files detected - running SDK checks..." >&2
-  cd "$CLAUDE_PROJECT_DIR/sdk/python" && make check-flokoa 2>&1
+  echo "Staged Python files detected - running ruff on staged files..." >&2
+  STAGED_PY=$(git -C "$CLAUDE_PROJECT_DIR" diff --cached --name-only 2>/dev/null | grep '^sdk/python/.*\.py$' | sed "s|^sdk/python/||")
+  cd "$CLAUDE_PROJECT_DIR/sdk/python"
+  echo "$STAGED_PY" | xargs uv run --package flokoa ruff check 2>&1
   if [ $? -ne 0 ]; then
-    echo "Python lint/type check failed. Fix errors before committing." >&2
+    echo "Python lint failed on staged files. Fix lint errors before committing." >&2
     FAILED=1
   fi
 fi

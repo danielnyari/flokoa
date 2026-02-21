@@ -1,13 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
 from a2a.server.agent_execution import AgentExecutor
-
-from flokoa.cache import (
-    CACHE_KEY_MODEL_CONFIG,
-    CACHE_KEY_TOOLS,
-    ConfigCache,
-    get_global_cache,
-)
 from flokoa_types import (
     ModelConfig,
     ProviderConfigType,
@@ -20,6 +13,13 @@ from flokoa_types import (
     ToolDefinition as FlokoaToolDefinition,
 )
 from flokoa_types.modelconfig import ProviderType
+
+from flokoa.cache import (
+    CACHE_KEY_MODEL_CONFIG,
+    CACHE_KEY_TOOLS,
+    ConfigCache,
+    get_global_cache,
+)
 from flokoa.utils import load_instruction, load_model_config, load_tools
 
 if TYPE_CHECKING:
