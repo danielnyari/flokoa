@@ -13,7 +13,7 @@ The DSL borrows terminology from Argo Workflows wherever the concept maps cleanl
 | AgentWorkflow keyword | Argo equivalent | Purpose |
 |---|---|---|
 | `tasks` | `dag.tasks` | Define the units of work |
-| `dependsOn` | `dag.tasks[].depends` | Declare execution order |
+| `dependsOn` | `dag.tasks[].dependencies` | Declare execution order |
 | `params` | `arguments.parameters` | Workflow-level inputs |
 | `retryStrategy` | `retryStrategy` | Retry failed tasks |
 | `timeout` | `activeDeadlineSeconds` | Time-bound execution |
