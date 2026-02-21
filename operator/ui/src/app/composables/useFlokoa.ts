@@ -112,6 +112,20 @@ export function useFlokoa() {
     })
   }
 
+  // Watch URL builders for useListWatch composable.
+  // These return URL strings for the SSE watch endpoints.
+
+  function watchUrl(resource: string, namespace?: string): string {
+    const ns = namespace ?? currentNamespace.value
+    return ns
+      ? `${API_BASE}/watch/namespaces/${ns}/${resource}`
+      : `${API_BASE}/watch/${resource}`
+  }
+
+  function watchWorkflowRunsUrl(namespace: string, workflowName: string): string {
+    return `${API_BASE}/watch/namespaces/${namespace}/agentworkflows/${workflowName}/runs`
+  }
+
   return {
     listAgents,
     listModels,
@@ -121,6 +135,10 @@ export function useFlokoa() {
     getAgentWorkflow,
     listWorkflowRuns,
     getWorkflowRun,
-    submitWorkflowRun
+    submitWorkflowRun,
+    // URL builders for list-watch pattern
+    namespacedPath,
+    watchUrl,
+    watchWorkflowRunsUrl
   }
 }

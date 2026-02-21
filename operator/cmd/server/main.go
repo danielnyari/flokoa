@@ -39,9 +39,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create Kubernetes client
+	// Create Kubernetes client with watch support for SSE endpoints
 	restConfig := ctrl.GetConfigOrDie()
-	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme.Scheme})
+	k8sClient, err := client.NewWithWatch(restConfig, client.Options{Scheme: scheme.Scheme})
 	if err != nil {
 		log.Error(err, "Failed to create Kubernetes client")
 		os.Exit(1)
@@ -89,6 +89,7 @@ func main() {
 		cfg.Auth,
 		log,
 		authInterceptor,
+		k8sClient,
 		agentService,
 		modelService,
 		modelProviderService,

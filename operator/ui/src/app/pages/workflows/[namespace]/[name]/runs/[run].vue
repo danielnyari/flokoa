@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import type { WorkflowRun } from '~/types'
+import type { WatchEvent } from '~/composables/useListWatch'
+
 const route = useRoute()
 
 const ns = route.params.namespace as string
 const workflowName = route.params.name as string
 const runName = route.params.run as string
 
-const { getWorkflowRun, getAgentWorkflow } = useFlokoa()
+const { getWorkflowRun, getAgentWorkflow, watchWorkflowRunsUrl } = useFlokoa()
 const { data: run, status: runStatus, refresh: refreshRun } = await getWorkflowRun(ns, workflowName, runName)
 const { data: workflow } = await getAgentWorkflow(ns, workflowName)
 
@@ -18,12 +21,19 @@ const tasks = computed(() => {
   }))
 })
 
-// Auto-refresh while run is active
-const { register } = useAutoRefresh()
-register(() => {
-  if (run.value?.phase === 'RUN_PHASE_RUNNING' || run.value?.phase === 'RUN_PHASE_PENDING') {
-    refreshRun()
+// Real-time updates via SSE watch - replaces polling.
+// Watches all runs for this workflow and filters for our specific run.
+const { connect } = useEventSource(watchWorkflowRunsUrl(ns, workflowName), {
+  onEvent: (data) => {
+    const event = data as WatchEvent<WorkflowRun>
+    if (event.object?.metadata?.name === runName) {
+      run.value = event.object
+    }
   }
+})
+
+onMounted(() => {
+  connect()
 })
 </script>
 

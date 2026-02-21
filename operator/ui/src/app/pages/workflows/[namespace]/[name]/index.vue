@@ -7,11 +7,14 @@ const toast = useToast()
 const ns = route.params.namespace as string
 const name = route.params.name as string
 
-const { getAgentWorkflow, listWorkflowRuns, submitWorkflowRun } = useFlokoa()
+const { getAgentWorkflow, submitWorkflowRun, watchWorkflowRunsUrl } = useFlokoa()
 const { data: workflow, status: wfStatus, refresh: refreshWorkflow } = await getAgentWorkflow(ns, name)
-const { data: runList, status: runStatus, refresh: refreshRuns } = await listWorkflowRuns(ns, name)
 
-const runs = computed(() => runList.value?.items ?? [])
+// Use list-watch for real-time run updates (replaces polling)
+const { items: runs, status: runStatus, refresh: refreshRuns } = useListWatch<WorkflowRun>({
+  listUrl: () => `/api/v1alpha1/namespaces/${ns}/agentworkflows/${name}/runs`,
+  watchUrl: () => watchWorkflowRunsUrl(ns, name)
+})
 
 const submitting = ref(false)
 async function handleSubmitRun() {
@@ -19,7 +22,7 @@ async function handleSubmitRun() {
   try {
     await submitWorkflowRun(ns, name)
     toast.add({ title: 'Run submitted', description: 'A new workflow run has been created.' })
-    refreshRuns()
+    // No need to manually refresh — the SSE watch will pick up the new run
   } catch {
     toast.add({ title: 'Failed', description: 'Could not submit workflow run.', color: 'error' })
   } finally {
@@ -59,17 +62,6 @@ function formatDuration(run: WorkflowRun): string {
   const remaining = seconds % 60
   return `${minutes}m ${remaining}s`
 }
-
-// Auto-refresh while any runs are active
-const { register } = useAutoRefresh()
-register(() => {
-  const hasActive = runs.value.some(r =>
-    r.phase === 'RUN_PHASE_RUNNING' || r.phase === 'RUN_PHASE_PENDING'
-  )
-  if (hasActive) {
-    refreshRuns()
-  }
-})
 
 function refreshAll() {
   refreshWorkflow()

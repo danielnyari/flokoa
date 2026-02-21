@@ -154,6 +154,24 @@ func (a *AuthInterceptor) authenticate(ctx context.Context) (*Claims, error) {
 	return &claims, nil
 }
 
+// VerifyHTTPToken validates a raw bearer token from an HTTP request.
+// This is used by SSE watch endpoints that bypass gRPC metadata.
+func (a *AuthInterceptor) VerifyHTTPToken(ctx context.Context, rawToken string) (*Claims, error) {
+	idToken, err := a.verifier.Verify(ctx, rawToken)
+	if err != nil {
+		a.log.V(1).Info("HTTP token verification failed", "error", err)
+		return nil, err
+	}
+
+	var claims Claims
+	if err := idToken.Claims(&claims); err != nil {
+		a.log.Error(err, "Failed to parse token claims")
+		return nil, err
+	}
+
+	return &claims, nil
+}
+
 // authenticatedServerStream wraps a grpc.ServerStream to inject an authenticated context.
 type authenticatedServerStream struct {
 	grpc.ServerStream

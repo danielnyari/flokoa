@@ -20,10 +20,14 @@ function openDetail(model: Model) {
   detailOpen.value = true
 }
 
-const { listModels } = useFlokoa()
-const { data: modelList, status, refresh } = await listModels()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
-const models = computed(() => modelList.value?.items ?? [])
+const { items: models, status: listStatus, refresh } = useListWatch<Model>({
+  listUrl: () => namespacedPath('models'),
+  watchUrl: () => buildWatchUrl('models')
+})
+
+const status = computed(() => listStatus.value === 'pending' ? 'pending' : 'success')
 
 const columnFilters = ref([{
   id: 'name',

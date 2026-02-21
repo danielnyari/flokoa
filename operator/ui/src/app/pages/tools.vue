@@ -20,10 +20,14 @@ function openDetail(tool: AgentTool) {
   detailOpen.value = true
 }
 
-const { listAgentTools } = useFlokoa()
-const { data: toolList, status, refresh } = await listAgentTools()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
-const tools = computed(() => toolList.value?.items ?? [])
+const { items: tools, status: listStatus, refresh } = useListWatch<AgentTool>({
+  listUrl: () => namespacedPath('agenttools'),
+  watchUrl: () => buildWatchUrl('agenttools')
+})
+
+const status = computed(() => listStatus.value === 'pending' ? 'pending' : 'success')
 
 const columnFilters = ref([{
   id: 'name',

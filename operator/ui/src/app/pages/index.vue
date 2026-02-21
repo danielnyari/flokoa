@@ -1,17 +1,32 @@
 <script setup lang="ts">
-const { listAgents, listModels, listModelProviders, listAgentTools, listAgentWorkflows } = useFlokoa()
+import type { Agent, Model, ModelProvider, AgentTool, AgentWorkflow } from '~/types'
 
-const { data: agentList, status: agentStatus, refresh: refreshAgents } = await listAgents()
-const { data: modelList, status: modelStatus, refresh: refreshModels } = await listModels()
-const { data: providerList, status: providerStatus, refresh: refreshProviders } = await listModelProviders()
-const { data: toolList, status: toolStatus, refresh: refreshTools } = await listAgentTools()
-const { data: workflowList, status: workflowStatus, refresh: refreshWorkflows } = await listAgentWorkflows()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
-const agents = computed(() => agentList.value?.items ?? [])
-const models = computed(() => modelList.value?.items ?? [])
-const providers = computed(() => providerList.value?.items ?? [])
-const tools = computed(() => toolList.value?.items ?? [])
-const workflows = computed(() => workflowList.value?.items ?? [])
+const { items: agents, status: agentStatus, refresh: refreshAgents } = useListWatch<Agent>({
+  listUrl: () => namespacedPath('agents'),
+  watchUrl: () => buildWatchUrl('agents')
+})
+
+const { items: models, status: modelStatus, refresh: refreshModels } = useListWatch<Model>({
+  listUrl: () => namespacedPath('models'),
+  watchUrl: () => buildWatchUrl('models')
+})
+
+const { items: providers, status: providerStatus, refresh: refreshProviders } = useListWatch<ModelProvider>({
+  listUrl: () => namespacedPath('modelproviders'),
+  watchUrl: () => buildWatchUrl('modelproviders')
+})
+
+const { items: tools, status: toolStatus, refresh: refreshTools } = useListWatch<AgentTool>({
+  listUrl: () => namespacedPath('agenttools'),
+  watchUrl: () => buildWatchUrl('agenttools')
+})
+
+const { items: workflows, status: workflowStatus, refresh: refreshWorkflows } = useListWatch<AgentWorkflow>({
+  listUrl: () => namespacedPath('agentworkflows'),
+  watchUrl: () => buildWatchUrl('agentworkflows')
+})
 
 const loading = computed(() =>
   agentStatus.value === 'pending'

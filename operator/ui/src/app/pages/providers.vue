@@ -20,10 +20,14 @@ function openDetail(provider: ModelProvider) {
   detailOpen.value = true
 }
 
-const { listModelProviders } = useFlokoa()
-const { data: providerList, status, refresh } = await listModelProviders()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
-const providers = computed(() => providerList.value?.items ?? [])
+const { items: providers, status: listStatus, refresh } = useListWatch<ModelProvider>({
+  listUrl: () => namespacedPath('modelproviders'),
+  watchUrl: () => buildWatchUrl('modelproviders')
+})
+
+const status = computed(() => listStatus.value === 'pending' ? 'pending' : 'success')
 
 const columnFilters = ref([{
   id: 'name',

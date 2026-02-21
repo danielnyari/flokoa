@@ -20,6 +20,8 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/danielnyari/flokoa/internal/config"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
 	uiFS "github.com/danielnyari/flokoa/ui"
@@ -35,23 +37,27 @@ var PublicGRPCMethods = []string{
 
 // Server wraps the gRPC server and its configuration.
 type Server struct {
-	grpcServer   *grpc.Server
-	httpServer   *http.Server
-	healthServer *health.Server
-	port         int
-	httpPort     int
-	authCfg      config.AuthConfig
-	log          logr.Logger
+	grpcServer      *grpc.Server
+	httpServer      *http.Server
+	healthServer    *health.Server
+	port            int
+	httpPort        int
+	authCfg         config.AuthConfig
+	log             logr.Logger
+	watchClient     client.WithWatch
+	authInterceptor *AuthInterceptor
 }
 
 // NewServer creates a new gRPC server with reflection enabled.
 // If authInterceptor is non-nil, it is added to the interceptor chain.
+// watchClient enables SSE watch endpoints for real-time UI updates.
 func NewServer(
 	port int,
 	httpPort int,
 	authCfg config.AuthConfig,
 	log logr.Logger,
 	authInterceptor *AuthInterceptor,
+	watchClient client.WithWatch,
 	agentService pb.AgentServiceServer,
 	modelService pb.ModelServiceServer,
 	modelProviderService pb.ModelProviderServiceServer,
@@ -96,12 +102,14 @@ func NewServer(
 	reflection.Register(grpcServer)
 
 	return &Server{
-		grpcServer:   grpcServer,
-		healthServer: healthServer,
-		port:         port,
-		httpPort:     httpPort,
-		authCfg:      authCfg,
-		log:          log,
+		grpcServer:      grpcServer,
+		healthServer:    healthServer,
+		port:            port,
+		httpPort:        httpPort,
+		authCfg:         authCfg,
+		log:             log,
+		watchClient:     watchClient,
+		authInterceptor: authInterceptor,
 	}
 }
 
@@ -216,6 +224,13 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		}
 	})
 
+	// Register SSE watch endpoints for real-time UI updates.
+	// These must be registered before the catch-all /api/ gateway route
+	// because Go 1.22+ ServeMux uses most-specific-pattern-wins matching.
+	if s.watchClient != nil {
+		registerWatchRoutes(mux, s.watchClient, s.log, authMiddleware(s.authInterceptor))
+	}
+
 	// Handle API requests with gateway
 	mux.Handle("/api/", gwMux)
 
@@ -275,12 +290,14 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		AllowCredentials: true,
 	})
 
+	// WriteTimeout is set to 0 because SSE watch connections are long-lived.
+	// Individual SSE handlers use http.ResponseController to manage write deadlines.
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.httpPort),
 		Handler:           c.Handler(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	s.log.Info("Starting HTTP gateway", "port", s.httpPort, "swagger-ui", fmt.Sprintf("http://localhost:%d/swagger/", s.httpPort))
