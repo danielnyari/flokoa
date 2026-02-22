@@ -18,7 +18,7 @@ metadata:
   name: argo-agent-reader-binding
 subjects:
   - kind: ServiceAccount
-    name: argo-workflow
+    name: flokoa-workflow
     namespace: argo
   - kind: ServiceAccount
     name: default
@@ -45,27 +45,27 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: argo-workflow
+  name: flokoa-workflow
   namespace: flokoa-system
 ---
 # Token secret for service account (required for Kubernetes 1.24+)
 apiVersion: v1
 kind: Secret
 metadata:
-  name: argo-workflow.service-account-token
+  name: flokoa-workflow.service-account-token
   namespace: flokoa-system
   annotations:
-    kubernetes.io/service-account.name: argo-workflow
+    kubernetes.io/service-account.name: flokoa-workflow
 type: kubernetes.io/service-account-token
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: argo-workflow-agent-access
+  name: flokoa-workflow-agent-access
   namespace: flokoa-system
 subjects:
   - kind: ServiceAccount
-    name: argo-workflow
+    name: flokoa-workflow
     namespace: flokoa-system
   - kind: ServiceAccount
     name: a2a-executor-plugin
@@ -80,7 +80,7 @@ roleRef:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: argo-workflow-executor
+  name: flokoa-workflow-executor
   namespace: flokoa-system
 rules:
   - apiGroups: ["argoproj.io"]
@@ -98,11 +98,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: argo-workflow-executor-access
+  name: flokoa-workflow-executor-access
   namespace: flokoa-system
 subjects:
   - kind: ServiceAccount
-    name: argo-workflow
+    name: flokoa-workflow
     namespace: flokoa-system
   - kind: ServiceAccount
     name: a2a-executor-plugin
@@ -110,4 +110,4 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: argo-workflow-executor
+  name: flokoa-workflow-executor

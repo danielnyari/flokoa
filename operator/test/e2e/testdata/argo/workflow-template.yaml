@@ -6,7 +6,7 @@ metadata:
   namespace: flokoa-system
 spec:
   entrypoint: call-agent
-  serviceAccountName: argo-workflow
+  serviceAccountName: flokoa-workflow
   automountServiceAccountToken: true
   arguments:
     parameters:

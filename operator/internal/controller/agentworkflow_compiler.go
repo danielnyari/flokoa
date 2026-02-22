@@ -57,6 +57,9 @@ const (
 	// traceparentWorkflowParam is the Argo workflow-level parameter that carries the traceparent value.
 	traceparentWorkflowParam = "_flokoa_traceparent"
 
+	// defaultWorkflowServiceAccount is the default ServiceAccount for workflow pods.
+	defaultWorkflowServiceAccount = "flokoa-workflow"
+
 	// Mount paths for resolved ConfigMaps in agent task containers.
 	agentTaskModelMountPath       = "/etc/flokoa/model.json"
 	agentTaskToolsMountPath       = "/etc/flokoa/tools"
@@ -95,6 +98,20 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 		Spec: wfv1.WorkflowSpec{
 			Entrypoint: dagEntrypointName,
 		},
+	}
+
+	// Service account for workflow pods.
+	saName := awf.Spec.ServiceAccountName
+	if saName == "" {
+		saName = defaultWorkflowServiceAccount
+	}
+	wft.Spec.ServiceAccountName = saName
+
+	if awf.Spec.AutomountServiceAccountToken != nil {
+		wft.Spec.AutomountServiceAccountToken = awf.Spec.AutomountServiceAccountToken
+	} else {
+		automount := true
+		wft.Spec.AutomountServiceAccountToken = &automount
 	}
 
 	// Inject traceparent as a workflow-level parameter so it is available to

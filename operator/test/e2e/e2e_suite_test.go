@@ -58,7 +58,7 @@ var (
 	serverImage = "example.com/server:v0.0.1"
 
 	// petstoreImage is the non-root petstore image built from test/e2e/testdata/petstore.Dockerfile
-	petstoreImage = "localhost/petstore:test"
+	petstoreImage = "petstore:test"
 
 	// cliImage is the flokoa-cli image used by template runtime agents
 	cliImage = "ghcr.io/danielnyari/flokoa-cli:latest"

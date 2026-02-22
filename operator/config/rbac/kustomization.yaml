@@ -38,4 +38,10 @@ resources:
 - agentworkflow_admin_role.yaml
 - agentworkflow_editor_role.yaml
 - agentworkflow_viewer_role.yaml
-
+# Workflow ServiceAccount and RBAC for compiled AgentWorkflow Argo pods.
+- workflow_service_account.yaml
+- workflow_service_account_token.yaml
+- workflow_agent_reader_role.yaml
+- workflow_agent_reader_role_binding.yaml
+- workflow_executor_role.yaml
+- workflow_executor_role_binding.yaml

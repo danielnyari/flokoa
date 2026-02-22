@@ -53,6 +53,13 @@ spec:
           spec:
             description: AgentWorkflowSpec defines the desired state of AgentWorkflow.
             properties:
+              automountServiceAccountToken:
+                default: true
+                description: |-
+                  AutomountServiceAccountToken controls whether the service account token
+                  is automatically mounted into workflow pods. Defaults to true.
+                  Argo executor plugins require this to be true.
+                type: boolean
               description:
                 description: Description is a human-readable description of the workflow.
                 type: string
@@ -106,6 +113,12 @@ spec:
                 required:
                 - limit
                 type: object
+              serviceAccountName:
+                default: flokoa-workflow
+                description: |-
+                  ServiceAccountName is the Kubernetes ServiceAccount used for workflow pods.
+                  Defaults to "flokoa-workflow" if not specified.
+                type: string
               tasks:
                 description: Tasks defines the workflow tasks to execute.
                 items:
