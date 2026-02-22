@@ -3025,3 +3025,947 @@ func TestCompile_CompletePipelineWithSwitch(t *testing.T) {
 		t.Errorf("archive body should contain translated expression, got %q", archiveTmpl.HTTP.Body)
 	}
 }
+
+// =============================================================================
+// Error path tests — verify the compiler rejects invalid inputs
+// =============================================================================
+
+func TestCompile_ErrorNoTaskType(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "bad", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "empty-task"}, // no agent, agentTask, container, http, or switch
+			},
+		},
+	}
+
+	_, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err == nil {
+		t.Fatal("expected error for task with no recognized type, got nil")
+	}
+	if !strings.Contains(err.Error(), "no recognized type") {
+		t.Errorf("error should mention 'no recognized type', got: %v", err)
+	}
+}
+
+func TestCompile_ErrorMissingResolvedAgentTaskInfo(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "missing-info", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "orphan-task",
+					AgentTask: &agentv1alpha1.AgentTask{
+						Type:        agentv1alpha1.MarvinTaskTypeRun,
+						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	// Pass empty resolved map — the task should error because it expects resolved info.
+	_, err := compileToArgoWorkflowTemplate(awf, map[string]*resolvedAgentTaskInfo{}, CompilerOptions{})
+	if err == nil {
+		t.Fatal("expected error for missing resolved agent task info, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing resolved agent task info") {
+		t.Errorf("error should mention 'missing resolved agent task info', got: %v", err)
+	}
+}
+
+func TestCompile_ErrorNilResolvedMapForAgentTask(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "nil-resolved", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task",
+					AgentTask: &agentv1alpha1.AgentTask{
+						Type:        agentv1alpha1.MarvinTaskTypeRun,
+						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	// Pass nil resolved map.
+	_, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err == nil {
+		t.Fatal("expected error when resolvedTasks is nil for agentTask, got nil")
+	}
+}
+
+// =============================================================================
+// Expression translation edge cases
+// =============================================================================
+
+func TestTranslateExpressions_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "unknown expression passes through",
+			input:    "{{unknown.foo}}",
+			expected: "{{unknown.foo}}",
+		},
+		{
+			name:     "single-part task reference passes through",
+			input:    "{{tasks.foo}}",
+			expected: "{{tasks.foo}}",
+		},
+		{
+			name:     "empty string unchanged",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "text with no braces",
+			input:    "just some text",
+			expected: "just some text",
+		},
+		{
+			name:     "deep nested field access",
+			input:    "{{tasks.x.output.a.b.c.d}}",
+			expected: "{{=sprig.fromJson(tasks['x'].outputs.parameters['artifact']).parts[0].data.a.b.c.d}}",
+		},
+		{
+			name:     "task name with numbers",
+			input:    "{{tasks.task123.output}}",
+			expected: "{{tasks.task123.outputs.parameters.result}}",
+		},
+		{
+			name:     "mixed params and task refs",
+			input:    "Input: {{params.x}}, Output: {{tasks.a.output}}, Field: {{tasks.b.output.f}}",
+			expected: "Input: {{workflow.parameters.x}}, Output: {{tasks.a.outputs.parameters.result}}, Field: {{=sprig.fromJson(tasks['b'].outputs.parameters['artifact']).parts[0].data.f}}",
+		},
+		{
+			name:     "argo expression with spaces",
+			input:    "{{= some.complex.expr }}",
+			expected: "{{= some.complex.expr}}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := TranslateExpressions(tt.input)
+			if result != tt.expected {
+				t.Errorf("\n  input:    %q\n  expected: %q\n  got:      %q", tt.input, tt.expected, result)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Structural validation tests — verify properties that should hold for ALL
+// compiled workflows, regardless of input specifics. These catch bugs that
+// snapshot tests miss because they verify invariants rather than exact output.
+// =============================================================================
+
+func TestCompileStructural_AllDAGTasksReferenceExistingTemplates(t *testing.T) {
+	testCases := []struct {
+		name string
+		awf  *agentv1alpha1.AgentWorkflow
+		opts CompilerOptions
+	}{
+		{
+			name: "simple sequential",
+			awf: &agentv1alpha1.AgentWorkflow{
+				ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "default"},
+				Spec: agentv1alpha1.AgentWorkflowSpec{
+					Tasks: []agentv1alpha1.WorkflowTask{
+						{Name: "a", Agent: &agentv1alpha1.AgentCall{Name: "agent", Text: "hello"}},
+						{Name: "b", Agent: &agentv1alpha1.AgentCall{Name: "agent", Text: "world"}, DependsOn: []string{"a"}},
+					},
+				},
+			},
+		},
+		{
+			name: "with switch",
+			awf: &agentv1alpha1.AgentWorkflow{
+				ObjectMeta: metav1.ObjectMeta{Name: "s2", Namespace: "default"},
+				Spec: agentv1alpha1.AgentWorkflowSpec{
+					Tasks: []agentv1alpha1.WorkflowTask{
+						{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "cls", Text: "classify"}},
+						{
+							Name: "route",
+							Switch: []agentv1alpha1.SwitchCase{
+								{Condition: "{{tasks.classify.output}} == yes", Then: "handle"},
+								{Default: "skip"},
+							},
+							DependsOn: []string{"classify"},
+						},
+						{Name: "handle", Agent: &agentv1alpha1.AgentCall{Name: "h", Text: "handle"}},
+						{Name: "skip", Agent: &agentv1alpha1.AgentCall{Name: "s", Text: "skip"}},
+					},
+				},
+			},
+		},
+		{
+			name: "mixed types",
+			awf: &agentv1alpha1.AgentWorkflow{
+				ObjectMeta: metav1.ObjectMeta{Name: "s3", Namespace: "default"},
+				Spec: agentv1alpha1.AgentWorkflowSpec{
+					Tasks: []agentv1alpha1.WorkflowTask{
+						{Name: "fetch", HTTP: &agentv1alpha1.HTTPTask{URL: "https://example.com"}},
+						{Name: "process", Container: &agentv1alpha1.ContainerTask{Image: "python:3.12"}, DependsOn: []string{"fetch"}},
+						{Name: "analyze", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "go"}, DependsOn: []string{"process"}},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := compileToArgoWorkflowTemplate(tc.awf, nil, tc.opts)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Build set of template names
+			templateNames := map[string]bool{}
+			for _, tmpl := range got.Spec.Templates {
+				if templateNames[tmpl.Name] {
+					t.Errorf("duplicate template name: %q", tmpl.Name)
+				}
+				templateNames[tmpl.Name] = true
+			}
+
+			// Every DAG task must reference an existing template
+			dagTmpl := got.Spec.Templates[0]
+			if dagTmpl.DAG == nil {
+				t.Fatal("first template should be the DAG entrypoint")
+			}
+			for _, dt := range dagTmpl.DAG.Tasks {
+				if !templateNames[dt.Template] {
+					t.Errorf("DAG task %q references template %q which does not exist", dt.Name, dt.Template)
+				}
+			}
+		})
+	}
+}
+
+func TestCompileStructural_EntrypointIsMain(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "ep-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "t", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "x"}},
+			},
+		},
+	}
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Spec.Entrypoint != "main" {
+		t.Errorf("entrypoint should be 'main', got %q", got.Spec.Entrypoint)
+	}
+	if got.Spec.Templates[0].Name != "main" {
+		t.Errorf("first template should be 'main', got %q", got.Spec.Templates[0].Name)
+	}
+	if got.Spec.Templates[0].DAG == nil {
+		t.Error("first template should be a DAG template")
+	}
+}
+
+func TestCompileStructural_AllWorkflowParamsPresent(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "params-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{
+				{Name: "alpha", Value: "a"},
+				{Name: "beta", Value: "b"},
+				{Name: "gamma", Description: "g desc", Value: "g"},
+			},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "t", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "{{params.alpha}}"}},
+			},
+		},
+	}
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	paramNames := map[string]bool{}
+	for _, p := range got.Spec.Arguments.Parameters {
+		paramNames[p.Name] = true
+	}
+
+	// Traceparent should always be present
+	if !paramNames["_flokoa_traceparent"] {
+		t.Error("missing _flokoa_traceparent parameter")
+	}
+	// All user params should be present
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		if !paramNames[name] {
+			t.Errorf("missing workflow parameter %q", name)
+		}
+	}
+}
+
+func TestCompileStructural_TraceparentInjected(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "tp-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "t", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "x"}},
+			},
+		},
+	}
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The first parameter must be _flokoa_traceparent with a non-empty default
+	if len(got.Spec.Arguments.Parameters) == 0 {
+		t.Fatal("expected at least one workflow parameter")
+	}
+	tp := got.Spec.Arguments.Parameters[0]
+	if tp.Name != "_flokoa_traceparent" {
+		t.Errorf("first parameter should be _flokoa_traceparent, got %q", tp.Name)
+	}
+	if tp.Default == nil || string(*tp.Default) == "" {
+		t.Error("_flokoa_traceparent should have a non-empty default value")
+	}
+}
+
+func TestCompileStructural_LabelsAndMetadata(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-workflow", Namespace: "prod"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "t", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "x"}},
+			},
+		},
+	}
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got.Name != "my-workflow" {
+		t.Errorf("name should match AgentWorkflow name, got %q", got.Name)
+	}
+	if got.Namespace != "prod" {
+		t.Errorf("namespace should match AgentWorkflow namespace, got %q", got.Namespace)
+	}
+	if got.Labels["agent.flokoa.ai/agentworkflow-name"] != "my-workflow" {
+		t.Errorf("missing or wrong agentworkflow-name label: %v", got.Labels)
+	}
+	if got.Labels["app.kubernetes.io/managed-by"] != "flokoa-operator" {
+		t.Errorf("missing or wrong managed-by label: %v", got.Labels)
+	}
+	if got.TypeMeta.Kind != "WorkflowTemplate" {
+		t.Errorf("Kind should be WorkflowTemplate, got %q", got.TypeMeta.Kind)
+	}
+	if got.TypeMeta.APIVersion != "argoproj.io/v1alpha1" {
+		t.Errorf("APIVersion should be argoproj.io/v1alpha1, got %q", got.TypeMeta.APIVersion)
+	}
+}
+
+func TestCompileStructural_EveryTaskProducesOutputs(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "out-test", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "agent-task", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "hello"}},
+				{Name: "http-task", HTTP: &agentv1alpha1.HTTPTask{URL: "https://example.com"}, DependsOn: []string{"agent-task"}},
+				{Name: "container-task", Container: &agentv1alpha1.ContainerTask{Image: "python:3"}, DependsOn: []string{"http-task"}},
+			},
+		},
+	}
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Skip the first template (DAG entrypoint) and check all others have outputs
+	for _, tmpl := range got.Spec.Templates[1:] {
+		hasParams := len(tmpl.Outputs.Parameters) > 0
+		hasArtifacts := len(tmpl.Outputs.Artifacts) > 0
+		if !hasParams && !hasArtifacts {
+			t.Errorf("template %q has no outputs (parameters or artifacts)", tmpl.Name)
+		}
+
+		// Check that "result" and "artifact" output names are present
+		outputNames := map[string]bool{}
+		for _, p := range tmpl.Outputs.Parameters {
+			outputNames[p.Name] = true
+		}
+		for _, a := range tmpl.Outputs.Artifacts {
+			outputNames[a.Name] = true
+		}
+		if !outputNames["result"] {
+			t.Errorf("template %q missing 'result' output", tmpl.Name)
+		}
+		if !outputNames["artifact"] {
+			t.Errorf("template %q missing 'artifact' output", tmpl.Name)
+		}
+	}
+}
+
+// =============================================================================
+// Strengthen tautological tests — replace existence checks with content checks
+// =============================================================================
+
+func TestCompile_SwitchConditionsHaveCorrectContent(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "switch-content", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "classifier", Text: "classify this"}},
+				{
+					Name: "route",
+					Switch: []agentv1alpha1.SwitchCase{
+						{Condition: "{{tasks.classify.output}} == positive", Then: "celebrate"},
+						{Condition: "{{tasks.classify.output}} == negative", Then: "escalate"},
+						{Default: "review"},
+					},
+					DependsOn: []string{"classify"},
+				},
+				{Name: "celebrate", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "a"}},
+				{Name: "escalate", Agent: &agentv1alpha1.AgentCall{Name: "b", Text: "b"}},
+				{Name: "review", Agent: &agentv1alpha1.AgentCall{Name: "c", Text: "c"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	dagTmplGot := got.Spec.Templates[0]
+	dagTaskMap := make(map[string]wfv1.DAGTask)
+	for _, dt := range dagTmplGot.DAG.Tasks {
+		dagTaskMap[dt.Name] = dt
+	}
+
+	// Verify the exact translated When expressions — not just their existence
+	wantConditions := map[string]string{
+		"route-celebrate": "{{tasks.classify.outputs.parameters.result}} == positive",
+		"route-escalate":  "{{tasks.classify.outputs.parameters.result}} == negative",
+		"route-review":    "", // default has no When
+	}
+
+	for name, wantWhen := range wantConditions {
+		dt, ok := dagTaskMap[name]
+		if !ok {
+			t.Errorf("missing switch DAG task %q", name)
+			continue
+		}
+		if dt.When != wantWhen {
+			t.Errorf("task %q: When = %q, want %q", name, dt.When, wantWhen)
+		}
+		// All switch branches should depend on "route"
+		if len(dt.Dependencies) != 1 || dt.Dependencies[0] != "route" {
+			t.Errorf("task %q: Dependencies = %v, want [route]", name, dt.Dependencies)
+		}
+	}
+}
+
+func TestCompile_SwitchFieldAccessConditionTranslated(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "switch-field", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "cls", Text: "classify"}},
+				{
+					Name: "route",
+					Switch: []agentv1alpha1.SwitchCase{
+						{Condition: "{{tasks.classify.output.category}} == urgent", Then: "handle"},
+						{Default: "ignore"},
+					},
+					DependsOn: []string{"classify"},
+				},
+				{Name: "handle", Agent: &agentv1alpha1.AgentCall{Name: "h", Text: "h"}},
+				{Name: "ignore", Agent: &agentv1alpha1.AgentCall{Name: "i", Text: "i"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	dagTmplGot := got.Spec.Templates[0]
+	dagTaskMap := make(map[string]wfv1.DAGTask)
+	for _, dt := range dagTmplGot.DAG.Tasks {
+		dagTaskMap[dt.Name] = dt
+	}
+
+	dt := dagTaskMap["route-handle"]
+	wantWhen := "{{=sprig.fromJson(tasks['classify'].outputs.parameters['artifact']).parts[0].data.category}} == urgent"
+	if dt.When != wantWhen {
+		t.Errorf("route-handle When:\n  got:  %q\n  want: %q", dt.When, wantWhen)
+	}
+}
+
+func TestCompile_PipelineExpressionTranslationAccuracy(t *testing.T) {
+	// This test replaces the weak strings.Contains checks in
+	// TestCompile_CompletePipelineWithSwitch with exact assertions.
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "expr-accuracy", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "api_url", Value: "https://example.com"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{URL: "{{params.api_url}}/data"},
+				},
+				{
+					Name: "preprocess",
+					Container: &agentv1alpha1.ContainerTask{
+						Image: "python:3.12",
+						Env:   []corev1.EnvVar{{Name: "RAW_DATA", Value: "{{tasks.fetch.output}}"}},
+					},
+					DependsOn: []string{"fetch"},
+				},
+				{
+					Name: "analyze",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "analyzer",
+						Text: "Analyze: {{tasks.preprocess.output}}",
+					},
+					DependsOn: []string{"preprocess"},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify HTTP URL translation
+	fetchTmpl := got.Spec.Templates[1]
+	if fetchTmpl.HTTP == nil {
+		t.Fatal("expected HTTP template for 'fetch'")
+	}
+	if fetchTmpl.HTTP.URL != "{{workflow.parameters.api_url}}/data" {
+		t.Errorf("fetch URL = %q, want %q", fetchTmpl.HTTP.URL, "{{workflow.parameters.api_url}}/data")
+	}
+
+	// Verify container env var translation
+	preprocessTmpl := got.Spec.Templates[2]
+	if preprocessTmpl.Container == nil {
+		t.Fatal("expected container template for 'preprocess'")
+	}
+	foundRAWDATA := false
+	for _, env := range preprocessTmpl.Container.Env {
+		if env.Name == "RAW_DATA" {
+			foundRAWDATA = true
+			want := "{{tasks.fetch.outputs.parameters.result}}"
+			if env.Value != want {
+				t.Errorf("RAW_DATA = %q, want %q", env.Value, want)
+			}
+		}
+	}
+	if !foundRAWDATA {
+		t.Error("preprocess template missing RAW_DATA env var")
+	}
+
+	// Verify agent message expression translation
+	analyzeTmpl := got.Spec.Templates[3]
+	if analyzeTmpl.Plugin == nil {
+		t.Fatal("expected plugin template for 'analyze'")
+	}
+	var pluginData map[string]interface{}
+	if err := json.Unmarshal(analyzeTmpl.Plugin.Value, &pluginData); err != nil {
+		t.Fatalf("failed to unmarshal plugin spec: %v", err)
+	}
+	a2aData, ok := pluginData["a2a"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing 'a2a' key in plugin spec")
+	}
+	msgData, ok := a2aData["message"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing 'message' key in a2a spec")
+	}
+	parts, ok := msgData["parts"].([]interface{})
+	if !ok || len(parts) == 0 {
+		t.Fatal("missing or empty 'parts' in message")
+	}
+	firstPart, ok := parts[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("first part is not a map")
+	}
+	textPart, ok := firstPart["text"].(map[string]interface{})
+	if !ok {
+		t.Fatal("first part missing 'text' key")
+	}
+	gotText, _ := textPart["text"].(string)
+	wantText := "Analyze: {{tasks.preprocess.outputs.parameters.result}}"
+	if gotText != wantText {
+		t.Errorf("analyze message text = %q, want %q", gotText, wantText)
+	}
+}
+
+// =============================================================================
+// HTTP defaults and edge cases
+// =============================================================================
+
+func TestCompile_HTTPDefaultMethodIsGET(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "http-default", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL: "https://api.example.com/data",
+						// Method intentionally omitted
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	httpTmpl := got.Spec.Templates[1]
+	if httpTmpl.HTTP == nil {
+		t.Fatal("expected HTTP template")
+	}
+	if httpTmpl.HTTP.Method != "GET" {
+		t.Errorf("expected default method GET, got %q", httpTmpl.HTTP.Method)
+	}
+}
+
+func TestCompile_HTTPDuplicateConfigMapHeaderDeduplication(t *testing.T) {
+	// Two tasks reference the same configMapKeyRef — should produce only one workflow parameter.
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "http-dedup", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "req1",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL: "https://api.example.com/a",
+						Headers: []agentv1alpha1.HTTPHeader{
+							{
+								Name:      "X-Token",
+								ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "shared-cm"}, Key: "token"}},
+							},
+						},
+					},
+				},
+				{
+					Name: "req2",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL: "https://api.example.com/b",
+						Headers: []agentv1alpha1.HTTPHeader{
+							{
+								Name:      "X-Token",
+								ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "shared-cm"}, Key: "token"}},
+							},
+						},
+					},
+					DependsOn: []string{"req1"},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Count how many parameters start with _cm_
+	cmParamCount := 0
+	for _, p := range got.Spec.Arguments.Parameters {
+		if strings.HasPrefix(p.Name, "_cm_") {
+			cmParamCount++
+		}
+	}
+	if cmParamCount != 1 {
+		t.Errorf("expected exactly 1 configMap parameter (deduplication), got %d", cmParamCount)
+	}
+}
+
+// =============================================================================
+// Switch task edge cases
+// =============================================================================
+
+func TestCompile_SwitchOnlyDefault(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "switch-only-default", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "check", Agent: &agentv1alpha1.AgentCall{Name: "checker", Text: "check"}},
+				{
+					Name: "route",
+					Switch: []agentv1alpha1.SwitchCase{
+						{Default: "fallback"},
+					},
+					DependsOn: []string{"check"},
+				},
+				{Name: "fallback", Agent: &agentv1alpha1.AgentCall{Name: "fb", Text: "fallback"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	dagTmplGot := got.Spec.Templates[0]
+	dagTaskMap := make(map[string]wfv1.DAGTask)
+	for _, dt := range dagTmplGot.DAG.Tasks {
+		dagTaskMap[dt.Name] = dt
+	}
+
+	// The default route should have no When condition
+	dt, ok := dagTaskMap["route-fallback"]
+	if !ok {
+		t.Fatal("missing route-fallback DAG task")
+	}
+	if dt.When != "" {
+		t.Errorf("default-only switch branch should have no When, got %q", dt.When)
+	}
+	if len(dt.Dependencies) != 1 || dt.Dependencies[0] != "route" {
+		t.Errorf("route-fallback should depend on 'route', got %v", dt.Dependencies)
+	}
+}
+
+func TestCompile_SwitchRouterTemplateIsNoOp(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "switch-noop", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "classify", Agent: &agentv1alpha1.AgentCall{Name: "cls", Text: "classify"}},
+				{
+					Name: "route",
+					Switch: []agentv1alpha1.SwitchCase{
+						{Condition: "{{tasks.classify.output}} == go", Then: "proceed"},
+					},
+					DependsOn: []string{"classify"},
+				},
+				{Name: "proceed", Agent: &agentv1alpha1.AgentCall{Name: "p", Text: "proceed"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Find the "route" template — should be a script template (router)
+	var routeTemplate *wfv1.Template
+	for i := range got.Spec.Templates {
+		if got.Spec.Templates[i].Name == "route" {
+			routeTemplate = &got.Spec.Templates[i]
+			break
+		}
+	}
+	if routeTemplate == nil {
+		t.Fatal("missing 'route' template")
+	}
+	if routeTemplate.Script == nil {
+		t.Fatal("switch router template should use Script")
+	}
+	if routeTemplate.Script.Image != "alpine:3.18" {
+		t.Errorf("switch router image = %q, want alpine:3.18", routeTemplate.Script.Image)
+	}
+	if routeTemplate.Plugin != nil || routeTemplate.Container != nil || routeTemplate.HTTP != nil {
+		t.Error("switch router should only have Script set, not Plugin/Container/HTTP")
+	}
+}
+
+// =============================================================================
+// Retry strategy edge cases
+// =============================================================================
+
+func TestCompile_RetryStrategyWithoutBackoff(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "retry-no-backoff", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			RetryStrategy: &agentv1alpha1.WorkflowRetryStrategy{
+				Limit: 5,
+				// No Backoff
+			},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "task", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "retry me"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tmpl := got.Spec.Templates[1]
+	if tmpl.RetryStrategy == nil {
+		t.Fatal("expected retry strategy on template")
+	}
+	if tmpl.RetryStrategy.Limit == nil || tmpl.RetryStrategy.Limit.IntValue() != 5 {
+		t.Errorf("retry limit should be 5, got %v", tmpl.RetryStrategy.Limit)
+	}
+	if tmpl.RetryStrategy.Backoff != nil {
+		t.Errorf("expected no backoff, got %v", tmpl.RetryStrategy.Backoff)
+	}
+}
+
+// =============================================================================
+// AgentTask resolved info edge cases
+// =============================================================================
+
+func TestCompile_AgentTaskWithNilModelInfo(t *testing.T) {
+	// resolvedAgentTaskInfo exists but modelInfo is nil — should compile without volumes.
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "nil-model", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task",
+					AgentTask: &agentv1alpha1.AgentTask{
+						Type:        agentv1alpha1.MarvinTaskTypeRun,
+						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	// Provide resolved info but with all nil fields.
+	resolved := map[string]*resolvedAgentTaskInfo{"task": {}}
+	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tmpl := got.Spec.Templates[1]
+	if tmpl.Container == nil {
+		t.Fatal("expected container template")
+	}
+	if len(tmpl.Volumes) != 0 {
+		t.Errorf("expected no volumes when modelInfo is nil, got %d", len(tmpl.Volumes))
+	}
+	if len(tmpl.Container.VolumeMounts) != 0 {
+		t.Errorf("expected no volume mounts when modelInfo is nil, got %d", len(tmpl.Container.VolumeMounts))
+	}
+}
+
+func TestCompile_AgentTaskWithEmptyConfigMapName(t *testing.T) {
+	// modelInfo exists but configMapName is empty — should not add volumes.
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "empty-cm", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task",
+					AgentTask: &agentv1alpha1.AgentTask{
+						Type:        agentv1alpha1.MarvinTaskTypeRun,
+						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	resolved := map[string]*resolvedAgentTaskInfo{
+		"task": {
+			modelInfo: &resolvedModelInfo{configMapName: ""}, // empty
+		},
+	}
+	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tmpl := got.Spec.Templates[1]
+	if len(tmpl.Volumes) != 0 {
+		t.Errorf("expected no volumes when configMapName is empty, got %d", len(tmpl.Volumes))
+	}
+}
+
+// =============================================================================
+// Timeout conversion accuracy
+// =============================================================================
+
+func TestCompile_TimeoutConversionAccuracy(t *testing.T) {
+	tests := []struct {
+		name        string
+		duration    time.Duration
+		wantSeconds int32
+	}{
+		{"30 seconds", 30 * time.Second, 30},
+		{"1 minute", 1 * time.Minute, 60},
+		{"5 minutes", 5 * time.Minute, 300},
+		{"1 hour", 1 * time.Hour, 3600},
+		{"90 seconds", 90 * time.Second, 90},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			timeout := metav1.Duration{Duration: tt.duration}
+			awf := &agentv1alpha1.AgentWorkflow{
+				ObjectMeta: metav1.ObjectMeta{Name: "timeout-test", Namespace: "default"},
+				Spec: agentv1alpha1.AgentWorkflowSpec{
+					Tasks: []agentv1alpha1.WorkflowTask{
+						{
+							Name:    "task",
+							Agent:   &agentv1alpha1.AgentCall{Name: "a", Text: "x"},
+							Timeout: &timeout,
+						},
+					},
+				},
+			}
+
+			got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			tmpl := got.Spec.Templates[1]
+			if tmpl.ActiveDeadlineSeconds == nil {
+				t.Fatal("expected ActiveDeadlineSeconds to be set")
+			}
+			if tmpl.ActiveDeadlineSeconds.IntVal != tt.wantSeconds {
+				t.Errorf("ActiveDeadlineSeconds = %d, want %d", tmpl.ActiveDeadlineSeconds.IntVal, tt.wantSeconds)
+			}
+		})
+	}
+}
+
+func TestCompile_WorkflowTimeoutConversion(t *testing.T) {
+	timeout := metav1.Duration{Duration: 30 * time.Minute}
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "wf-timeout", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Timeout: &timeout,
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "task", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "x"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got.Spec.ActiveDeadlineSeconds == nil {
+		t.Fatal("expected workflow ActiveDeadlineSeconds to be set")
+	}
+	if *got.Spec.ActiveDeadlineSeconds != 1800 {
+		t.Errorf("workflow ActiveDeadlineSeconds = %d, want 1800", *got.Spec.ActiveDeadlineSeconds)
+	}
+}
