@@ -90,6 +90,7 @@ func main() {
 		log,
 		authInterceptor,
 		k8sClient,
+		cfg.ReflectionEnabled,
 		agentService,
 		modelService,
 		modelProviderService,

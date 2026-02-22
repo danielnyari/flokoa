@@ -52,6 +52,8 @@ spec:
               value: {{ .Values.server.service.grpcPort | quote }}
             - name: HTTP_PORT
               value: {{ .Values.server.service.httpPort | quote }}
+            - name: GRPC_REFLECTION_ENABLED
+              value: {{ .Values.server.reflection.enabled | quote }}
             - name: SWAGGER_DIR
               value: "/swagger"
             {{- if .Values.dex.enabled }}

@@ -16,6 +16,9 @@ type ServerConfig struct {
 	MetricsPort int
 	// HealthPort is the port for the health check server.
 	HealthPort int
+	// ReflectionEnabled controls whether gRPC server reflection is enabled.
+	// When true, clients can discover services and their schemas at runtime.
+	ReflectionEnabled bool
 	// Auth holds OIDC authentication configuration.
 	Auth AuthConfig
 }
@@ -36,10 +39,11 @@ type AuthConfig struct {
 // LoadServerConfig loads the server configuration from environment variables.
 func LoadServerConfig() *ServerConfig {
 	return &ServerConfig{
-		Port:        getEnvInt("GRPC_PORT", 50051),
-		HTTPPort:    getEnvInt("HTTP_PORT", 8080),
-		MetricsPort: getEnvInt("METRICS_PORT", 9090),
-		HealthPort:  getEnvInt("HEALTH_PORT", 8081),
+		Port:              getEnvInt("GRPC_PORT", 50051),
+		HTTPPort:          getEnvInt("HTTP_PORT", 8080),
+		MetricsPort:       getEnvInt("METRICS_PORT", 9090),
+		HealthPort:        getEnvInt("HEALTH_PORT", 8081),
+		ReflectionEnabled: getEnvBool("GRPC_REFLECTION_ENABLED", true),
 		Auth: AuthConfig{
 			Enabled:        getEnvBool("AUTH_ENABLED", false),
 			IssuerURL:      getEnvStr("AUTH_OIDC_ISSUER_URL", ""),
