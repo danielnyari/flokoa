@@ -1,0 +1,40 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: container-preprocessing
+spec:
+  description: "Container preprocessing followed by agent analysis"
+  params:
+    - name: dataset_url
+      value: "s3://my-bucket/data.csv"
+  tasks:
+    - name: preprocess
+      container:
+        image: python:3.12-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json, os
+            url = os.environ["DATASET_URL"]
+            # Simulate data preprocessing
+            result = {"rows": 1000, "columns": 5, "summary": f"Processed data from {url}"}
+            with open("/tmp/result", "w") as f:
+                f.write(json.dumps(result))
+            with open("/tmp/artifact", "w") as f:
+                f.write(json.dumps({"parts": [{"data": result}]}))
+        env:
+          - name: DATASET_URL
+            value: "{{params.dataset_url}}"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+    - name: analyze
+      agent:
+        name: data-analyst
+        text: "Analyze this preprocessed data: {{tasks.preprocess.output}}"
+      dependsOn: [preprocess]

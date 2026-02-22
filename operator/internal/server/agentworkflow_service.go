@@ -166,13 +166,17 @@ func (s *AgentWorkflowService) SubmitWorkflowRun(ctx context.Context, req *pb.Su
 		})
 	}
 
-	// Inject traceparent from the current gRPC request context
-	if tp := telemetry.ExtractTraceparent(ctx); tp != "" {
-		params = append(params, wfv1.Parameter{
-			Name:  "_flokoa_traceparent",
-			Value: wfv1.AnyStringPtr(tp),
-		})
+	// Always inject traceparent so the Argo WorkflowTemplate parameter is satisfied.
+	// Use the caller's trace context if available, otherwise generate a fresh one
+	// with a UUID7 trace ID so every run gets a unique, time-ordered trace.
+	tp := telemetry.ExtractTraceparent(ctx)
+	if tp == "" {
+		tp = telemetry.NewTraceparent()
 	}
+	params = append(params, wfv1.Parameter{
+		Name:  "_flokoa_traceparent",
+		Value: wfv1.AnyStringPtr(tp),
+	})
 
 	// Create an Argo Workflow from the WorkflowTemplate
 	wf := &wfv1.Workflow{

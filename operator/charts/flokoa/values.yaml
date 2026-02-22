@@ -308,6 +308,19 @@ dex:
       cpu: "250m"
 
 # =============================================================================
+# AgentWorkflow Settings
+# =============================================================================
+agentWorkflow:
+  artifactIO:
+    # -- Switch task I/O from Argo parameters to artifacts backed by object storage.
+    # Requires an artifact repository (e.g., S3, GCS, MinIO) configured in Argo.
+    enabled: false
+    artifactGC:
+      # -- Artifact garbage collection strategy.
+      # Options: OnWorkflowCompletion, OnWorkflowDeletion, Never
+      strategy: OnWorkflowCompletion
+
+# =============================================================================
 # Argo Workflows Integration (optional)
 # =============================================================================
 argo:

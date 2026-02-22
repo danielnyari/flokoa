@@ -111,7 +111,7 @@ spec:
                 items:
                   description: |-
                     WorkflowTask defines a single task in the workflow.
-                    Exactly one of Agent, AgentTask, or Switch must be specified.
+                    Exactly one of Agent, AgentTask, Container, HTTP, or Switch must be specified.
                   properties:
                     agent:
                       description: Agent calls a deployed Agent CR via the A2A protocol.
@@ -805,6 +805,280 @@ spec:
                         Condition is an expression that must evaluate to true for this task to run.
                         If false, the task is skipped.
                       type: string
+                    container:
+                      description: |-
+                        Container runs an arbitrary container workload.
+                        The container should write its result to /tmp/result and optional
+                        structured output to /tmp/artifact.
+                      properties:
+                        args:
+                          description: Args are arguments to the command.
+                          items:
+                            type: string
+                          type: array
+                        command:
+                          description: Command is the entrypoint command.
+                          items:
+                            type: string
+                          type: array
+                        env:
+                          description: |-
+                            Env is additional environment variables for the container.
+                            Values support DSL expressions like {{params.x}} or {{tasks.prev.output}}.
+                          items:
+                            description: EnvVar represents an environment variable
+                              present in a Container.
+                            properties:
+                              name:
+                                description: Name of the environment variable. Must
+                                  be a C_IDENTIFIER.
+                                type: string
+                              value:
+                                description: |-
+                                  Variable references $(VAR_NAME) are expanded
+                                  using the previously defined environment variables in the container and
+                                  any service environment variables. If a variable cannot be resolved,
+                                  the reference in the input string will be unchanged. Double $$ are reduced
+                                  to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                                  "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                                  Escaped references will never be expanded, regardless of whether the variable
+                                  exists or not.
+                                  Defaults to "".
+                                type: string
+                              valueFrom:
+                                description: Source for the environment variable's
+                                  value. Cannot be used if value is not empty.
+                                properties:
+                                  configMapKeyRef:
+                                    description: Selects a key of a ConfigMap.
+                                    properties:
+                                      key:
+                                        description: The key to select.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the ConfigMap
+                                          or its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  fieldRef:
+                                    description: |-
+                                      Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                                      spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                                    properties:
+                                      apiVersion:
+                                        description: Version of the schema the FieldPath
+                                          is written in terms of, defaults to "v1".
+                                        type: string
+                                      fieldPath:
+                                        description: Path of the field to select in
+                                          the specified API version.
+                                        type: string
+                                    required:
+                                    - fieldPath
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  resourceFieldRef:
+                                    description: |-
+                                      Selects a resource of the container: only resources limits and requests
+                                      (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                                    properties:
+                                      containerName:
+                                        description: 'Container name: required for
+                                          volumes, optional for env vars'
+                                        type: string
+                                      divisor:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        description: Specifies the output format of
+                                          the exposed resources, defaults to "1"
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      resource:
+                                        description: 'Required: resource to select'
+                                        type: string
+                                    required:
+                                    - resource
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  secretKeyRef:
+                                    description: Selects a key of a secret in the
+                                      pod's namespace
+                                    properties:
+                                      key:
+                                        description: The key of the secret to select
+                                          from.  Must be a valid secret key.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the Secret or
+                                          its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                type: object
+                            required:
+                            - name
+                            type: object
+                          type: array
+                        image:
+                          description: Image is the container image to run.
+                          minLength: 1
+                          type: string
+                        resources:
+                          description: Resources specifies compute resource requirements
+                            for the container.
+                          properties:
+                            claims:
+                              description: |-
+                                Claims lists the names of resources, defined in spec.resourceClaims,
+                                that are used by this container.
+
+                                This is an alpha field and requires enabling the
+                                DynamicResourceAllocation feature gate.
+
+                                This field is immutable. It can only be set for containers.
+                              items:
+                                description: ResourceClaim references one entry in
+                                  PodSpec.ResourceClaims.
+                                properties:
+                                  name:
+                                    description: |-
+                                      Name must match the name of one entry in pod.spec.resourceClaims of
+                                      the Pod where this field is used. It makes that resource available
+                                      inside a container.
+                                    type: string
+                                  request:
+                                    description: |-
+                                      Request is the name chosen for a request in the referenced claim.
+                                      If empty, everything from the claim is made available, otherwise
+                                      only the result of this request.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - name
+                              x-kubernetes-list-type: map
+                            limits:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Limits describes the maximum amount of compute resources allowed.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                            requests:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Requests describes the minimum amount of compute resources required.
+                                If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                          type: object
+                        volumeMounts:
+                          description: VolumeMounts are volume mounts for the container.
+                          items:
+                            description: VolumeMount describes a mounting of a Volume
+                              within a container.
+                            properties:
+                              mountPath:
+                                description: |-
+                                  Path within the container at which the volume should be mounted.  Must
+                                  not contain ':'.
+                                type: string
+                              mountPropagation:
+                                description: |-
+                                  mountPropagation determines how mounts are propagated from the host
+                                  to container and the other way around.
+                                  When not set, MountPropagationNone is used.
+                                  This field is beta in 1.10.
+                                  When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
+                                  (which defaults to None).
+                                type: string
+                              name:
+                                description: This must match the Name of a Volume.
+                                type: string
+                              readOnly:
+                                description: |-
+                                  Mounted read-only if true, read-write otherwise (false or unspecified).
+                                  Defaults to false.
+                                type: boolean
+                              recursiveReadOnly:
+                                description: |-
+                                  RecursiveReadOnly specifies whether read-only mounts should be handled
+                                  recursively.
+
+                                  If ReadOnly is false, this field has no meaning and must be unspecified.
+
+                                  If ReadOnly is true, and this field is set to Disabled, the mount is not made
+                                  recursively read-only.  If this field is set to IfPossible, the mount is made
+                                  recursively read-only, if it is supported by the container runtime.  If this
+                                  field is set to Enabled, the mount is made recursively read-only if it is
+                                  supported by the container runtime, otherwise the pod will not be started and
+                                  an error will be generated to indicate the reason.
+
+                                  If this field is set to IfPossible or Enabled, MountPropagation must be set to
+                                  None (or be unspecified, which defaults to None).
+
+                                  If this field is not specified, it is treated as an equivalent of Disabled.
+                                type: string
+                              subPath:
+                                description: |-
+                                  Path within the volume from which the container's volume should be mounted.
+                                  Defaults to "" (volume's root).
+                                type: string
+                              subPathExpr:
+                                description: |-
+                                  Expanded path within the volume from which the container's volume should be mounted.
+                                  Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
+                                  Defaults to "" (volume's root).
+                                  SubPathExpr and SubPath are mutually exclusive.
+                                type: string
+                            required:
+                            - mountPath
+                            - name
+                            type: object
+                          type: array
+                        workingDir:
+                          description: WorkingDir is the working directory inside
+                            the container.
+                          type: string
+                      required:
+                      - image
+                      type: object
                     dependsOn:
                       description: |-
                         DependsOn lists task names that must complete before this task starts.
@@ -812,6 +1086,115 @@ spec:
                       items:
                         type: string
                       type: array
+                    http:
+                      description: |-
+                        HTTP makes an HTTP request to an external service.
+                        The response body is captured as the task output.
+                      properties:
+                        body:
+                          description: Body is the HTTP request body. Supports DSL
+                            expressions.
+                          type: string
+                        headers:
+                          description: Headers are HTTP headers to include in the
+                            request.
+                          items:
+                            description: |-
+                              HTTPHeader defines an HTTP header with a name and value.
+                              Exactly one of Value or ValueFrom must be set.
+                            properties:
+                              name:
+                                description: Name is the header name.
+                                minLength: 1
+                                type: string
+                              value:
+                                description: |-
+                                  Value is the header value. Supports DSL expressions.
+                                  Mutually exclusive with ValueFrom.
+                                type: string
+                              valueFrom:
+                                description: |-
+                                  ValueFrom references a secret or configmap key for the header value.
+                                  Mutually exclusive with Value.
+                                properties:
+                                  configMapKeyRef:
+                                    description: ConfigMapKeyRef references a key
+                                      in a Kubernetes ConfigMap.
+                                    properties:
+                                      key:
+                                        description: The key to select.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the ConfigMap
+                                          or its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  secretKeyRef:
+                                    description: SecretKeyRef references a key in
+                                      a Kubernetes Secret.
+                                    properties:
+                                      key:
+                                        description: The key of the secret to select
+                                          from.  Must be a valid secret key.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the Secret or
+                                          its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                type: object
+                            required:
+                            - name
+                            type: object
+                          type: array
+                        method:
+                          default: GET
+                          description: Method is the HTTP method to use.
+                          enum:
+                          - GET
+                          - POST
+                          - PUT
+                          - DELETE
+                          - PATCH
+                          - HEAD
+                          - OPTIONS
+                          type: string
+                        successCondition:
+                          description: |-
+                            SuccessCondition is an Argo-native expression evaluated against the HTTP response
+                            to determine if the request was successful (e.g., "response.statusCode == 200").
+                          type: string
+                        url:
+                          description: URL is the HTTP request URL. Supports DSL expressions.
+                          minLength: 1
+                          type: string
+                      required:
+                      - url
+                      type: object
                     name:
                       description: Name is the unique identifier for this task within
                         the workflow.

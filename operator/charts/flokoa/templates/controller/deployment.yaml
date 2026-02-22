@@ -49,6 +49,10 @@ spec:
             {{- else }}
             - --metrics-bind-address=0
             {{- end }}
+            {{- if .Values.agentWorkflow.artifactIO.enabled }}
+            - --artifact-io-enabled=true
+            - --artifact-gc-strategy={{ .Values.agentWorkflow.artifactIO.artifactGC.strategy }}
+            {{- end }}
             {{- range .Values.controller.extraArgs }}
             - {{ . }}
             {{- end }}

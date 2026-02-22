@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
@@ -502,5 +503,313 @@ func TestValidateAgentWorkflow_ArgoExpressionPassthrough(t *testing.T) {
 
 	if err := ValidateAgentWorkflow(wf); err != nil {
 		t.Errorf("unexpected error for Argo expression passthrough: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_ValidContainerTask(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "input"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "preprocess",
+					Container: &agentv1alpha1.ContainerTask{
+						Image:   "python:3.12",
+						Command: []string{"python", "-c"},
+						Args:    []string{"print('hello')"},
+						Env: []corev1.EnvVar{
+							{Name: "INPUT", Value: "{{params.input}}"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid container task, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_ContainerAndAgentConflict(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:      "conflict",
+					Agent:     &agentv1alpha1.AgentCall{Name: "agent1", Text: "hello"},
+					Container: &agentv1alpha1.ContainerTask{Image: "alpine"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for task with both agent and container")
+	}
+}
+
+func TestValidateAgentWorkflow_ContainerEmptyImage(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:      "no-image",
+					Container: &agentv1alpha1.ContainerTask{Image: ""},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for container with empty image")
+	}
+}
+
+func TestValidateAgentWorkflow_ContainerExpressionValidation(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "task1",
+					Container: &agentv1alpha1.ContainerTask{
+						Image: "alpine",
+						Env: []corev1.EnvVar{
+							{Name: "BAD", Value: "{{tasks.nonexistent.output}}"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for invalid expression in container env")
+	}
+}
+
+func TestValidateAgentWorkflow_ValidHTTPTask(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL:    "https://api.example.com/data",
+						Method: "GET",
+						Headers: []agentv1alpha1.HTTPHeader{
+							{Name: "Accept", Value: "application/json"},
+						},
+						SuccessCondition: "response.statusCode == 200",
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid HTTP task, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_HTTPWithSecretHeader(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL: "https://api.example.com/data",
+						Headers: []agentv1alpha1.HTTPHeader{
+							{
+								Name: "Authorization",
+								ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "api-creds"},
+										Key:                  "token",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid HTTP task with secret header, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_HTTPEmptyURL(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{URL: ""},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for HTTP task with empty URL")
+	}
+}
+
+func TestValidateAgentWorkflow_HTTPHeaderBothValueAndValueFrom(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL: "https://api.example.com",
+						Headers: []agentv1alpha1.HTTPHeader{
+							{
+								Name:  "Auth",
+								Value: "Bearer token",
+								ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "secret"},
+										Key:                  "key",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for HTTP header with both value and valueFrom")
+	}
+}
+
+func TestValidateAgentWorkflow_HTTPHeaderValueFromBothSources(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL: "https://api.example.com",
+						Headers: []agentv1alpha1.HTTPHeader{
+							{
+								Name: "Auth",
+								ValueFrom: &agentv1alpha1.HTTPHeaderValueFrom{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "secret"},
+										Key:                  "key",
+									},
+									ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "cm"},
+										Key:                  "key",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for HTTP header valueFrom with both secretKeyRef and configMapKeyRef")
+	}
+}
+
+func TestValidateAgentWorkflow_HTTPExpressionValidation(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL:  "https://api.example.com/{{tasks.nonexistent.output}}",
+						Body: "{{params.undefined}}",
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for invalid expressions in HTTP task")
+	}
+}
+
+func TestValidateAgentWorkflow_HTTPAndContainerConflict(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:      "conflict",
+					HTTP:      &agentv1alpha1.HTTPTask{URL: "https://example.com"},
+					Container: &agentv1alpha1.ContainerTask{Image: "alpine"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for task with both HTTP and container")
+	}
+}
+
+func TestValidateAgentWorkflow_MixedTaskTypesValid(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "query"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "fetch-data",
+					HTTP: &agentv1alpha1.HTTPTask{
+						URL:    "https://api.example.com/data",
+						Method: "GET",
+					},
+				},
+				{
+					Name: "preprocess",
+					Container: &agentv1alpha1.ContainerTask{
+						Image:   "python:3.12",
+						Command: []string{"python", "preprocess.py"},
+						Env: []corev1.EnvVar{
+							{Name: "DATA", Value: "{{tasks.fetch-data.output}}"},
+						},
+					},
+					DependsOn: []string{"fetch-data"},
+				},
+				{
+					Name: "analyze",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "analyzer",
+						Text: "Analyze: {{tasks.preprocess.output}} for {{params.query}}",
+					},
+					DependsOn: []string{"preprocess"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid mixed-type workflow, got error: %v", err)
 	}
 }
