@@ -4,15 +4,81 @@
 @theme static {
   --font-sans: 'Public Sans', sans-serif;
 
-  --color-green-50: #EFFDF5;
-  --color-green-100: #D9FBE8;
-  --color-green-200: #B3F5D1;
-  --color-green-300: #75EDAE;
-  --color-green-400: #00DC82;
-  --color-green-500: #00C16A;
-  --color-green-600: #00A155;
-  --color-green-700: #007F45;
-  --color-green-800: #016538;
-  --color-green-900: #0A5331;
-  --color-green-950: #052E16;
+  /* Primary — "Warm Cocoa" (anchored at milk chocolate #6B4226) */
+  --color-cocoa-50: #FAF5EF;
+  --color-cocoa-100: #F5E6D3;
+  --color-cocoa-200: #E8CBA8;
+  --color-cocoa-300: #D4A87A;
+  --color-cocoa-400: #C4956A;
+  --color-cocoa-500: #9B6B42;
+  --color-cocoa-600: #6B4226;
+  --color-cocoa-700: #573620;
+  --color-cocoa-800: #3E2615;
+  --color-cocoa-900: #2D1B0E;
+  --color-cocoa-950: #1A1210;
+
+  /* Neutral — warm chocolate-tinted grays */
+  --color-chocolate-50: #FAF6F1;
+  --color-chocolate-100: #F5E6D3;
+  --color-chocolate-200: #E4D0B8;
+  --color-chocolate-300: #C4B09A;
+  --color-chocolate-400: #A08A74;
+  --color-chocolate-500: #7D6555;
+  --color-chocolate-600: #5E4B3D;
+  --color-chocolate-700: #463830;
+  --color-chocolate-800: #2D2320;
+  --color-chocolate-900: #1A1210;
+  --color-chocolate-950: #100C09;
+
+  /* Kubernetes blue — links, CRD-related elements */
+  --color-k8s-50: #EEF3FD;
+  --color-k8s-100: #D4E2FB;
+  --color-k8s-200: #A9C5F7;
+  --color-k8s-300: #7EA8F3;
+  --color-k8s-400: #538BEF;
+  --color-k8s-500: #326CE5;
+  --color-k8s-600: #2555C0;
+  --color-k8s-700: #1D4399;
+  --color-k8s-800: #153272;
+  --color-k8s-900: #0E224D;
+  --color-k8s-950: #091530;
+
+  /* Warm green — healthy/running states */
+  --color-warmgreen-50: #EDF7F1;
+  --color-warmgreen-100: #D3ECDE;
+  --color-warmgreen-200: #A8D9BD;
+  --color-warmgreen-300: #7CC69C;
+  --color-warmgreen-400: #5EB383;
+  --color-warmgreen-500: #4A9E6D;
+  --color-warmgreen-600: #3B8058;
+  --color-warmgreen-700: #2D6344;
+  --color-warmgreen-800: #1F4630;
+  --color-warmgreen-900: #122A1D;
+  --color-warmgreen-950: #0A1A12;
+
+  /* Amber — warnings */
+  --color-warmamber-50: #FDF7EA;
+  --color-warmamber-100: #FAECC6;
+  --color-warmamber-200: #F5D98E;
+  --color-warmamber-300: #F0C656;
+  --color-warmamber-400: #E5AB33;
+  --color-warmamber-500: #CC9420;
+  --color-warmamber-600: #A57718;
+  --color-warmamber-700: #7E5B13;
+  --color-warmamber-800: #573F0D;
+  --color-warmamber-900: #352708;
+  --color-warmamber-950: #1F1705;
+
+  /* Soft red — errors/failures */
+  --color-softred-50: #FDF0F0;
+  --color-softred-100: #FADADA;
+  --color-softred-200: #F4B3B3;
+  --color-softred-300: #EC8B8B;
+  --color-softred-400: #D45B5B;
+  --color-softred-500: #BF4040;
+  --color-softred-600: #9E3030;
+  --color-softred-700: #7A2424;
+  --color-softred-800: #571A1A;
+  --color-softred-900: #371010;
+  --color-softred-950: #220A0A;
 }
