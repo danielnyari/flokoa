@@ -43,6 +43,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/test/utils"
 )
@@ -431,4 +433,50 @@ func ensureOpenAIAPIKeySecret(ns string) error {
 	}
 	existing.Data["api-key"] = []byte(apiKey)
 	return k8sClient.Update(ctx, existing)
+}
+
+// waitForWorkflowCompletion waits for an Argo Workflow to reach a terminal phase.
+// Returns the final Workflow object for further assertions.
+func waitForWorkflowCompletion(name, ns string, timeout time.Duration) (*wfv1.Workflow, error) {
+	var wf wfv1.Workflow
+	err := wait.PollUntilContextTimeout(ctx, 3*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
+		if err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, &wf); err != nil {
+			return false, nil
+		}
+		return wf.Status.Phase.Completed(), nil
+	})
+	if err != nil {
+		return &wf, fmt.Errorf("Workflow %s/%s did not complete (phase=%s): %w", ns, name, wf.Status.Phase, err)
+	}
+	return &wf, nil
+}
+
+// newCurlPod creates a restricted curl Pod spec for in-cluster HTTP calls.
+// Uses -s (silent) without -f so the pod always succeeds on HTTP responses
+// (even 4xx/5xx), allowing callers to inspect HTTP_STATUS in the logs.
+func newCurlPod(name, ns, url string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				{
+					Name:    "curl",
+					Image:   "curlimages/curl:latest",
+					Command: []string{"/bin/sh", "-c"},
+					Args:    []string{fmt.Sprintf("curl -s --retry 10 --retry-delay 3 --retry-connrefused --connect-timeout 10 --max-time 30 -o /dev/stdout -w '\\nHTTP_STATUS:%%{http_code}' %s", url)},
+					SecurityContext: &corev1.SecurityContext{
+						AllowPrivilegeEscalation: ptr(false),
+						Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+						RunAsNonRoot:             ptr(true),
+						RunAsUser:                ptr(int64(1000)),
+						SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
+				},
+			},
+		},
+	}
 }

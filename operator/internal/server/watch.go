@@ -1,12 +1,13 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-logr/logr"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -35,12 +36,6 @@ func watchEventType(t watch.EventType) string {
 	default:
 		return "ERROR"
 	}
-}
-
-// sseEvent is the JSON envelope sent over SSE for watch events.
-type sseEvent struct {
-	Type   string      `json:"type"`
-	Object interface{} `json:"object"`
 }
 
 // writeSSE writes a single SSE event to the response writer and flushes.
@@ -235,6 +230,9 @@ func watchWorkflowRunsHandler(watchClient client.WithWatch, log logr.Logger) htt
 	}
 }
 
+// sseMarshaler uses protojson to produce camelCase JSON consistent with grpc-gateway.
+var sseMarshaler = protojson.MarshalOptions{}
+
 // streamSSE is the core SSE streaming loop shared by all watch handlers.
 // It writes SSE headers, then loops reading from the watcher channel, converting
 // each event to JSON and writing it as an SSE data event. It sends periodic
@@ -292,16 +290,22 @@ func streamSSE(
 				continue
 			}
 
-			evt := sseEvent{
-				Type:   watchEventType(event.Type),
-				Object: converted,
-			}
-
-			data, err := json.Marshal(evt)
-			if err != nil {
-				log.Error(err, "Failed to marshal watch event")
+			// Marshal the proto object with protojson to get camelCase field names
+			// consistent with grpc-gateway, then build the SSE envelope manually.
+			protoMsg, isProto := converted.(proto.Message)
+			if !isProto {
+				log.Error(fmt.Errorf("converted object is not a proto.Message"), "Skipping watch event")
 				continue
 			}
+
+			objBytes, err := sseMarshaler.Marshal(protoMsg)
+			if err != nil {
+				log.Error(err, "Failed to marshal watch event object")
+				continue
+			}
+
+			evtType := watchEventType(event.Type)
+			data := fmt.Appendf(nil, `{"type":"%s","object":%s}`, evtType, objBytes)
 
 			if err := writeSSE(w, flusher, data); err != nil {
 				return

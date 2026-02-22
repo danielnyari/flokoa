@@ -48,11 +48,9 @@ export interface AgentSpec {
   card?: AgentCardOverride
   runtime?: {
     type?: RuntimeType
-    standard?: {
+    // Proto field name is "spec" (maps from CRD "standard" or "template")
+    spec?: {
       container?: Record<string, unknown>
-      replicas?: number
-    }
-    template?: {
       config?: Record<string, unknown>
       replicas?: number
     }

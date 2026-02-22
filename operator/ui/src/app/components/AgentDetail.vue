@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Agent, Condition } from '~/types'
+import { agentPhaseLabel, agentPhaseColor, runtimeTypeLabel, normaliseTimestamp } from '~/utils/enums'
 
 const props = defineProps<{
   agent: Agent
@@ -44,15 +45,11 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
             </p>
           </div>
           <UBadge
-            :color="
-              agent.status?.phase === 'Running' ? 'success'
-              : agent.status?.phase === 'Failed' ? 'error'
-                : 'warning'
-            "
+            :color="agentPhaseColor(agent.status?.phase)"
             variant="subtle"
-            class="capitalize ml-auto"
+            class="ml-auto"
           >
-            {{ agent.status?.phase ?? 'Unknown' }}
+            {{ agentPhaseLabel(agent.status?.phase) }}
           </UBadge>
         </div>
 
@@ -66,16 +63,16 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
               <p class="text-xs text-muted">
                 Framework
               </p>
-              <p class="text-sm font-medium text-highlighted">
-                {{ agent.spec.framework ?? agent.status?.detectedFramework ?? '—' }}
-              </p>
+              <div class="font-medium text-highlighted">
+                <FrameworkBadge :value="agent.spec.framework ?? agent.status?.detectedFramework" />
+              </div>
             </div>
             <div class="p-3 rounded-lg border border-default bg-elevated/50">
               <p class="text-xs text-muted">
                 Runtime
               </p>
               <p class="text-sm font-medium text-highlighted">
-                {{ agent.spec.runtime?.type ?? '—' }}
+                {{ runtimeTypeLabel(agent.spec.runtime?.type) ?? '—' }}
               </p>
             </div>
             <div class="p-3 rounded-lg border border-default bg-elevated/50">
@@ -83,7 +80,7 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
                 Replicas
               </p>
               <p class="text-sm font-medium text-highlighted">
-                {{ agent.status?.availableReplicas ?? 0 }}/{{ agent.status?.replicas ?? agent.spec.runtime?.standard?.replicas ?? 0 }}
+                {{ agent.status?.availableReplicas ?? 0 }}/{{ agent.status?.replicas ?? agent.spec.runtime?.spec?.replicas ?? 0 }}
               </p>
             </div>
             <div class="p-3 rounded-lg border border-default bg-elevated/50">
@@ -91,7 +88,7 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
                 Age
               </p>
               <p class="text-sm font-medium text-highlighted">
-                {{ agent.metadata.creationTimestamp ? useTimeAgo(agent.metadata.creationTimestamp).value : '—' }}
+                {{ normaliseTimestamp(agent.metadata.creationTimestamp) ? useTimeAgo(normaliseTimestamp(agent.metadata.creationTimestamp)!).value : '—' }}
               </p>
             </div>
           </div>
@@ -104,7 +101,12 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
           </h4>
           <div class="p-3 rounded-lg border border-default bg-elevated/50 flex items-center gap-2">
             <UIcon name="i-lucide-globe" class="size-4 text-muted shrink-0" />
-            <span class="text-sm font-mono truncate">{{ agent.status.url }}</span>
+            <a
+              :href="agent.status.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm font-mono truncate text-primary hover:underline"
+            >{{ agent.status.url }}</a>
           </div>
         </section>
 
@@ -214,7 +216,7 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
                 {{ condition.message }}
               </p>
               <p v-if="condition.lastTransitionTime" class="text-xs text-muted mt-1">
-                {{ useTimeAgo(condition.lastTransitionTime).value }}
+                {{ normaliseTimestamp(condition.lastTransitionTime) ? useTimeAgo(normaliseTimestamp(condition.lastTransitionTime)!).value : '' }}
               </p>
             </div>
           </div>

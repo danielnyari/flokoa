@@ -2,7 +2,8 @@
 import { nextTick, computed } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import type { Node, Edge } from '@vue-flow/core'
-import type { WorkflowRun, WorkflowRunNode, RunPhase } from '~/types'
+import type { WorkflowRun, WorkflowRunNode } from '~/types'
+import { isRunPhase } from '~/utils/enums'
 import AgentNode from './nodes/AgentNode.vue'
 import RootNode from './nodes/RootNode.vue'
 import SwitchNode from './nodes/SwitchNode.vue'
@@ -93,7 +94,7 @@ const graphData = computed(() => {
     const children = resolveChildren(node.id)
     for (const childId of children) {
       const childNode = nodeMap.get(childId)
-      const isRunning = childNode?.phase === 'RUN_PHASE_RUNNING' as RunPhase
+      const isRunning = isRunPhase(childNode?.phase, 'Running')
       edges.push({
         id: `${node.id}->${childId}`,
         source: node.id,

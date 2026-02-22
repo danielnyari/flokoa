@@ -1,4 +1,5 @@
 import type { ObjectMeta } from '~/types'
+import { normaliseTimestamp } from '~/utils/enums'
 
 /**
  * WatchEvent matches the SSE event format from the server.
@@ -45,8 +46,8 @@ export function useListWatch<T extends Resource>(options: UseListWatchOptions<T>
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   const defaultSorter = (a: Resource, b: Resource) => {
-    const ta = a.metadata.creationTimestamp ?? ''
-    const tb = b.metadata.creationTimestamp ?? ''
+    const ta = normaliseTimestamp(a.metadata.creationTimestamp) ?? ''
+    const tb = normaliseTimestamp(b.metadata.creationTimestamp) ?? ''
     return tb.localeCompare(ta) // newest first
   }
 

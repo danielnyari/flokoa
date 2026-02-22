@@ -1,31 +1,10 @@
 <script setup lang="ts">
-import type { WorkflowRun, RunPhase } from '~/types'
+import type { WorkflowRun } from '~/types'
+import { runPhaseLabel, runPhaseColor } from '~/utils/enums'
 
 const props = defineProps<{
   run: WorkflowRun
 }>()
-
-function phaseColor(phase?: RunPhase): 'success' | 'error' | 'warning' | 'info' | 'neutral' {
-  switch (phase) {
-    case 'RUN_PHASE_RUNNING': return 'info'
-    case 'RUN_PHASE_SUCCEEDED': return 'success'
-    case 'RUN_PHASE_FAILED': return 'error'
-    case 'RUN_PHASE_ERROR': return 'error'
-    case 'RUN_PHASE_PENDING': return 'warning'
-    default: return 'neutral'
-  }
-}
-
-function phaseLabel(phase?: RunPhase): string {
-  switch (phase) {
-    case 'RUN_PHASE_RUNNING': return 'Running'
-    case 'RUN_PHASE_SUCCEEDED': return 'Succeeded'
-    case 'RUN_PHASE_FAILED': return 'Failed'
-    case 'RUN_PHASE_ERROR': return 'Error'
-    case 'RUN_PHASE_PENDING': return 'Pending'
-    default: return 'Unknown'
-  }
-}
 
 const duration = computed(() => {
   if (!props.run.startedAt) return '\u2014'
@@ -51,8 +30,8 @@ const progressPercent = computed(() => {
 
 <template>
   <div class="flex items-center gap-4 px-4 py-2 border-b border-default bg-elevated/50">
-    <UBadge :color="phaseColor(run.phase)" variant="subtle">
-      {{ phaseLabel(run.phase) }}
+    <UBadge :color="runPhaseColor(run.phase)" variant="subtle">
+      {{ runPhaseLabel(run.phase) }}
     </UBadge>
 
     <span class="text-sm font-mono text-muted">{{ run.metadata.name }}</span>

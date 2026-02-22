@@ -4,10 +4,12 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Agent } from '~/types'
+import { agentPhaseLabel, agentPhaseColor, frameworkLabel, runtimeTypeLabel, normaliseTimestamp } from '~/utils/enums'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
+const FrameworkBadge = resolveComponent('FrameworkBadge')
 
 const toast = useToast()
 const table = useTemplateRef('table')
@@ -96,43 +98,42 @@ const columns: TableColumn<Agent>[] = [
   },
   {
     id: 'phase',
-    accessorFn: row => row.status?.phase,
+    accessorFn: row => agentPhaseLabel(row.status?.phase),
     header: 'Phase',
     filterFn: 'equals',
     cell: ({ row }) => {
-      const phase = row.original.status?.phase ?? 'Unknown'
-      const color = {
-        Running: 'success' as const,
-        Pending: 'warning' as const,
-        Failed: 'error' as const,
-        Unknown: 'neutral' as const
-      }[phase] ?? 'neutral' as const
-      return h(UBadge, { class: 'capitalize', variant: 'subtle', color }, () => phase)
+      const label = agentPhaseLabel(row.original.status?.phase)
+      const color = agentPhaseColor(row.original.status?.phase)
+      return h(UBadge, { variant: 'subtle', color }, () => label)
     }
   },
   {
     id: 'framework',
-    accessorFn: row => row.spec.framework ?? row.status?.detectedFramework,
+    accessorFn: row => frameworkLabel(row.spec.framework) ?? frameworkLabel(row.status?.detectedFramework),
     header: 'Framework',
     cell: ({ row }) => {
       const fw = row.original.spec.framework ?? row.original.status?.detectedFramework
-      if (!fw) return h('span', { class: 'text-muted' }, '—')
-      return h(UBadge, { variant: 'outline', color: 'neutral' }, () => fw)
+      return h(FrameworkBadge, { value: fw })
     }
   },
   {
     id: 'runtime',
-    accessorFn: row => row.spec.runtime?.type,
+    accessorFn: row => runtimeTypeLabel(row.spec.runtime?.type),
     header: 'Runtime',
-    cell: ({ row }) => row.original.spec.runtime?.type ?? '—'
+    cell: ({ row }) => {
+      const label = runtimeTypeLabel(row.original.spec.runtime?.type)
+      if (!label) return h('span', { class: 'text-muted' }, '—')
+      return h(UBadge, { variant: 'subtle', color: 'neutral' }, () => label)
+    }
   },
   {
     id: 'replicas',
     header: 'Ready',
     cell: ({ row }) => {
       const avail = row.original.status?.availableReplicas ?? 0
-      const total = row.original.status?.replicas ?? row.original.spec.runtime?.standard?.replicas ?? 0
-      return `${avail}/${total}`
+      const total = row.original.status?.replicas ?? row.original.spec.runtime?.spec?.replicas ?? 0
+      const color = avail > 0 && avail >= total ? 'success' : avail > 0 ? 'warning' : 'neutral'
+      return h(UBadge, { variant: 'subtle', color }, () => `${avail}/${total}`)
     }
   },
   {
@@ -142,16 +143,21 @@ const columns: TableColumn<Agent>[] = [
     cell: ({ row }) => {
       const url = row.original.status?.url
       if (!url) return h('span', { class: 'text-muted' }, '—')
-      return h('span', { class: 'text-sm font-mono truncate max-w-48 block' }, url)
+      return h('a', {
+        href: url,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        class: 'text-sm font-mono truncate max-w-48 block text-primary hover:underline'
+      }, url)
     }
   },
   {
     id: 'age',
-    accessorFn: row => row.metadata.creationTimestamp,
+    accessorFn: row => normaliseTimestamp(row.metadata.creationTimestamp),
     header: 'Age',
     cell: ({ row }) => {
-      const ts = row.original.metadata.creationTimestamp
-      if (!ts) return '—'
+      const ts = normaliseTimestamp(row.original.metadata.creationTimestamp)
+      if (!ts) return h('span', { class: 'text-muted' }, '—')
       return useTimeAgo(ts).value
     }
   },

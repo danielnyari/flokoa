@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"time"
@@ -157,7 +158,138 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			Expect(argoWft.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flokoa-operator"))
 		})
 
+		It("should reach agent via HTTP (A2A agent card endpoint)", func() {
+			agentURL := fmt.Sprintf("http://petstore-agent.%s.svc.cluster.local/.well-known/agent.json", namespace)
+			curlPodName := "curl-agent-card"
+
+			By("creating a curl pod to hit the agent card endpoint")
+			pod := newCurlPod(curlPodName, namespace, agentURL)
+			err := createPod(pod)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create curl pod")
+
+			By("waiting for curl pod to reach a terminal state")
+			Eventually(func(g Gomega) {
+				p := &corev1.Pod{}
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: curlPodName, Namespace: namespace}, p)
+				g.Expect(err).NotTo(HaveOccurred())
+				// Fast-fail on pod failure with diagnostic logs
+				if p.Status.Phase == corev1.PodFailed {
+					logs, _ := getPodLogs(curlPodName, namespace)
+					_, _ = fmt.Fprintf(GinkgoWriter, "Curl pod failed.\nStatus: %+v\nLogs: %s\n", p.Status, logs)
+					g.Expect(p.Status.Phase).To(Equal(corev1.PodSucceeded),
+						fmt.Sprintf("curl pod failed; logs: %s", logs))
+				}
+				g.Expect(p.Status.Phase).To(Equal(corev1.PodSucceeded), "curl pod not yet complete")
+			}, 5*time.Minute).Should(Succeed())
+
+			By("verifying agent card response")
+			logs, err := getPodLogs(curlPodName, namespace)
+			Expect(err).NotTo(HaveOccurred())
+			_, _ = fmt.Fprintf(GinkgoWriter, "Agent card response:\n%s\n", logs)
+			Expect(logs).To(ContainSubstring("petstore-agent"), "Response should contain agent name")
+			Expect(logs).To(ContainSubstring("HTTP_STATUS:200"), "Should return HTTP 200")
+		})
+
+		It("should execute a direct A2A workflow", func() {
+			wfName := "e2e-direct-a2a"
+			pluginSpec := map[string]any{
+				"a2a": map[string]any{
+					"agent":     "petstore-agent",
+					"namespace": namespace,
+					"message": map[string]any{
+						"parts": []map[string]any{
+							{"text": map[string]any{"text": "List a few available pets and include their IDs and names."}},
+						},
+					},
+					"timeout": "2m",
+				},
+			}
+			pluginJSON, err := json.Marshal(pluginSpec)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating Argo Workflow with A2A plugin")
+			wf := &wfv1.Workflow{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      wfName,
+					Namespace: namespace,
+				},
+				Spec: wfv1.WorkflowSpec{
+					Entrypoint:                   "call-agent",
+					ServiceAccountName:           "flokoa-workflow",
+					AutomountServiceAccountToken: ptr(true),
+					Templates: []wfv1.Template{
+						{
+							Name: "call-agent",
+							Plugin: &wfv1.Plugin{
+								Object: wfv1.Object{
+									Value: json.RawMessage(pluginJSON),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(ctx, wf)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Workflow")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Created Workflow: %s\n", wfName)
+
+			By("waiting for workflow to complete")
+			completedWf, err := waitForWorkflowCompletion(wfName, namespace, 5*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "Workflow did not complete")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Workflow phase: %s\n", completedWf.Status.Phase)
+			Expect(completedWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded), "Workflow should succeed")
+		})
+
+		It("should execute workflow from compiled AgentWorkflow template", func() {
+			wfName := "e2e-template-a2a"
+
+			By("getting the compiled WorkflowTemplate name from AgentWorkflow")
+			awf := &agentv1alpha1.AgentWorkflow{}
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: "e2e-petstore-workflow", Namespace: namespace}, awf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(awf.Status.WorkflowTemplateName).NotTo(BeEmpty())
+			templateName := awf.Status.WorkflowTemplateName
+			_, _ = fmt.Fprintf(GinkgoWriter, "Using WorkflowTemplate: %s\n", templateName)
+
+			By("creating Workflow from compiled template")
+			wf := &wfv1.Workflow{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      wfName,
+					Namespace: namespace,
+				},
+				Spec: wfv1.WorkflowSpec{
+					WorkflowTemplateRef: &wfv1.WorkflowTemplateRef{
+						Name: templateName,
+					},
+					Arguments: wfv1.Arguments{
+						Parameters: []wfv1.Parameter{
+							{
+								Name:  "prompt",
+								Value: wfv1.AnyStringPtr("List a few available pets and include their IDs and names."),
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(ctx, wf)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Workflow from template")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Created Workflow from template: %s\n", wfName)
+
+			By("waiting for workflow to complete")
+			completedWf, err := waitForWorkflowCompletion(wfName, namespace, 5*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "Workflow did not complete")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Workflow phase: %s\n", completedWf.Status.Phase)
+			Expect(completedWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded), "Workflow should succeed")
+		})
+
 		AfterAll(func() {
+			By("cleaning up test workflows")
+			_ = k8sClient.Delete(ctx, &wfv1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "e2e-direct-a2a", Namespace: namespace}})
+			_ = k8sClient.Delete(ctx, &wfv1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "e2e-template-a2a", Namespace: namespace}})
+
+			By("cleaning up curl pod")
+			deletePod("curl-agent-card", namespace)
+
 			By("cleaning up AgentWorkflow")
 			deleteManifestFile("test/e2e/testdata/argo/agentworkflow.yaml")
 

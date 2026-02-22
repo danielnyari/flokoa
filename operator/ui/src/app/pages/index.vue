@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Agent, Model, ModelProvider, AgentTool, AgentWorkflow } from '~/types'
+import { agentPhaseLabel, agentPhaseColor, isAgentPhase, frameworkLabel, normaliseTimestamp } from '~/utils/enums'
 
 const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
@@ -44,9 +45,9 @@ function refreshAll() {
   refreshWorkflows()
 }
 
-const runningAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Running').length)
-const pendingAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Pending').length)
-const failedAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Failed').length)
+const runningAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Running')).length)
+const pendingAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Pending')).length)
+const failedAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Failed')).length)
 const readyModels = computed(() => models.value.filter(m => m.status?.ready).length)
 const readyProviders = computed(() => providers.value.filter(p => p.status?.ready).length)
 const readyWorkflows = computed(() => workflows.value.filter(w => w.status?.ready).length)
@@ -92,8 +93,8 @@ const stats = computed(() => [
 const recentAgents = computed(() =>
   [...agents.value]
     .sort((a, b) => {
-      const ta = a.metadata.creationTimestamp ?? ''
-      const tb = b.metadata.creationTimestamp ?? ''
+      const ta = normaliseTimestamp(a.metadata.creationTimestamp) ?? ''
+      const tb = normaliseTimestamp(b.metadata.creationTimestamp) ?? ''
       return tb.localeCompare(ta)
     })
     .slice(0, 5)
@@ -288,26 +289,21 @@ const providerBreakdown = computed(() => {
                 </p>
                 <p class="text-xs text-muted">
                   {{ agent.metadata.namespace }}
-                  <template v-if="agent.spec.framework || agent.status?.detectedFramework">
-                    &middot; {{ agent.spec.framework ?? agent.status?.detectedFramework }}
+                  <template v-if="frameworkLabel(agent.spec.framework) || frameworkLabel(agent.status?.detectedFramework)">
+                    &middot; {{ frameworkLabel(agent.spec.framework) ?? frameworkLabel(agent.status?.detectedFramework) }}
                   </template>
                 </p>
               </div>
             </div>
             <div class="flex items-center gap-3">
               <UBadge
-                :color="
-                  agent.status?.phase === 'Running' ? 'success'
-                  : agent.status?.phase === 'Failed' ? 'error'
-                    : 'warning'
-                "
+                :color="agentPhaseColor(agent.status?.phase)"
                 variant="subtle"
-                class="capitalize"
               >
-                {{ agent.status?.phase ?? 'Unknown' }}
+                {{ agentPhaseLabel(agent.status?.phase) }}
               </UBadge>
-              <span v-if="agent.metadata.creationTimestamp" class="text-xs text-muted">
-                {{ useTimeAgo(agent.metadata.creationTimestamp).value }}
+              <span v-if="normaliseTimestamp(agent.metadata.creationTimestamp)" class="text-xs text-muted">
+                {{ useTimeAgo(normaliseTimestamp(agent.metadata.creationTimestamp)!).value }}
               </span>
             </div>
           </div>

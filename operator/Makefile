@@ -457,8 +457,15 @@ ui-build: ui-install ## Build the UI and copy to operator/ui/dist for embedding.
 	cp -r $(UI_DIR)/.output/public/* ui/dist/
 
 .PHONY: ui-dev
-ui-dev: ## Run the UI in development mode with API proxy.
-	cd $(UI_DIR) && pnpm dev
+ui-dev: ## Run the UI in development mode with API proxy to the in-cluster server.
+	@echo "Starting port-forward to flokoa-server (port 8080)..."
+	@kubectl port-forward svc/flokoa-server -n flokoa-system 8080:8080 &
+	@UI_PF_PID=$$!; \
+	trap "kill $$UI_PF_PID 2>/dev/null" EXIT; \
+	sleep 1; \
+	echo "Starting Nuxt dev server..."; \
+	cd $(UI_DIR) && pnpm dev; \
+	kill $$UI_PF_PID 2>/dev/null
 
 ##@ Build
 
