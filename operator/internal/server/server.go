@@ -44,14 +44,17 @@ type Server struct {
 	log          logr.Logger
 }
 
-// NewServer creates a new gRPC server with reflection enabled.
+// NewServer creates a new gRPC server with optional reflection support.
 // If authInterceptor is non-nil, it is added to the interceptor chain.
+// If reflectionEnabled is true, gRPC server reflection is registered,
+// allowing clients to discover services and their schemas at runtime.
 func NewServer(
 	port int,
 	httpPort int,
 	authCfg config.AuthConfig,
 	log logr.Logger,
 	authInterceptor *AuthInterceptor,
+	reflectionEnabled bool,
 	agentService pb.AgentServiceServer,
 	modelService pb.ModelServiceServer,
 	modelProviderService pb.ModelProviderServiceServer,
@@ -92,8 +95,11 @@ func NewServer(
 	healthServer := health.NewServer()
 	healthpb.RegisterHealthServer(grpcServer, healthServer)
 
-	// Enable gRPC reflection
-	reflection.Register(grpcServer)
+	// Enable gRPC server reflection if configured
+	if reflectionEnabled {
+		reflection.Register(grpcServer)
+		log.Info("gRPC server reflection enabled")
+	}
 
 	return &Server{
 		grpcServer:   grpcServer,

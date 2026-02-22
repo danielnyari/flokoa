@@ -89,6 +89,7 @@ func main() {
 		cfg.Auth,
 		log,
 		authInterceptor,
+		cfg.ReflectionEnabled,
 		agentService,
 		modelService,
 		modelProviderService,
