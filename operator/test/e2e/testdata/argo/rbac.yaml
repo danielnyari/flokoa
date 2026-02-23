@@ -41,6 +41,17 @@ metadata:
   name: a2a-executor-plugin
   namespace: flokoa-system
 ---
+# Token secret for A2A executor plugin SA (required by Argo agent pod volume mount).
+# Argo resolves token secrets via <sa-name>.service-account-token convention.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: a2a-executor-plugin.service-account-token
+  namespace: flokoa-system
+  annotations:
+    kubernetes.io/service-account.name: a2a-executor-plugin
+type: kubernetes.io/service-account-token
+---
 # Service account for workflows running in flokoa-system
 apiVersion: v1
 kind: ServiceAccount

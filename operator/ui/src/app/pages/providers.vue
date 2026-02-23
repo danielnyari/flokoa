@@ -58,13 +58,32 @@ const pagination = ref({
   pageSize: 10
 })
 
+const providerTypeMap: Record<string | number, string> = {
+  PROVIDER_TYPE_OPENAI: 'openai',
+  PROVIDER_TYPE_ANTHROPIC: 'anthropic',
+  PROVIDER_TYPE_GOOGLE: 'google',
+  PROVIDER_TYPE_BEDROCK: 'bedrock',
+  1: 'openai',
+  2: 'anthropic',
+  3: 'google',
+  4: 'bedrock'
+}
+
 function getProviderType(provider: ModelProvider): string {
-  if (provider.status?.provider) return provider.status.provider
+  const raw = provider.status?.provider
+  if (raw && providerTypeMap[raw]) return providerTypeMap[raw]
   if (provider.spec.openai) return 'openai'
   if (provider.spec.anthropic) return 'anthropic'
   if (provider.spec.google) return 'google'
   if (provider.spec.bedrock) return 'bedrock'
   return 'unknown'
+}
+
+const providerLabel: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  bedrock: 'Bedrock'
 }
 
 function getProviderIcon(type: string): string {
@@ -120,7 +139,7 @@ const columns: TableColumn<ModelProvider>[] = [
       const type = getProviderType(row.original)
       return h('div', { class: 'flex items-center gap-2' }, [
         h(resolveComponent('UIcon'), { name: getProviderIcon(type), class: 'size-4' }),
-        h(UBadge, { variant: 'subtle', color: 'neutral', class: 'capitalize' }, () => type)
+        h(UBadge, { variant: 'subtle', color: 'neutral' }, () => providerLabel[type] ?? type)
       ])
     }
   },
@@ -140,25 +159,6 @@ const columns: TableColumn<ModelProvider>[] = [
     }
   },
   {
-    id: 'apiKey',
-    header: 'API Key',
-    cell: ({ row }) => {
-      const ref = row.original.spec.apiKeySecretRef
-      if (!ref) return h('span', { class: 'text-muted' }, '—')
-      return h('span', { class: 'text-sm font-mono' }, `${ref.name}`)
-    }
-  },
-  {
-    id: 'tls',
-    header: 'TLS',
-    cell: ({ row }) => {
-      const tls = row.original.spec.tls
-      if (!tls) return h('span', { class: 'text-muted' }, 'Default')
-      if (tls.insecureSkipVerify) return h(UBadge, { variant: 'subtle', color: 'warning' }, () => 'Insecure')
-      return h(UBadge, { variant: 'subtle', color: 'success' }, () => 'Verified')
-    }
-  },
-  {
     id: 'ready',
     header: 'Ready',
     cell: ({ row }) => {
@@ -166,16 +166,6 @@ const columns: TableColumn<ModelProvider>[] = [
       if (ready === undefined) return h('span', { class: 'text-muted' }, '—')
       const color = ready ? 'success' as const : 'error' as const
       return h(UBadge, { variant: 'subtle', color }, () => ready ? 'Ready' : 'Not Ready')
-    }
-  },
-  {
-    id: 'age',
-    accessorFn: row => row.metadata.creationTimestamp,
-    header: 'Age',
-    cell: ({ row }) => {
-      const ts = row.original.metadata.creationTimestamp
-      if (!ts) return '—'
-      return useTimeAgo(ts).value
     }
   },
   {

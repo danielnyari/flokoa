@@ -258,6 +258,8 @@ func RuntimeTypeToProto(rt agentv1alpha1.RuntimeType) pb.RuntimeType {
 	switch rt {
 	case agentv1alpha1.RuntimeTypeStandard:
 		return pb.RuntimeType_RUNTIME_TYPE_STANDARD
+	case agentv1alpha1.RuntimeTypeTemplate:
+		return pb.RuntimeType_RUNTIME_TYPE_TEMPLATE
 	default:
 		return pb.RuntimeType_RUNTIME_TYPE_UNSPECIFIED
 	}

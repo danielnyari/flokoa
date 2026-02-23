@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -180,9 +181,15 @@ type authConfigResponse struct {
 
 // startHTTPGateway starts the HTTP/REST gateway with embedded UI.
 func (s *Server) startHTTPGateway(ctx context.Context) error {
-	// Create gRPC-Gateway mux
+	// Create gRPC-Gateway mux.
+	// EmitUnpopulated ensures proto3 zero values (0, "", false) are included
+	// in JSON responses so the UI always receives a consistent schema.
 	gwMux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{}),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions: protojson.MarshalOptions{
+				EmitUnpopulated: true,
+			},
+		}),
 	)
 
 	// Connect to gRPC server

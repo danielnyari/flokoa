@@ -51,17 +51,17 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			err = utils.LoadImageToKindClusterWithName(a2aPluginImage)
 			Expect(err).NotTo(HaveOccurred(), "Failed to load A2A plugin image")
 
+			By("applying RBAC for Argo Workflows (SA + token secrets must exist before plugin install)")
+			err = applyManifestFile("test/e2e/testdata/argo/rbac.yaml")
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply Argo RBAC")
+
 			By("installing Argo Workflows")
 			err = utils.InstallArgoWorkflows(ctx, k8sClient, namespace)
 			Expect(err).NotTo(HaveOccurred(), "Failed to install Argo Workflows")
 
-			By("installing the A2A executor plugin")
-			err = utils.InstallA2AExecutorPlugin(ctx, k8sClient, a2aPluginImage)
+			By("installing the A2A executor plugin via static ConfigMap")
+			err = applyManifestFile("test/e2e/testdata/argo/executor-plugin.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to install A2A executor plugin")
-
-			By("applying RBAC for Argo Workflows")
-			err = applyManifestFile("test/e2e/testdata/argo/rbac.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply Argo RBAC")
 
 			By("creating the plugin service account token secret")
 			err = applyManifestFile("test/e2e/testdata/secret.yaml")
@@ -242,6 +242,12 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "  Node %s: phase=%s, message=%s\n",
 					nodeName, node.Phase, node.Message)
 			}
+
+			// Dump agent pod diagnostics on failure
+			if completedWf.Status.Phase != wfv1.WorkflowSucceeded {
+				dumpAgentPodDiagnostics(wfName, namespace)
+			}
+
 			Expect(completedWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded), "Workflow should succeed")
 		})
 
@@ -316,7 +322,7 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			deleteManifestFile("test/e2e/testdata/argo/rbac.yaml")
 
 			By("uninstalling A2A executor plugin")
-			utils.UninstallA2AExecutorPlugin(ctx, k8sClient)
+			deleteManifestFile("test/e2e/testdata/argo/executor-plugin.yaml")
 
 			By("uninstalling Argo Workflows")
 			utils.UninstallArgoWorkflows(ctx, k8sClient)

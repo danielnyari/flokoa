@@ -32,6 +32,7 @@ enum AgentPhase {
 enum RuntimeType {
   RUNTIME_TYPE_UNSPECIFIED = 0;
   RUNTIME_TYPE_STANDARD = 1;
+  RUNTIME_TYPE_TEMPLATE = 2;
 }
 
 // InputOutputMode represents supported input/output modes.

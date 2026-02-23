@@ -1,0 +1,35 @@
+# A2A executor plugin ConfigMap for Argo Workflows.
+# Equivalent to the output of: argo executor-plugin build plugins/a2a/
+# Applied to the argo namespace so the workflow-controller discovers it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: a2a-executor-plugin
+  namespace: argo
+  labels:
+    workflows.argoproj.io/configmap-type: ExecutorPlugin
+data:
+  sidecar.automountServiceAccountToken: "true"
+  sidecar.container: |
+    command:
+    - /a2a-plugin
+    image: localhost/a2a-plugin:test
+    name: a2a-executor-plugin
+    ports:
+    - containerPort: 4355
+      protocol: TCP
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 64Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 65532

@@ -451,6 +451,65 @@ func waitForWorkflowCompletion(name, ns string, timeout time.Duration) (*wfv1.Wo
 	return &wf, nil
 }
 
+// dumpAgentPodDiagnostics finds and logs the Argo agent pod for a workflow.
+// Agent pods follow the naming pattern: <wf-name>-<hash>-agent.
+func dumpAgentPodDiagnostics(wfName, ns string) {
+	podList := &corev1.PodList{}
+	err := k8sClient.List(ctx, podList,
+		client.InNamespace(ns),
+		client.MatchingLabels{"workflows.argoproj.io/workflow": wfName, "workflows.argoproj.io/component": "agent"})
+	if err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Failed to list agent pods: %v\n", err)
+		return
+	}
+	if len(podList.Items) == 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "No agent pod found for workflow %s\n", wfName)
+		return
+	}
+	for _, pod := range podList.Items {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Agent pod %s: phase=%s\n", pod.Name, pod.Status.Phase)
+		for _, cs := range pod.Status.InitContainerStatuses {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  InitContainer %s: ready=%v state=%+v\n", cs.Name, cs.Ready, cs.State)
+		}
+		for _, cs := range pod.Status.ContainerStatuses {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  Container %s: ready=%v restarts=%d state=%+v\n", cs.Name, cs.Ready, cs.RestartCount, cs.State)
+			if cs.LastTerminationState.Terminated != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "    Last termination: reason=%s exitCode=%d message=%s\n",
+					cs.LastTerminationState.Terminated.Reason, cs.LastTerminationState.Terminated.ExitCode, cs.LastTerminationState.Terminated.Message)
+			}
+		}
+		// Try to get logs from each container
+		for _, c := range pod.Spec.Containers {
+			logs, logErr := getPodContainerLogs(pod.Name, ns, c.Name)
+			if logErr != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "  Logs(%s): error=%v\n", c.Name, logErr)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "  Logs(%s):\n%s\n", c.Name, logs)
+			}
+		}
+	}
+}
+
+// getPodContainerLogs retrieves logs from a specific container in a pod
+func getPodContainerLogs(podName, ns, containerName string) (string, error) {
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return "", err
+	}
+	req := clientset.CoreV1().Pods(ns).GetLogs(podName, &corev1.PodLogOptions{Container: containerName})
+	logs, err := req.Stream(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = logs.Close() }()
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, logs)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 // newCurlPod creates a restricted curl Pod spec for in-cluster HTTP calls.
 // Uses -s (silent) without -f so the pod always succeeds on HTTP responses
 // (even 4xx/5xx), allowing callers to inspect HTTP_STATUS in the logs.

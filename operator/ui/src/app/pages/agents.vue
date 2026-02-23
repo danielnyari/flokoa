@@ -16,10 +16,17 @@ const table = useTemplateRef('table')
 
 const selectedAgent = ref<Agent | null>(null)
 const detailOpen = ref(false)
+const cardAgent = ref<Agent | null>(null)
+const cardOpen = ref(false)
 
 function openDetail(agent: Agent) {
   selectedAgent.value = agent
   detailOpen.value = true
+}
+
+function openAgentCard(agent: Agent) {
+  cardAgent.value = agent
+  cardOpen.value = true
 }
 
 const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
@@ -78,7 +85,7 @@ function getRowItems(row: { original: Agent }) {
       onSelect() {
         openDetail(row.original)
       }
-    }
+    },
   ]
 }
 
@@ -88,11 +95,25 @@ const columns: TableColumn<Agent>[] = [
     accessorFn: row => row.metadata.name,
     header: 'Name',
     cell: ({ row }) => {
+      const agent = row.original
+      const hasUrl = !!agent.status?.url
       return h('div', { class: 'flex items-center gap-2' }, [
-        h('div', undefined, [
-          h('p', { class: 'font-medium text-highlighted' }, row.original.metadata.name),
-          h('p', { class: 'text-sm text-muted' }, row.original.metadata.namespace)
-        ])
+        h('div', { class: 'flex-1 min-w-0' }, [
+          h('p', { class: 'font-medium text-highlighted' }, agent.metadata.name),
+          h('p', { class: 'text-sm text-muted' }, agent.metadata.namespace)
+        ]),
+        h(UButton, {
+          icon: 'i-lucide-id-card',
+          color: 'neutral',
+          variant: 'ghost',
+          size: 'lg',
+          disabled: !hasUrl,
+          title: hasUrl ? 'View agent card' : 'No endpoint available',
+          onClick: (e: Event) => {
+            e.stopPropagation()
+            openAgentCard(agent)
+          }
+        })
       ])
     }
   },
@@ -286,4 +307,5 @@ const columns: TableColumn<Agent>[] = [
   </UDashboardPanel>
 
   <AgentDetail v-if="selectedAgent" v-model:open="detailOpen" :agent="selectedAgent" />
+  <AgentCardModal v-if="cardAgent" v-model:open="cardOpen" :agent="cardAgent" />
 </template>

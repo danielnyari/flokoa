@@ -4212,7 +4212,8 @@
       "type": "string",
       "enum": [
         "RUNTIME_TYPE_UNSPECIFIED",
-        "RUNTIME_TYPE_STANDARD"
+        "RUNTIME_TYPE_STANDARD",
+        "RUNTIME_TYPE_TEMPLATE"
       ],
       "default": "RUNTIME_TYPE_UNSPECIFIED",
       "description": "RuntimeType represents the type of runtime backend."

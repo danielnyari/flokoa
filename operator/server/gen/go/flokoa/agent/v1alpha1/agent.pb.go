@@ -144,6 +144,7 @@ type RuntimeType int32
 const (
 	RuntimeType_RUNTIME_TYPE_UNSPECIFIED RuntimeType = 0
 	RuntimeType_RUNTIME_TYPE_STANDARD    RuntimeType = 1
+	RuntimeType_RUNTIME_TYPE_TEMPLATE    RuntimeType = 2
 )
 
 // Enum value maps for RuntimeType.
@@ -151,10 +152,12 @@ var (
 	RuntimeType_name = map[int32]string{
 		0: "RUNTIME_TYPE_UNSPECIFIED",
 		1: "RUNTIME_TYPE_STANDARD",
+		2: "RUNTIME_TYPE_TEMPLATE",
 	}
 	RuntimeType_value = map[string]int32{
 		"RUNTIME_TYPE_UNSPECIFIED": 0,
 		"RUNTIME_TYPE_STANDARD":    1,
+		"RUNTIME_TYPE_TEMPLATE":    2,
 	}
 )
 
@@ -4947,10 +4950,11 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x17AGENT_PHASE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13AGENT_PHASE_PENDING\x10\x01\x12\x17\n" +
 	"\x13AGENT_PHASE_RUNNING\x10\x02\x12\x16\n" +
-	"\x12AGENT_PHASE_FAILED\x10\x03*F\n" +
+	"\x12AGENT_PHASE_FAILED\x10\x03*a\n" +
 	"\vRuntimeType\x12\x1c\n" +
 	"\x18RUNTIME_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15RUNTIME_TYPE_STANDARD\x10\x01*l\n" +
+	"\x15RUNTIME_TYPE_STANDARD\x10\x01\x12\x19\n" +
+	"\x15RUNTIME_TYPE_TEMPLATE\x10\x02*l\n" +
 	"\x0fInputOutputMode\x12!\n" +
 	"\x1dINPUT_OUTPUT_MODE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16INPUT_OUTPUT_MODE_TEXT\x10\x01\x12\x1a\n" +

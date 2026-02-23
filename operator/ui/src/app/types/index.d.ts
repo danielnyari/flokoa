@@ -326,6 +326,40 @@ export interface WorkflowRunList {
   items: WorkflowRun[]
 }
 
+// ─── A2A Agent Card (from /.well-known/agent.json) ─────────────────
+
+export interface A2AAgentCard {
+  name: string
+  description: string
+  url: string
+  version?: string
+  provider?: {
+    organization: string
+    url?: string
+  }
+  documentationUrl?: string
+  capabilities?: {
+    streaming?: boolean
+    pushNotifications?: boolean
+    stateTransitionHistory?: boolean
+  }
+  authentication?: {
+    schemes?: string[]
+    credentials?: unknown
+  }
+  defaultInputModes?: string[]
+  defaultOutputModes?: string[]
+  skills?: Array<{
+    id: string
+    name: string
+    description?: string
+    tags?: string[]
+    examples?: string[]
+    inputModes?: string[]
+    outputModes?: string[]
+  }>
+}
+
 // ─── Dashboard types ────────────────────────────────────────────────
 
 export interface Stat {

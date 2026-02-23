@@ -231,7 +231,11 @@ func watchWorkflowRunsHandler(watchClient client.WithWatch, log logr.Logger) htt
 }
 
 // sseMarshaler uses protojson to produce camelCase JSON consistent with grpc-gateway.
-var sseMarshaler = protojson.MarshalOptions{}
+// EmitUnpopulated ensures proto3 zero values (0, "", false) are included
+// so the UI always receives a consistent schema.
+var sseMarshaler = protojson.MarshalOptions{
+	EmitUnpopulated: true,
+}
 
 // streamSSE is the core SSE streaming loop shared by all watch handlers.
 // It writes SSE headers, then loops reading from the watcher channel, converting
