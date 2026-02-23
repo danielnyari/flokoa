@@ -49,6 +49,30 @@ const pagination = ref({
   pageSize: 10
 })
 
+const providerTypeMap: Record<string | number, string> = {
+  PROVIDER_TYPE_OPENAI: 'openai',
+  PROVIDER_TYPE_ANTHROPIC: 'anthropic',
+  PROVIDER_TYPE_GOOGLE: 'google',
+  PROVIDER_TYPE_BEDROCK: 'bedrock',
+  1: 'openai',
+  2: 'anthropic',
+  3: 'google',
+  4: 'bedrock'
+}
+
+const providerLabel: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  bedrock: 'Bedrock'
+}
+
+function resolveProviderLabel(raw: string | number | undefined): string | undefined {
+  if (!raw) return undefined
+  const key = providerTypeMap[raw]
+  return key ? providerLabel[key] : undefined
+}
+
 function getRowItems(row: { original: Model }) {
   return [
     { type: 'label' as const, label: 'Actions' },
@@ -97,9 +121,10 @@ const columns: TableColumn<Model>[] = [
     cell: ({ row }) => {
       const resolved = row.original.status?.resolvedProvider
       const providerName = row.original.spec.providerRef.name
-      if (resolved?.provider) {
+      const label = resolveProviderLabel(resolved?.provider)
+      if (label) {
         return h('div', { class: 'flex items-center gap-2' }, [
-          h(UBadge, { variant: 'subtle', color: 'neutral' }, () => resolved.provider),
+          h(UBadge, { variant: 'subtle', color: 'neutral' }, () => label),
           h('span', { class: 'text-sm text-muted' }, providerName)
         ])
       }
