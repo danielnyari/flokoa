@@ -236,7 +236,12 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			By("waiting for workflow to complete")
 			completedWf, err := waitForWorkflowCompletion(wfName, namespace, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "Workflow did not complete")
-			_, _ = fmt.Fprintf(GinkgoWriter, "Workflow phase: %s\n", completedWf.Status.Phase)
+			_, _ = fmt.Fprintf(GinkgoWriter, "Direct workflow phase: %s, message: %s\n",
+				completedWf.Status.Phase, completedWf.Status.Message)
+			for nodeName, node := range completedWf.Status.Nodes {
+				_, _ = fmt.Fprintf(GinkgoWriter, "  Node %s: phase=%s, message=%s\n",
+					nodeName, node.Phase, node.Message)
+			}
 			Expect(completedWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded), "Workflow should succeed")
 		})
 
@@ -278,7 +283,12 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			By("waiting for workflow to complete")
 			completedWf, err := waitForWorkflowCompletion(wfName, namespace, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "Workflow did not complete")
-			_, _ = fmt.Fprintf(GinkgoWriter, "Workflow phase: %s\n", completedWf.Status.Phase)
+			_, _ = fmt.Fprintf(GinkgoWriter, "Template workflow phase: %s, message: %s\n",
+				completedWf.Status.Phase, completedWf.Status.Message)
+			for nodeName, node := range completedWf.Status.Nodes {
+				_, _ = fmt.Fprintf(GinkgoWriter, "  Node %s: phase=%s, message=%s\n",
+					nodeName, node.Phase, node.Message)
+			}
 			Expect(completedWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded), "Workflow should succeed")
 		})
 
