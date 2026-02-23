@@ -186,7 +186,7 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			logs, err := getPodLogs(curlPodName, namespace)
 			Expect(err).NotTo(HaveOccurred())
 			_, _ = fmt.Fprintf(GinkgoWriter, "Agent card response:\n%s\n", logs)
-			Expect(logs).To(ContainSubstring("petstore-agent"), "Response should contain agent name")
+			Expect(logs).To(ContainSubstring("Petstore Agent"), "Response should contain agent name")
 			Expect(logs).To(ContainSubstring("HTTP_STATUS:200"), "Should return HTTP 200")
 		})
 
