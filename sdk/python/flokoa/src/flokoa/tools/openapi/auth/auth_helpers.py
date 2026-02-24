@@ -19,9 +19,7 @@ from typing import Any, Literal
 
 import httpx
 from fastapi.openapi.models import APIKey, APIKeyIn, HTTPBase, HTTPBearer, OAuth2, OpenIdConnect, Schema
-from pydantic import BaseModel, ValidationError
-
-from ....auth.auth_credential import (
+from flokoa_common.auth.auth_credential import (
     AuthCredential,
     AuthCredentialTypes,
     HttpAuth,
@@ -30,9 +28,11 @@ from ....auth.auth_credential import (
     ServiceAccount,
     ServiceAccountCredential,
 )
-from ....auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
+from flokoa_common.auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
+from flokoa_common.utils.openapi.common import ApiParameter
+from pydantic import BaseModel, ValidationError
+
 from ....utils.url_validation import validate_url
-from ..common import ApiParameter
 
 logger = logging.getLogger("flokoa." + __name__)
 

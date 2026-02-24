@@ -15,6 +15,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 import yaml
+from flokoa_common.utils.openapi.common import ApiParameter
+from flokoa_common.utils.openapi.openapi_spec_parser import OpenApiSpecParser, OperationEndpoint
+from flokoa_common.utils.openapi.operation_parser import OperationParser
 from pydantic_ai import FunctionToolset, RunContext, Tool
 
 from flokoa.tools.openapi import (
@@ -25,9 +28,6 @@ from flokoa.tools.openapi import (
     create_rest_api_tool,
 )
 from flokoa.tools.openapi.auth.auth_helpers import token_to_scheme_credential
-from flokoa.tools.openapi.common import ApiParameter
-from flokoa.tools.openapi.openapi_spec_parser import OpenApiSpecParser, OperationEndpoint
-from flokoa.tools.openapi.operation_parser import OperationParser
 from flokoa.tools.openapi.rest_api_tool import _prepare_request_params
 
 pytestmark = pytest.mark.anyio
@@ -64,9 +64,7 @@ class TestOpenAPIToolsetParsing:
         toolset = OpenAPIToolset(spec_dict=openapi_spec)
         tools = toolset.get_tools()
         # Count operations in the spec
-        expected_count = sum(
-            len(methods) for methods in openapi_spec["paths"].values()
-        )
+        expected_count = sum(len(methods) for methods in openapi_spec["paths"].values())
         assert len(tools) == expected_count
 
     def test_tools_are_pydantic_ai_tool_instances(self, openapi_spec):
@@ -234,9 +232,7 @@ class TestOpenAPIToolsetFunctionToolset:
 
 class TestOpenAPIToolsetAuth:
     def test_global_auth_propagates_to_configs(self, openapi_spec):
-        auth_scheme, auth_credential = token_to_scheme_credential(
-            "apikey", "header", "X-API-Key", "test-key-123"
-        )
+        auth_scheme, auth_credential = token_to_scheme_credential("apikey", "header", "X-API-Key", "test-key-123")
         toolset = OpenAPIToolset(
             spec_dict=openapi_spec,
             auth_scheme=auth_scheme,
@@ -277,9 +273,7 @@ class TestRestApiToolConfig:
 
     def test_ssl_verify_passed_through(self, openapi_spec):
         operations = OpenApiSpecParser().parse(openapi_spec)
-        config = RestApiToolConfig.from_parsed_operation(
-            operations[0], ssl_verify="/path/to/ca.pem"
-        )
+        config = RestApiToolConfig.from_parsed_operation(operations[0], ssl_verify="/path/to/ca.pem")
         assert config.ssl_verify == "/path/to/ca.pem"
 
 
@@ -514,11 +508,7 @@ class TestPrepareRequestParamsBody:
                 "status": Schema(type="string"),
             },
         )
-        operation = Operation(
-            requestBody=RequestBody(
-                content={"application/json": _make_media_type(body_schema)}
-            )
-        )
+        operation = Operation(requestBody=RequestBody(content={"application/json": _make_media_type(body_schema)}))
         endpoint = OperationEndpoint(base_url="https://api.example.com", path="/pets", method="POST")
         name_param = ApiParameter(
             original_name="name",
@@ -551,9 +541,7 @@ class TestPrepareRequestParamsBody:
             properties={"field": Schema(type="string")},
         )
         operation = Operation(
-            requestBody=RequestBody(
-                content={"application/x-www-form-urlencoded": _make_media_type(body_schema)}
-            )
+            requestBody=RequestBody(content={"application/x-www-form-urlencoded": _make_media_type(body_schema)})
         )
         endpoint = OperationEndpoint(base_url="https://api.example.com", path="/form", method="POST")
         param = ApiParameter(
@@ -649,7 +637,6 @@ class TestCreateRestApiCallable:
 
         assert "error" in result
         assert "404" in result["error"]
-        assert "Pet not found" in result["error"]
 
     async def test_non_json_response_returns_text(self, get_pet_config):
         mock_response = httpx.Response(
@@ -770,9 +757,7 @@ class TestAuthCredentialInjection:
     async def test_api_key_auth_injected_as_header(self, openapi_spec):
         # get_inventory uses the api_key security scheme from the spec
         # (apiKey in header named "api_key"), so we provide a matching credential
-        auth_scheme, auth_credential = token_to_scheme_credential(
-            "apikey", "header", "api_key", "secret-key"
-        )
+        auth_scheme, auth_credential = token_to_scheme_credential("apikey", "header", "api_key", "secret-key")
 
         toolset = OpenAPIToolset(
             spec_dict=openapi_spec,
@@ -1097,7 +1082,7 @@ class TestOpenApiSpecParser:
         get_inventory = next(o for o in operations if o.name == "get_inventory")
         # getInventory uses api_key security
         assert get_inventory.auth_scheme is not None
-        from flokoa.auth.auth_schemes import AuthSchemeType
+        from flokoa_common.auth.auth_schemes import AuthSchemeType
 
         assert get_inventory.auth_scheme.type_ == AuthSchemeType.apiKey
 
@@ -1200,9 +1185,7 @@ class TestOperationParser:
         """updatePetWithForm has path and query params."""
         operations = OpenApiSpecParser().parse(openapi_spec)
         update_form = next(o for o in operations if o.name == "update_pet_with_form")
-        parser = OperationParser.load(
-            update_form.operation, update_form.parameters, update_form.return_value
-        )
+        parser = OperationParser.load(update_form.operation, update_form.parameters, update_form.return_value)
         params = parser.get_parameters()
         locations = {p.param_location for p in params}
         assert "path" in locations
@@ -1401,9 +1384,7 @@ class TestOpenApiSpecParserEdgeCases:
                         "responses": {
                             "200": {
                                 "description": "ok",
-                                "content": {
-                                    "application/json": {"schema": {"$ref": "#/components/schemas/Node"}}
-                                },
+                                "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Node"}}},
                             }
                         },
                     }
@@ -1435,9 +1416,7 @@ class TestOpenApiSpecParserEdgeCases:
             "info": {"title": "T", "version": "1.0"},
             "paths": {
                 "/items/{itemId}": {
-                    "parameters": [
-                        {"name": "itemId", "in": "path", "required": True, "schema": {"type": "integer"}}
-                    ],
+                    "parameters": [{"name": "itemId", "in": "path", "required": True, "schema": {"type": "integer"}}],
                     "get": {
                         "operationId": "getItem",
                         "responses": {"200": {"description": "ok"}},

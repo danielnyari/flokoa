@@ -24,8 +24,7 @@ from fastapi.openapi.models import (
     Schema,
     SecuritySchemeType,
 )
-
-from flokoa.auth.auth_credential import (
+from flokoa_common.auth.auth_credential import (
     AuthCredential,
     AuthCredentialTypes,
     HttpAuth,
@@ -34,9 +33,11 @@ from flokoa.auth.auth_credential import (
     ServiceAccount,
     ServiceAccountCredential,
 )
-from flokoa.auth.auth_schemes import (
+from flokoa_common.auth.auth_schemes import (
     OpenIdConnectWithConfig,
 )
+from flokoa_common.utils.openapi.common import PydocHelper
+
 from flokoa.tools.openapi import OpenAPIDeps, create_rest_api_callable
 from flokoa.tools.openapi.auth.auth_helpers import (
     credential_to_param,
@@ -52,7 +53,6 @@ from flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger import (
     _EXPIRY_BUFFER_SECONDS,
     OAuth2CredentialExchanger,
 )
-from flokoa.tools.openapi.common import PydocHelper
 
 from ..fixtures import *
 
@@ -196,9 +196,13 @@ class TestRefreshAccessToken:
             "refresh_token": "new-refresh-token",
             "expires_in": 3600,
         }
-        mock_response = httpx.Response(200, json=new_token_response, request=httpx.Request("POST", "https://example.com"))
+        mock_response = httpx.Response(
+            200, json=new_token_response, request=httpx.Request("POST", "https://example.com")
+        )
 
-        with patch("flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response):
+        with patch(
+            "flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response
+        ):
             result = exchanger._refresh_access_token(scheme, cred)
 
         assert result.oauth2.access_token == "new-access-token"
@@ -228,8 +232,12 @@ class TestRefreshAccessToken:
         cred = _make_oauth2_credential()
         scheme = _make_openid_scheme()
 
-        mock_response = httpx.Response(400, json={"error": "invalid_grant"}, request=httpx.Request("POST", "https://example.com"))
-        with patch("flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response) as mock_post:
+        mock_response = httpx.Response(
+            400, json={"error": "invalid_grant"}, request=httpx.Request("POST", "https://example.com")
+        )
+        with patch(
+            "flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response
+        ) as mock_post:
             result = exchanger._refresh_access_token(scheme, cred)
 
         assert result.oauth2.access_token == "old-token"
@@ -241,10 +249,17 @@ class TestRefreshAccessToken:
         cred = _make_oauth2_credential()
         scheme = _make_openid_scheme()
 
-        mock_500 = httpx.Response(500, text="Internal Server Error", request=httpx.Request("POST", "https://example.com"))
-        mock_200 = httpx.Response(200, json={"access_token": "refreshed"}, request=httpx.Request("POST", "https://example.com"))
+        mock_500 = httpx.Response(
+            500, text="Internal Server Error", request=httpx.Request("POST", "https://example.com")
+        )
+        mock_200 = httpx.Response(
+            200, json={"access_token": "refreshed"}, request=httpx.Request("POST", "https://example.com")
+        )
 
-        with patch("flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", side_effect=[mock_500, mock_200]):
+        with patch(
+            "flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post",
+            side_effect=[mock_500, mock_200],
+        ):
             result = exchanger._refresh_access_token(scheme, cred)
 
         assert result.oauth2.access_token == "refreshed"
@@ -254,7 +269,9 @@ class TestRefreshAccessToken:
         cred = _make_oauth2_credential()
         scheme = _make_openid_scheme()
 
-        mock_200 = httpx.Response(200, json={"access_token": "recovered"}, request=httpx.Request("POST", "https://example.com"))
+        mock_200 = httpx.Response(
+            200, json={"access_token": "recovered"}, request=httpx.Request("POST", "https://example.com")
+        )
 
         with patch(
             "flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post",
@@ -290,7 +307,9 @@ class TestRefreshAccessToken:
             request=httpx.Request("POST", "https://example.com"),
         )
 
-        with patch("flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response):
+        with patch(
+            "flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response
+        ):
             result = exchanger._refresh_access_token(scheme, cred)
 
         assert result.oauth2.expires_at >= before + 7200
@@ -307,7 +326,9 @@ class TestRefreshAccessToken:
             request=httpx.Request("POST", "https://example.com"),
         )
 
-        with patch("flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response):
+        with patch(
+            "flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response
+        ):
             result = exchanger._refresh_access_token(scheme, cred)
 
         assert result.oauth2.expires_at == fixed_at
@@ -340,7 +361,9 @@ class TestOAuth2ExchangeCredentialIntegration:
             request=httpx.Request("POST", "https://example.com"),
         )
 
-        with patch("flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response):
+        with patch(
+            "flokoa.tools.openapi.auth.credential_exchangers.oauth2_exchanger.httpx.post", return_value=mock_response
+        ):
             result = exchanger.exchange_credential(scheme, cred)
 
         assert result.auth_type == AuthCredentialTypes.HTTP
@@ -495,9 +518,7 @@ class TestResolveOpenIdConnectScheme:
             request=httpx.Request("GET", "https://accounts.example.com/.well-known/openid-configuration"),
         )
         with patch("flokoa.tools.openapi.auth.auth_helpers.httpx.get", return_value=mock_response):
-            result = resolve_openid_connect_scheme(
-                "https://accounts.example.com/.well-known/openid-configuration"
-            )
+            result = resolve_openid_connect_scheme("https://accounts.example.com/.well-known/openid-configuration")
 
         assert isinstance(result, OpenIdConnectWithConfig)
         assert result.authorization_endpoint == "https://accounts.example.com/auth"
@@ -523,10 +544,13 @@ class TestResolveOpenIdConnectScheme:
             resolve_openid_connect_scheme("https://example.com/.well-known/openid-configuration")
 
     def test_http_error_raises(self):
-        with patch(
-            "flokoa.tools.openapi.auth.auth_helpers.httpx.get",
-            side_effect=httpx.ConnectError("connection refused"),
-        ), pytest.raises(ValueError, match="Failed to fetch"):
+        with (
+            patch(
+                "flokoa.tools.openapi.auth.auth_helpers.httpx.get",
+                side_effect=httpx.ConnectError("connection refused"),
+            ),
+            pytest.raises(ValueError, match="Failed to fetch"),
+        ):
             resolve_openid_connect_scheme("https://unreachable.example.com/.well-known/openid-configuration")
 
 
@@ -654,8 +678,9 @@ class TestPydocHelperMultipleContentTypes:
 class TestContentTypeResponseParsing:
     @pytest.fixture
     def get_pet_config(self, openapi_spec):
+        from flokoa_common.utils.openapi.openapi_spec_parser import OpenApiSpecParser
+
         from flokoa.tools.openapi import RestApiToolConfig
-        from flokoa.tools.openapi.openapi_spec_parser import OpenApiSpecParser
 
         operations = OpenApiSpecParser().parse(openapi_spec)
         get_pet_ops = [o for o in operations if o.name == "get_pet_by_id"]
@@ -1012,10 +1037,13 @@ class TestOpenIdHelpers:
         assert cred.oauth2.client_id == "c"
 
     def test_openid_url_fetch_failure_raises(self):
-        with patch(
-            "flokoa.tools.openapi.auth.auth_helpers.httpx.get",
-            side_effect=httpx.ConnectError("refused"),
-        ), pytest.raises(ValueError, match="Failed to fetch"):
+        with (
+            patch(
+                "flokoa.tools.openapi.auth.auth_helpers.httpx.get",
+                side_effect=httpx.ConnectError("refused"),
+            ),
+            pytest.raises(ValueError, match="Failed to fetch"),
+        ):
             openid_url_to_scheme_credential(
                 "https://bad.example.com/.well-known/openid-configuration",
                 ["openid"],

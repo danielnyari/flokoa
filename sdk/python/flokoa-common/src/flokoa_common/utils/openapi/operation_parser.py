@@ -21,7 +21,8 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 from fastapi.openapi.models import Operation, Parameter, Schema
 
-from ..utils import _to_snake_case
+from flokoa_common.utils.text import _to_snake_case
+
 from .common import ApiParameter, PydocHelper
 
 

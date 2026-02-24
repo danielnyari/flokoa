@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import google.auth
 import google.oauth2.credentials
+from flokoa_common.auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
+from flokoa_common.auth.auth_schemes import AuthScheme
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 
-from .....auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
-from .....auth.auth_schemes import AuthScheme
 from .base_credential_exchanger import AuthCredentialMissingError, BaseAuthCredentialExchanger
 
 

@@ -2,7 +2,6 @@ apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelProvider
 metadata:
   name: openai-provider
-  namespace: flokoa-system
 spec:
   apiKeySecretRef:
     name: openai-api-key

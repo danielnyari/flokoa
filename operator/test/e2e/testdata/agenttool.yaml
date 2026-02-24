@@ -2,14 +2,12 @@ apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
   name: petstore-api
-  namespace: flokoa-system
 spec:
   type: openapi
   description: "Petstore API - manage pets"
   openApi:
     serviceRef:
       name: tool-service
-      namespace: flokoa-system
       port: 8080
     openApiSchema:
       endpointPath: "/api/v3/openapi.json"

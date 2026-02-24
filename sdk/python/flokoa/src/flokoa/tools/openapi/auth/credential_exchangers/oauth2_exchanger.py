@@ -20,9 +20,15 @@ import logging
 import time
 
 import httpx
+from flokoa_common.auth.auth_credential import (
+    AuthCredential,
+    AuthCredentialTypes,
+    HttpAuth,
+    HttpCredentials,
+    OAuth2Auth,
+)
+from flokoa_common.auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
 
-from .....auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials, OAuth2Auth
-from .....auth.auth_schemes import AuthScheme, AuthSchemeType, OpenIdConnectWithConfig
 from .....utils.url_validation import validate_url
 from .base_credential_exchanger import BaseAuthCredentialExchanger
 

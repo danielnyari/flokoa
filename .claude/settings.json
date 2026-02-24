@@ -4,7 +4,11 @@
       "Bash(make test-e2e:*)",
       "Bash(yq eval:*)",
       "Bash(make:*)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "mcp__github__get_file_contents"
+    ],
+    "additionalDirectories": [
+      "/Users/danielnyari/Documents/GitHub/flokoa/sdk/python/flokoa-common/src/flokoa_common"
     ]
   },
   "hooks": {

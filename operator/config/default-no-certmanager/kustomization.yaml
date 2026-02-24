@@ -1,5 +1,5 @@
 # Adds namespace to all resources.
-namespace: flokoa-system
+namespace: flokoa-e2e-2a04ac4a
 
 resources:
 - ../crd
@@ -13,3 +13,5 @@ patches:
   target:
     kind: Deployment
     name: flokoa-controller
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization

@@ -3,7 +3,6 @@ apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
   generateName: a2a-test-
-  namespace: flokoa-system
 spec:
   entrypoint: call-agent
   serviceAccountName: flokoa-workflow
@@ -13,7 +12,6 @@ spec:
       plugin:
         a2a:
           agent: petstore-agent
-          namespace: flokoa-system
           message:
             parts:
               - text:

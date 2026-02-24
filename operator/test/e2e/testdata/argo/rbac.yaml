@@ -39,7 +39,6 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: a2a-executor-plugin
-  namespace: flokoa-system
 ---
 # Token secret for A2A executor plugin SA (required by Argo agent pod volume mount).
 # Argo resolves token secrets via <sa-name>.service-account-token convention.
@@ -47,7 +46,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: a2a-executor-plugin.service-account-token
-  namespace: flokoa-system
   annotations:
     kubernetes.io/service-account.name: a2a-executor-plugin
 type: kubernetes.io/service-account-token
@@ -57,14 +55,12 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: flokoa-workflow
-  namespace: flokoa-system
 ---
 # Token secret for service account (required for Kubernetes 1.24+)
 apiVersion: v1
 kind: Secret
 metadata:
   name: flokoa-workflow.service-account-token
-  namespace: flokoa-system
   annotations:
     kubernetes.io/service-account.name: flokoa-workflow
 type: kubernetes.io/service-account-token
@@ -73,7 +69,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: flokoa-workflow-agent-access
-  namespace: flokoa-system
 subjects:
   - kind: ServiceAccount
     name: flokoa-workflow
@@ -92,7 +87,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: flokoa-workflow-executor
-  namespace: flokoa-system
 rules:
   - apiGroups: ["argoproj.io"]
     resources: ["workflowtasksets", "workflowtaskresults", "workflows"]
@@ -110,7 +104,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: flokoa-workflow-executor-access
-  namespace: flokoa-system
 subjects:
   - kind: ServiceAccount
     name: flokoa-workflow

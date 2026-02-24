@@ -14,8 +14,9 @@
 
 from __future__ import annotations
 
-from .....auth.auth_credential import AuthCredential, AuthCredentialTypes
-from .....auth.auth_schemes import AuthScheme
+from flokoa_common.auth.auth_credential import AuthCredential, AuthCredentialTypes
+from flokoa_common.auth.auth_schemes import AuthScheme
+
 from .base_credential_exchanger import BaseAuthCredentialExchanger
 from .oauth2_exchanger import OAuth2CredentialExchanger
 from .service_account_exchanger import ServiceAccountCredentialExchanger

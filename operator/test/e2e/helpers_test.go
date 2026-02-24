@@ -26,6 +26,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -51,14 +52,9 @@ import (
 	"github.com/danielnyari/flokoa/test/utils"
 )
 
-// managerNamespace is where the operator and server are deployed by `make deploy`.
-const managerNamespace = "flokoa-system"
-
-// manifestDefaultNamespace is the namespace value baked into static test manifests.
-const manifestDefaultNamespace = "flokoa-system"
-
-// namespace where the project is deployed for this test run.
-var namespace = manifestDefaultNamespace
+// namespace is the single namespace used for operator, server, and workloads in this test run.
+// Initialized in BeforeSuite via initializeTestNamespace().
+var namespace string
 
 // serviceAccountName created for the project
 const serviceAccountName = "flokoa-controller"
@@ -79,10 +75,10 @@ func initializeTestNamespace() string {
 
 	randomBytes := make([]byte, 4)
 	if _, err := crand.Read(randomBytes); err != nil {
-		return fmt.Sprintf("%s-%d", manifestDefaultNamespace, time.Now().UnixNano())
+		return fmt.Sprintf("flokoa-e2e-%d", time.Now().UnixNano())
 	}
 
-	return fmt.Sprintf("%s-%s", manifestDefaultNamespace, hex.EncodeToString(randomBytes))
+	return fmt.Sprintf("flokoa-e2e-%s", hex.EncodeToString(randomBytes))
 }
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
@@ -101,7 +97,7 @@ func serviceAccountToken() (string, error) {
 
 	var token string
 	verifyTokenCreation := func(g Gomega) {
-		result, err := clientset.CoreV1().ServiceAccounts(managerNamespace).CreateToken(
+		result, err := clientset.CoreV1().ServiceAccounts(namespace).CreateToken(
 			ctx,
 			serviceAccountName,
 			tokenRequest,
@@ -119,13 +115,13 @@ func serviceAccountToken() (string, error) {
 func getMetricsOutput() string {
 	By("getting the curl-metrics logs")
 	pod := &corev1.Pod{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: managerNamespace}, pod)
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: namespace}, pod)
 	Expect(err).NotTo(HaveOccurred(), "Failed to get curl-metrics pod")
 
 	clientset, err := kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	req := clientset.CoreV1().Pods(managerNamespace).GetLogs("curl-metrics", &corev1.PodLogOptions{})
+	req := clientset.CoreV1().Pods(namespace).GetLogs("curl-metrics", &corev1.PodLogOptions{})
 	logs, err := req.Stream(ctx)
 	Expect(err).NotTo(HaveOccurred())
 	defer func() { _ = logs.Close() }()
@@ -144,7 +140,14 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-// loadManifestsFromFile loads Kubernetes manifests from a YAML file and returns unstructured objects
+// kustomizeBin returns the path to the kustomize binary built by the Makefile.
+func kustomizeBin() string {
+	projectDir, _ := utils.GetProjectDir()
+	return filepath.Join(projectDir, "bin", "kustomize")
+}
+
+// loadManifestsFromFile loads Kubernetes manifests from a YAML file and returns unstructured objects.
+// It uses a temporary kustomize overlay to inject the test namespace into all resources.
 func loadManifestsFromFile(path string) ([]*unstructured.Unstructured, error) {
 	projectDir, err := utils.GetProjectDir()
 	if err != nil {
@@ -152,15 +155,75 @@ func loadManifestsFromFile(path string) ([]*unstructured.Unstructured, error) {
 	}
 
 	fullPath := filepath.Join(projectDir, path)
-	data, err := os.ReadFile(fullPath)
+
+	// Create a temp overlay that wraps the single file with the test namespace.
+	// Kustomize refuses resources outside its root, so we copy the file in.
+	tmpDir, err := os.MkdirTemp("", "e2e-kustomize-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", fullPath, err)
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	localName := filepath.Base(fullPath)
+	srcData, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", path, err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, localName), srcData, 0o600); err != nil {
+		return nil, fmt.Errorf("failed to copy %s: %w", path, err)
 	}
 
-	if namespace != manifestDefaultNamespace {
-		data = bytes.ReplaceAll(data, []byte(manifestDefaultNamespace), []byte(namespace))
+	kustomization := fmt.Sprintf(
+		"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nnamespace: %s\nresources:\n  - %s\n",
+		namespace, localName,
+	)
+	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomization), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to write temp kustomization: %w", err)
 	}
 
+	cmd := exec.Command(kustomizeBin(), "build", tmpDir)
+	data, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("kustomize build failed for %s: %w", path, err)
+	}
+
+	return parseYAMLDocuments(data)
+}
+
+// loadKustomizeDir builds all resources from a kustomize directory with the test namespace.
+func loadKustomizeDir(dir string) ([]*unstructured.Unstructured, error) {
+	projectDir, err := utils.GetProjectDir()
+	if err != nil {
+		return nil, err
+	}
+
+	baseDir := filepath.Join(projectDir, dir)
+
+	tmpDir, err := os.MkdirTemp("", "e2e-kustomize-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	kustomization := fmt.Sprintf(
+		"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nnamespace: %s\nresources:\n  - %s\n",
+		namespace, baseDir,
+	)
+	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomization), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to write temp kustomization: %w", err)
+	}
+
+	cmd := exec.Command(kustomizeBin(), "build", "--load-restrictor", "LoadRestrictionsNone", tmpDir)
+	data, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("kustomize build failed for %s: %w", dir, err)
+	}
+
+	return parseYAMLDocuments(data)
+}
+
+// parseYAMLDocuments parses multi-document YAML into unstructured objects.
+func parseYAMLDocuments(data []byte) ([]*unstructured.Unstructured, error) {
 	var objects []*unstructured.Unstructured
 	reader := yaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 
@@ -521,7 +584,7 @@ func serverRESTProxy() (*http.Client, string, error) {
 		return nil, "", fmt.Errorf("failed to create transport from kubeconfig: %w", err)
 	}
 	baseURL := fmt.Sprintf("%s/api/v1/namespaces/%s/services/http:flokoa-server:8080/proxy",
-		cfg.Host, managerNamespace)
+		cfg.Host, namespace)
 	return &http.Client{Transport: transport}, baseURL, nil
 }
 

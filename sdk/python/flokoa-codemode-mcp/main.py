@@ -1,5 +1,9 @@
+from flokoa_codemode_mcp.server import CodemodeServer
+
+
 def main():
-    print("Hello from flokoa-codemode-mcp!")
+    server = CodemodeServer()
+    server.run()
 
 
 if __name__ == "__main__":
