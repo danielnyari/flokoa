@@ -9,6 +9,7 @@ const _useDashboard = () => {
     'g-m': () => router.push('/models'),
     'g-p': () => router.push('/providers'),
     'g-t': () => router.push('/tools'),
+    'g-w': () => router.push('/workflows'),
     'g-s': () => router.push('/settings')
   })
 

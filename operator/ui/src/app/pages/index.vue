@@ -100,6 +100,16 @@ const recentAgents = computed(() =>
     .slice(0, 5)
 )
 
+const recentWorkflows = computed(() =>
+  [...workflows.value]
+    .sort((a, b) => {
+      const ta = normaliseTimestamp(a.metadata.creationTimestamp) ?? ''
+      const tb = normaliseTimestamp(b.metadata.creationTimestamp) ?? ''
+      return tb.localeCompare(ta)
+    })
+    .slice(0, 5)
+)
+
 // Aggregate unique namespaces from all resources
 const namespaces = computed(() => {
   const ns = new Set<string>()
@@ -247,65 +257,133 @@ const providerBreakdown = computed(() => {
         </div>
       </div>
 
-      <!-- Recent Agents -->
-      <div class="mt-6">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-semibold text-highlighted">
-            Recent Agents
-          </h3>
-          <UButton
-            label="View all"
-            variant="ghost"
-            color="neutral"
-            size="sm"
-            trailing-icon="i-lucide-arrow-right"
-            to="/agents"
-          />
+      <!-- Recent Agents + Recent Workflows -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <!-- Recent Agents -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-highlighted">
+              Recent Agents
+            </h3>
+            <UButton
+              label="View all"
+              variant="ghost"
+              color="neutral"
+              size="sm"
+              trailing-icon="i-lucide-arrow-right"
+              to="/agents"
+            />
+          </div>
+
+          <div v-if="loading" class="text-sm text-muted">
+            Loading...
+          </div>
+          <div v-else-if="recentAgents.length === 0" class="text-sm text-muted p-8 border border-default rounded-lg text-center">
+            <UIcon name="i-lucide-bot" class="size-8 text-muted mb-2 mx-auto block" />
+            <p class="font-medium text-highlighted mb-1">
+              No agents found
+            </p>
+            <p>Deploy your first agent to get started.</p>
+          </div>
+          <div v-else class="space-y-2">
+            <NuxtLink
+              v-for="agent in recentAgents"
+              :key="agent.metadata.uid ?? agent.metadata.name"
+              to="/agents"
+              class="flex items-center justify-between p-3 rounded-lg border border-default bg-elevated/50 hover:bg-elevated transition-colors"
+            >
+              <div class="flex items-center gap-3">
+                <div class="flex items-center justify-center size-8 rounded-md bg-primary/10">
+                  <UIcon name="i-lucide-bot" class="size-4 text-primary" />
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-highlighted">
+                    {{ agent.metadata.name }}
+                  </p>
+                  <p class="text-xs text-muted">
+                    {{ agent.metadata.namespace }}
+                    <template v-if="frameworkLabel(agent.spec.framework) || frameworkLabel(agent.status?.detectedFramework)">
+                      &middot; {{ frameworkLabel(agent.spec.framework) ?? frameworkLabel(agent.status?.detectedFramework) }}
+                    </template>
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <UBadge
+                  :color="agentPhaseColor(agent.status?.phase)"
+                  variant="subtle"
+                >
+                  {{ agentPhaseLabel(agent.status?.phase) }}
+                </UBadge>
+                <span v-if="normaliseTimestamp(agent.metadata.creationTimestamp)" class="text-xs text-muted">
+                  {{ useTimeAgo(normaliseTimestamp(agent.metadata.creationTimestamp)!).value }}
+                </span>
+              </div>
+            </NuxtLink>
+          </div>
         </div>
 
-        <div v-if="loading" class="text-sm text-muted">
-          Loading...
-        </div>
-        <div v-else-if="recentAgents.length === 0" class="text-sm text-muted p-8 border border-default rounded-lg text-center">
-          <UIcon name="i-lucide-bot" class="size-8 text-muted mb-2 mx-auto block" />
-          <p class="font-medium text-highlighted mb-1">
-            No agents found
-          </p>
-          <p>Deploy your first agent to get started.</p>
-        </div>
-        <div v-else class="space-y-2">
-          <div
-            v-for="agent in recentAgents"
-            :key="agent.metadata.uid ?? agent.metadata.name"
-            class="flex items-center justify-between p-3 rounded-lg border border-default bg-elevated/50"
-          >
-            <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center size-8 rounded-md bg-primary/10">
-                <UIcon name="i-lucide-bot" class="size-4 text-primary" />
+        <!-- Recent Workflows -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-highlighted">
+              Recent Workflows
+            </h3>
+            <UButton
+              label="View all"
+              variant="ghost"
+              color="neutral"
+              size="sm"
+              trailing-icon="i-lucide-arrow-right"
+              to="/workflows"
+            />
+          </div>
+
+          <div v-if="loading" class="text-sm text-muted">
+            Loading...
+          </div>
+          <div v-else-if="recentWorkflows.length === 0" class="text-sm text-muted p-8 border border-default rounded-lg text-center">
+            <UIcon name="i-lucide-git-branch" class="size-8 text-muted mb-2 mx-auto block" />
+            <p class="font-medium text-highlighted mb-1">
+              No workflows found
+            </p>
+            <p>Create an AgentWorkflow to orchestrate multi-agent tasks.</p>
+          </div>
+          <div v-else class="space-y-2">
+            <NuxtLink
+              v-for="wf in recentWorkflows"
+              :key="wf.metadata.uid ?? wf.metadata.name"
+              :to="`/workflows/${wf.metadata.namespace}/${wf.metadata.name}`"
+              class="flex items-center justify-between p-3 rounded-lg border border-default bg-elevated/50 hover:bg-elevated transition-colors"
+            >
+              <div class="flex items-center gap-3">
+                <div class="flex items-center justify-center size-8 rounded-md bg-primary/10">
+                  <UIcon name="i-lucide-git-branch" class="size-4 text-primary" />
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-highlighted">
+                    {{ wf.metadata.name }}
+                  </p>
+                  <p class="text-xs text-muted truncate max-w-xs">
+                    {{ wf.spec.description || wf.metadata.namespace }}
+                    <template v-if="wf.spec.tasks">
+                      &middot; {{ wf.spec.tasks.length }} {{ wf.spec.tasks.length === 1 ? 'task' : 'tasks' }}
+                    </template>
+                  </p>
+                </div>
               </div>
-              <div>
-                <p class="text-sm font-medium text-highlighted">
-                  {{ agent.metadata.name }}
-                </p>
-                <p class="text-xs text-muted">
-                  {{ agent.metadata.namespace }}
-                  <template v-if="frameworkLabel(agent.spec.framework) || frameworkLabel(agent.status?.detectedFramework)">
-                    &middot; {{ frameworkLabel(agent.spec.framework) ?? frameworkLabel(agent.status?.detectedFramework) }}
-                  </template>
-                </p>
+              <div class="flex items-center gap-3">
+                <UBadge
+                  :color="wf.status?.ready ? 'success' : 'warning'"
+                  variant="subtle"
+                >
+                  {{ wf.status?.ready ? 'Ready' : 'Not Ready' }}
+                </UBadge>
+                <span v-if="normaliseTimestamp(wf.metadata.creationTimestamp)" class="text-xs text-muted">
+                  {{ useTimeAgo(normaliseTimestamp(wf.metadata.creationTimestamp)!).value }}
+                </span>
               </div>
-            </div>
-            <div class="flex items-center gap-3">
-              <UBadge
-                :color="agentPhaseColor(agent.status?.phase)"
-                variant="subtle"
-              >
-                {{ agentPhaseLabel(agent.status?.phase) }}
-              </UBadge>
-              <span v-if="normaliseTimestamp(agent.metadata.creationTimestamp)" class="text-xs text-muted">
-                {{ useTimeAgo(normaliseTimestamp(agent.metadata.creationTimestamp)!).value }}
-              </span>
-            </div>
+            </NuxtLink>
           </div>
         </div>
       </div>

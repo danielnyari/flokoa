@@ -7,6 +7,7 @@ const shortcuts = [
   { keys: ['g', 'm'], description: 'Go to Models' },
   { keys: ['g', 'p'], description: 'Go to Providers' },
   { keys: ['g', 't'], description: 'Go to Tools' },
+  { keys: ['g', 'w'], description: 'Go to Workflows' },
   { keys: ['g', 's'], description: 'Go to Settings' },
   { keys: ['?'], description: 'Show keyboard shortcuts' }
 ]

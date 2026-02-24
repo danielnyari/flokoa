@@ -269,28 +269,39 @@ const columns: TableColumn<Agent>[] = [
         </div>
       </div>
 
-      <UTable
-        ref="table"
-        v-model:column-filters="columnFilters"
-        v-model:column-visibility="columnVisibility"
-        v-model:pagination="pagination"
-        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
-        class="shrink-0"
-        :data="agents"
-        :columns="columns"
-        :loading="status === 'pending'"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default',
-          separator: 'h-0'
-        }"
+      <EmptyState
+        v-if="agents.length === 0 && status !== 'pending'"
+        icon="i-lucide-bot"
+        title="No agents deployed"
+        description="Deploy your first AI agent to get started. Agents run as pods in your cluster and can be managed declaratively via CRDs."
+        docs-url="https://flokoa.ai/agent"
+        docs-label="Agent Guide"
       />
 
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
+      <template v-else>
+        <UTable
+          ref="table"
+          v-model:column-filters="columnFilters"
+          v-model:column-visibility="columnVisibility"
+          v-model:pagination="pagination"
+          :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+          class="shrink-0"
+          :data="agents"
+          :columns="columns"
+          :loading="status === 'pending'"
+          :ui="{
+            base: 'table-fixed border-separate border-spacing-0',
+            thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+            tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/50',
+            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+            td: 'border-b border-default',
+            separator: 'h-0'
+          }"
+          @select="(_e: Event, row: { original: Agent }) => openDetail(row.original)"
+        />
+
+        <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
+          <div class="text-sm text-muted">
           {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} agent(s)
         </div>
 
@@ -303,6 +314,7 @@ const columns: TableColumn<Agent>[] = [
           />
         </div>
       </div>
+      </template>
     </template>
   </UDashboardPanel>
 

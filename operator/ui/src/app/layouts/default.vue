@@ -2,10 +2,15 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
+const { agentCount, modelCount, providerCount, toolCount, workflowCount } = useResourceCounts()
 
 const open = ref(false)
 
-const links = [[{
+function badgeOrUndefined(count: number): string | undefined {
+  return count > 0 ? String(count) : undefined
+}
+
+const links = computed<NavigationMenuItem[][]>(() => [[{
   label: 'Home',
   icon: 'i-lucide-house',
   to: '/',
@@ -16,6 +21,7 @@ const links = [[{
   label: 'Agents',
   icon: 'i-lucide-bot',
   to: '/agents',
+  badge: badgeOrUndefined(agentCount.value),
   onSelect: () => {
     open.value = false
   }
@@ -23,6 +29,7 @@ const links = [[{
   label: 'Models',
   icon: 'i-lucide-brain',
   to: '/models',
+  badge: badgeOrUndefined(modelCount.value),
   onSelect: () => {
     open.value = false
   }
@@ -30,6 +37,7 @@ const links = [[{
   label: 'Providers',
   icon: 'i-lucide-cloud',
   to: '/providers',
+  badge: badgeOrUndefined(providerCount.value),
   onSelect: () => {
     open.value = false
   }
@@ -37,6 +45,7 @@ const links = [[{
   label: 'Tools',
   icon: 'i-lucide-wrench',
   to: '/tools',
+  badge: badgeOrUndefined(toolCount.value),
   onSelect: () => {
     open.value = false
   }
@@ -44,6 +53,7 @@ const links = [[{
   label: 'Workflows',
   icon: 'i-lucide-git-branch',
   to: '/workflows',
+  badge: badgeOrUndefined(workflowCount.value),
   onSelect: () => {
     open.value = false
   }
@@ -89,12 +99,12 @@ const links = [[{
   icon: 'i-simple-icons-github',
   to: 'https://github.com/danielnyari/flokoa',
   target: '_blank'
-}]] satisfies NavigationMenuItem[][]
+}]])
 
 const groups = computed(() => [{
   id: 'links',
   label: 'Go to',
-  items: links.flat()
+  items: links.value.flat()
 }, {
   id: 'code',
   label: 'Code',

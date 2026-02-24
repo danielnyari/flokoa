@@ -235,40 +235,52 @@ const columns: TableColumn<Model>[] = [
         </div>
       </div>
 
-      <UTable
-        ref="table"
-        v-model:column-filters="columnFilters"
-        v-model:column-visibility="columnVisibility"
-        v-model:pagination="pagination"
-        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
-        class="shrink-0"
-        :data="models"
-        :columns="columns"
-        :loading="status === 'pending'"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default',
-          separator: 'h-0'
-        }"
+      <EmptyState
+        v-if="models.length === 0 && status !== 'pending'"
+        icon="i-lucide-brain"
+        title="No models configured"
+        description="Create a Model resource to configure LLM parameters like temperature, max tokens, and provider-specific settings."
+        docs-url="https://flokoa.ai/model"
+        docs-label="Model Guide"
       />
 
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} model(s)
-        </div>
+      <template v-else>
+        <UTable
+          ref="table"
+          v-model:column-filters="columnFilters"
+          v-model:column-visibility="columnVisibility"
+          v-model:pagination="pagination"
+          :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+          class="shrink-0"
+          :data="models"
+          :columns="columns"
+          :loading="status === 'pending'"
+          :ui="{
+            base: 'table-fixed border-separate border-spacing-0',
+            thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+            tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/50',
+            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+            td: 'border-b border-default',
+            separator: 'h-0'
+          }"
+          @select="(_e: Event, row: { original: Model }) => openDetail(row.original)"
+        />
 
-        <div class="flex items-center gap-1.5">
-          <UPagination
-            :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
-            :items-per-page="table?.tableApi?.getState().pagination.pageSize"
-            :total="table?.tableApi?.getFilteredRowModel().rows.length"
-            @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
-          />
+        <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
+          <div class="text-sm text-muted">
+            {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} model(s)
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <UPagination
+              :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
+              :items-per-page="table?.tableApi?.getState().pagination.pageSize"
+              :total="table?.tableApi?.getFilteredRowModel().rows.length"
+              @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
+            />
+          </div>
         </div>
-      </div>
+      </template>
     </template>
   </UDashboardPanel>
 
