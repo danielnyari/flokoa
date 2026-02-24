@@ -13,6 +13,11 @@ data:
   sidecar.container: |
     command:
     - /a2a-plugin
+    env:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
     image: localhost/a2a-plugin:test
     name: a2a-executor-plugin
     ports:
@@ -33,3 +38,4 @@ data:
       readOnlyRootFilesystem: true
       runAsNonRoot: true
       runAsUser: 65532
+      runAsGroup: 0

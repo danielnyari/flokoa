@@ -28,6 +28,7 @@ data:
         drop:
         - ALL
       readOnlyRootFilesystem: true
+      runAsGroup: 0
       runAsNonRoot: false
 kind: ConfigMap
 metadata:

@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
@@ -508,6 +510,19 @@ func getPodContainerLogs(podName, ns, containerName string) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// serverRESTProxy returns an HTTP client and base URL for making requests to
+// the flokoa-server REST gateway through the Kubernetes API server proxy.
+// No pods or port-forwards needed — uses the kubeconfig transport directly.
+func serverRESTProxy() (*http.Client, string, error) {
+	transport, err := rest.TransportFor(cfg)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create transport from kubeconfig: %w", err)
+	}
+	baseURL := fmt.Sprintf("%s/api/v1/namespaces/%s/services/http:flokoa-server:8080/proxy",
+		cfg.Host, managerNamespace)
+	return &http.Client{Transport: transport}, baseURL, nil
 }
 
 // newCurlPod creates a restricted curl Pod spec for in-cluster HTTP calls.

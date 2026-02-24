@@ -120,15 +120,11 @@ const columns: TableColumn<Model>[] = [
     header: 'Provider',
     cell: ({ row }) => {
       const resolved = row.original.status?.resolvedProvider
-      const providerName = row.original.spec.providerRef.name
       const label = resolveProviderLabel(resolved?.provider)
       if (label) {
-        return h('div', { class: 'flex items-center gap-2' }, [
-          h(UBadge, { variant: 'subtle', color: 'neutral' }, () => label),
-          h('span', { class: 'text-sm text-muted' }, providerName)
-        ])
+        return h(resolveComponent('NuxtLink'), { to: '/providers', class: 'text-primary hover:underline' }, () => label)
       }
-      return h('span', { class: 'text-sm' }, providerName)
+      return h(resolveComponent('NuxtLink'), { to: '/providers', class: 'text-sm hover:underline' }, () => row.original.spec.providerRef.name)
     }
   },
   {

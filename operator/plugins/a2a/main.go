@@ -40,21 +40,22 @@ func init() {
 	utilruntime.Must(agentv1alpha1.AddToScheme(scheme))
 
 	// Read the Argo token for authorization.
-	// When the token file exists (i.e. running inside Argo), it MUST be readable.
-	// A missing/unreadable token would silently disable authentication, allowing
-	// any HTTP client to execute arbitrary A2A tasks.
-	if _, statErr := os.Stat(tokenPath); statErr == nil {
-		token, err := os.ReadFile(tokenPath)
-		if err != nil {
-			log.Fatalf("FATAL: Argo token file exists at %s but cannot be read: %v", tokenPath, err)
-		}
+	// The argoexec init container writes a per-plugin token to /var/run/argo/token
+	// (via SubPath mount). When present, every inbound request must carry
+	// "Authorization: Bearer <token>".
+	if token, err := os.ReadFile(tokenPath); err == nil {
 		argoToken = string(token)
 		log.Printf("Loaded Argo token for authorization")
 	} else if os.Getenv("FLOKOA_DEV_MODE") == "true" {
-		log.Printf("Warning: Argo token file not found at %s — running without auth (FLOKOA_DEV_MODE=true)", tokenPath)
+		log.Printf("Warning: Argo token not available at %s (%v) — running without auth (FLOKOA_DEV_MODE=true)", tokenPath, err)
 	} else {
-		log.Fatalf("FATAL: Argo token file not found at %s and FLOKOA_DEV_MODE is not enabled. "+
-			"Set FLOKOA_DEV_MODE=true to run without authentication (development only).", tokenPath)
+		// In production the token should always be readable.  If it isn't,
+		// the most likely cause is a securityContext misconfiguration
+		// (the sidecar must run with runAsGroup: 0 so it can read files
+		// created by the argoexec init container).
+		log.Fatalf("FATAL: cannot read Argo token at %s: %v. "+
+			"Ensure the sidecar securityContext includes runAsGroup: 0. "+
+			"Set FLOKOA_DEV_MODE=true to bypass (development only).", tokenPath, err)
 	}
 }
 

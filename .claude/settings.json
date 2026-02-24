@@ -3,7 +3,8 @@
     "allow": [
       "Bash(make test-e2e:*)",
       "Bash(yq eval:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Read(//private/tmp/**)"
     ]
   },
   "hooks": {

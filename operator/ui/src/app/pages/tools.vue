@@ -49,6 +49,12 @@ const pagination = ref({
   pageSize: 10
 })
 
+const toolTypeLabel: Record<string | number, string> = {
+  AGENT_TOOL_TYPE_OPENAPI: 'OpenAPI',
+  1: 'OpenAPI',
+  openapi: 'OpenAPI'
+}
+
 function getToolSource(tool: AgentTool): string {
   if (tool.spec.openApi?.url) return tool.spec.openApi.url
   if (tool.spec.openApi?.serviceRef) {
@@ -98,7 +104,7 @@ const columns: TableColumn<AgentTool>[] = [
     accessorFn: row => row.spec.type,
     header: 'Type',
     cell: ({ row }) => {
-      return h(UBadge, { variant: 'outline', color: 'neutral', class: 'uppercase text-xs' }, () => row.original.spec.type)
+      return h(UBadge, { variant: 'outline', color: 'neutral', class: 'text-xs' }, () => toolTypeLabel[row.original.spec.type] ?? row.original.spec.type)
     }
   },
   {

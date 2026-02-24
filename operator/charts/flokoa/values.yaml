@@ -359,9 +359,12 @@ argo:
         cpu: "500m"
 
     # -- Plugin container security context
+    # runAsGroup: 0 is required so the sidecar can read the Argo auth token
+    # created by the argoexec init container (owned by root group).
     securityContext:
       runAsNonRoot: true
       runAsUser: 65532
+      runAsGroup: 0
       allowPrivilegeEscalation: false
       capabilities:
         drop:

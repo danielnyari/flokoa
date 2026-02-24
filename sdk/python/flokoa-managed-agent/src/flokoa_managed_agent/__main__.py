@@ -20,10 +20,7 @@ from a2a.server.apps import A2AFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from fastapi import FastAPI
-<<<<<<< claude/improve-agent-config-AgzoG
 from flokoa.config import LlmAgentConfig
-=======
->>>>>>> main
 from flokoa.utils import load_agent_card
 from flokoa.utils.agent_card_builder import AgentCardBuilder
 from flokoa.utils.router import router as health_router
