@@ -61,7 +61,9 @@ class OAuth2Auth(BaseModelWithConfig):
     expires_at: int | None = None
     expires_in: int | None = None
     audience: str | None = None
-    token_endpoint_auth_method: Literal["client_secret_basic", "client_secret_post", "client_secret_jwt", "private_key_jwt"] | None = "client_secret_basic"
+    token_endpoint_auth_method: (
+        Literal["client_secret_basic", "client_secret_post", "client_secret_jwt", "private_key_jwt"] | None
+    ) = "client_secret_basic"  # noqa: S105
 
 
 class ServiceAccountCredential(BaseModelWithConfig):

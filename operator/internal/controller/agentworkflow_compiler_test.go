@@ -78,8 +78,10 @@ func wantWorkflowTemplate(name, namespace string, templates []wfv1.Template, opt
 			},
 		},
 		Spec: wfv1.WorkflowSpec{
-			Entrypoint: "main",
-			Templates:  templates,
+			Entrypoint:                   "main",
+			ServiceAccountName:           "flokoa-workflow",
+			AutomountServiceAccountToken: boolPtr(true),
+			Templates:                    templates,
 			Arguments: wfv1.Arguments{
 				Parameters: []wfv1.Parameter{
 					{Name: "_flokoa_traceparent"},
@@ -3968,4 +3970,59 @@ func TestCompile_WorkflowTimeoutConversion(t *testing.T) {
 	if *got.Spec.ActiveDeadlineSeconds != 1800 {
 		t.Errorf("workflow ActiveDeadlineSeconds = %d, want 1800", *got.Spec.ActiveDeadlineSeconds)
 	}
+}
+
+func TestCompileToArgoWorkflow_ServiceAccountDefault(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "sa-default", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "task", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "hello"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got.Spec.ServiceAccountName != "flokoa-workflow" {
+		t.Errorf("ServiceAccountName = %q, want %q", got.Spec.ServiceAccountName, "flokoa-workflow")
+	}
+	if got.Spec.AutomountServiceAccountToken == nil || !*got.Spec.AutomountServiceAccountToken {
+		t.Error("AutomountServiceAccountToken should default to true")
+	}
+}
+
+func TestCompileToArgoWorkflow_ServiceAccountOverride(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "sa-override", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			ServiceAccountName:           "custom-sa",
+			AutomountServiceAccountToken: boolPtr(false),
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "task", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "hello"}},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("sa-override", "default", []wfv1.Template{
+		dagTmpl(wfv1.DAGTask{Name: "task", Template: "task"}),
+		{Name: "task", Plugin: makePlugin(map[string]interface{}{
+			"agent":       "a",
+			"message":     pluginTextMessage("hello"),
+			"traceparent": "{{workflow.parameters._flokoa_traceparent}}",
+		}), Outputs: pluginOutputs()},
+	}, func(wft *wfv1.WorkflowTemplate) {
+		wft.Spec.ServiceAccountName = "custom-sa"
+		wft.Spec.AutomountServiceAccountToken = boolPtr(false)
+	})
+
+	assertDiff(t, want, got)
 }

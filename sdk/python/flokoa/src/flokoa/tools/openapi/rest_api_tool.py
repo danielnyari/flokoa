@@ -22,17 +22,17 @@ from typing import Any
 
 import httpx
 from fastapi.openapi.models import Operation, Schema
+from flokoa_common.auth.auth_credential import AuthCredential
+from flokoa_common.auth.auth_schemes import AuthScheme
+from flokoa_common.utils.openapi.openapi_spec_parser import OperationEndpoint, ParsedOperation
+from flokoa_common.utils.openapi.operation_parser import OperationParser
+from flokoa_common.utils.openapi.request_builder import prepare_request_params as _prepare_request_params
+from flokoa_common.utils.text import _to_snake_case
 from pydantic_ai import RunContext, Tool
 
-from ...auth.auth_credential import AuthCredential
-from ...auth.auth_schemes import AuthScheme
 from ...utils.url_validation import SSRFError, validate_url
-from ..utils import _to_snake_case
 from .auth.auth_helpers import credential_to_param
 from .auth.credential_exchangers.auto_auth_credential_exchanger import AutoAuthCredentialExchanger
-from .common import ApiParameter
-from .openapi_spec_parser import OperationEndpoint, ParsedOperation
-from .operation_parser import OperationParser
 
 logger = logging.getLogger("flokoa." + __name__)
 
@@ -106,126 +106,6 @@ class RestApiToolConfig:
         )
 
 
-def _prepare_request_params(
-    endpoint: OperationEndpoint,
-    operation: Operation,
-    default_headers: dict[str, str],
-    tool_name: str,
-    parameters: list[ApiParameter],
-    kwargs: dict[str, Any],
-    auth_additional_headers: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Build httpx request parameters from operation config and call arguments.
-
-    This is a pure function extracted from the original RestApiTool method.
-    It maps OpenAPI parameters to their HTTP locations (path, query, header,
-    cookie) and constructs the request body from the operation's requestBody.
-
-    Args:
-        endpoint: The operation endpoint (base_url, path, method).
-        operation: The OpenAPI Operation object.
-        default_headers: Headers to include in every request.
-        tool_name: Name of the tool (for User-Agent).
-        parameters: List of ApiParameter objects for this operation.
-        kwargs: Keyword arguments from the tool call.
-        auth_additional_headers: Extra headers from auth credentials.
-
-    Returns:
-        A dict suitable for httpx.AsyncClient.request(**params).
-    """
-    method = endpoint.method.lower()
-    if not method:
-        raise ValueError("Operation method not found.")
-
-    path_params: dict[str, Any] = {}
-    query_params: dict[str, Any] = {}
-    header_params: dict[str, Any] = {}
-    cookie_params: dict[str, Any] = {}
-
-    header_params["User-Agent"] = f"flokoa (tool: {tool_name})"
-
-    if auth_additional_headers:
-        header_params.update(auth_additional_headers)
-
-    params_map: dict[str, ApiParameter] = {p.py_name: p for p in parameters}
-
-    for param_k, v in kwargs.items():
-        param_obj = params_map.get(param_k)
-        if not param_obj:
-            continue
-
-        original_k = param_obj.original_name
-        param_location = param_obj.param_location
-
-        if param_location == "path":
-            path_params[original_k] = v
-        elif param_location == "query":
-            if v:
-                query_params[original_k] = v
-        elif param_location == "header":
-            header_params[original_k] = v
-        elif param_location == "cookie":
-            cookie_params[original_k] = v
-
-    # Construct URL
-    base_url = endpoint.base_url or ""
-    base_url = base_url[:-1] if base_url.endswith("/") else base_url
-    url = f"{base_url}{endpoint.path.format(**path_params)}"
-
-    # Construct body
-    body_kwargs: dict[str, Any] = {}
-    request_body = operation.requestBody
-    if request_body:
-        for mime_type, media_type_object in request_body.content.items():
-            schema = media_type_object.schema_
-            body_data = None
-
-            if schema.type == "object":
-                body_data = {}
-                for param in parameters:
-                    if param.param_location == "body" and param.py_name in kwargs:
-                        body_data[param.original_name] = kwargs[param.py_name]
-
-            elif schema.type == "array":
-                for param in parameters:
-                    if param.param_location == "body" and param.py_name == "array":
-                        body_data = kwargs.get("array")
-                        break
-            else:
-                for param in parameters:
-                    if param.param_location == "body" and not param.original_name:
-                        body_data = kwargs.get(param.py_name) if param.py_name in kwargs else None
-                        break
-
-            if mime_type == "application/json" or mime_type.endswith("+json"):
-                if body_data is not None:
-                    body_kwargs["json"] = body_data
-            elif mime_type == "application/x-www-form-urlencoded":
-                body_kwargs["data"] = body_data
-            elif mime_type == "multipart/form-data":
-                body_kwargs["files"] = body_data
-            elif mime_type in ("application/octet-stream", "text/plain"):
-                body_kwargs["data"] = body_data
-
-            if mime_type:
-                header_params["Content-Type"] = mime_type
-            break  # Process only the first mime_type
-
-    filtered_query_params: dict[str, Any] = {k: v for k, v in query_params.items() if v is not None}
-
-    for key, value in default_headers.items():
-        header_params.setdefault(key, value)
-
-    return {
-        "method": method,
-        "url": url,
-        "params": filtered_query_params,
-        "headers": header_params,
-        "cookies": cookie_params,
-        **body_kwargs,
-    }
-
-
 def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
     """Create an async callable that executes a REST API operation.
 
@@ -284,12 +164,16 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
             auth_additional_headers=auth_additional_headers,
         )
 
-        # Validate the constructed URL against SSRF attacks
-        try:
-            validate_url(request_params["url"])
-        except SSRFError as e:
-            logger.warning("SSRF validation failed for tool %s: %s", config.name, e)
-            return {"error": f"Tool {config.name} request blocked: URL failed security validation"}
+        # Validate the constructed URL against SSRF attacks.
+        # Skip for relative URLs (no scheme) — these are resolved by the
+        # httpx client against its base_url and don't target hosts directly.
+        constructed_url = request_params["url"]
+        if constructed_url.startswith(("http://", "https://")):
+            try:
+                validate_url(constructed_url)
+            except SSRFError as e:
+                logger.warning("SSRF validation failed for tool %s: %s", config.name, e)
+                return {"error": f"Tool {config.name} request blocked: URL failed security validation"}
 
         # Apply SSL verification
         if config.ssl_verify is not None:

@@ -297,7 +297,7 @@ metadata:
   generateName: a2a-test-
 spec:
   entrypoint: call-agent
-  serviceAccountName: argo-workflow
+  serviceAccountName: flokoa-workflow
   automountServiceAccountToken: true
   templates:
     - name: call-agent
@@ -316,7 +316,7 @@ metadata:
   name: a2a-agent-template
 spec:
   entrypoint: call-agent
-  serviceAccountName: argo-workflow
+  serviceAccountName: flokoa-workflow
   automountServiceAccountToken: true
   arguments:
     parameters:

@@ -20,11 +20,11 @@ import ssl
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
+from flokoa_common.auth.auth_credential import AuthCredential
+from flokoa_common.auth.auth_schemes import AuthScheme
+from flokoa_common.utils.openapi.openapi_spec_parser import OpenApiSpecParser
 from pydantic_ai import FunctionToolset, Tool
 
-from ...auth.auth_credential import AuthCredential
-from ...auth.auth_schemes import AuthScheme
-from .openapi_spec_parser import OpenApiSpecParser
 from .rest_api_tool import RestApiToolConfig, create_rest_api_tool
 
 if TYPE_CHECKING:
@@ -89,9 +89,7 @@ class OpenAPIToolset:
         if not spec_dict:
             spec_dict = self._load_spec(spec_str, spec_str_type)
 
-        self._configs: list[RestApiToolConfig] = self._parse(
-            spec_dict, auth_scheme, auth_credential, ssl_verify
-        )
+        self._configs: list[RestApiToolConfig] = self._parse(spec_dict, auth_scheme, auth_credential, ssl_verify)
 
     @classmethod
     def from_tool_definition(cls, tool_definition: ToolDefinition) -> OpenAPIToolset:
@@ -112,15 +110,11 @@ class OpenAPIToolset:
         """
         open_api = tool_definition.spec.open_api
         if open_api is None:
-            raise ValueError(
-                f"Tool '{tool_definition.name}' has type openapi but no openApi configuration"
-            )
+            raise ValueError(f"Tool '{tool_definition.name}' has type openapi but no openApi configuration")
 
         spec_dict = open_api.open_api_schema.value
         if spec_dict is None:
-            raise ValueError(
-                f"Tool '{tool_definition.name}' has no inline OpenAPI spec (openApiSchema.value)"
-            )
+            raise ValueError(f"Tool '{tool_definition.name}' has no inline OpenAPI spec (openApiSchema.value)")
 
         # Override servers if CRD specifies a base URL
         if open_api.url:

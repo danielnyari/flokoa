@@ -2,7 +2,6 @@ apiVersion: agent.flokoa.ai/v1alpha1
 kind: Agent
 metadata:
   name: petstore-agent
-  namespace: flokoa-system
   labels:
     app.kubernetes.io/name: petstore-agent
     test: e2e

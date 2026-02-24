@@ -24,7 +24,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -41,20 +43,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/test/utils"
 )
 
-// managerNamespace is where the operator and server are deployed by `make deploy`.
-const managerNamespace = "flokoa-system"
-
-// manifestDefaultNamespace is the namespace value baked into static test manifests.
-const manifestDefaultNamespace = "flokoa-system"
-
-// namespace where the project is deployed for this test run.
-var namespace = manifestDefaultNamespace
+// namespace is the single namespace used for operator, server, and workloads in this test run.
+// Initialized in BeforeSuite via initializeTestNamespace().
+var namespace string
 
 // serviceAccountName created for the project
 const serviceAccountName = "flokoa-controller"
@@ -75,10 +75,10 @@ func initializeTestNamespace() string {
 
 	randomBytes := make([]byte, 4)
 	if _, err := crand.Read(randomBytes); err != nil {
-		return fmt.Sprintf("%s-%d", manifestDefaultNamespace, time.Now().UnixNano())
+		return fmt.Sprintf("flokoa-e2e-%d", time.Now().UnixNano())
 	}
 
-	return fmt.Sprintf("%s-%s", manifestDefaultNamespace, hex.EncodeToString(randomBytes))
+	return fmt.Sprintf("flokoa-e2e-%s", hex.EncodeToString(randomBytes))
 }
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
@@ -97,7 +97,7 @@ func serviceAccountToken() (string, error) {
 
 	var token string
 	verifyTokenCreation := func(g Gomega) {
-		result, err := clientset.CoreV1().ServiceAccounts(managerNamespace).CreateToken(
+		result, err := clientset.CoreV1().ServiceAccounts(namespace).CreateToken(
 			ctx,
 			serviceAccountName,
 			tokenRequest,
@@ -115,13 +115,13 @@ func serviceAccountToken() (string, error) {
 func getMetricsOutput() string {
 	By("getting the curl-metrics logs")
 	pod := &corev1.Pod{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: managerNamespace}, pod)
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: namespace}, pod)
 	Expect(err).NotTo(HaveOccurred(), "Failed to get curl-metrics pod")
 
 	clientset, err := kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	req := clientset.CoreV1().Pods(managerNamespace).GetLogs("curl-metrics", &corev1.PodLogOptions{})
+	req := clientset.CoreV1().Pods(namespace).GetLogs("curl-metrics", &corev1.PodLogOptions{})
 	logs, err := req.Stream(ctx)
 	Expect(err).NotTo(HaveOccurred())
 	defer func() { _ = logs.Close() }()
@@ -140,7 +140,14 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-// loadManifestsFromFile loads Kubernetes manifests from a YAML file and returns unstructured objects
+// kustomizeBin returns the path to the kustomize binary built by the Makefile.
+func kustomizeBin() string {
+	projectDir, _ := utils.GetProjectDir()
+	return filepath.Join(projectDir, "bin", "kustomize")
+}
+
+// loadManifestsFromFile loads Kubernetes manifests from a YAML file and returns unstructured objects.
+// It uses a temporary kustomize overlay to inject the test namespace into all resources.
 func loadManifestsFromFile(path string) ([]*unstructured.Unstructured, error) {
 	projectDir, err := utils.GetProjectDir()
 	if err != nil {
@@ -148,15 +155,75 @@ func loadManifestsFromFile(path string) ([]*unstructured.Unstructured, error) {
 	}
 
 	fullPath := filepath.Join(projectDir, path)
-	data, err := os.ReadFile(fullPath)
+
+	// Create a temp overlay that wraps the single file with the test namespace.
+	// Kustomize refuses resources outside its root, so we copy the file in.
+	tmpDir, err := os.MkdirTemp("", "e2e-kustomize-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", fullPath, err)
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	localName := filepath.Base(fullPath)
+	srcData, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", path, err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, localName), srcData, 0o600); err != nil {
+		return nil, fmt.Errorf("failed to copy %s: %w", path, err)
 	}
 
-	if namespace != manifestDefaultNamespace {
-		data = bytes.ReplaceAll(data, []byte(manifestDefaultNamespace), []byte(namespace))
+	kustomization := fmt.Sprintf(
+		"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nnamespace: %s\nresources:\n  - %s\n",
+		namespace, localName,
+	)
+	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomization), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to write temp kustomization: %w", err)
 	}
 
+	cmd := exec.Command(kustomizeBin(), "build", tmpDir)
+	data, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("kustomize build failed for %s: %w", path, err)
+	}
+
+	return parseYAMLDocuments(data)
+}
+
+// loadKustomizeDir builds all resources from a kustomize directory with the test namespace.
+func loadKustomizeDir(dir string) ([]*unstructured.Unstructured, error) {
+	projectDir, err := utils.GetProjectDir()
+	if err != nil {
+		return nil, err
+	}
+
+	baseDir := filepath.Join(projectDir, dir)
+
+	tmpDir, err := os.MkdirTemp("", "e2e-kustomize-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	kustomization := fmt.Sprintf(
+		"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nnamespace: %s\nresources:\n  - %s\n",
+		namespace, baseDir,
+	)
+	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomization), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to write temp kustomization: %w", err)
+	}
+
+	cmd := exec.Command(kustomizeBin(), "build", "--load-restrictor", "LoadRestrictionsNone", tmpDir)
+	data, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("kustomize build failed for %s: %w", dir, err)
+	}
+
+	return parseYAMLDocuments(data)
+}
+
+// parseYAMLDocuments parses multi-document YAML into unstructured objects.
+func parseYAMLDocuments(data []byte) ([]*unstructured.Unstructured, error) {
 	var objects []*unstructured.Unstructured
 	reader := yaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 
@@ -431,4 +498,122 @@ func ensureOpenAIAPIKeySecret(ns string) error {
 	}
 	existing.Data["api-key"] = []byte(apiKey)
 	return k8sClient.Update(ctx, existing)
+}
+
+// waitForWorkflowCompletion waits for an Argo Workflow to reach a terminal phase.
+// Returns the final Workflow object for further assertions.
+func waitForWorkflowCompletion(name, ns string, timeout time.Duration) (*wfv1.Workflow, error) {
+	var wf wfv1.Workflow
+	err := wait.PollUntilContextTimeout(ctx, 3*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
+		if err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, &wf); err != nil {
+			return false, nil
+		}
+		return wf.Status.Phase.Completed(), nil
+	})
+	if err != nil {
+		return &wf, fmt.Errorf("Workflow %s/%s did not complete (phase=%s): %w", ns, name, wf.Status.Phase, err)
+	}
+	return &wf, nil
+}
+
+// dumpAgentPodDiagnostics finds and logs the Argo agent pod for a workflow.
+// Agent pods follow the naming pattern: <wf-name>-<hash>-agent.
+func dumpAgentPodDiagnostics(wfName, ns string) {
+	podList := &corev1.PodList{}
+	err := k8sClient.List(ctx, podList,
+		client.InNamespace(ns),
+		client.MatchingLabels{"workflows.argoproj.io/workflow": wfName, "workflows.argoproj.io/component": "agent"})
+	if err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Failed to list agent pods: %v\n", err)
+		return
+	}
+	if len(podList.Items) == 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "No agent pod found for workflow %s\n", wfName)
+		return
+	}
+	for _, pod := range podList.Items {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Agent pod %s: phase=%s\n", pod.Name, pod.Status.Phase)
+		for _, cs := range pod.Status.InitContainerStatuses {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  InitContainer %s: ready=%v state=%+v\n", cs.Name, cs.Ready, cs.State)
+		}
+		for _, cs := range pod.Status.ContainerStatuses {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  Container %s: ready=%v restarts=%d state=%+v\n", cs.Name, cs.Ready, cs.RestartCount, cs.State)
+			if cs.LastTerminationState.Terminated != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "    Last termination: reason=%s exitCode=%d message=%s\n",
+					cs.LastTerminationState.Terminated.Reason, cs.LastTerminationState.Terminated.ExitCode, cs.LastTerminationState.Terminated.Message)
+			}
+		}
+		// Try to get logs from each container
+		for _, c := range pod.Spec.Containers {
+			logs, logErr := getPodContainerLogs(pod.Name, ns, c.Name)
+			if logErr != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "  Logs(%s): error=%v\n", c.Name, logErr)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "  Logs(%s):\n%s\n", c.Name, logs)
+			}
+		}
+	}
+}
+
+// getPodContainerLogs retrieves logs from a specific container in a pod
+func getPodContainerLogs(podName, ns, containerName string) (string, error) {
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return "", err
+	}
+	req := clientset.CoreV1().Pods(ns).GetLogs(podName, &corev1.PodLogOptions{Container: containerName})
+	logs, err := req.Stream(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = logs.Close() }()
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, logs)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// serverRESTProxy returns an HTTP client and base URL for making requests to
+// the flokoa-server REST gateway through the Kubernetes API server proxy.
+// No pods or port-forwards needed — uses the kubeconfig transport directly.
+func serverRESTProxy() (*http.Client, string, error) {
+	transport, err := rest.TransportFor(cfg)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create transport from kubeconfig: %w", err)
+	}
+	baseURL := fmt.Sprintf("%s/api/v1/namespaces/%s/services/http:flokoa-server:8080/proxy",
+		cfg.Host, namespace)
+	return &http.Client{Transport: transport}, baseURL, nil
+}
+
+// newCurlPod creates a restricted curl Pod spec for in-cluster HTTP calls.
+// Uses -s (silent) without -f so the pod always succeeds on HTTP responses
+// (even 4xx/5xx), allowing callers to inspect HTTP_STATUS in the logs.
+func newCurlPod(name, ns, url string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				{
+					Name:    "curl",
+					Image:   "curlimages/curl:latest",
+					Command: []string{"/bin/sh", "-c"},
+					Args:    []string{fmt.Sprintf("curl -s --retry 10 --retry-delay 3 --retry-connrefused --connect-timeout 10 --max-time 30 -o /dev/stdout -w '\\nHTTP_STATUS:%%{http_code}' %s", url)},
+					SecurityContext: &corev1.SecurityContext{
+						AllowPrivilegeEscalation: ptr(false),
+						Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+						RunAsNonRoot:             ptr(true),
+						RunAsUser:                ptr(int64(1000)),
+						SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
+				},
+			},
+		},
+	}
 }

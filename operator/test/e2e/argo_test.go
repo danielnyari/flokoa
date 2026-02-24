@@ -17,7 +17,11 @@ limitations under the License.
 package e2e
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"time"
 
@@ -50,17 +54,17 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			err = utils.LoadImageToKindClusterWithName(a2aPluginImage)
 			Expect(err).NotTo(HaveOccurred(), "Failed to load A2A plugin image")
 
+			By("applying RBAC for Argo Workflows (SA + token secrets must exist before plugin install)")
+			err = applyManifestFile("test/e2e/testdata/argo/rbac.yaml")
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply Argo RBAC")
+
 			By("installing Argo Workflows")
 			err = utils.InstallArgoWorkflows(ctx, k8sClient, namespace)
 			Expect(err).NotTo(HaveOccurred(), "Failed to install Argo Workflows")
 
-			By("installing the A2A executor plugin")
-			err = utils.InstallA2AExecutorPlugin(ctx, k8sClient, a2aPluginImage)
+			By("installing the A2A executor plugin via static ConfigMap")
+			err = applyManifestFile("test/e2e/testdata/argo/executor-plugin.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to install A2A executor plugin")
-
-			By("applying RBAC for Argo Workflows")
-			err = applyManifestFile("test/e2e/testdata/argo/rbac.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply Argo RBAC")
 
 			By("creating the plugin service account token secret")
 			err = applyManifestFile("test/e2e/testdata/secret.yaml")
@@ -157,7 +161,196 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			Expect(argoWft.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "flokoa-operator"))
 		})
 
+		It("should reach agent via HTTP (A2A agent card endpoint)", func() {
+			agentURL := fmt.Sprintf("http://petstore-agent.%s.svc.cluster.local/.well-known/agent.json", namespace)
+			curlPodName := "curl-agent-card"
+
+			By("creating a curl pod to hit the agent card endpoint")
+			pod := newCurlPod(curlPodName, namespace, agentURL)
+			err := createPod(pod)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create curl pod")
+
+			By("waiting for curl pod to reach a terminal state")
+			Eventually(func(g Gomega) {
+				p := &corev1.Pod{}
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: curlPodName, Namespace: namespace}, p)
+				g.Expect(err).NotTo(HaveOccurred())
+				// Fast-fail on pod failure with diagnostic logs
+				if p.Status.Phase == corev1.PodFailed {
+					logs, _ := getPodLogs(curlPodName, namespace)
+					_, _ = fmt.Fprintf(GinkgoWriter, "Curl pod failed.\nStatus: %+v\nLogs: %s\n", p.Status, logs)
+					g.Expect(p.Status.Phase).To(Equal(corev1.PodSucceeded),
+						fmt.Sprintf("curl pod failed; logs: %s", logs))
+				}
+				g.Expect(p.Status.Phase).To(Equal(corev1.PodSucceeded), "curl pod not yet complete")
+			}, 5*time.Minute).Should(Succeed())
+
+			By("verifying agent card response")
+			logs, err := getPodLogs(curlPodName, namespace)
+			Expect(err).NotTo(HaveOccurred())
+			_, _ = fmt.Fprintf(GinkgoWriter, "Agent card response:\n%s\n", logs)
+			Expect(logs).To(ContainSubstring("Petstore Agent"), "Response should contain agent name")
+			Expect(logs).To(ContainSubstring("HTTP_STATUS:200"), "Should return HTTP 200")
+		})
+
+		It("should execute a direct A2A workflow", func() {
+			wfName := "e2e-direct-a2a"
+			pluginSpec := map[string]any{
+				"a2a": map[string]any{
+					"agent":     "petstore-agent",
+					"namespace": namespace,
+					"message": map[string]any{
+						"parts": []map[string]any{
+							{"text": map[string]any{"text": "List a few available pets and include their IDs and names."}},
+						},
+					},
+					"timeout": "5m",
+				},
+			}
+			pluginJSON, err := json.Marshal(pluginSpec)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating Argo Workflow with A2A plugin")
+			wf := &wfv1.Workflow{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      wfName,
+					Namespace: namespace,
+				},
+				Spec: wfv1.WorkflowSpec{
+					Entrypoint:                   "call-agent",
+					ServiceAccountName:           "flokoa-workflow",
+					AutomountServiceAccountToken: ptr(true),
+					Templates: []wfv1.Template{
+						{
+							Name: "call-agent",
+							Plugin: &wfv1.Plugin{
+								Object: wfv1.Object{
+									Value: json.RawMessage(pluginJSON),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(ctx, wf)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create Workflow")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Created Workflow: %s\n", wfName)
+
+			By("waiting for workflow to complete")
+			completedWf, err := waitForWorkflowCompletion(wfName, namespace, 5*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "Workflow did not complete")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Direct workflow phase: %s, message: %s\n",
+				completedWf.Status.Phase, completedWf.Status.Message)
+			for nodeName, node := range completedWf.Status.Nodes {
+				_, _ = fmt.Fprintf(GinkgoWriter, "  Node %s: phase=%s, message=%s\n",
+					nodeName, node.Phase, node.Message)
+			}
+
+			// Dump agent pod diagnostics on failure
+			if completedWf.Status.Phase != wfv1.WorkflowSucceeded {
+				dumpAgentPodDiagnostics(wfName, namespace)
+			}
+
+			Expect(completedWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded), "Workflow should succeed")
+		})
+
+		It("should submit and complete workflow via SubmitWorkflowRun REST API", func() {
+			By("creating an HTTP client via Kubernetes API server proxy")
+			httpClient, baseURL, err := serverRESTProxy()
+			Expect(err).NotTo(HaveOccurred())
+
+			workflowName := "e2e-petstore-workflow"
+			submitURL := fmt.Sprintf("%s/api/v1alpha1/namespaces/%s/agentworkflows/%s/runs",
+				baseURL, namespace, workflowName)
+
+			By("submitting workflow run via SubmitWorkflowRun REST endpoint")
+			reqBody, err := json.Marshal(map[string]any{
+				"parameters": map[string]string{
+					"prompt": "List a few available pets and include their IDs and names.",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			resp, err := httpClient.Post(submitURL, "application/json", bytes.NewReader(reqBody))
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			respBody, err := io.ReadAll(resp.Body)
+			Expect(err).NotTo(HaveOccurred())
+			_, _ = fmt.Fprintf(GinkgoWriter, "SubmitWorkflowRun response (%d): %s\n", resp.StatusCode, string(respBody))
+			Expect(resp.StatusCode).To(Equal(http.StatusOK),
+				fmt.Sprintf("SubmitWorkflowRun failed: %s", string(respBody)))
+
+			var submitResp struct {
+				Metadata struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+				Phase string `json:"phase"`
+			}
+			Expect(json.Unmarshal(respBody, &submitResp)).To(Succeed())
+			runName := submitResp.Metadata.Name
+			Expect(runName).NotTo(BeEmpty(), "run name should be set in response")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Submitted workflow run: %s (phase: %s)\n", runName, submitResp.Phase)
+
+			By("polling GetWorkflowRun until completion")
+			getURL := fmt.Sprintf("%s/api/v1alpha1/namespaces/%s/agentworkflows/%s/runs/%s",
+				baseURL, namespace, workflowName, runName)
+
+			var finalPhase, finalMessage string
+			Eventually(func(g Gomega) {
+				resp, err := httpClient.Get(getURL)
+				g.Expect(err).NotTo(HaveOccurred())
+				defer resp.Body.Close()
+
+				body, err := io.ReadAll(resp.Body)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var run struct {
+					Phase   string `json:"phase"`
+					Message string `json:"message"`
+				}
+				g.Expect(json.Unmarshal(body, &run)).To(Succeed())
+				finalPhase = run.Phase
+				finalMessage = run.Message
+
+				_, _ = fmt.Fprintf(GinkgoWriter, "Run %s: phase=%s\n", runName, finalPhase)
+
+				g.Expect(finalPhase).To(BeElementOf(
+					"RUN_PHASE_SUCCEEDED", "RUN_PHASE_FAILED", "RUN_PHASE_ERROR",
+				), "workflow run not yet complete")
+			}, 7*time.Minute, 3*time.Second).Should(Succeed())
+
+			_, _ = fmt.Fprintf(GinkgoWriter, "Workflow run %s completed: phase=%s, message=%s\n",
+				runName, finalPhase, finalMessage)
+
+			// On failure, dump the underlying Argo Workflow for diagnostics
+			if finalPhase != "RUN_PHASE_SUCCEEDED" {
+				var wf wfv1.Workflow
+				if getErr := k8sClient.Get(ctx, client.ObjectKey{Name: runName, Namespace: namespace}, &wf); getErr == nil {
+					_, _ = fmt.Fprintf(GinkgoWriter, "Argo Workflow SA: %s, automount: %v\n",
+						wf.Spec.ServiceAccountName, wf.Spec.AutomountServiceAccountToken)
+					for nodeName, node := range wf.Status.Nodes {
+						_, _ = fmt.Fprintf(GinkgoWriter, "  Node %s: phase=%s type=%s message=%s\n",
+							nodeName, node.Phase, node.Type, node.Message)
+					}
+				}
+				dumpAgentPodDiagnostics(runName, namespace)
+			}
+
+			Expect(finalPhase).To(Equal("RUN_PHASE_SUCCEEDED"), "workflow run should succeed")
+		})
+
 		AfterAll(func() {
+			By("cleaning up test workflows")
+			_ = k8sClient.Delete(ctx, &wfv1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "e2e-direct-a2a", Namespace: namespace}})
+			_ = k8sClient.DeleteAllOf(ctx, &wfv1.Workflow{},
+				client.InNamespace(namespace),
+				client.MatchingLabels{"app.kubernetes.io/managed-by": "flokoa-server"})
+
+			By("cleaning up curl pod")
+			deletePod("curl-agent-card", namespace)
+
 			By("cleaning up AgentWorkflow")
 			deleteManifestFile("test/e2e/testdata/argo/agentworkflow.yaml")
 
@@ -174,7 +367,7 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			deleteManifestFile("test/e2e/testdata/argo/rbac.yaml")
 
 			By("uninstalling A2A executor plugin")
-			utils.UninstallA2AExecutorPlugin(ctx, k8sClient)
+			deleteManifestFile("test/e2e/testdata/argo/executor-plugin.yaml")
 
 			By("uninstalling Argo Workflows")
 			utils.UninstallArgoWorkflows(ctx, k8sClient)

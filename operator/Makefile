@@ -457,8 +457,15 @@ ui-build: ui-install ## Build the UI and copy to operator/ui/dist for embedding.
 	cp -r $(UI_DIR)/.output/public/* ui/dist/
 
 .PHONY: ui-dev
-ui-dev: ## Run the UI in development mode with API proxy.
-	cd $(UI_DIR) && pnpm dev
+ui-dev: ## Run the UI in development mode with API proxy to the in-cluster server.
+	@echo "Starting port-forward to flokoa-server (port 8080)..."
+	@kubectl port-forward svc/flokoa-server -n flokoa-system 8080:8080 &
+	@UI_PF_PID=$$!; \
+	trap "kill $$UI_PF_PID 2>/dev/null" EXIT; \
+	sleep 1; \
+	echo "Starting Nuxt dev server..."; \
+	cd $(UI_DIR) && pnpm dev; \
+	kill $$UI_PF_PID 2>/dev/null
 
 ##@ Build
 
@@ -548,6 +555,8 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+DEPLOY_NAMESPACE ?= flokoa-system
+
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller and server to the K8s cluster specified in ~/.kube/config.
 	@if [ "$(DEPLOY_WITH_CERT_MANAGER)" = "true" ]; then \
@@ -557,10 +566,12 @@ deploy: manifests kustomize ## Deploy controller and server to the K8s cluster s
 	fi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	cd config/server && $(KUSTOMIZE) edit set image server=${SERVER_IMG}
+	cd $(DEPLOY_KUSTOMIZATION) && $(KUSTOMIZE) edit set namespace $(DEPLOY_NAMESPACE)
 	$(KUSTOMIZE) build $(DEPLOY_KUSTOMIZATION) | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	cd $(DEPLOY_KUSTOMIZATION) && $(KUSTOMIZE) edit set namespace $(DEPLOY_NAMESPACE)
 	$(KUSTOMIZE) build $(DEPLOY_KUSTOMIZATION) | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Argo Workflows
@@ -599,10 +610,10 @@ cert-manager-preflight: ## Ensure cert-manager CRDs exist before deploy (auto-in
 .PHONY: webhook-cleanup
 webhook-cleanup: ## Remove webhook resources for no-cert-manager deployments.
 	-$(KUBECTL) delete validatingwebhookconfiguration validating-webhook-configuration --ignore-not-found=true
-	-$(KUBECTL) -n flokoa-system delete service webhook-service --ignore-not-found=true
-	-$(KUBECTL) -n flokoa-system delete secret webhook-server-cert --ignore-not-found=true
-	-$(KUBECTL) -n flokoa-system delete certificate serving-cert --ignore-not-found=true
-	-$(KUBECTL) -n flokoa-system delete issuer selfsigned-issuer --ignore-not-found=true
+	-$(KUBECTL) -n $(DEPLOY_NAMESPACE) delete service webhook-service --ignore-not-found=true
+	-$(KUBECTL) -n $(DEPLOY_NAMESPACE) delete secret webhook-server-cert --ignore-not-found=true
+	-$(KUBECTL) -n $(DEPLOY_NAMESPACE) delete certificate serving-cert --ignore-not-found=true
+	-$(KUBECTL) -n $(DEPLOY_NAMESPACE) delete issuer selfsigned-issuer --ignore-not-found=true
 
 .PHONY: deploy-argo-workflows
 deploy-argo-workflows: ## Deploy Argo Workflows with executor plugins enabled.

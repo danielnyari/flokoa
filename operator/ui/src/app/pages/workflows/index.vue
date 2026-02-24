@@ -13,10 +13,14 @@ const toast = useToast()
 const router = useRouter()
 const table = useTemplateRef('table')
 
-const { listAgentWorkflows } = useFlokoa()
-const { data: workflowList, status, refresh } = await listAgentWorkflows()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
-const workflows = computed(() => workflowList.value?.items ?? [])
+const { items: workflows, status: listStatus, refresh } = useListWatch<AgentWorkflow>({
+  listUrl: () => namespacedPath('agentworkflows'),
+  watchUrl: () => buildWatchUrl('agentworkflows')
+})
+
+const status = computed(() => listStatus.value === 'pending' ? 'pending' : 'success')
 
 const columnFilters = ref([{
   id: 'name',

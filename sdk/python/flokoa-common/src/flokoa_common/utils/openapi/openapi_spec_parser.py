@@ -20,24 +20,27 @@ from typing import Any
 from fastapi.openapi.models import Operation
 from pydantic import BaseModel
 
-from ...auth.auth_credential import AuthCredential
-from ...auth.auth_schemes import AuthScheme
-from ..utils import _to_snake_case
+from flokoa_common.auth.auth_credential import AuthCredential
+from flokoa_common.auth.auth_schemes import AuthScheme
+from flokoa_common.utils.text import _to_snake_case
+
 from .common import ApiParameter
 from .operation_parser import OperationParser
 
 # Valid JSON Schema types as per OpenAPI 3.0/3.1 specification.
 #
 # These are the only types accepted by Pydantic 2.11+ for Schema.type.
-_VALID_SCHEMA_TYPES: set[str] = frozenset({
-    "array",
-    "boolean",
-    "integer",
-    "null",
-    "number",
-    "object",
-    "string",
-})
+_VALID_SCHEMA_TYPES: set[str] = frozenset(
+    {
+        "array",
+        "boolean",
+        "integer",
+        "null",
+        "number",
+        "object",
+        "string",
+    }
+)
 
 _SCHEMA_CONTAINER_KEYS: set[str] = frozenset({"schema", "schemas"})
 
@@ -86,7 +89,7 @@ class OpenApiSpecParser:
         operations = self._collect_operations(openapi_spec_dict)
         return operations
 
-    def _sanitize_schema_types(self, openapi_spec: dict[str, Any]) -> dict[str, Any]:
+    def _sanitize_schema_types(self, openapi_spec: dict[str, Any]) -> dict[str, Any]:  # noqa: C901
         """Recursively sanitizes schema types in an OpenAPI specification.
 
         Pydantic 2.11+ strictly validates that schema types are one of:
@@ -224,7 +227,7 @@ class OpenApiSpecParser:
 
         return operations
 
-    def _resolve_references(self, openapi_spec: dict[str, Any]) -> dict[str, Any]:
+    def _resolve_references(self, openapi_spec: dict[str, Any]) -> dict[str, Any]:  # noqa: C901
         """Recursively resolves all $ref references in an OpenAPI specification.
 
         Handles circular references correctly.

@@ -58,7 +58,7 @@ var (
 	serverImage = "example.com/server:v0.0.1"
 
 	// petstoreImage is the non-root petstore image built from test/e2e/testdata/petstore.Dockerfile
-	petstoreImage = "localhost/petstore:test"
+	petstoreImage = "petstore:test"
 
 	// cliImage is the flokoa-cli image used by template runtime agents
 	cliImage = "ghcr.io/danielnyari/flokoa-cli:latest"
@@ -85,13 +85,13 @@ func TestE2E(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	ctx = context.Background()
+
+	By("creating randomized test namespace")
 	namespace = initializeTestNamespace()
-	_, _ = fmt.Fprintf(GinkgoWriter, "Using operator namespace: %s\n", managerNamespace)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Using e2e workload namespace: %s\n", namespace)
+	_, _ = fmt.Fprintf(GinkgoWriter, "Using namespace: %s\n", namespace)
 
 	By("setting up Kubernetes client")
 	var err error
-	// Get kubeconfig from default location or KUBECONFIG env var
 	kubeconfigPath := clientcmd.RecommendedHomeFile
 	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
 		kubeconfigPath = envPath
@@ -99,7 +99,6 @@ var _ = BeforeSuite(func() {
 	cfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load kubeconfig")
 
-	// Add our custom schemes
 	testScheme = runtime.NewScheme()
 	err = scheme.AddToScheme(testScheme)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add core scheme")
@@ -108,7 +107,6 @@ var _ = BeforeSuite(func() {
 	err = wfv1.AddToScheme(testScheme)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add Argo Workflows scheme")
 
-	// Create the client
 	k8sClient, err = client.New(cfg, client.Options{Scheme: testScheme})
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create Kubernetes client")
 
@@ -119,8 +117,6 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) and server images")
 
-	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
-	// built and available before running the tests. Also, remove the following block.
 	By("loading the manager(Operator) image on Kind")
 	err = utils.LoadImageToKindClusterWithName(projectImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
@@ -151,10 +147,6 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(cliImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the flokoa-cli image into Kind")
 
-	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
-	// To prevent errors when tests run in environments with CertManager already installed,
-	// we check for its presence before execution.
-	// Setup CertManager before the suite if not skipped and if not already installed
 	if !skipCertManagerInstall {
 		By("checking if cert manager is installed already")
 		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
@@ -166,49 +158,33 @@ var _ = BeforeSuite(func() {
 		}
 	}
 
-	// Deploy the operator and server - shared across all tests
-	ensureNamespaceReady := func(name string) {
-		existingNs := &corev1.Namespace{}
-		if err = k8sClient.Get(ctx, client.ObjectKey{Name: name}, existingNs); err == nil {
-			if existingNs.Status.Phase == corev1.NamespaceTerminating {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Namespace %s is Terminating, waiting for deletion...\n", name)
-				existingNs.Spec.Finalizers = nil
-				if finalizeErr := k8sClient.SubResource("finalize").Update(ctx, existingNs); finalizeErr != nil {
-					_, _ = fmt.Fprintf(GinkgoWriter, "Warning: failed to clear finalizers for namespace %s: %v\n", name, finalizeErr)
-				}
-				Eventually(func() bool {
-					getErr := k8sClient.Get(ctx, client.ObjectKey{Name: name}, &corev1.Namespace{})
-					return apierrors.IsNotFound(getErr)
-				}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(BeTrue())
-			}
+	// Ensure namespace is ready (wait for terminating ns from previous runs)
+	existingNs := &corev1.Namespace{}
+	if err = k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, existingNs); err == nil {
+		if existingNs.Status.Phase == corev1.NamespaceTerminating {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Namespace %s is Terminating, waiting for deletion...\n", namespace)
+			existingNs.Spec.Finalizers = nil
+			_ = k8sClient.SubResource("finalize").Update(ctx, existingNs)
+			Eventually(func() bool {
+				getErr := k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{})
+				return apierrors.IsNotFound(getErr)
+			}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(BeTrue())
 		}
 	}
 
-	By("creating manager and workload namespaces")
-	// Manager namespace uses "restricted" PSS - operator-managed pods comply with restricted PSS.
-	// Workload namespace uses "baseline" PSS - Argo workflow pods (third-party) don't comply with restricted.
-	type nsSpec struct {
-		name string
-		pss  string
-	}
-	namespaceDefs := []nsSpec{{name: managerNamespace, pss: "restricted"}}
-	if namespace != managerNamespace {
-		namespaceDefs = append(namespaceDefs, nsSpec{name: namespace, pss: "baseline"})
-	}
-	for _, nsDef := range namespaceDefs {
-		ensureNamespaceReady(nsDef.name)
-		ns := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nsDef.name,
-				Labels: map[string]string{
-					"pod-security.kubernetes.io/enforce": nsDef.pss,
-				},
+	By("creating test namespace")
+	// Use "baseline" PSS — Argo workflow pods don't comply with "restricted".
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+			Labels: map[string]string{
+				"pod-security.kubernetes.io/enforce": "baseline",
 			},
-		}
-		err = k8sClient.Create(ctx, ns)
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create namespace")
-		}
+		},
+	}
+	err = k8sClient.Create(ctx, ns)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create namespace")
 	}
 
 	By("installing CRDs")
@@ -217,30 +193,62 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 	By("deploying the controller-manager and server")
-	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage), fmt.Sprintf("SERVER_IMG=%s", serverImage))
+	cmd = exec.Command("make", "deploy",
+		fmt.Sprintf("IMG=%s", projectImage),
+		fmt.Sprintf("SERVER_IMG=%s", serverImage),
+		fmt.Sprintf("DEPLOY_NAMESPACE=%s", namespace))
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager and server")
 })
 
 var _ = AfterSuite(func() {
-	// Clean up the operator deployment
+	if namespace == "" || k8sClient == nil {
+		return // BeforeSuite never completed; nothing to clean up
+	}
+
+	By("cleaning up cluster-scoped resources")
+	deleteClusterRoleBinding(metricsRoleBindingName)
+
+	By("uninstalling Argo Workflows (if installed)")
+	if utils.IsArgoWorkflowsInstalled(ctx, k8sClient) {
+		utils.UninstallArgoWorkflows(ctx, k8sClient)
+	}
+
 	By("undeploying the controller-manager")
-	cmd := exec.Command("make", "undeploy")
+	cmd := exec.Command("make", "undeploy", fmt.Sprintf("DEPLOY_NAMESPACE=%s", namespace))
 	_, _ = utils.Run(cmd)
 
 	By("uninstalling CRDs")
 	cmd = exec.Command("make", "uninstall")
 	_, _ = utils.Run(cmd)
 
-	By("removing test namespaces")
-	for _, nsName := range []string{namespace, managerNamespace} {
-		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
-		_ = k8sClient.Delete(ctx, ns)
+	By("deleting the test namespace")
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+	if err := k8sClient.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Failed to delete namespace %s: %v\n", namespace, err)
 	}
 
-	// Teardown CertManager after the suite if not skipped and if it was not already installed
+	By("waiting for the test namespace to be fully removed")
+	Eventually(func() bool {
+		existing := &corev1.Namespace{}
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, existing)
+		if apierrors.IsNotFound(err) {
+			return true
+		}
+		// If stuck in Terminating, strip finalizers
+		if err == nil && existing.Status.Phase == corev1.NamespaceTerminating {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Namespace %s stuck in Terminating, clearing finalizers...\n", namespace)
+			existing.Spec.Finalizers = nil
+			_ = k8sClient.SubResource("finalize").Update(ctx, existing)
+		}
+		return false
+	}).WithTimeout(120*time.Second).WithPolling(2*time.Second).Should(BeTrue(),
+		fmt.Sprintf("Namespace %s was not deleted within 2 minutes", namespace))
+
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
 		utils.UninstallCertManager()
 	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "Cleanup complete.\n")
 })

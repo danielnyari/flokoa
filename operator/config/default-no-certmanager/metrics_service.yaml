@@ -2,17 +2,16 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    control-plane: controller-manager
     app.kubernetes.io/name: flokoa
     app.kubernetes.io/component: controller
-  name: controller-manager-metrics-service
+    app.kubernetes.io/managed-by: kustomize
+  name: flokoa-controller-metrics-service
 spec:
   ports:
-    - name: https
-      port: 8443
-      protocol: TCP
-      targetPort: https
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
   selector:
-    control-plane: controller-manager
     app.kubernetes.io/name: flokoa
     app.kubernetes.io/component: controller

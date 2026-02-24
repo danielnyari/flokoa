@@ -18,10 +18,9 @@ import hashlib
 import json
 from warnings import deprecated
 
+from flokoa_common.auth.auth_credential import AuthCredential, BaseModelWithConfig
+from flokoa_common.auth.auth_schemes import AuthScheme
 from pydantic import BaseModel
-
-from .auth_credential import AuthCredential, BaseModelWithConfig
-from .auth_schemes import AuthScheme
 
 
 def _stable_model_digest(model: BaseModel) -> str:

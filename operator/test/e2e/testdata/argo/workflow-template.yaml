@@ -3,17 +3,14 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: a2a-agent-test
-  namespace: flokoa-system
 spec:
   entrypoint: call-agent
-  serviceAccountName: argo-workflow
+  serviceAccountName: flokoa-workflow
   automountServiceAccountToken: true
   arguments:
     parameters:
       - name: agent-name
         value: petstore-agent
-      - name: agent-namespace
-        value: flokoa-system
       - name: message
         value: "List a few available pets and include their IDs and names."
       - name: timeout
@@ -23,6 +20,5 @@ spec:
       plugin:
         a2a:
           agent: "{{workflow.parameters.agent-name}}"
-          namespace: "{{workflow.parameters.agent-namespace}}"
           message: "{{workflow.parameters.message}}"
           timeout: "{{workflow.parameters.timeout}}"

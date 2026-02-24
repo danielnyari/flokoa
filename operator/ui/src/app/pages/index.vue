@@ -1,17 +1,33 @@
 <script setup lang="ts">
-const { listAgents, listModels, listModelProviders, listAgentTools, listAgentWorkflows } = useFlokoa()
+import type { Agent, Model, ModelProvider, AgentTool, AgentWorkflow } from '~/types'
+import { agentPhaseLabel, agentPhaseColor, isAgentPhase, frameworkLabel, normaliseTimestamp } from '~/utils/enums'
 
-const { data: agentList, status: agentStatus, refresh: refreshAgents } = await listAgents()
-const { data: modelList, status: modelStatus, refresh: refreshModels } = await listModels()
-const { data: providerList, status: providerStatus, refresh: refreshProviders } = await listModelProviders()
-const { data: toolList, status: toolStatus, refresh: refreshTools } = await listAgentTools()
-const { data: workflowList, status: workflowStatus, refresh: refreshWorkflows } = await listAgentWorkflows()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
-const agents = computed(() => agentList.value?.items ?? [])
-const models = computed(() => modelList.value?.items ?? [])
-const providers = computed(() => providerList.value?.items ?? [])
-const tools = computed(() => toolList.value?.items ?? [])
-const workflows = computed(() => workflowList.value?.items ?? [])
+const { items: agents, status: agentStatus, refresh: refreshAgents } = useListWatch<Agent>({
+  listUrl: () => namespacedPath('agents'),
+  watchUrl: () => buildWatchUrl('agents')
+})
+
+const { items: models, status: modelStatus, refresh: refreshModels } = useListWatch<Model>({
+  listUrl: () => namespacedPath('models'),
+  watchUrl: () => buildWatchUrl('models')
+})
+
+const { items: providers, status: providerStatus, refresh: refreshProviders } = useListWatch<ModelProvider>({
+  listUrl: () => namespacedPath('modelproviders'),
+  watchUrl: () => buildWatchUrl('modelproviders')
+})
+
+const { items: tools, status: toolStatus, refresh: refreshTools } = useListWatch<AgentTool>({
+  listUrl: () => namespacedPath('agenttools'),
+  watchUrl: () => buildWatchUrl('agenttools')
+})
+
+const { items: workflows, status: workflowStatus, refresh: refreshWorkflows } = useListWatch<AgentWorkflow>({
+  listUrl: () => namespacedPath('agentworkflows'),
+  watchUrl: () => buildWatchUrl('agentworkflows')
+})
 
 const loading = computed(() =>
   agentStatus.value === 'pending'
@@ -29,9 +45,9 @@ function refreshAll() {
   refreshWorkflows()
 }
 
-const runningAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Running').length)
-const pendingAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Pending').length)
-const failedAgents = computed(() => agents.value.filter(a => a.status?.phase === 'Failed').length)
+const runningAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Running')).length)
+const pendingAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Pending')).length)
+const failedAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Failed')).length)
 const readyModels = computed(() => models.value.filter(m => m.status?.ready).length)
 const readyProviders = computed(() => providers.value.filter(p => p.status?.ready).length)
 const readyWorkflows = computed(() => workflows.value.filter(w => w.status?.ready).length)
@@ -77,8 +93,8 @@ const stats = computed(() => [
 const recentAgents = computed(() =>
   [...agents.value]
     .sort((a, b) => {
-      const ta = a.metadata.creationTimestamp ?? ''
-      const tb = b.metadata.creationTimestamp ?? ''
+      const ta = normaliseTimestamp(a.metadata.creationTimestamp) ?? ''
+      const tb = normaliseTimestamp(b.metadata.creationTimestamp) ?? ''
       return tb.localeCompare(ta)
     })
     .slice(0, 5)
@@ -273,26 +289,21 @@ const providerBreakdown = computed(() => {
                 </p>
                 <p class="text-xs text-muted">
                   {{ agent.metadata.namespace }}
-                  <template v-if="agent.spec.framework || agent.status?.detectedFramework">
-                    &middot; {{ agent.spec.framework ?? agent.status?.detectedFramework }}
+                  <template v-if="frameworkLabel(agent.spec.framework) || frameworkLabel(agent.status?.detectedFramework)">
+                    &middot; {{ frameworkLabel(agent.spec.framework) ?? frameworkLabel(agent.status?.detectedFramework) }}
                   </template>
                 </p>
               </div>
             </div>
             <div class="flex items-center gap-3">
               <UBadge
-                :color="
-                  agent.status?.phase === 'Running' ? 'success'
-                  : agent.status?.phase === 'Failed' ? 'error'
-                    : 'warning'
-                "
+                :color="agentPhaseColor(agent.status?.phase)"
                 variant="subtle"
-                class="capitalize"
               >
-                {{ agent.status?.phase ?? 'Unknown' }}
+                {{ agentPhaseLabel(agent.status?.phase) }}
               </UBadge>
-              <span v-if="agent.metadata.creationTimestamp" class="text-xs text-muted">
-                {{ useTimeAgo(agent.metadata.creationTimestamp).value }}
+              <span v-if="normaliseTimestamp(agent.metadata.creationTimestamp)" class="text-xs text-muted">
+                {{ useTimeAgo(normaliseTimestamp(agent.metadata.creationTimestamp)!).value }}
               </span>
             </div>
           </div>

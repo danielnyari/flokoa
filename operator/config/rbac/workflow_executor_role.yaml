@@ -1,0 +1,39 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: flokoa
+    app.kubernetes.io/managed-by: kustomize
+  name: flokoa-workflow-executor
+  namespace: system
+rules:
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflowtasksets
+  - workflowtaskresults
+  - workflows
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflowtasksets/status
+  - workflows/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - create
+  - update

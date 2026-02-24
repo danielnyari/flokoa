@@ -41,7 +41,7 @@ class OAuthGrantType(StrEnum):
     CLIENT_CREDENTIALS = "client_credentials"
     AUTHORIZATION_CODE = "authorization_code"
     IMPLICIT = "implicit"
-    PASSWORD = "password"
+    PASSWORD = "password"  # noqa: S105
 
     @staticmethod
     def from_flow(flow: OAuthFlows) -> OAuthGrantType:

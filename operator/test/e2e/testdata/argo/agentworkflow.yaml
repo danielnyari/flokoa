@@ -2,7 +2,6 @@ apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentWorkflow
 metadata:
   name: e2e-petstore-workflow
-  namespace: flokoa-system
 spec:
   description: "E2E test: call petstore agent via AgentWorkflow DSL"
   params:

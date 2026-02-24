@@ -19,6 +19,9 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/danielnyari/flokoa/internal/config"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
@@ -35,17 +38,20 @@ var PublicGRPCMethods = []string{
 
 // Server wraps the gRPC server and its configuration.
 type Server struct {
-	grpcServer   *grpc.Server
-	httpServer   *http.Server
-	healthServer *health.Server
-	port         int
-	httpPort     int
-	authCfg      config.AuthConfig
-	log          logr.Logger
+	grpcServer      *grpc.Server
+	httpServer      *http.Server
+	healthServer    *health.Server
+	port            int
+	httpPort        int
+	authCfg         config.AuthConfig
+	log             logr.Logger
+	watchClient     client.WithWatch
+	authInterceptor *AuthInterceptor
 }
 
 // NewServer creates a new gRPC server with optional reflection support.
 // If authInterceptor is non-nil, it is added to the interceptor chain.
+// watchClient enables SSE watch endpoints for real-time UI updates.
 // If reflectionEnabled is true, gRPC server reflection is registered,
 // allowing clients to discover services and their schemas at runtime.
 func NewServer(
@@ -54,6 +60,7 @@ func NewServer(
 	authCfg config.AuthConfig,
 	log logr.Logger,
 	authInterceptor *AuthInterceptor,
+	watchClient client.WithWatch,
 	reflectionEnabled bool,
 	agentService pb.AgentServiceServer,
 	modelService pb.ModelServiceServer,
@@ -102,12 +109,14 @@ func NewServer(
 	}
 
 	return &Server{
-		grpcServer:   grpcServer,
-		healthServer: healthServer,
-		port:         port,
-		httpPort:     httpPort,
-		authCfg:      authCfg,
-		log:          log,
+		grpcServer:      grpcServer,
+		healthServer:    healthServer,
+		port:            port,
+		httpPort:        httpPort,
+		authCfg:         authCfg,
+		log:             log,
+		watchClient:     watchClient,
+		authInterceptor: authInterceptor,
 	}
 }
 
@@ -172,9 +181,15 @@ type authConfigResponse struct {
 
 // startHTTPGateway starts the HTTP/REST gateway with embedded UI.
 func (s *Server) startHTTPGateway(ctx context.Context) error {
-	// Create gRPC-Gateway mux
+	// Create gRPC-Gateway mux.
+	// EmitUnpopulated ensures proto3 zero values (0, "", false) are included
+	// in JSON responses so the UI always receives a consistent schema.
 	gwMux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{}),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions: protojson.MarshalOptions{
+				EmitUnpopulated: true,
+			},
+		}),
 	)
 
 	// Connect to gRPC server
@@ -221,6 +236,13 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 			s.log.Error(err, "Failed to encode auth config response")
 		}
 	})
+
+	// Register SSE watch endpoints for real-time UI updates.
+	// These must be registered before the catch-all /api/ gateway route
+	// because Go 1.22+ ServeMux uses most-specific-pattern-wins matching.
+	if s.watchClient != nil {
+		registerWatchRoutes(mux, s.watchClient, s.log, authMiddleware(s.authInterceptor))
+	}
 
 	// Handle API requests with gateway
 	mux.Handle("/api/", gwMux)
@@ -281,12 +303,14 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		AllowCredentials: true,
 	})
 
+	// WriteTimeout is set to 0 because SSE watch connections are long-lived.
+	// Individual SSE handlers use http.ResponseController to manage write deadlines.
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.httpPort),
 		Handler:           c.Handler(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	s.log.Info("Starting HTTP gateway", "port", s.httpPort, "swagger-ui", fmt.Sprintf("http://localhost:%d/swagger/", s.httpPort))

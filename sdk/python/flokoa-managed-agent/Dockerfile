@@ -37,12 +37,15 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY flokoa/pyproject.toml ./flokoa/pyproject.toml
 COPY flokoa-types/pyproject.toml ./flokoa-types/pyproject.toml
+COPY flokoa-common/pyproject.toml ./flokoa-common/pyproject.toml
 COPY flokoa-managed-agent/pyproject.toml ./flokoa-managed-agent/pyproject.toml
 
 # Stub packages so hatchling can discover them for workspace resolution
 RUN mkdir -p flokoa/src/flokoa flokoa-types/src/flokoa_types \
+             flokoa-common/src/flokoa_common \
              flokoa-managed-agent/src/flokoa_managed_agent && \
     touch flokoa/src/flokoa/__init__.py flokoa-types/src/flokoa_types/__init__.py \
+          flokoa-common/src/flokoa_common/__init__.py \
           flokoa-managed-agent/src/flokoa_managed_agent/__init__.py
 
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -54,6 +57,8 @@ COPY flokoa/README.md ./flokoa/README.md
 COPY flokoa/src ./flokoa/src
 COPY flokoa-types/README.md ./flokoa-types/README.md
 COPY flokoa-types/src ./flokoa-types/src
+COPY flokoa-common/README.md ./flokoa-common/README.md
+COPY flokoa-common/src ./flokoa-common/src
 COPY flokoa-managed-agent/README.md ./flokoa-managed-agent/README.md
 COPY flokoa-managed-agent/src ./flokoa-managed-agent/src
 

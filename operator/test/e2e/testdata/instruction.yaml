@@ -2,7 +2,6 @@ apiVersion: agent.flokoa.ai/v1alpha1
 kind: Instruction
 metadata:
   name: petstore-instruction
-  namespace: flokoa-system
 spec:
   content: |
     You are a Petstore API assistant.

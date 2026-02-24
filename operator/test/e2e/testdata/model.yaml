@@ -2,7 +2,6 @@ apiVersion: agent.flokoa.ai/v1alpha1
 kind: Model
 metadata:
   name: gpt-5-mini
-  namespace: flokoa-system
 spec:
   model: "gpt-5-mini"
   providerRef:

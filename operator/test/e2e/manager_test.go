@@ -36,7 +36,7 @@ var _ = Describe("Manager", Ordered, func() {
 	// After all tests in this describe block, clean up resources specific to manager tests
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
-		deletePod("curl-metrics", managerNamespace)
+		deletePod("curl-metrics", namespace)
 
 		By("cleaning up metrics role binding")
 		deleteClusterRoleBinding(metricsRoleBindingName)
@@ -48,7 +48,7 @@ var _ = Describe("Manager", Ordered, func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Fetching controller manager pod logs")
-			controllerLogs, err := getPodLogs(controllerPodName, managerNamespace)
+			controllerLogs, err := getPodLogs(controllerPodName, namespace)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
 			} else {
@@ -57,7 +57,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("Fetching Kubernetes events")
 			eventList := &corev1.EventList{}
-			if err := k8sClient.List(ctx, eventList, client.InNamespace(managerNamespace)); err == nil {
+			if err := k8sClient.List(ctx, eventList, client.InNamespace(namespace)); err == nil {
 				// Sort events by last timestamp
 				sort.Slice(eventList.Items, func(i, j int) bool {
 					return eventList.Items[i].LastTimestamp.Before(&eventList.Items[j].LastTimestamp)
@@ -84,7 +84,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("Fetching controller manager pod description")
 			pod := &corev1.Pod{}
-			nn := types.NamespacedName{Name: controllerPodName, Namespace: managerNamespace}
+			nn := types.NamespacedName{Name: controllerPodName, Namespace: namespace}
 			if err := k8sClient.Get(ctx, nn, pod); err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Pod description:\n  Name: %s\n  Phase: %s\n  Conditions:\n",
 					pod.Name, pod.Status.Phase)
@@ -112,7 +112,7 @@ var _ = Describe("Manager", Ordered, func() {
 				// Get the controller-manager pods
 				podList := &corev1.PodList{}
 				err := k8sClient.List(ctx, podList,
-					client.InNamespace(managerNamespace),
+					client.InNamespace(namespace),
 					client.MatchingLabels{
 						"app.kubernetes.io/name":      "flokoa",
 						"app.kubernetes.io/component": "controller",
@@ -143,14 +143,14 @@ var _ = Describe("Manager", Ordered, func() {
 				{
 					Kind:      "ServiceAccount",
 					Name:      serviceAccountName,
-					Namespace: managerNamespace,
+					Namespace: namespace,
 				},
 			})
 			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
 			svc := &corev1.Service{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: metricsServiceName, Namespace: managerNamespace}, svc)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: metricsServiceName, Namespace: namespace}, svc)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
 			By("getting the service account token")
@@ -161,7 +161,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
 				endpoints := &corev1.Endpoints{} //nolint:staticcheck // TODO: migrate to discoveryv1.EndpointSlice
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: metricsServiceName, Namespace: managerNamespace}, endpoints)
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: metricsServiceName, Namespace: namespace}, endpoints)
 				g.Expect(err).NotTo(HaveOccurred())
 				// Check that we have at least one ready address
 				hasReadyAddress := false
@@ -180,7 +180,7 @@ var _ = Describe("Manager", Ordered, func() {
 				// Get the controller pod name first
 				podList := &corev1.PodList{}
 				err := k8sClient.List(ctx, podList,
-					client.InNamespace(managerNamespace),
+					client.InNamespace(namespace),
 					client.MatchingLabels{
 						"app.kubernetes.io/name":      "flokoa",
 						"app.kubernetes.io/component": "controller",
@@ -195,7 +195,7 @@ var _ = Describe("Manager", Ordered, func() {
 					}
 				}
 
-				output, err := getPodLogs(controllerPodName, managerNamespace)
+				output, err := getPodLogs(controllerPodName, namespace)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("controller-runtime.metrics\tServing metrics server"),
 					"Metrics server not yet started")
@@ -206,7 +206,7 @@ var _ = Describe("Manager", Ordered, func() {
 			curlPod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "curl-metrics",
-					Namespace: managerNamespace,
+					Namespace: namespace,
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyNever,
@@ -218,7 +218,7 @@ var _ = Describe("Manager", Ordered, func() {
 							Command: []string{"/bin/sh", "-c"},
 							Args: []string{
 								fmt.Sprintf("curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics",
-									token, metricsServiceName, managerNamespace),
+									token, metricsServiceName, namespace),
 							},
 							SecurityContext: &corev1.SecurityContext{
 								AllowPrivilegeEscalation: ptr(false),
@@ -241,7 +241,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("waiting for the curl-metrics pod to complete.")
 			verifyCurlUp := func(g Gomega) {
 				pod := &corev1.Pod{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: managerNamespace}, pod)
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: "curl-metrics", Namespace: namespace}, pod)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(pod.Status.Phase).To(Equal(corev1.PodSucceeded), "curl pod in wrong status")
 			}

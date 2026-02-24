@@ -45,6 +45,19 @@ type AgentWorkflowSpec struct {
 	// Individual tasks can override this.
 	// +optional
 	RetryStrategy *WorkflowRetryStrategy `json:"retryStrategy,omitempty"`
+
+	// ServiceAccountName is the Kubernetes ServiceAccount used for workflow pods.
+	// Defaults to "flokoa-workflow" if not specified.
+	// +optional
+	// +kubebuilder:default=flokoa-workflow
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// AutomountServiceAccountToken controls whether the service account token
+	// is automatically mounted into workflow pods. Defaults to true.
+	// Argo executor plugins require this to be true.
+	// +optional
+	// +kubebuilder:default=true
+	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
 }
 
 // WorkflowParam defines a workflow-level parameter.

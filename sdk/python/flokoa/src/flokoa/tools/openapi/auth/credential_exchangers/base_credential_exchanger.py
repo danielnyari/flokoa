@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import abc
 
-from .....auth.auth_credential import AuthCredential
-from .....auth.auth_schemes import AuthScheme
+from flokoa_common.auth.auth_credential import AuthCredential
+from flokoa_common.auth.auth_schemes import AuthScheme
 
 
 class AuthCredentialMissingError(Exception):

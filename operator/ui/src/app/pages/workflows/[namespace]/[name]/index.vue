@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { RunPhase, WorkflowRun } from '~/types'
+import type { WorkflowRun } from '~/types'
+import { runPhaseLabel, runPhaseColor, isRunPhase } from '~/utils/enums'
 
 const route = useRoute()
 const toast = useToast()
@@ -7,11 +8,14 @@ const toast = useToast()
 const ns = route.params.namespace as string
 const name = route.params.name as string
 
-const { getAgentWorkflow, listWorkflowRuns, submitWorkflowRun } = useFlokoa()
+const { getAgentWorkflow, submitWorkflowRun, watchWorkflowRunsUrl } = useFlokoa()
 const { data: workflow, status: wfStatus, refresh: refreshWorkflow } = await getAgentWorkflow(ns, name)
-const { data: runList, status: runStatus, refresh: refreshRuns } = await listWorkflowRuns(ns, name)
 
-const runs = computed(() => runList.value?.items ?? [])
+// Use list-watch for real-time run updates (replaces polling)
+const { items: runs, status: runStatus, refresh: refreshRuns } = useListWatch<WorkflowRun>({
+  listUrl: () => `/api/v1alpha1/namespaces/${ns}/agentworkflows/${name}/runs`,
+  watchUrl: () => watchWorkflowRunsUrl(ns, name)
+})
 
 const submitting = ref(false)
 async function handleSubmitRun() {
@@ -19,33 +23,11 @@ async function handleSubmitRun() {
   try {
     await submitWorkflowRun(ns, name)
     toast.add({ title: 'Run submitted', description: 'A new workflow run has been created.' })
-    refreshRuns()
+    // No need to manually refresh — the SSE watch will pick up the new run
   } catch {
     toast.add({ title: 'Failed', description: 'Could not submit workflow run.', color: 'error' })
   } finally {
     submitting.value = false
-  }
-}
-
-function runPhaseColor(phase?: RunPhase): 'success' | 'error' | 'warning' | 'neutral' | 'info' {
-  switch (phase) {
-    case 'RUN_PHASE_RUNNING': return 'info'
-    case 'RUN_PHASE_SUCCEEDED': return 'success'
-    case 'RUN_PHASE_FAILED': return 'error'
-    case 'RUN_PHASE_ERROR': return 'error'
-    case 'RUN_PHASE_PENDING': return 'warning'
-    default: return 'neutral'
-  }
-}
-
-function runPhaseLabel(phase?: RunPhase): string {
-  switch (phase) {
-    case 'RUN_PHASE_RUNNING': return 'Running'
-    case 'RUN_PHASE_SUCCEEDED': return 'Succeeded'
-    case 'RUN_PHASE_FAILED': return 'Failed'
-    case 'RUN_PHASE_ERROR': return 'Error'
-    case 'RUN_PHASE_PENDING': return 'Pending'
-    default: return 'Unknown'
   }
 }
 
@@ -59,17 +41,6 @@ function formatDuration(run: WorkflowRun): string {
   const remaining = seconds % 60
   return `${minutes}m ${remaining}s`
 }
-
-// Auto-refresh while any runs are active
-const { register } = useAutoRefresh()
-register(() => {
-  const hasActive = runs.value.some(r =>
-    r.phase === 'RUN_PHASE_RUNNING' || r.phase === 'RUN_PHASE_PENDING'
-  )
-  if (hasActive) {
-    refreshRuns()
-  }
-})
 
 function refreshAll() {
   refreshWorkflow()
@@ -186,12 +157,12 @@ function refreshAll() {
           class="flex items-center justify-between p-3 rounded-lg border border-default bg-elevated/50 hover:bg-elevated transition-colors"
         >
           <div class="flex items-center gap-3">
-            <div class="flex items-center justify-center size-8 rounded-md" :class="run.phase === 'RUN_PHASE_RUNNING' ? 'bg-info/10' : 'bg-primary/10'">
+            <div class="flex items-center justify-center size-8 rounded-md" :class="isRunPhase(run.phase, 'Running') ? 'bg-info/10' : 'bg-primary/10'">
               <UIcon
-                :name="run.phase === 'RUN_PHASE_RUNNING' ? 'i-lucide-loader' : 'i-lucide-play'"
+                :name="isRunPhase(run.phase, 'Running') ? 'i-lucide-loader' : 'i-lucide-play'"
                 class="size-4"
                 :class="[
-                  run.phase === 'RUN_PHASE_RUNNING' ? 'text-info animate-spin' : 'text-primary'
+                  isRunPhase(run.phase, 'Running') ? 'text-info animate-spin' : 'text-primary'
                 ]"
               />
             </div>

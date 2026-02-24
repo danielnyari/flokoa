@@ -20,10 +20,14 @@ function openDetail(model: Model) {
   detailOpen.value = true
 }
 
-const { listModels } = useFlokoa()
-const { data: modelList, status, refresh } = await listModels()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
-const models = computed(() => modelList.value?.items ?? [])
+const { items: models, status: listStatus, refresh } = useListWatch<Model>({
+  listUrl: () => namespacedPath('models'),
+  watchUrl: () => buildWatchUrl('models')
+})
+
+const status = computed(() => listStatus.value === 'pending' ? 'pending' : 'success')
 
 const columnFilters = ref([{
   id: 'name',
@@ -44,6 +48,30 @@ const pagination = ref({
   pageIndex: 0,
   pageSize: 10
 })
+
+const providerTypeMap: Record<string | number, string> = {
+  PROVIDER_TYPE_OPENAI: 'openai',
+  PROVIDER_TYPE_ANTHROPIC: 'anthropic',
+  PROVIDER_TYPE_GOOGLE: 'google',
+  PROVIDER_TYPE_BEDROCK: 'bedrock',
+  1: 'openai',
+  2: 'anthropic',
+  3: 'google',
+  4: 'bedrock'
+}
+
+const providerLabel: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  bedrock: 'Bedrock'
+}
+
+function resolveProviderLabel(raw: string | number | undefined): string | undefined {
+  if (!raw) return undefined
+  const key = providerTypeMap[raw]
+  return key ? providerLabel[key] : undefined
+}
 
 function getRowItems(row: { original: Model }) {
   return [
@@ -92,14 +120,11 @@ const columns: TableColumn<Model>[] = [
     header: 'Provider',
     cell: ({ row }) => {
       const resolved = row.original.status?.resolvedProvider
-      const providerName = row.original.spec.providerRef.name
-      if (resolved?.provider) {
-        return h('div', { class: 'flex items-center gap-2' }, [
-          h(UBadge, { variant: 'subtle', color: 'neutral' }, () => resolved.provider),
-          h('span', { class: 'text-sm text-muted' }, providerName)
-        ])
+      const label = resolveProviderLabel(resolved?.provider)
+      if (label) {
+        return h(resolveComponent('NuxtLink'), { to: '/providers', class: 'text-primary hover:underline' }, () => label)
       }
-      return h('span', { class: 'text-sm' }, providerName)
+      return h(resolveComponent('NuxtLink'), { to: '/providers', class: 'text-sm hover:underline' }, () => row.original.spec.providerRef.name)
     }
   },
   {

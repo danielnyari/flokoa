@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { WorkflowRun, WorkflowRunNode, RunPhase } from '~/types'
+import type { WorkflowRun, WorkflowRunNode } from '~/types'
+import { runPhaseLabel, runPhaseColor, nodeTypeLabel } from '~/utils/enums'
 
 const props = defineProps<{
   run: WorkflowRun
@@ -12,39 +13,6 @@ const selectedNode = computed<WorkflowRunNode | undefined>(() => {
 })
 
 const activeTab = ref('overview')
-
-function phaseColor(phase?: RunPhase): 'success' | 'error' | 'warning' | 'info' | 'neutral' {
-  switch (phase) {
-    case 'RUN_PHASE_RUNNING': return 'info'
-    case 'RUN_PHASE_SUCCEEDED': return 'success'
-    case 'RUN_PHASE_FAILED': return 'error'
-    case 'RUN_PHASE_ERROR': return 'error'
-    case 'RUN_PHASE_PENDING': return 'warning'
-    default: return 'neutral'
-  }
-}
-
-function phaseLabel(phase?: RunPhase): string {
-  switch (phase) {
-    case 'RUN_PHASE_RUNNING': return 'Running'
-    case 'RUN_PHASE_SUCCEEDED': return 'Succeeded'
-    case 'RUN_PHASE_FAILED': return 'Failed'
-    case 'RUN_PHASE_ERROR': return 'Error'
-    case 'RUN_PHASE_PENDING': return 'Pending'
-    default: return 'Unknown'
-  }
-}
-
-function nodeTypeLabel(type?: string): string {
-  switch (type) {
-    case 'NODE_TYPE_POD': return 'Pod'
-    case 'NODE_TYPE_DAG': return 'DAG'
-    case 'NODE_TYPE_PLUGIN': return 'Plugin'
-    case 'NODE_TYPE_STEPS': return 'Steps'
-    case 'NODE_TYPE_SUSPEND': return 'Suspend'
-    default: return 'Unknown'
-  }
-}
 
 function formatTime(ts?: string): string {
   if (!ts) return '\u2014'
@@ -90,8 +58,8 @@ const tabItems = [
             <div class="space-y-2">
               <div class="flex items-center justify-between">
                 <span class="text-sm font-medium text-highlighted">{{ selectedNode.displayName || selectedNode.name }}</span>
-                <UBadge :color="phaseColor(selectedNode.phase)" variant="subtle" size="xs">
-                  {{ phaseLabel(selectedNode.phase) }}
+                <UBadge :color="runPhaseColor(selectedNode.phase)" variant="subtle" size="xs">
+                  {{ runPhaseLabel(selectedNode.phase) }}
                 </UBadge>
               </div>
               <div class="grid grid-cols-2 gap-2">
@@ -190,8 +158,8 @@ const tabItems = [
             <div class="space-y-2">
               <div class="flex items-center justify-between">
                 <span class="text-sm font-mono text-highlighted">{{ run.metadata.name }}</span>
-                <UBadge :color="phaseColor(run.phase)" variant="subtle" size="xs">
-                  {{ phaseLabel(run.phase) }}
+                <UBadge :color="runPhaseColor(run.phase)" variant="subtle" size="xs">
+                  {{ runPhaseLabel(run.phase) }}
                 </UBadge>
               </div>
               <div class="grid grid-cols-2 gap-2">
