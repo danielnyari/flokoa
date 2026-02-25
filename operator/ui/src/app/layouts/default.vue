@@ -6,58 +6,36 @@ const { agentCount, modelCount, providerCount, toolCount, workflowCount } = useR
 
 const open = ref(false)
 
-function badgeOrUndefined(count: number): string | undefined {
-  return count > 0 ? String(count) : undefined
-}
+// Keep navigation items as stable objects so UNavigationMenu doesn't
+// re-mount NuxtLinks when badge counts change (which swallows clicks).
+const agentLink = reactive<NavigationMenuItem>({ label: 'Agents', icon: 'i-lucide-bot', to: '/agents', onSelect: () => { open.value = false } })
+const modelLink = reactive<NavigationMenuItem>({ label: 'Models', icon: 'i-lucide-brain', to: '/models', onSelect: () => { open.value = false } })
+const providerLink = reactive<NavigationMenuItem>({ label: 'Providers', icon: 'i-lucide-cloud', to: '/providers', onSelect: () => { open.value = false } })
+const toolLink = reactive<NavigationMenuItem>({ label: 'Tools', icon: 'i-lucide-wrench', to: '/tools', onSelect: () => { open.value = false } })
+const workflowLink = reactive<NavigationMenuItem>({ label: 'Workflows', icon: 'i-lucide-git-branch', to: '/workflows', onSelect: () => { open.value = false } })
 
-const links = computed<NavigationMenuItem[][]>(() => [[{
+watchEffect(() => {
+  agentLink.badge = agentCount.value > 0 ? String(agentCount.value) : undefined
+  modelLink.badge = modelCount.value > 0 ? String(modelCount.value) : undefined
+  providerLink.badge = providerCount.value > 0 ? String(providerCount.value) : undefined
+  toolLink.badge = toolCount.value > 0 ? String(toolCount.value) : undefined
+  workflowLink.badge = workflowCount.value > 0 ? String(workflowCount.value) : undefined
+})
+
+const links = [[{
   label: 'Home',
   icon: 'i-lucide-house',
   to: '/',
   onSelect: () => {
     open.value = false
   }
-}, {
-  label: 'Agents',
-  icon: 'i-lucide-bot',
-  to: '/agents',
-  badge: badgeOrUndefined(agentCount.value),
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Models',
-  icon: 'i-lucide-brain',
-  to: '/models',
-  badge: badgeOrUndefined(modelCount.value),
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Providers',
-  icon: 'i-lucide-cloud',
-  to: '/providers',
-  badge: badgeOrUndefined(providerCount.value),
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Tools',
-  icon: 'i-lucide-wrench',
-  to: '/tools',
-  badge: badgeOrUndefined(toolCount.value),
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Workflows',
-  icon: 'i-lucide-git-branch',
-  to: '/workflows',
-  badge: badgeOrUndefined(workflowCount.value),
-  onSelect: () => {
-    open.value = false
-  }
-}, {
+},
+  agentLink,
+  modelLink,
+  providerLink,
+  toolLink,
+  workflowLink,
+{
   label: 'Settings',
   to: '/settings',
   icon: 'i-lucide-settings',
@@ -99,12 +77,12 @@ const links = computed<NavigationMenuItem[][]>(() => [[{
   icon: 'i-simple-icons-github',
   to: 'https://github.com/danielnyari/flokoa',
   target: '_blank'
-}]])
+}]] as NavigationMenuItem[][]
 
 const groups = computed(() => [{
   id: 'links',
   label: 'Go to',
-  items: links.value.flat()
+  items: links.flat()
 }, {
   id: 'code',
   label: 'Code',

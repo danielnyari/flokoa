@@ -1,46 +1,45 @@
 import { createSharedComposable } from '@vueuse/core'
-import type { Agent, Model, ModelProvider, AgentTool, AgentWorkflow } from '~/types'
 
 /**
- * Shared composable that provides live resource counts for sidebar badges.
- * Uses the same list-watch pattern as individual pages so counts stay in
- * sync with the cluster via SSE.
+ * Shared composable that provides resource counts for sidebar badges.
+ * Uses a single deferred fetch (after mount) so it never blocks app
+ * initialisation or the NuxtLoadingIndicator.
  */
 const _useResourceCounts = () => {
-  const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
+  const { namespacedPath } = useFlokoa()
 
-  const { items: agents } = useListWatch<Agent>({
-    listUrl: () => namespacedPath('agents'),
-    watchUrl: () => buildWatchUrl('agents')
-  })
+  const agentCount = ref(0)
+  const modelCount = ref(0)
+  const providerCount = ref(0)
+  const toolCount = ref(0)
+  const workflowCount = ref(0)
 
-  const { items: models } = useListWatch<Model>({
-    listUrl: () => namespacedPath('models'),
-    watchUrl: () => buildWatchUrl('models')
-  })
+  async function refresh() {
+    const auth = useAuth()
+    const headers: Record<string, string> = {}
+    const token = auth.getAccessToken()
+    if (token) headers.Authorization = `Bearer ${token}`
 
-  const { items: providers } = useListWatch<ModelProvider>({
-    listUrl: () => namespacedPath('modelproviders'),
-    watchUrl: () => buildWatchUrl('modelproviders')
-  })
+    const results = await Promise.allSettled([
+      $fetch<{ items?: unknown[] }>(namespacedPath('agents'), { headers }),
+      $fetch<{ items?: unknown[] }>(namespacedPath('models'), { headers }),
+      $fetch<{ items?: unknown[] }>(namespacedPath('modelproviders'), { headers }),
+      $fetch<{ items?: unknown[] }>(namespacedPath('agenttools'), { headers }),
+      $fetch<{ items?: unknown[] }>(namespacedPath('agentworkflows'), { headers })
+    ])
 
-  const { items: tools } = useListWatch<AgentTool>({
-    listUrl: () => namespacedPath('agenttools'),
-    watchUrl: () => buildWatchUrl('agenttools')
-  })
-
-  const { items: workflows } = useListWatch<AgentWorkflow>({
-    listUrl: () => namespacedPath('agentworkflows'),
-    watchUrl: () => buildWatchUrl('agentworkflows')
-  })
-
-  return {
-    agentCount: computed(() => agents.value.length),
-    modelCount: computed(() => models.value.length),
-    providerCount: computed(() => providers.value.length),
-    toolCount: computed(() => tools.value.length),
-    workflowCount: computed(() => workflows.value.length)
+    const counts = results.map(r => r.status === 'fulfilled' ? (r.value.items?.length ?? 0) : 0)
+    agentCount.value = counts[0]
+    modelCount.value = counts[1]
+    providerCount.value = counts[2]
+    toolCount.value = counts[3]
+    workflowCount.value = counts[4]
   }
+
+  // Defer fetch until after the app has fully mounted
+  onMounted(() => refresh())
+
+  return { agentCount, modelCount, providerCount, toolCount, workflowCount, refresh }
 }
 
 export const useResourceCounts = createSharedComposable(_useResourceCounts)

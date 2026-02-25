@@ -121,10 +121,11 @@ const columns: TableColumn<Model>[] = [
     cell: ({ row }) => {
       const resolved = row.original.status?.resolvedProvider
       const label = resolveProviderLabel(resolved?.provider)
-      if (label) {
-        return h(resolveComponent('NuxtLink'), { to: '/providers', class: 'text-primary hover:underline' }, () => label)
-      }
-      return h(resolveComponent('NuxtLink'), { to: '/providers', class: 'text-sm hover:underline' }, () => row.original.spec.providerRef.name)
+      const text = label || row.original.spec.providerRef?.name || '—'
+      return h('span', {
+        class: text !== '—' ? 'text-primary hover:underline cursor-pointer' : 'text-muted',
+        ...(text !== '—' && { onClick: (e: MouseEvent) => { e.stopPropagation(); navigateTo('/providers') } })
+      }, text)
     }
   },
   {
