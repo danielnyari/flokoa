@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: flokoa-system
 
 resources:
-  - secret.yaml
   - modelprovider.yaml
   - model.yaml
   - instruction.yaml

@@ -74,6 +74,7 @@ class RestApiToolConfig:
     auth_credential: AuthCredential | None = None
     ssl_verify: bool | str | ssl.SSLContext | None = None
     default_headers: dict[str, str] = field(default_factory=dict)
+    allow_internal: bool = False
     credential_exchanger: AutoAuthCredentialExchanger = field(default_factory=AutoAuthCredentialExchanger)
 
     @classmethod
@@ -121,6 +122,15 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
     """
 
     async def rest_api_call(ctx: RunContext[OpenAPIDeps], **kwargs: Any) -> dict[str, Any]:
+        logger.info("TOOL CALL: %s(kwargs=%s)", config.name, kwargs)
+        logger.debug(
+            "  endpoint=%s %s%s, default_headers=%s",
+            config.endpoint.method,
+            config.endpoint.base_url,
+            config.endpoint.path,
+            list(config.default_headers.keys()) if config.default_headers else None,
+        )
+
         # Exchange auth credentials (e.g. OAuth2 token refresh, service account)
         auth_scheme = config.auth_scheme
         auth_credential = config.auth_credential
@@ -163,6 +173,7 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
             kwargs=api_args,
             auth_additional_headers=auth_additional_headers,
         )
+        logger.debug("  request_params: method=%s url=%s", request_params.get("method"), request_params.get("url"))
 
         # Validate the constructed URL against SSRF attacks.
         # Skip for relative URLs (no scheme) — these are resolved by the
@@ -170,7 +181,7 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
         constructed_url = request_params["url"]
         if constructed_url.startswith(("http://", "https://")):
             try:
-                validate_url(constructed_url)
+                validate_url(constructed_url, allow_internal=config.allow_internal)
             except SSRFError as e:
                 logger.warning("SSRF validation failed for tool %s: %s", config.name, e)
                 return {"error": f"Tool {config.name} request blocked: URL failed security validation"}
@@ -195,12 +206,16 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
             response = await client.request(**request_params)
 
         # Log the response
-        logger.debug(
-            "API Response: %s %s - Status: %d",
+        logger.info(
+            "TOOL RESPONSE: %s %s %s - Status: %d, Content-Length: %s",
+            config.name,
             request_params.get("method", "").upper(),
             request_params.get("url", ""),
             response.status_code,
+            response.headers.get("content-length", "unknown"),
         )
+        logger.debug("  Response headers: %s", dict(response.headers))
+        logger.debug("  Response body (first 500 chars): %s", response.text[:500] if response.text else "")
 
         # Parse response
         try:

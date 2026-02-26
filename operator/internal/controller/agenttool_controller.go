@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -52,7 +54,8 @@ const (
 // AgentToolReconciler reconciles a AgentTool object
 type AgentToolReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme     *runtime.Scheme
+	HTTPClient *http.Client
 }
 
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttools,verbs=get;list;watch;create;update;patch;delete
@@ -113,8 +116,22 @@ func (r *AgentToolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	r.setCondition(agentTool, ConditionTypeValidated, metav1.ConditionTrue, ReasonValidationSuccess, "Spec is valid")
 
-	// Create or update ConfigMap with spec content
-	if err := r.reconcileConfigMap(ctx, agentTool); err != nil {
+	// Resolve the spec: fetch OpenAPI from endpointPath, read from valueFrom, resolve serviceRef to URL.
+	// This produces a materialized spec with openApiSchema.value always populated.
+	resolvedSpec, err := r.resolveSpec(ctx, agentTool)
+	if err != nil {
+		logger.Error(err, "Failed to resolve spec")
+		r.setCondition(agentTool, ConditionTypeStored, metav1.ConditionFalse, ReasonStorageFailed, err.Error())
+		if statusErr := updateStatusWithRetry(ctx, r.Client, agentTool, func() {
+			r.setCondition(agentTool, ConditionTypeStored, metav1.ConditionFalse, ReasonStorageFailed, err.Error())
+		}); statusErr != nil {
+			logger.Error(statusErr, "Failed to update AgentTool status after resolve failure")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Create or update ConfigMap with resolved spec content
+	if err := r.reconcileConfigMap(ctx, agentTool, resolvedSpec); err != nil {
 		logger.Error(err, "Failed to reconcile ConfigMap")
 		r.setCondition(agentTool, ConditionTypeStored, metav1.ConditionFalse, ReasonStorageFailed, err.Error())
 		if statusErr := updateStatusWithRetry(ctx, r.Client, agentTool, func() {
@@ -173,14 +190,140 @@ func (r *AgentToolReconciler) validateConfigMapRef(ctx context.Context, namespac
 	return nil
 }
 
-// reconcileConfigMap creates or updates a ConfigMap containing the AgentTool spec as JSON
-func (r *AgentToolReconciler) reconcileConfigMap(ctx context.Context, agentTool *agentv1alpha1.AgentTool) error {
+// resolveSpec produces a materialized copy of the spec with openApiSchema.value populated.
+// It handles all three schema sources:
+//   - value: used as-is
+//   - endpointPath: fetches the OpenAPI spec via HTTP from the resolved URL
+//   - valueFrom: reads from the referenced ConfigMap
+//
+// It also resolves serviceRef to a url so the SDK can reach the service.
+func (r *AgentToolReconciler) resolveSpec(ctx context.Context, agentTool *agentv1alpha1.AgentTool) (*agentv1alpha1.AgentToolSpec, error) {
+	spec := agentTool.Spec.DeepCopy()
+
+	if spec.OpenApi == nil {
+		return spec, nil
+	}
+
+	schema := &spec.OpenApi.OpenApiSchema
+
+	// Resolve serviceRef → url so the SDK knows where to send requests
+	if spec.OpenApi.URL == "" && spec.OpenApi.ServiceRef != nil {
+		spec.OpenApi.URL = resolveServiceRefURL(agentTool.Namespace, spec.OpenApi.ServiceRef)
+	}
+
+	// If value is already inline, nothing to resolve
+	if schema.Value != nil {
+		return spec, nil
+	}
+
+	// Resolve from endpointPath: fetch the OpenAPI spec via HTTP
+	if schema.EndpointPath != "" {
+		if spec.OpenApi.URL == "" {
+			return nil, fmt.Errorf("endpointPath requires either url or serviceRef to be set")
+		}
+
+		fetchURL := spec.OpenApi.URL + schema.EndpointPath
+		body, err := r.fetchOpenAPISpec(ctx, fetchURL, spec.OpenApi.TimeoutSeconds)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch OpenAPI spec from %s: %w", fetchURL, err)
+		}
+
+		schema.Value = &runtime.RawExtension{Raw: body}
+		return spec, nil
+	}
+
+	// Resolve from valueFrom: read the referenced ConfigMap
+	if schema.ValueFrom != nil {
+		cm := &corev1.ConfigMap{}
+		cmKey := client.ObjectKey{
+			Name:      schema.ValueFrom.Name,
+			Namespace: agentTool.Namespace,
+		}
+		if err := r.Get(ctx, cmKey, cm); err != nil {
+			return nil, fmt.Errorf("failed to get ConfigMap %s for valueFrom: %w", schema.ValueFrom.Name, err)
+		}
+
+		data, ok := cm.Data[schema.ValueFrom.Key]
+		if !ok {
+			return nil, fmt.Errorf("key %s not found in ConfigMap %s", schema.ValueFrom.Key, schema.ValueFrom.Name)
+		}
+
+		// Validate it's valid JSON
+		if !json.Valid([]byte(data)) {
+			return nil, fmt.Errorf("valueFrom ConfigMap %s key %s does not contain valid JSON", schema.ValueFrom.Name, schema.ValueFrom.Key)
+		}
+
+		schema.Value = &runtime.RawExtension{Raw: []byte(data)}
+		return spec, nil
+	}
+
+	return spec, nil
+}
+
+// resolveServiceRefURL builds a cluster-internal URL from a ServiceRef.
+func resolveServiceRefURL(namespace string, ref *agentv1alpha1.ServiceRef) string {
+	svcNamespace := ref.Namespace
+	if svcNamespace == "" {
+		svcNamespace = namespace
+	}
+	port := int32(80)
+	if ref.Port != nil {
+		port = *ref.Port
+	}
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", ref.Name, svcNamespace, port)
+}
+
+// fetchOpenAPISpec fetches an OpenAPI spec from the given URL.
+func (r *AgentToolReconciler) fetchOpenAPISpec(ctx context.Context, url string, timeoutSeconds *int32) ([]byte, error) {
+	timeout := 30 * time.Second
+	if timeoutSeconds != nil {
+		timeout = time.Duration(*timeoutSeconds) * time.Second
+	}
+
+	httpClient := r.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: timeout}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if !json.Valid(body) {
+		return nil, fmt.Errorf("response is not valid JSON")
+	}
+
+	return body, nil
+}
+
+// reconcileConfigMap creates or updates a ConfigMap containing the resolved tool definition.
+// The ConfigMap uses key "spec.json" with ToolDefinition format: {"name": "...", "spec": {...}}.
+// This is the format the Python SDK expects in /etc/flokoa/tools/*.json.
+func (r *AgentToolReconciler) reconcileConfigMap(ctx context.Context, agentTool *agentv1alpha1.AgentTool, resolvedSpec *agentv1alpha1.AgentToolSpec) error {
 	logger := log.FromContext(ctx)
 
-	// Serialize the spec to JSON
-	specJSON, err := json.Marshal(agentTool.Spec)
+	specJSON, err := json.Marshal(map[string]any{
+		"name": agentTool.Name,
+		"spec": resolvedSpec,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal spec: %w", err)
+		return fmt.Errorf("failed to marshal tool definition: %w", err)
 	}
 
 	cmName := fmt.Sprintf("%s-spec", agentTool.Name)
@@ -195,7 +338,7 @@ func (r *AgentToolReconciler) reconcileConfigMap(ctx context.Context, agentTool 
 			},
 		},
 		Data: map[string]string{
-			fmt.Sprintf("%s-spec.json", agentTool.Name): string(specJSON),
+			"spec.json": string(specJSON),
 		},
 	}
 
@@ -217,9 +360,8 @@ func (r *AgentToolReconciler) reconcileConfigMap(ctx context.Context, agentTool 
 			return fmt.Errorf("failed to get ConfigMap: %w", err)
 		}
 	} else {
-		// Update data with new spec JSON
 		logger.Info("Updating ConfigMap", "name", cmName)
-		existingCM.Data[fmt.Sprintf("%s-spec.json", agentTool.Name)] = string(specJSON)
+		existingCM.Data["spec.json"] = string(specJSON)
 		if err := r.Update(ctx, existingCM); err != nil {
 			return fmt.Errorf("failed to update ConfigMap: %w", err)
 		}

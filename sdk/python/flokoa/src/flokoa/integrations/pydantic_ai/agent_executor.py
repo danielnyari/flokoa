@@ -90,10 +90,15 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
 
     def _build_toolset(self) -> FunctionToolset:
         """Build a new toolset from current tool definitions via the factory."""
+        logger.debug(
+            "_build_toolset(): %d tool definition(s) to build",
+            len(self.tool_definitions),
+        )
         tools = self._toolset_factory.build(self.tool_definitions, IntegrationType.PYDANTIC_AI)
         toolset = FunctionToolset()
         for tool in tools:
             toolset.add_tool(tool)
+        logger.debug("_build_toolset(): built FunctionToolset with %d tool(s)", len(tools))
         return toolset
 
     def _get_toolset(self) -> FunctionToolset:
@@ -107,6 +112,11 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
             FunctionToolset with all configured tools.
         """
         current_tools = self.tool_definitions
+        logger.debug(
+            "_get_toolset(): %d current tool definition(s), cached_toolset=%s",
+            len(current_tools),
+            self._cached_toolset is not None,
+        )
 
         # Rebuild if tools changed or toolset not initialized
         # Compare by identity first (same list object), then by content
@@ -120,6 +130,8 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
             logger.info("Rebuilding toolset due to configuration change")
             self._cached_toolset = self._build_toolset()
             self._cached_tool_definitions = current_tools
+        else:
+            logger.debug("_get_toolset(): using cached toolset (no changes)")
 
         # _cached_toolset is guaranteed to be set after the rebuild block above
         return self._cached_toolset  # type: ignore[return-value]

@@ -104,6 +104,16 @@ const columns: TableColumn<AgentWorkflow>[] = [
     }
   },
   {
+    id: 'description',
+    accessorFn: row => row.spec.description ?? '',
+    header: 'Description',
+    cell: ({ row }) => {
+      const desc = row.original.spec.description
+      if (!desc) return h('span', { class: 'text-muted' }, '\u2014')
+      return h('span', { class: 'text-sm text-muted truncate max-w-xs block' }, desc)
+    }
+  },
+  {
     id: 'ready',
     accessorFn: row => row.status?.ready,
     header: 'Ready',
@@ -225,41 +235,52 @@ const columns: TableColumn<AgentWorkflow>[] = [
         </div>
       </div>
 
-      <UTable
-        ref="table"
-        v-model:column-filters="columnFilters"
-        v-model:column-visibility="columnVisibility"
-        v-model:pagination="pagination"
-        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
-        class="shrink-0"
-        :data="workflows"
-        :columns="columns"
-        :loading="status === 'pending'"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default',
-          separator: 'h-0'
-        }"
-        @select="(_e: Event, row: { original: AgentWorkflow }) => router.push(`/workflows/${row.original.metadata.namespace}/${row.original.metadata.name}`)"
+      <EmptyState
+        v-if="workflows.length === 0 && status !== 'pending'"
+        icon="i-lucide-git-branch"
+        title="No workflows defined"
+        description="Create an AgentWorkflow to orchestrate multi-agent tasks with DAG-based execution, conditional branching, and parameter passing."
+        docs-url="https://flokoa.ai/getting-started"
+        docs-label="Getting Started"
       />
 
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} workflow(s)
-        </div>
+      <template v-else>
+        <UTable
+          ref="table"
+          v-model:column-filters="columnFilters"
+          v-model:column-visibility="columnVisibility"
+          v-model:pagination="pagination"
+          :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+          class="shrink-0"
+          :data="workflows"
+          :columns="columns"
+          :loading="status === 'pending'"
+          :ui="{
+            base: 'table-fixed border-separate border-spacing-0',
+            thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+            tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/50',
+            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+            td: 'border-b border-default',
+            separator: 'h-0'
+          }"
+          @select="(_e: Event, row: { original: AgentWorkflow }) => router.push(`/workflows/${row.original.metadata.namespace}/${row.original.metadata.name}`)"
+        />
 
-        <div class="flex items-center gap-1.5">
-          <UPagination
-            :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
-            :items-per-page="table?.tableApi?.getState().pagination.pageSize"
-            :total="table?.tableApi?.getFilteredRowModel().rows.length"
-            @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
-          />
+        <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
+          <div class="text-sm text-muted">
+            {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} workflow(s)
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <UPagination
+              :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
+              :items-per-page="table?.tableApi?.getState().pagination.pageSize"
+              :total="table?.tableApi?.getFilteredRowModel().rows.length"
+              @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
+            />
+          </div>
         </div>
-      </div>
+      </template>
     </template>
   </UDashboardPanel>
 </template>

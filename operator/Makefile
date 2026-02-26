@@ -485,37 +485,39 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker images for manager, server, and A2A plugin.
-	$(CONTAINER_TOOL) build -t ${IMG} .
-	$(CONTAINER_TOOL) build -f server/Dockerfile -t ${SERVER_IMG} .
-	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} .
+docker-build: ## Build docker images for manager, server, A2A plugin, and CLI.
+	$(CONTAINER_TOOL) build -t ${IMG} -t $(IMAGE_TAG_BASE):latest .
+	$(CONTAINER_TOOL) build -f server/Dockerfile -t ${SERVER_IMG} -t $(SERVER_IMAGE_TAG_BASE):latest .
+	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} -t $(A2A_PLUGIN_IMAGE_TAG_BASE):latest .
+	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} -t $(FLOKOA_CLI_IMAGE_TAG_BASE):latest ../sdk/python
 
 .PHONY: docker-push
-docker-push: ## Push docker images for manager, server, and A2A plugin.
+docker-push: ## Push docker images for manager, server, A2A plugin, and CLI.
 	$(CONTAINER_TOOL) push ${IMG}
+	$(CONTAINER_TOOL) push $(IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${SERVER_IMG}
+	$(CONTAINER_TOOL) push $(SERVER_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
-	$(CONTAINER_TOOL) tag ${A2A_PLUGIN_IMG} $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
+	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-plugins
 docker-build-plugins: ## Build docker images for all plugins.
-	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} .
+	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} -t $(A2A_PLUGIN_IMAGE_TAG_BASE):latest .
 
 .PHONY: docker-push-plugins
 docker-push-plugins: ## Push docker images for all plugins.
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
-	$(CONTAINER_TOOL) tag ${A2A_PLUGIN_IMG} $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-flokoa-cli
 docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
-	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} ../sdk/python
+	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} -t $(FLOKOA_CLI_IMAGE_TAG_BASE):latest ../sdk/python
 
 .PHONY: docker-push-flokoa-cli
 docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.
 	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
-	$(CONTAINER_TOOL) tag ${FLOKOA_CLI_IMG} $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple

@@ -5,7 +5,9 @@
       "Bash(yq eval:*)",
       "Bash(make:*)",
       "Read(//private/tmp/**)",
-      "mcp__github__get_file_contents"
+      "mcp__github__get_file_contents",
+      "Bash(lsof:*)",
+      "Bash(npx playwright test:*)"
     ],
     "additionalDirectories": [
       "/Users/danielnyari/Documents/GitHub/flokoa/sdk/python/flokoa-common/src/flokoa_common"

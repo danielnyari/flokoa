@@ -108,24 +108,51 @@ class OpenAPIToolset:
         Raises:
             ValueError: If the tool definition lacks required openApi config.
         """
+        logger.debug("from_tool_definition('%s'): building OpenAPIToolset", tool_definition.name)
         open_api = tool_definition.spec.open_api
         if open_api is None:
             raise ValueError(f"Tool '{tool_definition.name}' has type openapi but no openApi configuration")
+
+        logger.debug(
+            "  open_api_schema: has_value=%s, has_endpoint_path=%s, url=%s",
+            open_api.open_api_schema.value is not None if open_api.open_api_schema else False,
+            getattr(open_api.open_api_schema, "endpoint_path", None) if open_api.open_api_schema else None,
+            open_api.url,
+        )
 
         spec_dict = open_api.open_api_schema.value
         if spec_dict is None:
             raise ValueError(f"Tool '{tool_definition.name}' has no inline OpenAPI spec (openApiSchema.value)")
 
+        logger.debug(
+            "  OpenAPI spec: title=%s, version=%s, servers=%s, paths=%d",
+            spec_dict.get("info", {}).get("title"),
+            spec_dict.get("info", {}).get("version"),
+            spec_dict.get("servers"),
+            len(spec_dict.get("paths", {})),
+        )
+
         # Override servers if CRD specifies a base URL
         if open_api.url:
             spec_dict = {**spec_dict, "servers": [{"url": open_api.url}]}
+            logger.debug("  Overriding servers with CRD URL: %s", open_api.url)
 
         toolset = cls(spec_dict=spec_dict)
+        logger.debug(
+            "  Parsed %d operation(s): %s",
+            len(toolset._configs),
+            [c.name for c in toolset._configs],
+        )
+
+        # Allow cluster-internal IPs — operator-provided serviceRef URLs are trusted
+        for config in toolset._configs:
+            config.allow_internal = True
 
         # Apply default headers from CRD
         if open_api.headers:
             for config in toolset._configs:
                 config.default_headers.update(open_api.headers)
+            logger.debug("  Applied default headers: %s", list(open_api.headers.keys()))
 
         return toolset
 

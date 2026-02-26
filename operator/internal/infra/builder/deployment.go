@@ -24,6 +24,7 @@ const (
 	InstructionConfigMapKey = "instruction.txt"
 
 	ToolsMountPath        = "/etc/flokoa/tools"
+	ToolConfigMapKey      = "spec.json"
 	AgentCardVolumeName   = "agent-card"
 	AgentCardConfigMapKey = "agent-card.json"
 	AgentCardMountPath    = "/etc/flokoa/agent-card.json"
@@ -174,7 +175,8 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 		})
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      volumeName,
-			MountPath: fmt.Sprintf("%s/%s", ToolsMountPath, toolCM.ToolName),
+			MountPath: fmt.Sprintf("%s/%s.json", ToolsMountPath, toolCM.ToolName),
+			SubPath:   ToolConfigMapKey,
 			ReadOnly:  true,
 		})
 		toolsHashBuilder += toolCM.ToolName + ":" + toolCM.DataHash + ";"

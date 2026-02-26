@@ -170,7 +170,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				container := firstContainer(deployment)
 				toolMount := findVolumeMount(container, "tool-weather-api")
 				Expect(toolMount).NotTo(BeNil())
-				Expect(toolMount.MountPath).To(Equal("/etc/flokoa/tools/weather-api"))
+				Expect(toolMount.MountPath).To(Equal("/etc/flokoa/tools/weather-api.json"))
+				Expect(toolMount.SubPath).To(Equal("spec.json"))
 				Expect(toolMount.ReadOnly).To(BeTrue())
 
 				By("Verifying ToolsReady condition is set")
@@ -282,8 +283,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				for _, vm := range container.VolumeMounts {
 					mountPaths = append(mountPaths, vm.MountPath)
 				}
-				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-one"))
-				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-two"))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-one.json"))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/tool-two.json"))
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/agent-card.json"))
 			})
 		})
@@ -393,6 +394,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				Expect(toolMount).NotTo(BeNil())
 				Expect(toolMount.MountPath).To(HavePrefix("/etc/flokoa/tools/"))
 				Expect(toolMount.MountPath).To(ContainSubstring(agentToolName))
+				Expect(toolMount.SubPath).To(Equal("spec.json"))
 				Expect(toolMount.ReadOnly).To(BeTrue())
 			})
 
@@ -518,7 +520,7 @@ var _ = Describe("Agent Controller - Tools", func() {
 				container := firstContainer(deployment)
 				toolMount := findVolumeMount(container, "tool-my-custom-tool-name")
 				Expect(toolMount).NotTo(BeNil())
-				Expect(toolMount.MountPath).To(Equal("/etc/flokoa/tools/my-custom-tool-name"))
+				Expect(toolMount.MountPath).To(Equal("/etc/flokoa/tools/my-custom-tool-name.json"))
 			})
 		})
 
@@ -639,8 +641,8 @@ var _ = Describe("Agent Controller - Tools", func() {
 				for _, vm := range container.VolumeMounts {
 					mountPaths = append(mountPaths, vm.MountPath)
 				}
-				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/inline-tool"))
-				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/" + agentToolName))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/inline-tool.json"))
+				Expect(mountPaths).To(ContainElement("/etc/flokoa/tools/" + agentToolName + ".json"))
 				Expect(mountPaths).To(ContainElement("/etc/flokoa/agent-card.json"))
 
 				By("Verifying ToolsReady condition shows 2 tools synced")

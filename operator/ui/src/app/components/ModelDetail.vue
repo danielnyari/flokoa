@@ -78,8 +78,8 @@ const paramEntries = computed(() => {
           <div class="p-3 rounded-lg border border-default bg-elevated/50">
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-cloud" class="size-4 text-primary shrink-0" />
-              <span class="text-sm font-medium text-highlighted">{{ model.spec.providerRef.name }}</span>
-              <span v-if="model.spec.providerRef.namespace" class="text-xs text-muted">
+              <span class="text-sm font-medium text-highlighted">{{ model.spec.providerRef?.name ?? '—' }}</span>
+              <span v-if="model.spec.providerRef?.namespace" class="text-xs text-muted">
                 ({{ model.spec.providerRef.namespace }})
               </span>
             </div>

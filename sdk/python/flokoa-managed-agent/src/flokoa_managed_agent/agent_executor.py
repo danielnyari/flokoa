@@ -10,13 +10,13 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import new_data_artifact, new_task
-from pydantic_ai import AgentRunResult
-
 from flokoa.cache import ConfigCache
 from flokoa.config import AgentConfig, LlmAgentConfig
 from flokoa.exceptions import ProviderNotConfiguredError
 from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
 from flokoa_types import TemplateConfig
+from pydantic_ai import AgentRunResult
+
 from flokoa_managed_agent.bootstrap import TemplatedAgentBuilder, build_agent_from_config
 
 logger = logging.getLogger(__name__)
@@ -51,10 +51,7 @@ class TemplatedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
         if agent_config is not None:
             inner = agent_config.root
             if not isinstance(inner, LlmAgentConfig):
-                raise TypeError(
-                    f"TemplatedPydanticAIAgentExecutor requires LlmAgentConfig, "
-                    f"got {type(inner).__name__}"
-                )
+                raise TypeError(f"TemplatedPydanticAIAgentExecutor requires LlmAgentConfig, got {type(inner).__name__}")
             self._llm_config = inner
             agent = build_agent_from_config(agent_config)
         elif config is not None:
@@ -106,6 +103,7 @@ class TemplatedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
     @override
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         request = context.get_user_input()
+        logger.info("TemplatedExecutor.execute(): request=%r", request[:200] if request else None)
         task = context.current_task
         if not task:
             task = new_task(context.message)
@@ -114,17 +112,33 @@ class TemplatedPydanticAIAgentExecutor(PydanticAIAgentExecutor):
         # Use model from unified config or fall back to mounted file
         if self._llm_config and self._llm_config.model:
             from flokoa.integrations.pydantic_ai.model_factory import create_model_from_config
+
             model = create_model_from_config(self._llm_config.model)
+            logger.debug("Using model from unified config: %s", model)
         elif self.model_config:
             model = self._create_model(self._create_provider(self.model_config.provider.type))
+            logger.debug("Using model from mounted file: %s", model)
         else:
             raise ProviderNotConfiguredError("Model configuration is required for templated agents")
+
+        toolset = self._get_toolset()
+        tool_names = [t.name for t in toolset._tools.values()] if hasattr(toolset, "_tools") else "unknown"
+        logger.info(
+            "Running agent with %s tool(s): %s",
+            len(toolset._tools) if hasattr(toolset, "_tools") else "?",
+            tool_names,
+        )
+        logger.debug("Instruction (first 200 chars): %s", self.instruction[:200] if self.instruction else None)
 
         result: AgentRunResult[dict[str, Any]] = await self.agent.run(
             request,
             model=model,
-            toolsets=[self._get_toolset()],
+            toolsets=[toolset],
             instructions=self.instruction,
+        )
+        logger.info(
+            "Agent run complete. Output keys: %s",
+            list(result.output.keys()) if isinstance(result.output, dict) else type(result.output).__name__,
         )
 
         await event_queue.enqueue_event(

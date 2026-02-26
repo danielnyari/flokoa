@@ -1,5 +1,5 @@
 # Adds namespace to all resources.
-namespace: flokoa-e2e-2a04ac4a
+namespace: flokoa-system
 
 resources:
 - ../crd
