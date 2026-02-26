@@ -13,6 +13,7 @@ const modelLink = reactive<NavigationMenuItem>({ label: 'Models', icon: 'i-lucid
 const providerLink = reactive<NavigationMenuItem>({ label: 'Providers', icon: 'i-lucide-cloud', to: '/providers', onSelect: () => { open.value = false } })
 const toolLink = reactive<NavigationMenuItem>({ label: 'Tools', icon: 'i-lucide-wrench', to: '/tools', onSelect: () => { open.value = false } })
 const workflowLink = reactive<NavigationMenuItem>({ label: 'Workflows', icon: 'i-lucide-git-branch', to: '/workflows', onSelect: () => { open.value = false } })
+const playgroundLink = reactive<NavigationMenuItem>({ label: 'Playground', icon: 'i-lucide-flask-conical', to: '/playground', onSelect: () => { open.value = false } })
 
 watchEffect(() => {
   agentLink.badge = agentCount.value > 0 ? String(agentCount.value) : undefined
@@ -35,6 +36,7 @@ const links = [[{
   providerLink,
   toolLink,
   workflowLink,
+  playgroundLink,
 {
   label: 'Settings',
   to: '/settings',
