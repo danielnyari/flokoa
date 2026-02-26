@@ -161,7 +161,7 @@ var _ = Describe("Cross-Controller Integration", func() {
 			Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
 
 			By("Reconciling the AgentTool")
-			r := &AgentToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			r := &AgentToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), HTTPClient: mockHTTPClient()}
 
 			// First reconcile adds finalizer
 			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: toolNN})
@@ -179,7 +179,7 @@ var _ = Describe("Cross-Controller Integration", func() {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm)
 			}, timeout, interval).Should(Succeed())
 
-			Expect(cm.Data).To(HaveKey(fmt.Sprintf("%s-spec.json", agentToolName)))
+			Expect(cm.Data).To(HaveKey("spec.json"))
 
 			By("Verifying Validated and Stored conditions are True")
 			Expect(k8sClient.Get(ctx, toolNN, agentTool)).To(Succeed())

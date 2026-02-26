@@ -64,9 +64,7 @@ class ToolsetFactory[ToolObjectT: ToolObject]:
         )
     """
 
-    _builders: BuilderRegistry[ToolObjectT] = field(
-        default_factory=lambda: cast(BuilderRegistry[ToolObjectT], {})
-    )
+    _builders: BuilderRegistry[ToolObjectT] = field(default_factory=lambda: cast(BuilderRegistry[ToolObjectT], {}))
 
     def register(
         self,
@@ -108,8 +106,20 @@ class ToolsetFactory[ToolObjectT: ToolObject]:
         Returns:
             A flat list of framework-specific tool objects.
         """
+        logger.debug(
+            "ToolsetFactory.build(): %d definition(s), integration=%s, registered_builders=%s",
+            len(tool_definitions),
+            integration.value,
+            {k: list(v.get("by_integration", {}).keys()) for k, v in self._builders.items()},
+        )
         tools: list[ToolObjectT] = []
         for td in tool_definitions:
+            logger.debug(
+                "Processing tool '%s': type=%s, has_openApi=%s",
+                td.name,
+                td.type,
+                td.spec.open_api is not None if td.spec else False,
+            )
             if td.type != ToolType.OPENAPI:
                 builder = None
             else:
@@ -122,14 +132,20 @@ class ToolsetFactory[ToolObjectT: ToolObject]:
                     td.name,
                 )
                 continue
-            built = builder(td)
+            try:
+                built = builder(td)
+            except Exception:
+                logger.exception("Failed to build tool '%s'", td.name)
+                continue
             tools.extend(built)
             logger.info(
-                "Built %d tool(s) from '%s' for integration '%s'",
+                "Built %d tool(s) from '%s' for integration '%s': %s",
                 len(built),
                 td.name,
                 integration.value,
+                [getattr(t, "name", str(t)) for t in built],
             )
+        logger.info("ToolsetFactory.build() complete: %d total tool(s)", len(tools))
         return tools
 
 

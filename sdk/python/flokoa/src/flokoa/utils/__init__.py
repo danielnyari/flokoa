@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from glob import glob
 
@@ -14,6 +15,8 @@ from flokoa.cache import (
     ConfigCache,
     get_global_cache,
 )
+
+logger = logging.getLogger("flokoa." + __name__)
 
 TOOLS_PATH = "/etc/flokoa/tools/"
 AGENT_CARD_PATH = "/etc/flokoa/agent-card.json"
@@ -127,16 +130,39 @@ def _load_tools_from_files() -> tuple[list[ToolDefinition], list[str]]:
     Returns:
         Tuple of (tool definitions list, list of file paths that were loaded).
     """
+    logger.debug("Loading tools from %s", TOOLS_PATH)
     if not os.path.exists(TOOLS_PATH):
+        logger.warning("Tools directory does not exist: %s", TOOLS_PATH)
         return [], []
 
     definitions: list[ToolDefinition] = []
     file_paths: list[str] = []
 
-    for filename in glob(os.path.join(TOOLS_PATH, "*.json")):
+    json_files = glob(os.path.join(TOOLS_PATH, "*.json"))
+    logger.debug("Found %d tool JSON file(s) in %s: %s", len(json_files), TOOLS_PATH, json_files)
+
+    for filename in json_files:
         file_paths.append(filename)
         with open(filename) as f:
             tool_cfg = json.load(f)
+            logger.debug(
+                "Loaded tool file %s: name=%s, type=%s, has_openApi=%s",
+                filename,
+                tool_cfg.get("name"),
+                tool_cfg.get("spec", {}).get("type"),
+                "openApi" in tool_cfg.get("spec", {}),
+            )
+            # Log the spec keys for debugging tool structure issues
+            spec = tool_cfg.get("spec", {})
+            if "openApi" in spec:
+                open_api = spec["openApi"]
+                logger.debug(
+                    "  openApi config: has_schema_value=%s, has_schema_endpoint=%s, url=%s, headers=%s",
+                    "value" in open_api.get("openApiSchema", {}),
+                    "endpointPath" in open_api.get("openApiSchema", {}),
+                    open_api.get("url"),
+                    list(open_api.get("headers", {}).keys()) if open_api.get("headers") else None,
+                )
             tool_definition = ToolDefinition(
                 name=tool_cfg["name"],
                 spec=AgentToolSpec(**tool_cfg["spec"]),
@@ -144,6 +170,7 @@ def _load_tools_from_files() -> tuple[list[ToolDefinition], list[str]]:
             )
             definitions.append(tool_definition)
 
+    logger.info("Loaded %d tool definition(s) from %s", len(definitions), TOOLS_PATH)
     return definitions, file_paths
 
 
@@ -157,16 +184,13 @@ def load_tools(
     {
         "name": "tool_name",
         "spec": {
-            "type": "http-api",
+            "type": "openapi",
             "description": "Tool description",
-            "inputSchema": {...},
-            "outputSchema": {...},
-            "httpApi": {
+            "openApi": {
                 "url": "https://api.example.com",
-                "method": "GET"
+                "openApiSchema": {"value": {...}}
             }
-        },
-        "metadata": {...}  // optional
+        }
     }
 
     Args:

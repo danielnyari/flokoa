@@ -33,7 +33,12 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Start the managed agent from operator-mounted configuration."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+    logger.info("Log level set to %s", log_level)
 
     # Initialize OpenTelemetry tracing.  For the managed-agent (long-running
     # A2A server) we do NOT restore context from the env var — each incoming
@@ -50,6 +55,7 @@ def main() -> None:
 
     # Try unified config first, then fall back to legacy
     agent_config = load_managed_agent_config()
+    logger.debug("load_managed_agent_config() returned: %s", type(agent_config).__name__ if agent_config else None)
 
     if agent_config is not None and isinstance(agent_config.root, LlmAgentConfig):
         logger.info("Using unified AgentConfig (framework=%s)", agent_config.root.framework.value)

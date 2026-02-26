@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING, Any
 
 from a2a.server.agent_execution import AgentExecutor
@@ -21,6 +22,8 @@ from flokoa.cache import (
     get_global_cache,
 )
 from flokoa.utils import load_instruction, load_model_config, load_tools
+
+logger = logging.getLogger("flokoa." + __name__)
 
 if TYPE_CHECKING:
     from google.adk.agents import BaseAgent
@@ -111,6 +114,11 @@ class FlokoaAgentExecutor(AgentExecutor):
     def _reload_tools(self) -> None:
         """Reload tool definitions from files."""
         self._tool_definitions = load_tools(use_cache=True, cache=self._cache)
+        logger.debug(
+            "_reload_tools(): loaded %d tool definition(s): %s",
+            len(self._tool_definitions),
+            [td.name for td in self._tool_definitions],
+        )
 
     def _reload_model_config(self) -> None:
         """Reload model configuration from file."""
