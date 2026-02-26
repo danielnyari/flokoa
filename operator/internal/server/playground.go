@@ -40,16 +40,27 @@ type playgroundTurn struct {
 	Content string `json:"content"`
 }
 
+// playgroundPart represents a single content part extracted from an A2A response.
+type playgroundPart struct {
+	Type string                 // "text" or "data"
+	Text string                 // populated for type="text"
+	Data map[string]interface{} // populated for type="data"
+	Name string                 // artifact name (optional)
+}
+
 // AG-UI event types emitted as SSE named events.
 type aguiEvent struct {
-	Type      string `json:"type"`
-	RunID     string `json:"runId,omitempty"`
-	ThreadID  string `json:"threadId,omitempty"`
-	MessageID string `json:"messageId,omitempty"`
-	Role      string `json:"role,omitempty"`
-	Delta     string `json:"delta,omitempty"`
-	Message   string `json:"message,omitempty"`
-	Timestamp int64  `json:"timestamp"`
+	Type      string          `json:"type"`
+	RunID     string          `json:"runId,omitempty"`
+	ThreadID  string          `json:"threadId,omitempty"`
+	MessageID string          `json:"messageId,omitempty"`
+	Role      string          `json:"role,omitempty"`
+	Delta     string          `json:"delta,omitempty"`
+	Message   string          `json:"message,omitempty"`
+	DataID    string          `json:"dataId,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Timestamp int64           `json:"timestamp"`
 }
 
 func (h *PlaygroundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +132,7 @@ func (h *PlaygroundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Call the agent via A2A and stream back AG-UI events.
-	text, err := h.callAgent(r.Context(), endpoint, req)
+	parts, err := h.callAgent(r.Context(), endpoint, req)
 	if err != nil {
 		h.log.Error(err, "A2A call failed", "agent", name, "namespace", namespace)
 		h.writeEvent(w, flusher, "RUN_ERROR", aguiEvent{
@@ -133,7 +144,7 @@ func (h *PlaygroundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Emit text message events.
+	// Always emit TEXT_MESSAGE_START to create the assistant message container.
 	h.writeEvent(w, flusher, "TEXT_MESSAGE_START", aguiEvent{
 		Type:      "TEXT_MESSAGE_START",
 		MessageID: messageID,
@@ -141,12 +152,32 @@ func (h *PlaygroundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Timestamp: nowMs(),
 	})
 
-	h.writeEvent(w, flusher, "TEXT_MESSAGE_CONTENT", aguiEvent{
-		Type:      "TEXT_MESSAGE_CONTENT",
-		MessageID: messageID,
-		Delta:     text,
-		Timestamp: nowMs(),
-	})
+	// Emit events for each part.
+	for _, pp := range parts {
+		switch pp.Type {
+		case "text":
+			h.writeEvent(w, flusher, "TEXT_MESSAGE_CONTENT", aguiEvent{
+				Type:      "TEXT_MESSAGE_CONTENT",
+				MessageID: messageID,
+				Delta:     pp.Text,
+				Timestamp: nowMs(),
+			})
+		case "data":
+			raw, err := json.Marshal(pp.Data)
+			if err != nil {
+				h.log.Error(err, "Failed to marshal data part")
+				continue
+			}
+			h.writeEvent(w, flusher, "DATA_PART", aguiEvent{
+				Type:      "DATA_PART",
+				MessageID: messageID,
+				DataID:    newUUID(),
+				Data:      raw,
+				Name:      pp.Name,
+				Timestamp: nowMs(),
+			})
+		}
+	}
 
 	h.writeEvent(w, flusher, "TEXT_MESSAGE_END", aguiEvent{
 		Type:      "TEXT_MESSAGE_END",
@@ -162,8 +193,8 @@ func (h *PlaygroundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// callAgent sends a message to an A2A agent and returns the response text.
-func (h *PlaygroundHandler) callAgent(ctx context.Context, endpoint string, req playgroundRequest) (string, error) {
+// callAgent sends a message to an A2A agent and returns structured response parts.
+func (h *PlaygroundHandler) callAgent(ctx context.Context, endpoint string, req playgroundRequest) ([]playgroundPart, error) {
 	ctx, cancel := context.WithTimeout(ctx, playgroundTimeout)
 	defer cancel()
 
@@ -201,51 +232,51 @@ func (h *PlaygroundHandler) callAgent(ctx context.Context, endpoint string, req 
 	}
 
 	if sendErr != nil {
-		return "", fmt.Errorf("failed to send A2A message: %w", sendErr)
+		return nil, fmt.Errorf("failed to send A2A message: %w", sendErr)
 	}
 
 	// Extract result from the A2A response.
 	switch r := result.(type) {
 	case *a2a.Task:
 		if r == nil {
-			return "", fmt.Errorf("received nil task from agent")
+			return nil, fmt.Errorf("received nil task from agent")
 		}
 		if r.Status.State.Terminal() {
-			return extractPlaygroundText(r), nil
+			return extractPartsFromTask(r), nil
 		}
 		// Task is still running — poll for completion.
 		return h.pollTask(ctx, usedEndpoint, r.ID)
 
 	case *a2a.Message:
 		if r == nil {
-			return "", fmt.Errorf("received nil message from agent")
+			return nil, fmt.Errorf("received nil message from agent")
 		}
-		text := extractTextFromContentParts(r.Parts)
-		if text != "" {
-			return text, nil
+		parts := extractParts(r.Parts, "")
+		if len(parts) > 0 {
+			return parts, nil
 		}
 		// If we got a message back with a task ID, poll it.
 		if r.TaskID != "" {
 			return h.pollTask(ctx, usedEndpoint, r.TaskID)
 		}
-		return "", fmt.Errorf("received empty response from agent")
+		return nil, fmt.Errorf("received empty response from agent")
 
 	default:
-		return "", fmt.Errorf("unexpected A2A response type: %T", result)
+		return nil, fmt.Errorf("unexpected A2A response type: %T", result)
 	}
 }
 
 // pollTask polls an A2A task until it reaches a terminal state.
-func (h *PlaygroundHandler) pollTask(ctx context.Context, endpoint string, taskID a2a.TaskID) (string, error) {
+func (h *PlaygroundHandler) pollTask(ctx context.Context, endpoint string, taskID a2a.TaskID) ([]playgroundPart, error) {
 	a2aClient, err := createA2AClient(ctx, endpoint)
 	if err != nil {
-		return "", fmt.Errorf("failed to create A2A client for polling: %w", err)
+		return nil, fmt.Errorf("failed to create A2A client for polling: %w", err)
 	}
 
 	for i := 0; i < playgroundMaxPolls; i++ {
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(playgroundPollInterval):
 		}
 
@@ -256,50 +287,58 @@ func (h *PlaygroundHandler) pollTask(ctx context.Context, endpoint string, taskI
 		}
 
 		if task.Status.State.Terminal() {
-			return extractPlaygroundText(task), nil
+			return extractPartsFromTask(task), nil
 		}
 	}
 
-	return "", fmt.Errorf("A2A task timed out after polling")
+	return nil, fmt.Errorf("A2A task timed out after polling")
 }
 
-// extractPlaygroundText gets the response text from a completed A2A task.
-func extractPlaygroundText(task *a2a.Task) string {
+// extractPartsFromTask extracts structured parts from a completed A2A task.
+// Uses the same fallback priority as before: Status.Message → last agent History → Artifacts.
+func extractPartsFromTask(task *a2a.Task) []playgroundPart {
 	if task == nil {
-		return ""
+		return nil
 	}
 	// Try status message first.
 	if task.Status.Message != nil {
-		if text := extractTextFromContentParts(task.Status.Message.Parts); text != "" {
-			return text
+		if parts := extractParts(task.Status.Message.Parts, ""); len(parts) > 0 {
+			return parts
 		}
 	}
 	// Try last agent message in history.
 	for i := len(task.History) - 1; i >= 0; i-- {
 		if task.History[i].Role == a2a.MessageRoleAgent {
-			if text := extractTextFromContentParts(task.History[i].Parts); text != "" {
-				return text
+			if parts := extractParts(task.History[i].Parts, ""); len(parts) > 0 {
+				return parts
 			}
 		}
 	}
-	// Try artifacts.
+	// Try artifacts — pass through artifact name.
 	for _, artifact := range task.Artifacts {
-		if text := extractTextFromContentParts(artifact.Parts); text != "" {
-			return text
+		if parts := extractParts(artifact.Parts, artifact.Name); len(parts) > 0 {
+			return parts
 		}
 	}
-	return ""
+	return nil
 }
 
-// extractTextFromContentParts extracts text from A2A content parts.
-func extractTextFromContentParts(parts a2a.ContentParts) string {
-	var texts []string
+// extractParts extracts structured parts from A2A content, preserving part types.
+func extractParts(parts a2a.ContentParts, artifactName string) []playgroundPart {
+	var result []playgroundPart
 	for _, part := range parts {
-		if tp, ok := part.(a2a.TextPart); ok {
-			texts = append(texts, tp.Text)
+		switch p := part.(type) {
+		case a2a.TextPart:
+			if p.Text != "" {
+				result = append(result, playgroundPart{Type: "text", Text: p.Text})
+			}
+		case a2a.DataPart:
+			if len(p.Data) > 0 {
+				result = append(result, playgroundPart{Type: "data", Data: p.Data, Name: artifactName})
+			}
 		}
 	}
-	return strings.Join(texts, "\n")
+	return result
 }
 
 // createA2AClient creates an A2A client for the given endpoint.

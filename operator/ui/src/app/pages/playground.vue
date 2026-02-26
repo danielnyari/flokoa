@@ -1,24 +1,26 @@
 <script setup lang="ts">
 import type { Agent } from '~/types'
+import { isAgentPhase } from '~/utils/enums'
 
 definePageMeta({ layout: 'default' })
 
-const { current: namespace } = useNamespace()
-const { listAgents } = useFlokoa()
-const { data: agentList } = listAgents()
+const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
+const { items: agents } = useListWatch<Agent>({
+  listUrl: () => namespacedPath('agents'),
+  watchUrl: () => buildWatchUrl('agents')
+})
 const { messages, status, error, send, clear, stop } = useAgChat()
 
 const selectedAgent = ref<string | undefined>(undefined)
 const input = ref('')
 
-const agents = computed(() => agentList.value?.items ?? [])
 const currentAgent = computed<Agent | undefined>(() =>
   agents.value.find(a => a.metadata.name === selectedAgent.value)
 )
 
 const agentItems = computed(() =>
   agents.value
-    .filter(a => a.status?.phase === 'Running')
+    .filter(a => isAgentPhase(a.status?.phase, 'Running'))
     .map(a => ({
       label: a.metadata.name,
       value: a.metadata.name,
@@ -26,18 +28,21 @@ const agentItems = computed(() =>
     }))
 )
 
-// Map composable status to UChatMessages expected status prop.
-const chatStatus = computed(() => {
-  if (status.value === 'streaming') return 'streaming'
-  if (status.value === 'error') return 'error'
-  return 'ready'
+// Whether the last assistant message has any visible content yet.
+const lastMessageHasContent = computed(() => {
+  const lastMsg = messages.value[messages.value.length - 1]
+  if (!lastMsg) return false
+  return lastMsg.parts.some(p =>
+    (p.type === 'text' && p.text) || p.type === 'data-artifact'
+  )
 })
 
 async function handleSend() {
-  if (!input.value.trim() || !selectedAgent.value || !namespace.value || status.value === 'streaming') return
+  const ns = currentAgent.value?.metadata.namespace
+  if (!input.value.trim() || !selectedAgent.value || !ns || status.value === 'streaming') return
   const msg = input.value
   input.value = ''
-  await send(namespace.value, selectedAgent.value, msg)
+  await send(ns, selectedAgent.value, msg)
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -45,6 +50,10 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault()
     handleSend()
   }
+}
+
+function formatData(data: unknown): string {
+  return typeof data === 'string' ? data : JSON.stringify(data, null, 2)
 }
 
 // Clear conversation when agent changes.
@@ -144,10 +153,28 @@ watch(selectedAgent, () => {
               :variant="msg.role === 'user' ? 'soft' : 'naked'"
               :side="msg.role === 'user' ? 'right' : 'left'"
               :icon="msg.role === 'assistant' ? 'i-lucide-bot' : undefined"
-            />
+            >
+              <template #content>
+                <template v-for="(part, index) in msg.parts" :key="`${msg.id}-${part.type}-${index}`">
+                  <p v-if="part.type === 'text' && part.text" class="whitespace-pre-wrap">
+                    {{ part.text }}
+                  </p>
+                  <div
+                    v-else-if="part.type === 'data-artifact'"
+                    class="rounded-lg border border-default bg-elevated/50 p-3 my-2"
+                  >
+                    <div class="flex items-center gap-2 text-xs text-muted mb-2">
+                      <UIcon name="i-lucide-box" class="size-3.5" />
+                      <span class="font-medium">{{ part.name || 'Data' }}</span>
+                    </div>
+                    <pre class="text-xs overflow-x-auto whitespace-pre-wrap break-all">{{ formatData(part.data) }}</pre>
+                  </div>
+                </template>
+              </template>
+            </UChatMessage>
 
             <div
-              v-if="status === 'streaming' && messages.length > 0 && messages[messages.length - 1]?.parts[0]?.text === ''"
+              v-if="status === 'streaming' && messages.length > 0 && !lastMessageHasContent"
               class="flex items-center gap-2 text-sm text-muted"
             >
               <UIcon name="i-lucide-loader" class="size-4 animate-spin" />

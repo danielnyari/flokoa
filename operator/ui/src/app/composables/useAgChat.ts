@@ -1,7 +1,7 @@
 /**
  * AG-UI event types emitted by the playground SSE endpoint.
  */
-type AGUIEventType = 'RUN_STARTED' | 'TEXT_MESSAGE_START' | 'TEXT_MESSAGE_CONTENT' | 'TEXT_MESSAGE_END' | 'RUN_FINISHED' | 'RUN_ERROR'
+type AGUIEventType = 'RUN_STARTED' | 'TEXT_MESSAGE_START' | 'TEXT_MESSAGE_CONTENT' | 'TEXT_MESSAGE_END' | 'RUN_FINISHED' | 'RUN_ERROR' | 'DATA_PART'
 
 interface AGUIEvent {
   type: AGUIEventType
@@ -11,8 +11,18 @@ interface AGUIEvent {
   role?: string
   delta?: string
   message?: string
+  dataId?: string
+  data?: unknown
+  name?: string
   timestamp: number
 }
+
+/**
+ * AI SDK v5 compatible part types for UChatMessage.
+ */
+export type AgTextPart = { type: 'text'; text: string }
+export type AgDataPart = { type: 'data-artifact'; id: string; data: unknown; name?: string }
+export type AgMessagePart = AgTextPart | AgDataPart
 
 /**
  * Message format compatible with Nuxt UI's UChatMessage `parts` prop.
@@ -20,7 +30,7 @@ interface AGUIEvent {
 export interface AgMessage {
   id: string
   role: 'user' | 'assistant'
-  parts: Array<{ type: 'text'; id: string; text: string }>
+  parts: AgMessagePart[]
 }
 
 type ChatStatus = 'idle' | 'streaming' | 'error'
@@ -57,7 +67,7 @@ export function useAgChat() {
     messages.value = [...messages.value, {
       id: userMsgId,
       role: 'user',
-      parts: [{ type: 'text' as const, id: crypto.randomUUID(), text: message }]
+      parts: [{ type: 'text' as const, text: message }]
     }]
 
     // Build history from previous messages (excluding the one we just added).
@@ -65,7 +75,7 @@ export function useAgChat() {
       .filter(m => m.id !== userMsgId)
       .map(m => ({
         role: m.role,
-        content: m.parts.filter(p => p.type === 'text').map(p => p.text).join('')
+        content: m.parts.filter((p): p is AgTextPart => p.type === 'text').map(p => p.text).join('')
       }))
 
     status.value = 'streaming'
@@ -73,29 +83,19 @@ export function useAgChat() {
     abortController = new AbortController()
 
     try {
-      const response = await fetch(
+      const stream = await $fetch<ReadableStream>(
         `/api/v1alpha1/namespaces/${encodeURIComponent(namespace)}/agents/${encodeURIComponent(agentName)}/playground`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders()
-          },
-          body: JSON.stringify({ message, history }),
+          headers: authHeaders(),
+          body: { message, history },
+          responseType: 'stream',
           signal: abortController.signal
         }
       )
 
-      if (!response.ok) {
-        const text = await response.text()
-        throw new Error(text || `HTTP ${response.status}`)
-      }
-
-      if (!response.body) {
-        throw new Error('No response body')
-      }
-
-      await readSSEStream(response.body)
+      const reader = stream.pipeThrough(new TextDecoderStream()).getReader()
+      await readSSEStream(reader)
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
         status.value = 'idle'
@@ -111,9 +111,7 @@ export function useAgChat() {
   /**
    * Read and process the SSE stream from the response body.
    */
-  async function readSSEStream(body: ReadableStream<Uint8Array>) {
-    const reader = body.getReader()
-    const decoder = new TextDecoder()
+  async function readSSEStream(reader: ReadableStreamDefaultReader<string>) {
     let buffer = ''
 
     try {
@@ -121,7 +119,7 @@ export function useAgChat() {
         const { done, value } = await reader.read()
         if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
+        buffer += value
         const { events, remaining } = parseSSEEvents(buffer)
         buffer = remaining
 
@@ -160,7 +158,7 @@ export function useAgChat() {
         messages.value = [...messages.value, {
           id: msgId,
           role: 'assistant',
-          parts: [{ type: 'text' as const, id: crypto.randomUUID(), text: '' }]
+          parts: [{ type: 'text' as const, text: '' }]
         }]
         break
       }
@@ -174,10 +172,29 @@ export function useAgChat() {
         const updated: AgMessage[] = messages.value.map(m => ({ ...m, parts: [...m.parts] }))
         const msg = updated[idx]
         if (!msg) break
-        const textPart = msg.parts.find(p => p.type === 'text')
+        const textPart = msg.parts.find((p): p is AgTextPart => p.type === 'text')
         if (textPart) {
           textPart.text += event.delta
         }
+        messages.value = updated
+        break
+      }
+
+      case 'DATA_PART': {
+        if (!event.messageId || !event.data) break
+        const idx = messages.value.findIndex(m => m.id === event.messageId)
+        if (idx === -1) break
+
+        // Clone to trigger reactivity.
+        const updated: AgMessage[] = messages.value.map(m => ({ ...m, parts: [...m.parts] }))
+        const msg = updated[idx]
+        if (!msg) break
+        msg.parts.push({
+          type: 'data-artifact',
+          id: event.dataId || crypto.randomUUID(),
+          data: event.data,
+          name: event.name
+        })
         messages.value = updated
         break
       }
