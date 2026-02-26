@@ -374,10 +374,10 @@ const providerBreakdown = computed(() => {
               </div>
               <div class="flex items-center gap-3">
                 <UBadge
-                  :color="wf.status?.ready ? 'success' : 'warning'"
+                  :color="wf.status?.ready === true ? 'success' : wf.status?.ready === false ? 'error' : 'neutral'"
                   variant="subtle"
                 >
-                  {{ wf.status?.ready ? 'Ready' : 'Not Ready' }}
+                  {{ wf.status?.ready === true ? 'Ready' : wf.status?.ready === false ? 'Not Ready' : 'Unknown' }}
                 </UBadge>
                 <span v-if="normaliseTimestamp(wf.metadata.creationTimestamp)" class="text-xs text-muted">
                   {{ useTimeAgo(normaliseTimestamp(wf.metadata.creationTimestamp)!).value }}
