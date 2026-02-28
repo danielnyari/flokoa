@@ -1256,6 +1256,30 @@ class TestOpenAPIToolsetFromToolDefinition:
         config = toolset._configs[0]
         assert config.endpoint.base_url == "https://override.example.com"
 
+    def test_url_preserves_relative_server_base_path(self):
+        """When the spec has a relative server URL (e.g. /api), the CRD URL
+        should be merged with it so the base path is not lost."""
+        spec = {
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0"},
+            "servers": [{"url": "/api"}],
+            "paths": {
+                "/items/{itemId}": {
+                    "get": {
+                        "operationId": "getItem",
+                        "parameters": [
+                            {"name": "itemId", "in": "path", "required": True, "schema": {"type": "integer"}}
+                        ],
+                        "responses": {"200": {"description": "OK"}},
+                    }
+                }
+            },
+        }
+        td = self._make_tool_definition(url="http://tool-service:8080", spec_dict=spec)
+        toolset = OpenAPIToolset.from_tool_definition(td)
+        config = toolset._configs[0]
+        assert config.endpoint.base_url == "http://tool-service:8080/api"
+
     def test_headers_applied_to_configs(self):
         td = self._make_tool_definition(headers={"X-Custom": "value123"})
         toolset = OpenAPIToolset.from_tool_definition(td)

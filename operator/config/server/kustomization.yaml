@@ -10,4 +10,4 @@ resources:
 images:
 - name: server
   newName: ghcr.io/danielnyari/flokoa-server
-  newTag: 0.0.20
+  newTag: 0.0.23

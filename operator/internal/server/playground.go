@@ -143,6 +143,15 @@ func (h *PlaygroundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if len(parts) == 0 {
+		h.writeEvent(w, flusher, "RUN_ERROR", aguiEvent{
+			Type:      "RUN_ERROR",
+			RunID:     runID,
+			Message:   "Agent returned no response",
+			Timestamp: nowMs(),
+		})
+		return
+	}
 
 	// Always emit TEXT_MESSAGE_START to create the assistant message container.
 	h.writeEvent(w, flusher, "TEXT_MESSAGE_START", aguiEvent{
@@ -287,6 +296,19 @@ func (h *PlaygroundHandler) pollTask(ctx context.Context, endpoint string, taskI
 		}
 
 		if task.Status.State.Terminal() {
+			// If task failed, return an error with the status message.
+			if task.Status.State == a2a.TaskStateFailed {
+				msg := "Agent task failed"
+				if task.Status.Message != nil {
+					for _, p := range task.Status.Message.Parts {
+						if tp, ok := p.(a2a.TextPart); ok && tp.Text != "" {
+							msg = tp.Text
+							break
+						}
+					}
+				}
+				return nil, fmt.Errorf("%s", msg)
+			}
 			return extractPartsFromTask(task), nil
 		}
 	}
