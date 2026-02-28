@@ -164,7 +164,7 @@ export function useAgChat() {
       }
 
       case 'TEXT_MESSAGE_CONTENT': {
-        if (!event.messageId || !event.delta) break
+        if (!event.messageId || event.delta == null) break
         const idx = messages.value.findIndex(m => m.id === event.messageId)
         if (idx === -1) break
 

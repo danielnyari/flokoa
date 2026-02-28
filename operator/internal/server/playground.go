@@ -91,7 +91,7 @@ func (h *PlaygroundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	key := client.ObjectKey{Namespace: namespace, Name: name}
 	if err := h.client.Get(r.Context(), key, &agent); err != nil {
 		h.log.Error(err, "Failed to get agent", "namespace", namespace, "name", name)
-		http.Error(w, fmt.Sprintf("agent not found: %v", err), http.StatusNotFound)
+		http.Error(w, "agent not found", http.StatusNotFound)
 		return
 	}
 
