@@ -463,31 +463,4 @@ var _ = Describe("Error Path Tests", func() {
 		})
 	})
 
-	Context("AgentWorkflow controller error paths", func() {
-		var (
-			ctx          context.Context
-			workflowName string
-			workflowNN   types.NamespacedName
-		)
-
-		BeforeEach(func() {
-			ctx = context.Background()
-			workflowName = fmt.Sprintf("err-wf-%d", time.Now().UnixNano())
-			workflowNN = types.NamespacedName{Name: workflowName, Namespace: namespace}
-		})
-
-		AfterEach(func() {
-			wf := &agentv1alpha1.AgentWorkflow{}
-			if err := k8sClient.Get(ctx, workflowNN, wf); err == nil {
-				_ = k8sClient.Delete(ctx, wf)
-			}
-		})
-
-		It("should handle reconcile of non-existent workflow gracefully", func() {
-			By("Reconciling a non-existent AgentWorkflow")
-			r := &AgentWorkflowReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: workflowNN})
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
 })

@@ -19,21 +19,12 @@ package utils
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive,staticcheck
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -43,11 +34,6 @@ const (
 
 	certmanagerVersion = "v1.16.3"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
-
-	argoWorkflowsVersion    = "3.7.9"
-	argoWorkflowsQuickStart = "https://github.com/argoproj/argo-workflows/releases/download/v%s/quick-start-minimal.yaml"
-
-	argoNamespace = "argo"
 )
 
 func warnError(err error) {
@@ -213,201 +199,6 @@ func GetProjectDir() (string, error) {
 	}
 	wd = strings.ReplaceAll(wd, "/test/e2e", "")
 	return wd, nil
-}
-
-// InstallArgoWorkflows installs Argo Workflows with executor plugins enabled
-func InstallArgoWorkflows(ctx context.Context, k8sClient client.Client, managedNamespaces ...string) error {
-	// Create argo namespace using client-go
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: argoNamespace,
-		},
-	}
-	if err := k8sClient.Create(ctx, ns); err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create argo namespace: %w", err)
-	}
-
-	// Apply quick-start-minimal.yaml - this still uses kubectl as it's a remote URL
-	// and requires multi-document YAML parsing that's complex to do with client-go
-	url := fmt.Sprintf(argoWorkflowsQuickStart, argoWorkflowsVersion)
-	cmd := exec.Command("kubectl", "apply", "-n", argoNamespace, "-f", url)
-	if _, err := Run(cmd); err != nil {
-		return fmt.Errorf("failed to apply Argo Workflows manifests: %w", err)
-	}
-
-	// Patch workflow-controller deployment to enable executor plugins
-	// and optionally configure additional managed namespaces.
-	// Use retry to handle optimistic concurrency conflicts.
-	patchErr := wait.PollUntilContextTimeout(
-		ctx, time.Second, 30*time.Second, true,
-		func(ctx context.Context) (bool, error) {
-			deploy := &appsv1.Deployment{}
-			nn := types.NamespacedName{Name: "workflow-controller", Namespace: argoNamespace}
-			if err := k8sClient.Get(ctx, nn, deploy); err != nil {
-				return false, fmt.Errorf("failed to get workflow-controller deployment: %w", err)
-			}
-
-			container := &deploy.Spec.Template.Spec.Containers[0]
-
-			// Add ARGO_EXECUTOR_PLUGINS env var
-			envExists := false
-			for i, env := range container.Env {
-				if env.Name == "ARGO_EXECUTOR_PLUGINS" {
-					container.Env[i].Value = "true"
-					envExists = true
-					break
-				}
-			}
-			if !envExists {
-				container.Env = append(container.Env, corev1.EnvVar{
-					Name:  "ARGO_EXECUTOR_PLUGINS",
-					Value: "true",
-				})
-			}
-
-			// If additional namespaces are specified, remove --namespaced flag
-			// and add --managed-namespace for each namespace so the controller
-			// watches workflows outside the argo namespace.
-			if len(managedNamespaces) > 0 {
-				var filteredArgs []string
-				for _, arg := range container.Args {
-					if arg != "--namespaced" {
-						filteredArgs = append(filteredArgs, arg)
-					}
-				}
-				// Always include the argo namespace since we removed --namespaced
-				filteredArgs = append(filteredArgs, fmt.Sprintf("--managed-namespace=%s", argoNamespace))
-				for _, managedNs := range managedNamespaces {
-					filteredArgs = append(filteredArgs, fmt.Sprintf("--managed-namespace=%s", managedNs))
-				}
-				container.Args = filteredArgs
-			}
-
-			if err := k8sClient.Update(ctx, deploy); err != nil {
-				if apierrors.IsConflict(err) {
-					return false, nil // retry on conflict
-				}
-				return false, fmt.Errorf("failed to update workflow-controller deployment: %w", err)
-			}
-			return true, nil
-		})
-	if patchErr != nil {
-		return fmt.Errorf("failed to patch workflow-controller: %w", patchErr)
-	}
-
-	// Wait for workflow-controller to be ready (5 minutes to allow for image pulls)
-	err := wait.PollUntilContextTimeout(
-		ctx, 2*time.Second, 5*time.Minute, true,
-		func(ctx context.Context) (bool, error) {
-			d := &appsv1.Deployment{}
-			nn := types.NamespacedName{
-				Name: "workflow-controller", Namespace: argoNamespace,
-			}
-			if err := k8sClient.Get(ctx, nn, d); err != nil {
-				return false, nil
-			}
-			if d.Spec.Replicas == nil {
-				return false, nil
-			}
-			return d.Status.ReadyReplicas == *d.Spec.Replicas && d.Status.UpdatedReplicas == *d.Spec.Replicas, nil
-		})
-	if err != nil {
-		return fmt.Errorf("workflow-controller not ready: %w", err)
-	}
-
-	return nil
-}
-
-// UninstallArgoWorkflows uninstalls Argo Workflows
-func UninstallArgoWorkflows(ctx context.Context, k8sClient client.Client) {
-	// Delete using kubectl since the manifests are from a URL
-	url := fmt.Sprintf(argoWorkflowsQuickStart, argoWorkflowsVersion)
-	cmd := exec.Command("kubectl", "delete", "-n", argoNamespace, "-f", url, "--ignore-not-found=true")
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
-	}
-
-	// Delete namespace using client-go
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: argoNamespace,
-		},
-	}
-	if err := k8sClient.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
-		warnError(err)
-	}
-}
-
-// IsArgoWorkflowsInstalled checks if Argo Workflows is installed
-func IsArgoWorkflowsInstalled(ctx context.Context, k8sClient client.Client) bool {
-	deploy := &appsv1.Deployment{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Name: "workflow-controller", Namespace: argoNamespace}, deploy)
-	return err == nil
-}
-
-// InstallA2AExecutorPlugin installs the A2A executor plugin to Argo using client-go
-func InstallA2AExecutorPlugin(ctx context.Context, k8sClient client.Client, pluginImage string) error {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "a2a-executor-plugin",
-			Namespace: argoNamespace,
-			Labels: map[string]string{
-				"workflows.argoproj.io/configmap-type": "ExecutorPlugin",
-			},
-		},
-		Data: map[string]string{
-			"sidecar.automountServiceAccountToken": "true",
-			"sidecar.container": fmt.Sprintf(`command:
-- /a2a-plugin
-image: %s
-name: a2a-executor-plugin
-ports:
-- containerPort: 4355
-  protocol: TCP
-resources:
-  limits:
-    cpu: 500m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 64Mi
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 65532
-`, pluginImage),
-		},
-	}
-
-	// Try to create, if exists update
-	err := k8sClient.Create(ctx, cm)
-	if apierrors.IsAlreadyExists(err) {
-		existing := &corev1.ConfigMap{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, existing); err != nil {
-			return err
-		}
-		existing.Data = cm.Data
-		existing.Labels = cm.Labels
-		return k8sClient.Update(ctx, existing)
-	}
-	return err
-}
-
-// UninstallA2AExecutorPlugin uninstalls the A2A executor plugin from Argo
-func UninstallA2AExecutorPlugin(ctx context.Context, k8sClient client.Client) {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "a2a-executor-plugin",
-			Namespace: argoNamespace,
-		},
-	}
-	if err := k8sClient.Delete(ctx, cm); err != nil && !apierrors.IsNotFound(err) {
-		warnError(err)
-	}
 }
 
 // UncommentCode searches for target in the file and remove the comment prefix

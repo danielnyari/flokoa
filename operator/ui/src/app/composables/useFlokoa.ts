@@ -1,4 +1,4 @@
-import type { AgentList, ModelList, ModelProviderList, AgentToolList, AgentWorkflowList, AgentWorkflow, WorkflowRunList, WorkflowRun } from '~/types'
+import type { AgentList, ModelList, ModelProviderList, AgentToolList } from '~/types'
 
 const API_BASE = '/api/v1alpha1'
 
@@ -70,48 +70,6 @@ export function useFlokoa() {
     })
   }
 
-  function listAgentWorkflows(namespace?: string) {
-    const path = computed(() => namespacedPath('agentworkflows', namespace))
-    return useFetch<AgentWorkflowList>(path, {
-      lazy: true,
-      headers: computed(() => authHeaders()),
-      onResponseError
-    })
-  }
-
-  function getAgentWorkflow(namespace: string, name: string) {
-    return useFetch<AgentWorkflow>(`${API_BASE}/namespaces/${namespace}/agentworkflows/${name}`, {
-      lazy: true,
-      headers: computed(() => authHeaders()),
-      onResponseError
-    })
-  }
-
-  function listWorkflowRuns(namespace: string, workflowName: string) {
-    return useFetch<WorkflowRunList>(`${API_BASE}/namespaces/${namespace}/agentworkflows/${workflowName}/runs`, {
-      lazy: true,
-      headers: computed(() => authHeaders()),
-      onResponseError
-    })
-  }
-
-  function getWorkflowRun(namespace: string, workflowName: string, runName: string) {
-    return useFetch<WorkflowRun>(`${API_BASE}/namespaces/${namespace}/agentworkflows/${workflowName}/runs/${runName}`, {
-      lazy: true,
-      headers: computed(() => authHeaders()),
-      onResponseError
-    })
-  }
-
-  function submitWorkflowRun(namespace: string, workflowName: string, parameters?: Record<string, string>) {
-    return $fetch<WorkflowRun>(`${API_BASE}/namespaces/${namespace}/agentworkflows/${workflowName}/runs`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: parameters ? { parameters } : {},
-      onResponseError
-    })
-  }
-
   // Watch URL builders for useListWatch composable.
   // These return URL strings for the SSE watch endpoints.
 
@@ -122,23 +80,13 @@ export function useFlokoa() {
       : `${API_BASE}/watch/${resource}`
   }
 
-  function watchWorkflowRunsUrl(namespace: string, workflowName: string): string {
-    return `${API_BASE}/watch/namespaces/${namespace}/agentworkflows/${workflowName}/runs`
-  }
-
   return {
     listAgents,
     listModels,
     listModelProviders,
     listAgentTools,
-    listAgentWorkflows,
-    getAgentWorkflow,
-    listWorkflowRuns,
-    getWorkflowRun,
-    submitWorkflowRun,
     // URL builders for list-watch pattern
     namespacedPath,
-    watchUrl,
-    watchWorkflowRunsUrl
+    watchUrl
   }
 }

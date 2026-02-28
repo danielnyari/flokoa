@@ -109,9 +109,6 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = SetupAgentWorkflowWebhookWithManager(mgr)
-	Expect(err).NotTo(HaveOccurred())
-
 	// +kubebuilder:scaffold:webhook
 
 	go func() {

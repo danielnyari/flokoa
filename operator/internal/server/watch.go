@@ -11,8 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/internal/converter"
 )
@@ -168,68 +166,6 @@ func watchAgentToolsHandler(watchClient client.WithWatch, log logr.Logger) http.
 	}
 }
 
-// watchAgentWorkflowsHandler creates an HTTP handler that streams AgentWorkflow watch events as SSE.
-func watchAgentWorkflowsHandler(watchClient client.WithWatch, log logr.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		namespace := r.PathValue("namespace")
-
-		opts := []client.ListOption{}
-		if namespace != "" {
-			opts = append(opts, client.InNamespace(namespace))
-		}
-
-		var list agentv1alpha1.AgentWorkflowList
-		watcher, err := watchClient.Watch(r.Context(), &list, opts...)
-		if err != nil {
-			log.Error(err, "Failed to start agent workflow watch")
-			http.Error(w, "failed to start watch", http.StatusInternalServerError)
-			return
-		}
-		defer watcher.Stop()
-
-		streamSSE(w, r, watcher, log, func(obj client.Object) interface{} {
-			if awf, ok := obj.(*agentv1alpha1.AgentWorkflow); ok {
-				return converter.AgentWorkflowToProto(awf)
-			}
-			return nil
-		})
-	}
-}
-
-// watchWorkflowRunsHandler creates an HTTP handler that streams Argo Workflow (run) watch events as SSE.
-func watchWorkflowRunsHandler(watchClient client.WithWatch, log logr.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		namespace := r.PathValue("namespace")
-		workflowName := r.PathValue("workflowName")
-
-		opts := []client.ListOption{}
-		if namespace != "" {
-			opts = append(opts, client.InNamespace(namespace))
-		}
-		if workflowName != "" {
-			opts = append(opts, client.MatchingLabels{
-				"agent.flokoa.ai/agentworkflow-name": workflowName,
-			})
-		}
-
-		var list wfv1.WorkflowList
-		watcher, err := watchClient.Watch(r.Context(), &list, opts...)
-		if err != nil {
-			log.Error(err, "Failed to start workflow run watch")
-			http.Error(w, "failed to start watch", http.StatusInternalServerError)
-			return
-		}
-		defer watcher.Stop()
-
-		streamSSE(w, r, watcher, log, func(obj client.Object) interface{} {
-			if wf, ok := obj.(*wfv1.Workflow); ok {
-				return converter.ArgoWorkflowToRunProto(wf, true)
-			}
-			return nil
-		})
-	}
-}
-
 // sseMarshaler uses protojson to produce camelCase JSON consistent with grpc-gateway.
 // EmitUnpopulated ensures proto3 zero values (0, "", false) are included
 // so the UI always receives a consistent schema.
@@ -339,13 +275,6 @@ func registerWatchRoutes(mux *http.ServeMux, watchClient client.WithWatch, log l
 	// AgentTool watches
 	mux.Handle("GET /api/v1alpha1/watch/agenttools", authFn(watchAgentToolsHandler(watchClient, watchLog)))
 	mux.Handle("GET /api/v1alpha1/watch/namespaces/{namespace}/agenttools", authFn(watchAgentToolsHandler(watchClient, watchLog)))
-
-	// AgentWorkflow watches
-	mux.Handle("GET /api/v1alpha1/watch/agentworkflows", authFn(watchAgentWorkflowsHandler(watchClient, watchLog)))
-	mux.Handle("GET /api/v1alpha1/watch/namespaces/{namespace}/agentworkflows", authFn(watchAgentWorkflowsHandler(watchClient, watchLog)))
-
-	// WorkflowRun watches (Argo Workflows)
-	mux.Handle("GET /api/v1alpha1/watch/namespaces/{namespace}/agentworkflows/{workflowName}/runs", authFn(watchWorkflowRunsHandler(watchClient, watchLog)))
 }
 
 // authMiddleware wraps an HTTP handler with Bearer token validation.

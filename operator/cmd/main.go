@@ -27,7 +27,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -44,7 +43,6 @@ import (
 	"github.com/danielnyari/flokoa/internal/controller"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
 	"github.com/danielnyari/flokoa/internal/telemetry"
-	webhookagentv1alpha1 "github.com/danielnyari/flokoa/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -57,7 +55,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(agentv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(wfv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -92,12 +89,6 @@ func main() {
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", false,
 		"Enable admission webhooks. Requires TLS certificates (e.g., from cert-manager).")
 
-	var artifactIOEnabled bool
-	var artifactGCStrategy string
-	flag.BoolVar(&artifactIOEnabled, "artifact-io-enabled", false,
-		"Switch AgentWorkflow task I/O from Argo parameters to artifacts backed by object storage.")
-	flag.StringVar(&artifactGCStrategy, "artifact-gc-strategy", "OnWorkflowCompletion",
-		"Artifact garbage collection strategy when artifact I/O is enabled (e.g., OnWorkflowCompletion, OnWorkflowDeletion).")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -306,21 +297,6 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Instruction")
 			os.Exit(1)
 		}
-		if err := webhookagentv1alpha1.SetupAgentWorkflowWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "AgentWorkflow")
-			os.Exit(1)
-		}
-	}
-	if err := (&controller.AgentWorkflowReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		CompilerOptions: controller.CompilerOptions{
-			ArtifactIOEnabled:  artifactIOEnabled,
-			ArtifactGCStrategy: artifactGCStrategy,
-		},
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AgentWorkflow")
-		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 

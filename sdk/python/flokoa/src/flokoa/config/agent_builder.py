@@ -20,7 +20,7 @@ from typing import Any, ClassVar, final
 
 from flokoa_types import IntegrationType
 
-from flokoa.config.agent_config import BaseAgentConfig, LlmAgentConfig, TaskAgentConfig
+from flokoa.config.agent_config import BaseAgentConfig, LlmAgentConfig
 from flokoa.config.code_ref import resolve_code_ref
 from flokoa.config.tool_config import ToolConfig, ToolRefType
 
@@ -270,50 +270,6 @@ class GoogleADKAgentBuilder(BaseAgentBuilder):
         return LlmAgent(**agent_kwargs)
 
 
-class MarvinTaskBuilder(BaseAgentBuilder):
-    """Builds and executes a Marvin task from :class:`TaskAgentConfig`.
-
-    Unlike LLM builders that return a persistent agent, :meth:`_build`
-    returns a dict of kwargs ready for :func:`marvin.run` / :func:`marvin.classify`
-    / etc.  The actual execution is handled by the executor.
-    """
-
-    config_type: ClassVar[type[BaseAgentConfig]] = TaskAgentConfig
-
-    @classmethod
-    def _parse_config(
-        cls,
-        config: BaseAgentConfig,
-        kwargs: dict[str, Any],
-    ) -> dict[str, Any]:
-        if not isinstance(config, TaskAgentConfig):
-            raise TypeError(f"Expected TaskAgentConfig, got {type(config)}")
-
-        kwargs["task_type"] = config.task_type
-        if config.result_type is not None:
-            kwargs["result_type"] = config.result_type
-        if config.input is not None:
-            kwargs["input"] = config.input
-        if config.labels is not None:
-            kwargs["labels"] = config.labels
-        if config.multi_label is not None:
-            kwargs["multi_label"] = config.multi_label
-        if config.count is not None:
-            kwargs["count"] = config.count
-        if config.context is not None:
-            kwargs["context"] = config.context
-
-        return kwargs
-
-    @classmethod
-    def _build(cls, config: BaseAgentConfig, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Return the kwargs dict for the managed-task executor.
-
-        The executor calls the appropriate ``marvin.*`` function with these kwargs.
-        """
-        return kwargs
-
-
 # ---------------------------------------------------------------------------
 # Builder registry
 # ---------------------------------------------------------------------------
@@ -321,7 +277,6 @@ class MarvinTaskBuilder(BaseAgentBuilder):
 _BUILDER_REGISTRY: dict[tuple[str, str], type[BaseAgentBuilder]] = {
     ("llm", IntegrationType.PYDANTIC_AI): PydanticAIAgentBuilder,
     ("llm", IntegrationType.GOOGLE_ADK): GoogleADKAgentBuilder,
-    ("task", "marvin"): MarvinTaskBuilder,
 }
 
 

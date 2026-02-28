@@ -2,13 +2,12 @@
 
 This package provides:
 
-- :class:`AgentConfig` — discriminated union for all agent config types
+- :class:`AgentConfig` — top-level agent config model
 - :class:`LlmAgentConfig` — config for LLM-backed agents (pydantic-ai, google-adk)
-- :class:`TaskAgentConfig` — config for Marvin task agents
 - :class:`CodeRef` — reference to Python objects by fully-qualified dotted path
 - :class:`ToolConfig` — multi-strategy tool configuration
 - :class:`BaseAgentBuilder` — factory base with ``_parse_config()`` hook
-- Builder implementations for pydantic-ai, google-adk, and Marvin
+- Builder implementations for pydantic-ai and google-adk
 
 Example::
 
@@ -31,7 +30,6 @@ Example::
 from flokoa.config.agent_builder import (
     BaseAgentBuilder,
     GoogleADKAgentBuilder,
-    MarvinTaskBuilder,
     PydanticAIAgentBuilder,
     get_builder,
     register_builder,
@@ -40,7 +38,6 @@ from flokoa.config.agent_config import (
     AgentConfig,
     BaseAgentConfig,
     LlmAgentConfig,
-    TaskAgentConfig,
 )
 from flokoa.config.code_ref import (
     Argument,
@@ -53,7 +50,6 @@ from flokoa.config.loader import (
     load_agent_config,
     load_agent_config_from_dict,
     load_legacy_llm_config,
-    load_legacy_task_config,
 )
 from flokoa.config.tool_config import ToolConfig, ToolRefType
 
@@ -65,16 +61,13 @@ __all__ = [
     "CodeRef",
     "GoogleADKAgentBuilder",
     "LlmAgentConfig",
-    "MarvinTaskBuilder",
     "PydanticAIAgentBuilder",
-    "TaskAgentConfig",
     "ToolConfig",
     "ToolRefType",
     "get_builder",
     "load_agent_config",
     "load_agent_config_from_dict",
     "load_legacy_llm_config",
-    "load_legacy_task_config",
     "register_builder",
     "resolve_callbacks",
     "resolve_code_ref",

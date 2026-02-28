@@ -10,6 +10,3 @@ resources:
   - agenttool.yaml
   - tool-service.yaml
   - agent.yaml
-  - argo/rbac.yaml
-  - argo/workflow-template.yaml
-  - argo/agentworkflow.yaml

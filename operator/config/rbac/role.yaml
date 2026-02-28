@@ -30,7 +30,6 @@ rules:
   resources:
   - agents
   - agenttools
-  - agentworkflows
   - instructions
   - modelproviders
   - models
@@ -47,7 +46,6 @@ rules:
   resources:
   - agents/finalizers
   - agenttools/finalizers
-  - agentworkflows/finalizers
   - instructions/finalizers
   - modelproviders/finalizers
   - models/finalizers
@@ -58,7 +56,6 @@ rules:
   resources:
   - agents/status
   - agenttools/status
-  - agentworkflows/status
   - instructions/status
   - modelproviders/status
   - models/status
@@ -70,19 +67,6 @@ rules:
   - apps
   resources:
   - deployments
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - argoproj.io
-  resources:
-  - workflows
-  - workflowtemplates
   verbs:
   - create
   - delete

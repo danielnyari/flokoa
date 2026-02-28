@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -104,8 +103,6 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add core scheme")
 	err = agentv1alpha1.AddToScheme(testScheme)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add agent scheme")
-	err = wfv1.AddToScheme(testScheme)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add Argo Workflows scheme")
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: testScheme})
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create Kubernetes client")
@@ -173,7 +170,6 @@ var _ = BeforeSuite(func() {
 	}
 
 	By("creating test namespace")
-	// Use "baseline" PSS — Argo workflow pods don't comply with "restricted".
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
@@ -208,11 +204,6 @@ var _ = AfterSuite(func() {
 
 	By("cleaning up cluster-scoped resources")
 	deleteClusterRoleBinding(metricsRoleBindingName)
-
-	By("uninstalling Argo Workflows (if installed)")
-	if utils.IsArgoWorkflowsInstalled(ctx, k8sClient) {
-		utils.UninstallArgoWorkflows(ctx, k8sClient)
-	}
 
 	By("undeploying the controller-manager")
 	cmd := exec.Command("make", "undeploy", fmt.Sprintf("DEPLOY_NAMESPACE=%s", namespace))

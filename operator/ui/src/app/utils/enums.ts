@@ -98,58 +98,6 @@ export function frameworkLabel(value?: string | number | null): string | null {
   return frameworkInfo(value)?.label ?? null
 }
 
-// ─── Run Phase (Argo Workflow) ──────────────────────────────────────
-
-const RUN_PHASE_LABELS: Record<string | number, string> = {
-  RUN_PHASE_PENDING: 'Pending',
-  RUN_PHASE_RUNNING: 'Running',
-  RUN_PHASE_SUCCEEDED: 'Succeeded',
-  RUN_PHASE_FAILED: 'Failed',
-  RUN_PHASE_ERROR: 'Error',
-  RUN_PHASE_UNSPECIFIED: 'Unknown',
-  1: 'Pending',
-  2: 'Running',
-  3: 'Succeeded',
-  4: 'Failed',
-  5: 'Error',
-  0: 'Unknown',
-}
-
-const RUN_PHASE_COLORS: Record<string, BadgeColor> = {
-  Running: 'info',
-  Succeeded: 'success',
-  Failed: 'error',
-  Error: 'error',
-  Pending: 'warning',
-  Unknown: 'neutral',
-}
-
-const RUN_PHASE_BORDER_COLORS: Record<string, string> = {
-  Running: 'border-info',
-  Succeeded: 'border-success',
-  Failed: 'border-error',
-  Error: 'border-error',
-  Pending: 'border-default',
-  Unknown: 'border-default',
-}
-
-export function runPhaseLabel(value?: string | number | null): string {
-  if (value == null) return 'Unknown'
-  return RUN_PHASE_LABELS[value] ?? 'Unknown'
-}
-
-export function runPhaseColor(value?: string | number | null): BadgeColor {
-  return RUN_PHASE_COLORS[runPhaseLabel(value)] ?? 'neutral'
-}
-
-export function runPhaseBorderColor(value?: string | number | null): string {
-  return RUN_PHASE_BORDER_COLORS[runPhaseLabel(value)] ?? 'border-default'
-}
-
-export function isRunPhase(value: string | number | undefined | null, label: string): boolean {
-  return runPhaseLabel(value) === label
-}
-
 // ─── Runtime Type ───────────────────────────────────────────────────
 
 const RUNTIME_TYPE_LABELS: Record<string | number, string> = {
@@ -166,25 +114,6 @@ const RUNTIME_TYPE_LABELS: Record<string | number, string> = {
 export function runtimeTypeLabel(value?: string | number | null): string | null {
   if (value == null || value === 0 || value === 'RUNTIME_TYPE_UNSPECIFIED') return null
   return RUNTIME_TYPE_LABELS[value] ?? null
-}
-
-// ─── Node Type ──────────────────────────────────────────────────────
-
-const NODE_TYPE_LABELS: Record<string | number, string> = {
-  NODE_TYPE_POD: 'Pod',
-  NODE_TYPE_DAG: 'DAG',
-  NODE_TYPE_PLUGIN: 'Plugin',
-  NODE_TYPE_STEPS: 'Steps',
-  NODE_TYPE_SUSPEND: 'Suspend',
-  NODE_TYPE_TASK_GROUP: 'Task Group',
-  NODE_TYPE_RETRY: 'Retry',
-  NODE_TYPE_SKIPPED: 'Skipped',
-  NODE_TYPE_UNSPECIFIED: 'Unknown',
-}
-
-export function nodeTypeLabel(value?: string | number | null): string {
-  if (value == null) return 'Unknown'
-  return NODE_TYPE_LABELS[value] ?? 'Unknown'
 }
 
 // ─── Timestamp Helpers ─────────────────────────────────────────────

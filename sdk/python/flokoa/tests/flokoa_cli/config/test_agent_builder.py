@@ -5,12 +5,11 @@ from flokoa_types import IntegrationType
 
 from flokoa.config.agent_builder import (
     BaseAgentBuilder,
-    MarvinTaskBuilder,
     PydanticAIAgentBuilder,
     get_builder,
     register_builder,
 )
-from flokoa.config.agent_config import LlmAgentConfig, TaskAgentConfig
+from flokoa.config.agent_config import LlmAgentConfig
 
 
 class TestPydanticAIAgentBuilder:
@@ -44,37 +43,6 @@ class TestPydanticAIAgentBuilder:
 
     def test_config_type(self):
         assert PydanticAIAgentBuilder.config_type is LlmAgentConfig
-
-
-class TestMarvinTaskBuilder:
-    def test_builds_kwargs(self):
-        config = TaskAgentConfig(
-            name="classifier",
-            task_type="classify",
-            labels=["a", "b"],
-            input="test input",
-        )
-        result = MarvinTaskBuilder.from_config(config)
-        assert isinstance(result, dict)
-        assert result["name"] == "classifier"
-        assert result["task_type"].value == "classify"
-        assert result["labels"] == ["a", "b"]
-        assert result["input"] == "test input"
-
-    def test_builds_with_model(self):
-        config = TaskAgentConfig(
-            name="test",
-            task_type="run",
-            model={
-                "provider": {"type": "openai"},
-                "model": "gpt-4o",
-            },
-        )
-        result = MarvinTaskBuilder.from_config(config)
-        assert "model_config" in result
-
-    def test_config_type(self):
-        assert MarvinTaskBuilder.config_type is TaskAgentConfig
 
 
 class TestToolResolution:
@@ -112,10 +80,6 @@ class TestBuilderRegistry:
     def test_get_builder_pydantic_ai(self):
         cls = get_builder("llm", IntegrationType.PYDANTIC_AI)
         assert cls is PydanticAIAgentBuilder
-
-    def test_get_builder_marvin(self):
-        cls = get_builder("task", "marvin")
-        assert cls is MarvinTaskBuilder
 
     def test_get_builder_unknown_raises(self):
         with pytest.raises(KeyError, match="No builder registered"):

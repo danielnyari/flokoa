@@ -56,10 +56,6 @@ IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
 SERVER_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-server
 SERVER_IMG ?= $(SERVER_IMAGE_TAG_BASE):$(VERSION)
 
-# A2A plugin image settings
-A2A_PLUGIN_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-a2a-plugin
-A2A_PLUGIN_IMG ?= $(A2A_PLUGIN_IMAGE_TAG_BASE):$(VERSION)
-
 # Flokoa CLI image settings (Python SDK)
 FLOKOA_CLI_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-cli
 FLOKOA_CLI_IMG ?= $(FLOKOA_CLI_IMAGE_TAG_BASE):$(VERSION)
@@ -188,7 +184,6 @@ endif
 		--from-literal=api-key=$(OPENAI_API_KEY) \
 		--dry-run=client -o yaml | $(KUBECTL) apply -f -
 	$(KUSTOMIZE) build test/e2e/testdata | $(KUBECTL) apply -f -
-	$(ARGO) submit -n $(E2E_NAMESPACE) test/e2e/testdata/argo/workflow.yaml
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -342,83 +337,6 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--output $(PYTHON_MODELS_DIR)/templateconfig.py
 	@rm /tmp/templateConfig_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/templateconfig.py"
-	@# Extract AgentWorkflowSpec schema
-	@echo "Building AgentWorkflowSpec schema..."
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec' \
-		config/crd/bases/agent.flokoa.ai_agentworkflows.yaml > /tmp/agentworkflow_schema.json
-	@# Deduplicate shared schemas using $$defs (retryStrategy appears at both spec and task level)
-	@yq eval -i -o json '.["$$defs"].WorkflowRetryStrategy = .properties.retryStrategy | .["$$defs"].WorkflowRetryStrategy.title = "WorkflowRetryStrategy" | .["$$defs"].WorkflowRetryStrategy.properties.backoff.title = "WorkflowBackoff"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.retryStrategy = {"$$ref": "#/$$defs/WorkflowRetryStrategy"}' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.retryStrategy = {"$$ref": "#/$$defs/WorkflowRetryStrategy"}' /tmp/agentworkflow_schema.json
-	@# Simplify x-kubernetes-int-or-string anyOf patterns to plain strings (K8s quantities)
-	@yq eval -i -o json 'del(.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.resourceFieldRef.properties.divisor.anyOf) | .properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.resourceFieldRef.properties.divisor.type = "string"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json 'del(.properties.tasks.items.properties.agentTask.properties.resources.properties.limits.additionalProperties.anyOf) | .properties.tasks.items.properties.agentTask.properties.resources.properties.limits.additionalProperties.type = "string"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json 'del(.properties.tasks.items.properties.agentTask.properties.resources.properties.requests.additionalProperties.anyOf) | .properties.tasks.items.properties.agentTask.properties.resources.properties.requests.additionalProperties.type = "string"' /tmp/agentworkflow_schema.json
-	@# Add titles to all nested objects for proper Python class naming
-	@yq eval -i -o json '.title = "AgentWorkflowSpec"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.params.items.title = "WorkflowParam"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.title = "WorkflowTask"' /tmp/agentworkflow_schema.json
-	@# Agent call types
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.title = "AgentCall"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.config.title = "MessageSendConfig"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.title = "AgentMessage"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.role.title = "MessageRole"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.title = "MessagePart"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.data.title = "DataPart"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.title = "FilePart"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.properties.file.title = "FileContent"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.text.title = "TextPart"' /tmp/agentworkflow_schema.json
-	@# Agent task types (Marvin)
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.title = "AgentTask"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.type.title = "MarvinTaskType"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.instruction.title = "InstructionEntry"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.instruction.properties.instructionRef.title = "InstructionRef"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.resultType.title = "StructuredIOSchema"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.model.title = "AgentModelRef"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.agent.title = "MarvinAgentSpec"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.agent.properties.model.title = "AgentModelRef"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.title = "ToolEntry"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.properties.toolRef.title = "ToolRef"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.properties.template.title = "AgentToolSpec"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.title = "EnvVar"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.title = "EnvVarSource"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.configMapKeyRef.title = "ConfigMapKeySelector"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.fieldRef.title = "ObjectFieldSelector"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.resourceFieldRef.title = "ResourceFieldSelector"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.env.items.properties.valueFrom.properties.secretKeyRef.title = "SecretKeySelector"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.resources.title = "ResourceRequirements"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.resources.properties.claims.items.title = "ResourceClaim"' /tmp/agentworkflow_schema.json
-	@# Switch type
-	@yq eval -i -o json '.properties.tasks.items.properties.switch.items.title = "SwitchCase"' /tmp/agentworkflow_schema.json
-	@# Generate AgentWorkflowSpec Pydantic v2 models
-	@$(DATAMODEL_CODEGEN) \
-		--input /tmp/agentworkflow_schema.json \
-		--input-file-type jsonschema \
-		--output-model-type pydantic_v2.BaseModel \
-		--snake-case-field \
-		--use-annotated \
-		--allow-population-by-field-name \
-		--use-title-as-name \
-		--class-name AgentWorkflowSpec \
-		--output $(PYTHON_MODELS_DIR)/agentworkflow.py
-	@# Add populate_by_alias=True to ConfigDict (no CLI flag for this in datamodel-codegen)
-	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/agentworkflow.py
-	@rm /tmp/agentworkflow_schema.json
-	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentworkflow.py"
-	@# Generate TaskConfig Pydantic v2 model from static schema
-	@echo "Building TaskConfig schema..."
-	@$(DATAMODEL_CODEGEN) \
-		--input config/schemas/taskconfig_schema.json \
-		--input-file-type jsonschema \
-		--output-model-type pydantic_v2.BaseModel \
-		--snake-case-field \
-		--use-annotated \
-		--allow-population-by-field-name \
-		--use-title-as-name \
-		--class-name TaskConfig \
-		--output $(PYTHON_MODELS_DIR)/taskconfig.py
-	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/taskconfig.py
-	@echo "Generated TaskConfig at $(PYTHON_MODELS_DIR)/taskconfig.py"
 
 ##@ gRPC Server
 
@@ -485,31 +403,19 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker images for manager, server, A2A plugin, and CLI.
+docker-build: ## Build docker images for manager, server, and CLI.
 	$(CONTAINER_TOOL) build -t ${IMG} -t $(IMAGE_TAG_BASE):latest .
 	$(CONTAINER_TOOL) build -f server/Dockerfile -t ${SERVER_IMG} -t $(SERVER_IMAGE_TAG_BASE):latest .
-	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} -t $(A2A_PLUGIN_IMAGE_TAG_BASE):latest .
 	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} -t $(FLOKOA_CLI_IMAGE_TAG_BASE):latest ../sdk/python
 
 .PHONY: docker-push
-docker-push: ## Push docker images for manager, server, A2A plugin, and CLI.
+docker-push: ## Push docker images for manager, server, and CLI.
 	$(CONTAINER_TOOL) push ${IMG}
 	$(CONTAINER_TOOL) push $(IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${SERVER_IMG}
 	$(CONTAINER_TOOL) push $(SERVER_IMAGE_TAG_BASE):latest
-	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
-	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
 	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
-
-.PHONY: docker-build-plugins
-docker-build-plugins: ## Build docker images for all plugins.
-	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} -t $(A2A_PLUGIN_IMAGE_TAG_BASE):latest .
-
-.PHONY: docker-push-plugins
-docker-push-plugins: ## Push docker images for all plugins.
-	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
-	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-flokoa-cli
 docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
@@ -576,9 +482,8 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 	cd $(DEPLOY_KUSTOMIZATION) && $(KUSTOMIZE) edit set namespace $(DEPLOY_NAMESPACE)
 	$(KUSTOMIZE) build $(DEPLOY_KUSTOMIZATION) | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
-##@ Argo Workflows
+##@ Certificate Manager
 
-ARGO_WORKFLOWS_VERSION ?= 3.7.9
 CERT_MANAGER_VERSION ?= v1.16.3
 CERT_MANAGER_MANIFEST_URL ?= https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
 DEPLOY_WITH_CERT_MANAGER ?= false
@@ -617,45 +522,6 @@ webhook-cleanup: ## Remove webhook resources for no-cert-manager deployments.
 	-$(KUBECTL) -n $(DEPLOY_NAMESPACE) delete certificate serving-cert --ignore-not-found=true
 	-$(KUBECTL) -n $(DEPLOY_NAMESPACE) delete issuer selfsigned-issuer --ignore-not-found=true
 
-.PHONY: deploy-argo-workflows
-deploy-argo-workflows: ## Deploy Argo Workflows with executor plugins enabled.
-	@echo "Deploying Argo Workflows $(ARGO_WORKFLOWS_VERSION) with executor plugins enabled..."
-	-$(KUBECTL) create namespace argo
-	$(KUBECTL) apply -n argo -f "https://github.com/argoproj/argo-workflows/releases/download/v$(ARGO_WORKFLOWS_VERSION)/quick-start-minimal.yaml"
-	@echo "Enabling executor plugins on workflow-controller..."
-	$(KUBECTL) -n argo patch deployment workflow-controller --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "ARGO_EXECUTOR_PLUGINS", "value": "true"}}]' || \
-		$(KUBECTL) -n argo set env deployment/workflow-controller ARGO_EXECUTOR_PLUGINS=true
-	@echo "Waiting for workflow-controller to be ready..."
-	$(KUBECTL) -n argo rollout status deployment/workflow-controller --timeout=120s
-	@echo "Argo Workflows deployed successfully with executor plugins enabled"
-
-.PHONY: undeploy-argo-workflows
-undeploy-argo-workflows: ## Undeploy Argo Workflows.
-	$(KUBECTL) delete -n argo -f "https://github.com/argoproj/argo-workflows/releases/download/v$(ARGO_WORKFLOWS_VERSION)/quick-start-minimal.yaml" --ignore-not-found=true
-	-$(KUBECTL) delete namespace argo
-
-.PHONY: deploy-executor-plugins
-deploy-executor-plugins: argo-cli ## Build and deploy executor plugins to Argo.
-	@echo "Building and deploying A2A executor plugin..."
-	cd plugins/a2a/config && $(ARGO) executor-plugin build .
-	$(KUBECTL) -n argo apply -f plugins/a2a/config/a2a-executor-plugin-configmap.yaml
-	@echo "Executor plugins deployed successfully"
-
-.PHONY: undeploy-executor-plugins
-undeploy-executor-plugins: ## Undeploy executor plugins from Argo.
-	$(KUBECTL) -n argo delete configmap a2a-executor-plugin --ignore-not-found=true
-
-.PHONY: deploy-full
-deploy-full: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy everything for local testing (operator, Argo Workflows, executor plugins).
-	@echo "Local test environment deployed successfully"
-	@echo "  - Flokoa operator: deployed"
-	@echo "  - Argo Workflows: deployed with executor plugins enabled"
-	@echo "  - A2A executor plugin: registered"
-
-.PHONY: undeploy-full
-undeploy-full: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.
-	@echo "Local test environment undeployed"
-
 ##@ Dependencies
 
 ## Location to install dependencies to
@@ -670,11 +536,9 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
-ARGO ?= $(LOCALBIN)/argo
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
-ARGO_CLI_VERSION ?= $(ARGO_WORKFLOWS_VERSION)
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
@@ -709,27 +573,6 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
-
-.PHONY: argo-cli
-argo-cli: $(ARGO) ## Download argo CLI locally if necessary.
-$(ARGO): $(LOCALBIN)
-	$(call install-argo-cli,$(ARGO),$(ARGO_CLI_VERSION))
-
-# install-argo-cli downloads the argo CLI binary
-define install-argo-cli
-@[ -f $(1) ] || { \
-	set -e; \
-	echo "Downloading argo CLI v$(2)..."; \
-	ARGO_OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
-	ARGO_ARCH=$$(uname -m); \
-	if [ "$$ARGO_ARCH" = "x86_64" ]; then ARGO_ARCH="amd64"; fi; \
-	if [ "$$ARGO_ARCH" = "aarch64" ] || [ "$$ARGO_ARCH" = "arm64" ]; then ARGO_ARCH="arm64"; fi; \
-	curl -sLo $(1).gz "https://github.com/argoproj/argo-workflows/releases/download/v$(2)/argo-$$ARGO_OS-$$ARGO_ARCH.gz"; \
-	gunzip -f $(1).gz; \
-	chmod +x $(1); \
-	echo "argo CLI v$(2) installed to $(1)"; \
-}
-endef
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

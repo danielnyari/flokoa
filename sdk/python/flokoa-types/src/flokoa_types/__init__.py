@@ -17,8 +17,6 @@ from flokoa_types.modelconfig import (
     OpenAIProviderConfig,
     ProviderType,
 )
-from flokoa_types.taskconfig import TaskAgentConfig, TaskConfig, TaskResultType
-from flokoa_types.taskconfig import Type as MarvinTaskType
 from flokoa_types.templateconfig import TemplateConfig
 
 ProviderConfigType = Annotated[
@@ -87,15 +85,11 @@ class ToolDefinition(BaseModel):
 
 __all__ = [
     "IntegrationType",
-    "MarvinTaskType",
     "ModelConfig",
     "ModelParameters",
     "ProviderConfigType",
     "ProviderModelParametersType",
     "ProviderType",
-    "TaskAgentConfig",
-    "TaskConfig",
-    "TaskResultType",
     "TemplateConfig",
     "ToolDefinition",
     "ToolType",

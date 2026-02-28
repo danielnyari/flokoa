@@ -46,8 +46,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	wfv1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	"github.com/danielnyari/flokoa/test/utils"
 )
@@ -64,9 +62,6 @@ const metricsServiceName = "flokoa-controller-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "flokoa-metrics-binding"
-
-// a2aPluginImage is the name of the A2A plugin image for testing
-const a2aPluginImage = "localhost/a2a-plugin:test"
 
 func initializeTestNamespace() string {
 	if explicit := os.Getenv("E2E_NAMESPACE"); explicit != "" {
@@ -342,28 +337,6 @@ func findCondition(conditions []metav1.Condition, condType string) *metav1.Condi
 	return nil
 }
 
-// waitForAgentWorkflowReady waits for an AgentWorkflow to become ready.
-// It fast-fails if the workflow has a failed Compiled condition.
-func waitForAgentWorkflowReady(name, ns string, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
-		awf := &agentv1alpha1.AgentWorkflow{}
-		err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, awf)
-		if err != nil {
-			return false, nil
-		}
-		if awf.Status.Ready {
-			return true, nil
-		}
-		// Fast-fail if compilation failed
-		for _, c := range awf.Status.Conditions {
-			if c.Type == "Compiled" && c.Status == metav1.ConditionFalse {
-				return false, fmt.Errorf("AgentWorkflow %s/%s failed compilation: %s", ns, name, c.Message)
-			}
-		}
-		return false, nil
-	})
-}
-
 // createClusterRoleBinding creates a ClusterRoleBinding
 func createClusterRoleBinding(name, clusterRole string, subjects []rbacv1.Subject) error {
 	crb := &rbacv1.ClusterRoleBinding{
@@ -466,65 +439,6 @@ func ensureOpenAIAPIKeySecret(ns string) error {
 	}
 	existing.Data["api-key"] = []byte(apiKey)
 	return k8sClient.Update(ctx, existing)
-}
-
-// waitForWorkflowCompletion waits for an Argo Workflow to reach a terminal phase.
-// Returns the final Workflow object for further assertions.
-func waitForWorkflowCompletion(name, ns string, timeout time.Duration) (*wfv1.Workflow, error) {
-	var wf wfv1.Workflow
-	err := wait.PollUntilContextTimeout(ctx, 3*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
-		if err := k8sClient.Get(ctx2, types.NamespacedName{Name: name, Namespace: ns}, &wf); err != nil {
-			return false, nil
-		}
-		return wf.Status.Phase.Completed(), nil
-	})
-	if err != nil {
-		return &wf, fmt.Errorf("Workflow %s/%s did not complete (phase=%s): %w", ns, name, wf.Status.Phase, err)
-	}
-	return &wf, nil
-}
-
-// dumpAgentPodDiagnostics finds and logs the Argo agent pod for a workflow.
-// Agent pods follow the naming pattern: <wf-name>-<hash>-agent.
-func dumpAgentPodDiagnostics(wfName, ns string) {
-	podList := &corev1.PodList{}
-	err := k8sClient.List(ctx, podList,
-		client.InNamespace(ns),
-		client.MatchingLabels{"workflows.argoproj.io/workflow": wfName, "workflows.argoproj.io/component": "agent"})
-	if err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Failed to list agent pods: %v\n", err)
-		return
-	}
-	if len(podList.Items) == 0 {
-		_, _ = fmt.Fprintf(GinkgoWriter, "No agent pod found for workflow %s\n", wfName)
-		return
-	}
-	for _, pod := range podList.Items {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Agent pod %s: phase=%s\n", pod.Name, pod.Status.Phase)
-		for _, cs := range pod.Status.InitContainerStatuses {
-			_, _ = fmt.Fprintf(GinkgoWriter, "  InitContainer %s: ready=%v state=%+v\n", cs.Name, cs.Ready, cs.State)
-		}
-		for _, cs := range pod.Status.ContainerStatuses {
-			_, _ = fmt.Fprintf(GinkgoWriter,
-				"  Container %s: ready=%v restarts=%d state=%+v\n",
-				cs.Name, cs.Ready, cs.RestartCount, cs.State)
-			if cs.LastTerminationState.Terminated != nil {
-				t := cs.LastTerminationState.Terminated
-				_, _ = fmt.Fprintf(GinkgoWriter,
-					"    Last termination: reason=%s exitCode=%d message=%s\n",
-					t.Reason, t.ExitCode, t.Message)
-			}
-		}
-		// Try to get logs from each container
-		for _, c := range pod.Spec.Containers {
-			logs, logErr := getPodContainerLogs(pod.Name, ns, c.Name)
-			if logErr != nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "  Logs(%s): error=%v\n", c.Name, logErr)
-			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "  Logs(%s):\n%s\n", c.Name, logs)
-			}
-		}
-	}
 }
 
 // getPodContainerLogs retrieves logs from a specific container in a pod

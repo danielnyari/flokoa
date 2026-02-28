@@ -2,7 +2,7 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
-const { agentCount, modelCount, providerCount, toolCount, workflowCount } = useResourceCounts()
+const { agentCount, modelCount, providerCount, toolCount } = useResourceCounts()
 
 const open = ref(false)
 
@@ -12,7 +12,6 @@ const agentLink = reactive<NavigationMenuItem>({ label: 'Agents', icon: 'i-lucid
 const modelLink = reactive<NavigationMenuItem>({ label: 'Models', icon: 'i-lucide-brain', to: '/models', onSelect: () => { open.value = false } })
 const providerLink = reactive<NavigationMenuItem>({ label: 'Providers', icon: 'i-lucide-cloud', to: '/providers', onSelect: () => { open.value = false } })
 const toolLink = reactive<NavigationMenuItem>({ label: 'Tools', icon: 'i-lucide-wrench', to: '/tools', onSelect: () => { open.value = false } })
-const workflowLink = reactive<NavigationMenuItem>({ label: 'Workflows', icon: 'i-lucide-git-branch', to: '/workflows', onSelect: () => { open.value = false } })
 const playgroundLink = reactive<NavigationMenuItem>({ label: 'Playground', icon: 'i-lucide-flask-conical', to: '/playground', onSelect: () => { open.value = false } })
 
 watchEffect(() => {
@@ -20,7 +19,6 @@ watchEffect(() => {
   modelLink.badge = modelCount.value > 0 ? String(modelCount.value) : undefined
   providerLink.badge = providerCount.value > 0 ? String(providerCount.value) : undefined
   toolLink.badge = toolCount.value > 0 ? String(toolCount.value) : undefined
-  workflowLink.badge = workflowCount.value > 0 ? String(workflowCount.value) : undefined
 })
 
 const links = [[{
@@ -35,7 +33,6 @@ const links = [[{
   modelLink,
   providerLink,
   toolLink,
-  workflowLink,
   playgroundLink,
 {
   label: 'Settings',

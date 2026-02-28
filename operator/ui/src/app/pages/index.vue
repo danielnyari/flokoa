@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Agent, Model, ModelProvider, AgentTool, AgentWorkflow } from '~/types'
+import type { Agent, Model, ModelProvider, AgentTool } from '~/types'
 import { agentPhaseLabel, agentPhaseColor, isAgentPhase, frameworkLabel, normaliseTimestamp } from '~/utils/enums'
 
 const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
@@ -24,17 +24,11 @@ const { items: tools, status: toolStatus, refresh: refreshTools } = useListWatch
   watchUrl: () => buildWatchUrl('agenttools')
 })
 
-const { items: workflows, status: workflowStatus, refresh: refreshWorkflows } = useListWatch<AgentWorkflow>({
-  listUrl: () => namespacedPath('agentworkflows'),
-  watchUrl: () => buildWatchUrl('agentworkflows')
-})
-
 const loading = computed(() =>
   agentStatus.value === 'pending'
   || modelStatus.value === 'pending'
   || providerStatus.value === 'pending'
   || toolStatus.value === 'pending'
-  || workflowStatus.value === 'pending'
 )
 
 function refreshAll() {
@@ -42,7 +36,6 @@ function refreshAll() {
   refreshModels()
   refreshProviders()
   refreshTools()
-  refreshWorkflows()
 }
 
 const runningAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Running')).length)
@@ -50,7 +43,6 @@ const pendingAgents = computed(() => agents.value.filter(a => isAgentPhase(a.sta
 const failedAgents = computed(() => agents.value.filter(a => isAgentPhase(a.status?.phase, 'Failed')).length)
 const readyModels = computed(() => models.value.filter(m => m.status?.ready).length)
 const readyProviders = computed(() => providers.value.filter(p => p.status?.ready).length)
-const readyWorkflows = computed(() => workflows.value.filter(w => w.status?.ready).length)
 
 const stats = computed(() => [
   {
@@ -80,28 +72,11 @@ const stats = computed(() => [
     value: tools.value.length,
     description: `${tools.value.length} configured`,
     to: '/tools'
-  },
-  {
-    title: 'Workflows',
-    icon: 'i-lucide-git-branch',
-    value: workflows.value.length,
-    description: `${readyWorkflows.value} ready`,
-    to: '/workflows'
   }
 ])
 
 const recentAgents = computed(() =>
   [...agents.value]
-    .sort((a, b) => {
-      const ta = normaliseTimestamp(a.metadata.creationTimestamp) ?? ''
-      const tb = normaliseTimestamp(b.metadata.creationTimestamp) ?? ''
-      return tb.localeCompare(ta)
-    })
-    .slice(0, 5)
-)
-
-const recentWorkflows = computed(() =>
-  [...workflows.value]
     .sort((a, b) => {
       const ta = normaliseTimestamp(a.metadata.creationTimestamp) ?? ''
       const tb = normaliseTimestamp(b.metadata.creationTimestamp) ?? ''
@@ -158,7 +133,7 @@ const providerBreakdown = computed(() => {
 
     <template #body>
       <!-- Stats cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <NuxtLink
           v-for="stat in stats"
           :key="stat.title"
@@ -257,9 +232,8 @@ const providerBreakdown = computed(() => {
         </div>
       </div>
 
-      <!-- Recent Agents + Recent Workflows -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <!-- Recent Agents -->
+      <!-- Recent Agents -->
+      <div class="mt-6">
         <div>
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-semibold text-highlighted">
@@ -317,70 +291,6 @@ const providerBreakdown = computed(() => {
                 </UBadge>
                 <span v-if="normaliseTimestamp(agent.metadata.creationTimestamp)" class="text-xs text-muted">
                   {{ useTimeAgo(normaliseTimestamp(agent.metadata.creationTimestamp)!).value }}
-                </span>
-              </div>
-            </NuxtLink>
-          </div>
-        </div>
-
-        <!-- Recent Workflows -->
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-semibold text-highlighted">
-              Recent Workflows
-            </h3>
-            <UButton
-              label="View all"
-              variant="ghost"
-              color="neutral"
-              size="sm"
-              trailing-icon="i-lucide-arrow-right"
-              to="/workflows"
-            />
-          </div>
-
-          <div v-if="loading" class="text-sm text-muted">
-            Loading...
-          </div>
-          <div v-else-if="recentWorkflows.length === 0" class="text-sm text-muted p-8 border border-default rounded-lg text-center">
-            <UIcon name="i-lucide-git-branch" class="size-8 text-muted mb-2 mx-auto block" />
-            <p class="font-medium text-highlighted mb-1">
-              No workflows found
-            </p>
-            <p>Create an AgentWorkflow to orchestrate multi-agent tasks.</p>
-          </div>
-          <div v-else class="space-y-2">
-            <NuxtLink
-              v-for="wf in recentWorkflows"
-              :key="wf.metadata.uid ?? wf.metadata.name"
-              :to="`/workflows/${wf.metadata.namespace}/${wf.metadata.name}`"
-              class="flex items-center justify-between p-3 rounded-lg border border-default bg-elevated/50 hover:bg-elevated transition-colors"
-            >
-              <div class="flex items-center gap-3">
-                <div class="flex items-center justify-center size-8 rounded-md bg-primary/10">
-                  <UIcon name="i-lucide-git-branch" class="size-4 text-primary" />
-                </div>
-                <div>
-                  <p class="text-sm font-medium text-highlighted">
-                    {{ wf.metadata.name }}
-                  </p>
-                  <p class="text-xs text-muted truncate max-w-xs">
-                    {{ wf.spec.description || wf.metadata.namespace }}
-                    <template v-if="wf.spec.tasks">
-                      &middot; {{ wf.spec.tasks.length }} {{ wf.spec.tasks.length === 1 ? 'task' : 'tasks' }}
-                    </template>
-                  </p>
-                </div>
-              </div>
-              <div class="flex items-center gap-3">
-                <UBadge
-                  :color="wf.status?.ready === true ? 'success' : wf.status?.ready === false ? 'error' : 'neutral'"
-                  variant="subtle"
-                >
-                  {{ wf.status?.ready === true ? 'Ready' : wf.status?.ready === false ? 'Not Ready' : 'Unknown' }}
-                </UBadge>
-                <span v-if="normaliseTimestamp(wf.metadata.creationTimestamp)" class="text-xs text-muted">
-                  {{ useTimeAgo(normaliseTimestamp(wf.metadata.creationTimestamp)!).value }}
                 </span>
               </div>
             </NuxtLink>

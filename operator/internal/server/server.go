@@ -66,7 +66,6 @@ func NewServer(
 	modelService pb.ModelServiceServer,
 	modelProviderService pb.ModelProviderServiceServer,
 	agentToolService pb.AgentToolServiceServer,
-	agentWorkflowService pb.AgentWorkflowServiceServer,
 ) *Server {
 	// Build interceptor chains
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
@@ -96,7 +95,6 @@ func NewServer(
 	pb.RegisterModelServiceServer(grpcServer, modelService)
 	pb.RegisterModelProviderServiceServer(grpcServer, modelProviderService)
 	pb.RegisterAgentToolServiceServer(grpcServer, agentToolService)
-	pb.RegisterAgentWorkflowServiceServer(grpcServer, agentWorkflowService)
 
 	// Register health service
 	healthServer := health.NewServer()
@@ -208,9 +206,6 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	}
 	if err := pb.RegisterAgentToolServiceHandlerFromEndpoint(ctx, gwMux, grpcAddr, opts); err != nil {
 		return fmt.Errorf("failed to register agent tool gateway: %w", err)
-	}
-	if err := pb.RegisterAgentWorkflowServiceHandlerFromEndpoint(ctx, gwMux, grpcAddr, opts); err != nil {
-		return fmt.Errorf("failed to register agent workflow gateway: %w", err)
 	}
 
 	// Create HTTP mux

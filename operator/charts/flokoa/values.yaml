@@ -315,63 +315,6 @@ dex:
       cpu: "250m"
 
 # =============================================================================
-# AgentWorkflow Settings
-# =============================================================================
-agentWorkflow:
-  artifactIO:
-    # -- Switch task I/O from Argo parameters to artifacts backed by object storage.
-    # Requires an artifact repository (e.g., S3, GCS, MinIO) configured in Argo.
-    enabled: false
-    artifactGC:
-      # -- Artifact garbage collection strategy.
-      # Options: OnWorkflowCompletion, OnWorkflowDeletion, Never
-      strategy: OnWorkflowCompletion
-
-# =============================================================================
-# Argo Workflows Integration (optional)
-# =============================================================================
-argo:
-  # -- Enable Argo Workflows integration
-  enabled: false
-
-  a2aPlugin:
-    # -- Deploy the A2A executor plugin
-    enabled: true
-
-    image:
-      # -- A2A plugin image registry
-      registry: ghcr.io
-      # -- A2A plugin image repository
-      repository: danielnyari/flokoa-a2a-plugin
-      # -- A2A plugin image tag (defaults to appVersion)
-      tag: ""
-
-    # -- Namespace where the Argo executor plugin will be created
-    namespace: argo
-
-    # -- Plugin resource requests and limits
-    resources:
-      requests:
-        memory: "64Mi"
-        cpu: "100m"
-      limits:
-        memory: "128Mi"
-        cpu: "500m"
-
-    # -- Plugin container security context
-    # runAsGroup: 0 is required so the sidecar can read the Argo auth token
-    # created by the argoexec init container (owned by root group).
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 65532
-      runAsGroup: 0
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-          - ALL
-      readOnlyRootFilesystem: true
-
-# =============================================================================
 # Extra manifests
 # =============================================================================
 # -- Extra Kubernetes manifests to deploy alongside the chart.
