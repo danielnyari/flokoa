@@ -242,6 +242,14 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// because Go 1.22+ ServeMux uses most-specific-pattern-wins matching.
 	if s.watchClient != nil {
 		registerWatchRoutes(mux, s.watchClient, s.log, authMiddleware(s.authInterceptor))
+
+		// Register playground chat endpoint (AG-UI SSE bridge to A2A agents).
+		playgroundHandler := &PlaygroundHandler{
+			client: s.watchClient,
+			log:    s.log.WithName("playground"),
+		}
+		mux.Handle("POST /api/v1alpha1/namespaces/{namespace}/agents/{name}/playground",
+			authMiddleware(s.authInterceptor)(playgroundHandler))
 	}
 
 	// Handle API requests with gateway

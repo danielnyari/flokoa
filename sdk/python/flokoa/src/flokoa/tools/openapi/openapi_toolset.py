@@ -132,10 +132,17 @@ class OpenAPIToolset:
             len(spec_dict.get("paths", {})),
         )
 
-        # Override servers if CRD specifies a base URL
+        # Override servers if CRD specifies a base URL.
+        # Preserve relative server paths (e.g., /api) by merging with the CRD URL.
         if open_api.url:
-            spec_dict = {**spec_dict, "servers": [{"url": open_api.url}]}
-            logger.debug("  Overriding servers with CRD URL: %s", open_api.url)
+            crd_url = open_api.url.rstrip("/")
+            original_servers = spec_dict.get("servers", [])
+            if original_servers:
+                first_url = original_servers[0].get("url", "")
+                if first_url.startswith("/") and first_url != "/":
+                    crd_url = crd_url + "/" + first_url.strip("/")
+            spec_dict = {**spec_dict, "servers": [{"url": crd_url}]}
+            logger.debug("  Overriding servers with CRD URL: %s", crd_url)
 
         toolset = cls(spec_dict=spec_dict)
         logger.debug(

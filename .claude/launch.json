@@ -1,0 +1,37 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nuxt-ui",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "operator/ui/src",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "go-server",
+      "runtimeExecutable": "go",
+      "runtimeArgs": [
+        "-C",
+        "operator",
+        "run",
+        "./cmd/server/main.go"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "a2a-plugin",
+      "runtimeExecutable": "go",
+      "runtimeArgs": [
+        "-C",
+        "operator",
+        "run",
+        "./plugins/a2a/main.go"
+      ],
+      "port": 4355
+    }
+  ]
+}

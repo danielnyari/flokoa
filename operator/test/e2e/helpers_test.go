@@ -162,7 +162,7 @@ func loadManifestsFromFile(path string) ([]*unstructured.Unstructured, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	localName := filepath.Base(fullPath)
 	srcData, err := os.ReadFile(fullPath)
@@ -185,38 +185,6 @@ func loadManifestsFromFile(path string) ([]*unstructured.Unstructured, error) {
 	data, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("kustomize build failed for %s: %w", path, err)
-	}
-
-	return parseYAMLDocuments(data)
-}
-
-// loadKustomizeDir builds all resources from a kustomize directory with the test namespace.
-func loadKustomizeDir(dir string) ([]*unstructured.Unstructured, error) {
-	projectDir, err := utils.GetProjectDir()
-	if err != nil {
-		return nil, err
-	}
-
-	baseDir := filepath.Join(projectDir, dir)
-
-	tmpDir, err := os.MkdirTemp("", "e2e-kustomize-*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	kustomization := fmt.Sprintf(
-		"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nnamespace: %s\nresources:\n  - %s\n",
-		namespace, baseDir,
-	)
-	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomization), 0o600); err != nil {
-		return nil, fmt.Errorf("failed to write temp kustomization: %w", err)
-	}
-
-	cmd := exec.Command(kustomizeBin(), "build", "--load-restrictor", "LoadRestrictionsNone", tmpDir)
-	data, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("kustomize build failed for %s: %w", dir, err)
 	}
 
 	return parseYAMLDocuments(data)
@@ -537,10 +505,14 @@ func dumpAgentPodDiagnostics(wfName, ns string) {
 			_, _ = fmt.Fprintf(GinkgoWriter, "  InitContainer %s: ready=%v state=%+v\n", cs.Name, cs.Ready, cs.State)
 		}
 		for _, cs := range pod.Status.ContainerStatuses {
-			_, _ = fmt.Fprintf(GinkgoWriter, "  Container %s: ready=%v restarts=%d state=%+v\n", cs.Name, cs.Ready, cs.RestartCount, cs.State)
+			_, _ = fmt.Fprintf(GinkgoWriter,
+				"  Container %s: ready=%v restarts=%d state=%+v\n",
+				cs.Name, cs.Ready, cs.RestartCount, cs.State)
 			if cs.LastTerminationState.Terminated != nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "    Last termination: reason=%s exitCode=%d message=%s\n",
-					cs.LastTerminationState.Terminated.Reason, cs.LastTerminationState.Terminated.ExitCode, cs.LastTerminationState.Terminated.Message)
+				t := cs.LastTerminationState.Terminated
+				_, _ = fmt.Fprintf(GinkgoWriter,
+					"    Last termination: reason=%s exitCode=%d message=%s\n",
+					t.Reason, t.ExitCode, t.Message)
 			}
 		}
 		// Try to get logs from each container
@@ -604,7 +576,10 @@ func newCurlPod(name, ns, url string) *corev1.Pod {
 					Name:    "curl",
 					Image:   "curlimages/curl:latest",
 					Command: []string{"/bin/sh", "-c"},
-					Args:    []string{fmt.Sprintf("curl -s --retry 10 --retry-delay 3 --retry-connrefused --connect-timeout 10 --max-time 30 -o /dev/stdout -w '\\nHTTP_STATUS:%%{http_code}' %s", url)},
+					Args: []string{fmt.Sprintf(
+						"curl -s --retry 10 --retry-delay 3 --retry-connrefused "+
+							"--connect-timeout 10 --max-time 30 -o /dev/stdout "+
+							"-w '\\nHTTP_STATUS:%%{http_code}' %s", url)},
 					SecurityContext: &corev1.SecurityContext{
 						AllowPrivilegeEscalation: ptr(false),
 						Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},

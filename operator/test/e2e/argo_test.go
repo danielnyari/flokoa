@@ -273,7 +273,7 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 
 			resp, err := httpClient.Post(submitURL, "application/json", bytes.NewReader(reqBody))
 			Expect(err).NotTo(HaveOccurred())
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			respBody, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
@@ -300,7 +300,7 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			Eventually(func(g Gomega) {
 				resp, err := httpClient.Get(getURL)
 				g.Expect(err).NotTo(HaveOccurred())
-				defer resp.Body.Close()
+				defer func() { _ = resp.Body.Close() }()
 
 				body, err := io.ReadAll(resp.Body)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -343,7 +343,9 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 
 		AfterAll(func() {
 			By("cleaning up test workflows")
-			_ = k8sClient.Delete(ctx, &wfv1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "e2e-direct-a2a", Namespace: namespace}})
+			_ = k8sClient.Delete(ctx, &wfv1.Workflow{
+				ObjectMeta: metav1.ObjectMeta{Name: "e2e-direct-a2a", Namespace: namespace},
+			})
 			_ = k8sClient.DeleteAllOf(ctx, &wfv1.Workflow{},
 				client.InNamespace(namespace),
 				client.MatchingLabels{"app.kubernetes.io/managed-by": "flokoa-server"})

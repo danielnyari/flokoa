@@ -34,6 +34,8 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
+const taskNameRoute = "route"
+
 // cmpOpts are shared options for cmp.Diff comparisons on Argo Workflow objects.
 var cmpOpts = cmp.Options{
 	// time.Time has unexported fields; compare via Equal method.
@@ -2132,7 +2134,7 @@ func TestCompile_SwitchMultipleConditionsAndDefault(t *testing.T) {
 
 	switchTasks := make(map[string]string)
 	for _, dt := range dagTemplate.DAG.Tasks {
-		if len(dt.Dependencies) == 1 && dt.Dependencies[0] == "route" && dt.Name != "route" {
+		if len(dt.Dependencies) == 1 && dt.Dependencies[0] == taskNameRoute && dt.Name != taskNameRoute {
 			switchTasks[dt.Name] = dt.When
 		}
 	}
@@ -2980,7 +2982,7 @@ func TestCompile_CompletePipelineWithSwitch(t *testing.T) {
 		if dt.When == "" {
 			t.Error("route-act should have a When expression")
 		}
-		if len(dt.Dependencies) != 1 || dt.Dependencies[0] != "route" {
+		if len(dt.Dependencies) != 1 || dt.Dependencies[0] != taskNameRoute {
 			t.Errorf("route-act should depend on route, got %v", dt.Dependencies)
 		}
 	}
@@ -3365,11 +3367,11 @@ func TestCompileStructural_LabelsAndMetadata(t *testing.T) {
 	if got.Labels["app.kubernetes.io/managed-by"] != "flokoa-operator" {
 		t.Errorf("missing or wrong managed-by label: %v", got.Labels)
 	}
-	if got.TypeMeta.Kind != "WorkflowTemplate" {
-		t.Errorf("Kind should be WorkflowTemplate, got %q", got.TypeMeta.Kind)
+	if got.Kind != "WorkflowTemplate" {
+		t.Errorf("Kind should be WorkflowTemplate, got %q", got.Kind)
 	}
-	if got.TypeMeta.APIVersion != "argoproj.io/v1alpha1" {
-		t.Errorf("APIVersion should be argoproj.io/v1alpha1, got %q", got.TypeMeta.APIVersion)
+	if got.APIVersion != "argoproj.io/v1alpha1" {
+		t.Errorf("APIVersion should be argoproj.io/v1alpha1, got %q", got.APIVersion)
 	}
 }
 
@@ -3468,7 +3470,7 @@ func TestCompile_SwitchConditionsHaveCorrectContent(t *testing.T) {
 			t.Errorf("task %q: When = %q, want %q", name, dt.When, wantWhen)
 		}
 		// All switch branches should depend on "route"
-		if len(dt.Dependencies) != 1 || dt.Dependencies[0] != "route" {
+		if len(dt.Dependencies) != 1 || dt.Dependencies[0] != taskNameRoute {
 			t.Errorf("task %q: Dependencies = %v, want [route]", name, dt.Dependencies)
 		}
 	}
@@ -3740,7 +3742,7 @@ func TestCompile_SwitchOnlyDefault(t *testing.T) {
 	if dt.When != "" {
 		t.Errorf("default-only switch branch should have no When, got %q", dt.When)
 	}
-	if len(dt.Dependencies) != 1 || dt.Dependencies[0] != "route" {
+	if len(dt.Dependencies) != 1 || dt.Dependencies[0] != taskNameRoute {
 		t.Errorf("route-fallback should depend on 'route', got %v", dt.Dependencies)
 	}
 }
@@ -3771,7 +3773,7 @@ func TestCompile_SwitchRouterTemplateIsNoOp(t *testing.T) {
 	// Find the "route" template — should be a script template (router)
 	var routeTemplate *wfv1.Template
 	for i := range got.Spec.Templates {
-		if got.Spec.Templates[i].Name == "route" {
+		if got.Spec.Templates[i].Name == taskNameRoute {
 			routeTemplate = &got.Spec.Templates[i]
 			break
 		}

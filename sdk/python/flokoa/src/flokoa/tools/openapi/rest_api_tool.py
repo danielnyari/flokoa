@@ -191,19 +191,29 @@ def create_rest_api_callable(config: RestApiToolConfig) -> Callable:
             request_params["verify"] = config.ssl_verify
 
         # Apply dynamic headers from deps
-        if ctx.deps.header_provider is not None:
-            provider_headers = ctx.deps.header_provider()
+        deps: OpenAPIDeps | None = ctx.deps
+        if deps is not None and deps.header_provider is not None:
+            provider_headers = deps.header_provider()
             if provider_headers:
                 request_params.setdefault("headers", {}).update(provider_headers)
 
-        # Execute request via deps client
-        client = ctx.deps.client
+        # Execute request via deps client (or a fresh client when no deps provided)
         verify = request_params.pop("verify", None)
-        if verify is not None:
-            async with httpx.AsyncClient(verify=verify) as ssl_client:
-                response = await ssl_client.request(**request_params)
-        else:
-            response = await client.request(**request_params)
+        try:
+            if verify is not None:
+                async with httpx.AsyncClient(verify=verify) as ssl_client:
+                    response = await ssl_client.request(**request_params)
+            elif deps is not None:
+                response = await deps.client.request(**request_params)
+            else:
+                async with httpx.AsyncClient() as client:
+                    response = await client.request(**request_params)
+        except httpx.TimeoutException as e:
+            logger.warning("Timeout calling tool %s: %s", config.name, e)
+            return {"error": f"Tool {config.name} request timed out"}
+        except httpx.RequestError as e:
+            logger.warning("Request error calling tool %s: %s", config.name, e)
+            return {"error": f"Tool {config.name} request failed: {type(e).__name__}"}
 
         # Log the response
         logger.info(
