@@ -1,0 +1,35 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: document-processing-pipeline
+spec:
+  description: "Process PDFs with GCP Document AI, then analyze with an agent"
+  params:
+    - name: inputUri
+      value: "gs://my-bucket/documents/invoice.pdf"
+    - name: outputUri
+      value: "gs://my-bucket/output/"
+  tasks:
+    - name: process-document
+      gcpDocAI:
+        processorName: "projects/my-project/locations/us/processors/abc123"
+        location: "us"
+        inputDocuments:
+          documents:
+            - gcsUri: "{{params.inputUri}}"
+              mimeType: "application/pdf"
+        outputConfig:
+          gcsUri: "{{params.outputUri}}"
+        processOptions:
+          layoutConfig:
+            chunkingConfig:
+              chunkSize: 1024
+              includeAncestorHeadings: true
+        skipHumanReview: true
+        timeout: 15m
+
+    - name: analyze-results
+      agent:
+        name: document-analyst
+        text: "Analyze the Document AI processing results. Operation: {{tasks.process-document.output}}"
+      dependsOn: [process-document]

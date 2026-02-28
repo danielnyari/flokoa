@@ -42,6 +42,9 @@ const (
 	// a2aPluginKey is the key used in the Argo plugin spec for A2A tasks.
 	a2aPluginKey = "a2a"
 
+	// gcpDocAIPluginKey is the key used in the Argo plugin spec for GCP Document AI tasks.
+	gcpDocAIPluginKey = "gcpdocai"
+
 	// agentTaskOutputParam is the output parameter name for task results.
 	agentTaskOutputParam = "result"
 
@@ -284,6 +287,10 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 		buildContainerTemplate(tmpl, task.Container, opts)
 	case task.HTTP != nil:
 		buildHTTPTemplate(tmpl, task.HTTP)
+	case task.GCPDocAI != nil:
+		if err := buildGCPDocAITemplate(tmpl, task.GCPDocAI); err != nil {
+			return nil, err
+		}
 	case len(task.Switch) > 0:
 		// Switch tasks are a no-op routing template; branching is in DAG when expressions.
 		tmpl.Script = &wfv1.ScriptTemplate{
@@ -294,7 +301,7 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 			},
 		}
 	default:
-		return nil, fmt.Errorf("task has no recognized type (must set one of agent, agentTask, container, http, or switch)")
+		return nil, fmt.Errorf("task has no recognized type (must set one of agent, agentTask, container, http, gcpDocAI, or switch)")
 	}
 
 	return tmpl, nil
@@ -814,6 +821,90 @@ func buildHTTPTemplate(tmpl *wfv1.Template, ht *agentv1alpha1.HTTPTask) {
 			},
 		},
 	}
+}
+
+// buildGCPDocAITemplate populates a template with the GCP Document AI plugin spec.
+func buildGCPDocAITemplate(tmpl *wfv1.Template, docai *agentv1alpha1.GCPDocAITask) error {
+	docaiSpec := map[string]interface{}{
+		"processorName":   TranslateExpressions(docai.ProcessorName),
+		"location":        docai.Location,
+		"skipHumanReview": docai.SkipHumanReview,
+		"traceparent":     fmt.Sprintf("{{workflow.parameters.%s}}", traceparentWorkflowParam),
+	}
+
+	if docai.Timeout != nil {
+		docaiSpec["timeout"] = docai.Timeout.Duration.String()
+	}
+
+	// Build inputDocuments with expression translation on GCS URIs
+	inputDocs := map[string]interface{}{}
+	if len(docai.InputDocuments.Documents) > 0 {
+		docs := make([]map[string]string, 0, len(docai.InputDocuments.Documents))
+		for _, doc := range docai.InputDocuments.Documents {
+			docs = append(docs, map[string]string{
+				"gcsUri":   TranslateExpressions(doc.GCSUri),
+				"mimeType": doc.MimeType,
+			})
+		}
+		inputDocs["gcsDocuments"] = docs
+	}
+	if docai.InputDocuments.GCSPrefix != nil {
+		inputDocs["gcsPrefix"] = map[string]string{
+			"gcsUriPrefix": TranslateExpressions(docai.InputDocuments.GCSPrefix.GCSUriPrefix),
+		}
+	}
+	docaiSpec["inputDocuments"] = inputDocs
+
+	// Build outputConfig with expression translation
+	outputCfg := map[string]interface{}{
+		"gcsUri": TranslateExpressions(docai.OutputConfig.GCSUri),
+	}
+	if docai.OutputConfig.FieldMask != "" {
+		outputCfg["fieldMask"] = docai.OutputConfig.FieldMask
+	}
+	docaiSpec["outputConfig"] = outputCfg
+
+	// Build processOptions if present
+	if docai.ProcessOptions != nil {
+		opts := map[string]interface{}{}
+		if docai.ProcessOptions.LayoutConfig != nil {
+			layoutCfg := map[string]interface{}{}
+			if docai.ProcessOptions.LayoutConfig.ChunkingConfig != nil {
+				chunkCfg := map[string]interface{}{}
+				if docai.ProcessOptions.LayoutConfig.ChunkingConfig.ChunkSize != nil {
+					chunkCfg["chunkSize"] = *docai.ProcessOptions.LayoutConfig.ChunkingConfig.ChunkSize
+				}
+				chunkCfg["includeAncestorHeadings"] = docai.ProcessOptions.LayoutConfig.ChunkingConfig.IncludeAncestorHeadings
+				layoutCfg["chunkingConfig"] = chunkCfg
+			}
+			opts["layoutConfig"] = layoutCfg
+		}
+		docaiSpec["processOptions"] = opts
+	}
+
+	pluginData := map[string]interface{}{
+		gcpDocAIPluginKey: docaiSpec,
+	}
+
+	pluginJSON, err := json.Marshal(pluginData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal GCP Document AI plugin spec: %w", err)
+	}
+
+	tmpl.Plugin = &wfv1.Plugin{}
+	tmpl.Plugin.Value = pluginJSON
+
+	// Declare output parameters as "supplied" — the GCP DocAI executor plugin
+	// fills them via NodeResult at runtime.
+	supplied := &wfv1.ValueFrom{Supplied: &wfv1.SuppliedValueFrom{}}
+	tmpl.Outputs = wfv1.Outputs{
+		Parameters: []wfv1.Parameter{
+			{Name: agentTaskOutputParam, ValueFrom: supplied},
+			{Name: agentTaskArtifactParam, ValueFrom: supplied},
+		},
+	}
+
+	return nil
 }
 
 // buildSwitchDAGTasks generates additional DAG tasks for switch routing.

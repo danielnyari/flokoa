@@ -1,0 +1,51 @@
+{{- if and .Values.argo.enabled .Values.argo.gcpDocAIPlugin.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: ExecutorPlugin
+metadata:
+  name: gcpdocai
+  namespace: {{ .Values.argo.gcpDocAIPlugin.namespace }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gcpdocai-plugin
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  sidecar:
+    automountServiceAccountToken: true
+    container:
+      name: gcpdocai-executor-plugin
+      image: {{ include "flokoa.image" (dict "image" .Values.argo.gcpDocAIPlugin.image "appVersion" .Chart.AppVersion) }}
+      imagePullPolicy: {{ .Values.images.pullPolicy }}
+      command:
+        - /gcpdocai-plugin
+      env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- if .Values.argo.gcpDocAIPlugin.gcp.serviceAccountKey.enabled }}
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/run/secrets/gcp/{{ .Values.argo.gcpDocAIPlugin.gcp.serviceAccountKey.key }}
+        {{- end }}
+      ports:
+        - containerPort: 4355
+          protocol: TCP
+      resources:
+        {{- toYaml .Values.argo.gcpDocAIPlugin.resources | nindent 8 }}
+      securityContext:
+        {{- toYaml .Values.argo.gcpDocAIPlugin.securityContext | nindent 8 }}
+      {{- if .Values.argo.gcpDocAIPlugin.gcp.serviceAccountKey.enabled }}
+      volumeMounts:
+        - name: gcp-sa-key
+          mountPath: /var/run/secrets/gcp
+          readOnly: true
+      {{- end }}
+    {{- if .Values.argo.gcpDocAIPlugin.gcp.serviceAccountKey.enabled }}
+    volumes:
+      - name: gcp-sa-key
+        secret:
+          secretName: {{ .Values.argo.gcpDocAIPlugin.gcp.serviceAccountKey.secretName }}
+    {{- end }}
+{{- end }}

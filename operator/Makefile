@@ -60,6 +60,10 @@ SERVER_IMG ?= $(SERVER_IMAGE_TAG_BASE):$(VERSION)
 A2A_PLUGIN_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-a2a-plugin
 A2A_PLUGIN_IMG ?= $(A2A_PLUGIN_IMAGE_TAG_BASE):$(VERSION)
 
+# GCP Document AI plugin image settings
+GCPDOCAI_PLUGIN_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-gcpdocai-plugin
+GCPDOCAI_PLUGIN_IMG ?= $(GCPDOCAI_PLUGIN_IMAGE_TAG_BASE):$(VERSION)
+
 # Flokoa CLI image settings (Python SDK)
 FLOKOA_CLI_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-cli
 FLOKOA_CLI_IMG ?= $(FLOKOA_CLI_IMAGE_TAG_BASE):$(VERSION)
@@ -485,31 +489,37 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker images for manager, server, A2A plugin, and CLI.
+docker-build: ## Build docker images for manager, server, plugins, and CLI.
 	$(CONTAINER_TOOL) build -t ${IMG} -t $(IMAGE_TAG_BASE):latest .
 	$(CONTAINER_TOOL) build -f server/Dockerfile -t ${SERVER_IMG} -t $(SERVER_IMAGE_TAG_BASE):latest .
 	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} -t $(A2A_PLUGIN_IMAGE_TAG_BASE):latest .
+	$(CONTAINER_TOOL) build -f plugins/gcpdocai/Dockerfile -t ${GCPDOCAI_PLUGIN_IMG} -t $(GCPDOCAI_PLUGIN_IMAGE_TAG_BASE):latest .
 	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} -t $(FLOKOA_CLI_IMAGE_TAG_BASE):latest ../sdk/python
 
 .PHONY: docker-push
-docker-push: ## Push docker images for manager, server, A2A plugin, and CLI.
+docker-push: ## Push docker images for manager, server, plugins, and CLI.
 	$(CONTAINER_TOOL) push ${IMG}
 	$(CONTAINER_TOOL) push $(IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${SERVER_IMG}
 	$(CONTAINER_TOOL) push $(SERVER_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
 	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push ${GCPDOCAI_PLUGIN_IMG}
+	$(CONTAINER_TOOL) push $(GCPDOCAI_PLUGIN_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
 	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-plugins
 docker-build-plugins: ## Build docker images for all plugins.
 	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} -t $(A2A_PLUGIN_IMAGE_TAG_BASE):latest .
+	$(CONTAINER_TOOL) build -f plugins/gcpdocai/Dockerfile -t ${GCPDOCAI_PLUGIN_IMG} -t $(GCPDOCAI_PLUGIN_IMAGE_TAG_BASE):latest .
 
 .PHONY: docker-push-plugins
 docker-push-plugins: ## Push docker images for all plugins.
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
 	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
+	$(CONTAINER_TOOL) push ${GCPDOCAI_PLUGIN_IMG}
+	$(CONTAINER_TOOL) push $(GCPDOCAI_PLUGIN_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-flokoa-cli
 docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
@@ -639,11 +649,15 @@ deploy-executor-plugins: argo-cli ## Build and deploy executor plugins to Argo.
 	@echo "Building and deploying A2A executor plugin..."
 	cd plugins/a2a/config && $(ARGO) executor-plugin build .
 	$(KUBECTL) -n argo apply -f plugins/a2a/config/a2a-executor-plugin-configmap.yaml
+	@echo "Building and deploying GCP Document AI executor plugin..."
+	cd plugins/gcpdocai/config && $(ARGO) executor-plugin build .
+	$(KUBECTL) -n argo apply -f plugins/gcpdocai/config/gcpdocai-executor-plugin-configmap.yaml
 	@echo "Executor plugins deployed successfully"
 
 .PHONY: undeploy-executor-plugins
 undeploy-executor-plugins: ## Undeploy executor plugins from Argo.
 	$(KUBECTL) -n argo delete configmap a2a-executor-plugin --ignore-not-found=true
+	$(KUBECTL) -n argo delete configmap gcpdocai-executor-plugin --ignore-not-found=true
 
 .PHONY: deploy-full
 deploy-full: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy everything for local testing (operator, Argo Workflows, executor plugins).
@@ -651,6 +665,7 @@ deploy-full: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy ever
 	@echo "  - Flokoa operator: deployed"
 	@echo "  - Argo Workflows: deployed with executor plugins enabled"
 	@echo "  - A2A executor plugin: registered"
+	@echo "  - GCP Document AI executor plugin: registered"
 
 .PHONY: undeploy-full
 undeploy-full: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.

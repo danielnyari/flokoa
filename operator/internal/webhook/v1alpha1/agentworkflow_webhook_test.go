@@ -813,3 +813,254 @@ func TestValidateAgentWorkflow_MixedTaskTypesValid(t *testing.T) {
 		t.Errorf("expected valid mixed-type workflow, got error: %v", err)
 	}
 }
+
+func TestValidateAgentWorkflow_ValidGCPDocAITask(t *testing.T) {
+	chunkSize := int32(1024)
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "inputUri"}, {Name: "outputUri"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/my-project/locations/us/processors/abc123",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "{{params.inputUri}}", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "{{params.outputUri}}",
+						},
+						ProcessOptions: &agentv1alpha1.GCPDocAIProcessOptions{
+							LayoutConfig: &agentv1alpha1.GCPDocAILayoutConfig{
+								ChunkingConfig: &agentv1alpha1.GCPDocAIChunkingConfig{
+									ChunkSize:               &chunkSize,
+									IncludeAncestorHeadings: true,
+								},
+							},
+						},
+						SkipHumanReview: true,
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid GCPDocAI task, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_GCPDocAIEmptyProcessorName(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "gs://bucket/doc.pdf", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "gs://bucket/output/",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for GCPDocAI task with empty processorName")
+	}
+}
+
+func TestValidateAgentWorkflow_GCPDocAINoInputDocuments(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName:  "projects/p/locations/us/processors/x",
+						Location:       "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "gs://bucket/output/",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for GCPDocAI task with no input documents")
+	}
+}
+
+func TestValidateAgentWorkflow_GCPDocAIEmptyOutputGCSUri(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/us/processors/x",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							GCSPrefix: &agentv1alpha1.GCPDocAIGCSPrefix{
+								GCSUriPrefix: "gs://bucket/input/",
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for GCPDocAI task with empty output gcsUri")
+	}
+}
+
+func TestValidateAgentWorkflow_GCPDocAIAndAgentConflict(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:  "conflict",
+					Agent: &agentv1alpha1.AgentCall{Name: "agent1", Text: "hello"},
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/us/processors/x",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "gs://bucket/doc.pdf", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "gs://bucket/output/",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for task with both agent and gcpDocAI")
+	}
+}
+
+func TestValidateAgentWorkflow_GCPDocAIExpressionValidation(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/us/processors/x",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "{{tasks.nonexistent.output}}", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "{{params.undefined}}",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err == nil {
+		t.Error("expected error for invalid expressions in GCPDocAI task")
+	}
+}
+
+func TestValidateAgentWorkflow_GCPDocAIWithGCSPrefix(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "prefix"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/eu/processors/y",
+						Location:      "eu",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							GCSPrefix: &agentv1alpha1.GCPDocAIGCSPrefix{
+								GCSUriPrefix: "{{params.prefix}}",
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri:    "gs://bucket/output/",
+							FieldMask: "text,pages.layout",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid GCPDocAI task with GCS prefix, got error: %v", err)
+	}
+}
+
+func TestValidateAgentWorkflow_GCPDocAIPipelineWithAgent(t *testing.T) {
+	wf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{{Name: "inputUri"}, {Name: "outputUri"}},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process-document",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/us/processors/x",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "{{params.inputUri}}", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "{{params.outputUri}}",
+						},
+					},
+				},
+				{
+					Name: "analyze",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "analyzer",
+						Text: "Analyze: {{tasks.process-document.output}}",
+					},
+					DependsOn: []string{"process-document"},
+				},
+			},
+		},
+	}
+
+	if err := ValidateAgentWorkflow(wf); err != nil {
+		t.Errorf("expected valid GCPDocAI -> agent pipeline, got error: %v", err)
+	}
+}

@@ -1,0 +1,48 @@
+{{- if and .Values.argo.enabled .Values.argo.gcpDocAIPlugin.enabled }}
+# Role granting the GCP Document AI executor plugin access to persist LRO state
+# in a ConfigMap. The plugin runs as a sidecar in Argo Workflow pods and uses
+# the workflow's default service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "flokoa.fullname" . }}-gcpdocai-plugin
+  namespace: {{ .Values.argo.gcpDocAIPlugin.namespace }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gcpdocai-plugin
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
+    resourceNames: ["flokoa-gcpdocai-plugin-state"]
+  # Allow creating the ConfigMap when it doesn't exist yet (resourceNames
+  # cannot be used with create, so we need a separate rule without names).
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flokoa.fullname" . }}-gcpdocai-plugin
+  namespace: {{ .Values.argo.gcpDocAIPlugin.namespace }}
+  labels:
+    {{- include "flokoa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gcpdocai-plugin
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "flokoa.fullname" . }}-gcpdocai-plugin
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ .Values.argo.gcpDocAIPlugin.namespace }}
+{{- end }}

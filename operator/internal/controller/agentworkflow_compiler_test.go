@@ -153,6 +153,15 @@ func makePlugin(a2aSpec map[string]interface{}) *wfv1.Plugin {
 	return p
 }
 
+// mustJSON marshals a value to json.RawMessage, panicking on error.
+func mustJSON(v interface{}) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 // pluginMessage builds the message structure that buildPluginMessage produces for a single text part.
 func pluginTextMessage(text string) map[string]interface{} {
 	return map[string]interface{}{
@@ -4025,4 +4034,302 @@ func TestCompileToArgoWorkflow_ServiceAccountOverride(t *testing.T) {
 	})
 
 	assertDiff(t, want, got)
+}
+
+func TestCompile_GCPDocAIBasic(t *testing.T) {
+	chunkSize := int32(1024)
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "docai-basic", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/my-project/locations/us/processors/abc123",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "gs://bucket/doc.pdf", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "gs://bucket/output/",
+						},
+						ProcessOptions: &agentv1alpha1.GCPDocAIProcessOptions{
+							LayoutConfig: &agentv1alpha1.GCPDocAILayoutConfig{
+								ChunkingConfig: &agentv1alpha1.GCPDocAIChunkingConfig{
+									ChunkSize:               &chunkSize,
+									IncludeAncestorHeadings: true,
+								},
+							},
+						},
+						SkipHumanReview: true,
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := wantWorkflowTemplate("docai-basic", "default",
+		[]wfv1.Template{
+			dagTmpl(wfv1.DAGTask{Name: "process", Template: "process"}),
+			{Name: "process", Plugin: &wfv1.Plugin{Value: mustJSON(map[string]interface{}{
+				"gcpdocai": map[string]interface{}{
+					"processorName":   "projects/my-project/locations/us/processors/abc123",
+					"location":        "us",
+					"skipHumanReview": true,
+					"traceparent":     "{{workflow.parameters._flokoa_traceparent}}",
+					"inputDocuments": map[string]interface{}{
+						"gcsDocuments": []interface{}{
+							map[string]interface{}{
+								"gcsUri":   "gs://bucket/doc.pdf",
+								"mimeType": "application/pdf",
+							},
+						},
+					},
+					"outputConfig": map[string]interface{}{
+						"gcsUri": "gs://bucket/output/",
+					},
+					"processOptions": map[string]interface{}{
+						"layoutConfig": map[string]interface{}{
+							"chunkingConfig": map[string]interface{}{
+								"chunkSize":               float64(1024),
+								"includeAncestorHeadings": true,
+							},
+						},
+					},
+				},
+			})}, Outputs: pluginOutputs()},
+		},
+	)
+
+	assertDiff(t, want, got)
+}
+
+func TestCompile_GCPDocAIWithExpressions(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "docai-expr", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{
+				{Name: "inputUri"},
+				{Name: "outputUri"},
+			},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/my-project/locations/us/processors/abc123",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "{{params.inputUri}}", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "{{params.outputUri}}",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify expressions are translated to Argo workflow parameters
+	pluginJSON := got.Spec.Templates[1].Plugin.Value
+	var pluginData map[string]json.RawMessage
+	if err := json.Unmarshal(pluginJSON, &pluginData); err != nil {
+		t.Fatalf("failed to unmarshal plugin JSON: %v", err)
+	}
+
+	var docaiSpec map[string]interface{}
+	if err := json.Unmarshal(pluginData["gcpdocai"], &docaiSpec); err != nil {
+		t.Fatalf("failed to unmarshal gcpdocai spec: %v", err)
+	}
+
+	inputDocs := docaiSpec["inputDocuments"].(map[string]interface{})
+	gcsDocs := inputDocs["gcsDocuments"].([]interface{})
+	firstDoc := gcsDocs[0].(map[string]interface{})
+
+	// Expressions should be translated from {{params.x}} to {{workflow.parameters.x}}
+	if !strings.Contains(firstDoc["gcsUri"].(string), "workflow.parameters.inputUri") {
+		t.Errorf("expected inputUri expression to be translated, got: %s", firstDoc["gcsUri"])
+	}
+
+	outputConfig := docaiSpec["outputConfig"].(map[string]interface{})
+	if !strings.Contains(outputConfig["gcsUri"].(string), "workflow.parameters.outputUri") {
+		t.Errorf("expected outputUri expression to be translated, got: %s", outputConfig["gcsUri"])
+	}
+}
+
+func TestCompile_GCPDocAIWithGCSPrefix(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "docai-prefix", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/eu/processors/y",
+						Location:      "eu",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							GCSPrefix: &agentv1alpha1.GCPDocAIGCSPrefix{
+								GCSUriPrefix: "gs://bucket/input/",
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri:    "gs://bucket/output/",
+							FieldMask: "text,pages.layout",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify GCS prefix is set correctly
+	pluginJSON := got.Spec.Templates[1].Plugin.Value
+	var pluginData map[string]json.RawMessage
+	if err := json.Unmarshal(pluginJSON, &pluginData); err != nil {
+		t.Fatalf("failed to unmarshal plugin JSON: %v", err)
+	}
+
+	var docaiSpec map[string]interface{}
+	if err := json.Unmarshal(pluginData["gcpdocai"], &docaiSpec); err != nil {
+		t.Fatalf("failed to unmarshal gcpdocai spec: %v", err)
+	}
+
+	inputDocs := docaiSpec["inputDocuments"].(map[string]interface{})
+	prefix := inputDocs["gcsPrefix"].(map[string]interface{})
+	if prefix["gcsUriPrefix"] != "gs://bucket/input/" {
+		t.Errorf("expected gcsUriPrefix 'gs://bucket/input/', got: %s", prefix["gcsUriPrefix"])
+	}
+
+	outputConfig := docaiSpec["outputConfig"].(map[string]interface{})
+	if outputConfig["fieldMask"] != "text,pages.layout" {
+		t.Errorf("expected fieldMask 'text,pages.layout', got: %s", outputConfig["fieldMask"])
+	}
+}
+
+func TestCompile_GCPDocAIWithTimeout(t *testing.T) {
+	timeout := metav1.Duration{Duration: 15 * time.Minute}
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "docai-timeout", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/us/processors/x",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "gs://bucket/doc.pdf", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "gs://bucket/output/",
+						},
+						Timeout: &timeout,
+					},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify timeout is included in the plugin spec
+	pluginJSON := got.Spec.Templates[1].Plugin.Value
+	var pluginData map[string]json.RawMessage
+	if err := json.Unmarshal(pluginJSON, &pluginData); err != nil {
+		t.Fatalf("failed to unmarshal plugin JSON: %v", err)
+	}
+
+	var docaiSpec map[string]interface{}
+	if err := json.Unmarshal(pluginData["gcpdocai"], &docaiSpec); err != nil {
+		t.Fatalf("failed to unmarshal gcpdocai spec: %v", err)
+	}
+
+	if docaiSpec["timeout"] != "15m0s" {
+		t.Errorf("expected timeout '15m0s', got: %v", docaiSpec["timeout"])
+	}
+}
+
+func TestCompile_GCPDocAIInPipeline(t *testing.T) {
+	awf := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "docai-pipeline", Namespace: "default"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Params: []agentv1alpha1.WorkflowParam{
+				{Name: "inputUri", Value: "gs://bucket/doc.pdf"},
+			},
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name: "process-document",
+					GCPDocAI: &agentv1alpha1.GCPDocAITask{
+						ProcessorName: "projects/p/locations/us/processors/x",
+						Location:      "us",
+						InputDocuments: agentv1alpha1.GCPDocAIInputConfig{
+							Documents: []agentv1alpha1.GCPDocAIGCSDocument{
+								{GCSUri: "{{params.inputUri}}", MimeType: "application/pdf"},
+							},
+						},
+						OutputConfig: agentv1alpha1.GCPDocAIOutputConfig{
+							GCSUri: "gs://bucket/output/",
+						},
+					},
+				},
+				{
+					Name: "analyze",
+					Agent: &agentv1alpha1.AgentCall{
+						Name: "analyzer",
+						Text: "Analyze: {{tasks.process-document.output}}",
+					},
+					DependsOn: []string{"process-document"},
+				},
+			},
+		},
+	}
+
+	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify DAG has correct dependencies
+	dagTemplate := got.Spec.Templates[0]
+	if dagTemplate.DAG == nil {
+		t.Fatal("expected DAG template")
+	}
+
+	var analyzeTask *wfv1.DAGTask
+	for i := range dagTemplate.DAG.Tasks {
+		if dagTemplate.DAG.Tasks[i].Name == "analyze" {
+			analyzeTask = &dagTemplate.DAG.Tasks[i]
+			break
+		}
+	}
+	if analyzeTask == nil {
+		t.Fatal("expected 'analyze' DAG task")
+	}
+	if len(analyzeTask.Dependencies) != 1 || analyzeTask.Dependencies[0] != "process-document" {
+		t.Errorf("expected analyze to depend on process-document, got: %v", analyzeTask.Dependencies)
+	}
 }

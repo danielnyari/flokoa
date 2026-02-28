@@ -130,16 +130,19 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 		if task.HTTP != nil {
 			typeCount++
 		}
+		if task.GCPDocAI != nil {
+			typeCount++
+		}
 		if len(task.Switch) > 0 {
 			typeCount++
 		}
 		if typeCount == 0 {
 			allErrs = append(allErrs, field.Required(taskPath,
-				"exactly one of agent, agentTask, container, http, or switch must be specified"))
+				"exactly one of agent, agentTask, container, http, gcpDocAI, or switch must be specified"))
 		}
 		if typeCount > 1 {
 			allErrs = append(allErrs, field.Forbidden(taskPath,
-				"only one of agent, agentTask, container, http, or switch may be specified"))
+				"only one of agent, agentTask, container, http, gcpDocAI, or switch may be specified"))
 		}
 
 		// W4+W5: Validate AgentCall (text/message exclusivity + message parts)
@@ -155,6 +158,11 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 		// Validate HTTPTask
 		if task.HTTP != nil {
 			allErrs = append(allErrs, validateHTTPTask(taskPath.Child("http"), task.HTTP)...)
+		}
+
+		// Validate GCPDocAITask
+		if task.GCPDocAI != nil {
+			allErrs = append(allErrs, validateGCPDocAITask(taskPath.Child("gcpDocAI"), task.GCPDocAI)...)
 		}
 
 		// W6: Valid dependsOn references
@@ -294,6 +302,35 @@ func validateHTTPTask(httpPath *field.Path, ht *agentv1alpha1.HTTPTask) field.Er
 	return allErrs
 }
 
+// validateGCPDocAITask checks that the GCP Document AI task has valid required fields.
+func validateGCPDocAITask(docaiPath *field.Path, docai *agentv1alpha1.GCPDocAITask) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if docai.ProcessorName == "" {
+		allErrs = append(allErrs, field.Required(docaiPath.Child("processorName"),
+			"processorName is required"))
+	}
+	if docai.Location == "" {
+		allErrs = append(allErrs, field.Required(docaiPath.Child("location"),
+			"location is required"))
+	}
+
+	// Validate inputDocuments: at least one of documents or gcsPrefix
+	hasDocuments := len(docai.InputDocuments.Documents) > 0
+	hasPrefix := docai.InputDocuments.GCSPrefix != nil
+	if !hasDocuments && !hasPrefix {
+		allErrs = append(allErrs, field.Required(docaiPath.Child("inputDocuments"),
+			"one of documents or gcsPrefix must be specified"))
+	}
+
+	if docai.OutputConfig.GCSUri == "" {
+		allErrs = append(allErrs, field.Required(docaiPath.Child("outputConfig", "gcsUri"),
+			"gcsUri is required"))
+	}
+
+	return allErrs
+}
+
 func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, taskNames map[string]int, paramNames map[string]bool) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -351,6 +388,31 @@ func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, 
 					header.Value,
 				})
 			}
+		}
+	}
+	if task.GCPDocAI != nil {
+		if task.GCPDocAI.ProcessorName != "" {
+			fields = append(fields, exprField{taskPath.Child("gcpDocAI", "processorName"), task.GCPDocAI.ProcessorName})
+		}
+		for i, doc := range task.GCPDocAI.InputDocuments.Documents {
+			if doc.GCSUri != "" {
+				fields = append(fields, exprField{
+					taskPath.Child("gcpDocAI", "inputDocuments", "documents").Index(i).Child("gcsUri"),
+					doc.GCSUri,
+				})
+			}
+		}
+		if task.GCPDocAI.InputDocuments.GCSPrefix != nil && task.GCPDocAI.InputDocuments.GCSPrefix.GCSUriPrefix != "" {
+			fields = append(fields, exprField{
+				taskPath.Child("gcpDocAI", "inputDocuments", "gcsPrefix", "gcsUriPrefix"),
+				task.GCPDocAI.InputDocuments.GCSPrefix.GCSUriPrefix,
+			})
+		}
+		if task.GCPDocAI.OutputConfig.GCSUri != "" {
+			fields = append(fields, exprField{
+				taskPath.Child("gcpDocAI", "outputConfig", "gcsUri"),
+				task.GCPDocAI.OutputConfig.GCSUri,
+			})
 		}
 	}
 	if task.Condition != "" {

@@ -78,7 +78,7 @@ type WorkflowParam struct {
 }
 
 // WorkflowTask defines a single task in the workflow.
-// Exactly one of Agent, AgentTask, Container, HTTP, or Switch must be specified.
+// Exactly one of Agent, AgentTask, Container, HTTP, GCPDocAI, or Switch must be specified.
 type WorkflowTask struct {
 	// Name is the unique identifier for this task within the workflow.
 	// +kubebuilder:validation:Required
@@ -104,6 +104,12 @@ type WorkflowTask struct {
 	// The response body is captured as the task output.
 	// +optional
 	HTTP *HTTPTask `json:"http,omitempty"`
+
+	// GCPDocAI calls GCP Document AI's BatchProcessDocuments API.
+	// The operation name is captured as the task result, and the full batch
+	// process metadata (with per-document output URIs) is captured as the artifact.
+	// +optional
+	GCPDocAI *GCPDocAITask `json:"gcpDocAI,omitempty"`
 
 	// Switch routes to different tasks based on the output of a previous task.
 	// +optional
@@ -547,6 +553,135 @@ type HTTPHeaderValueFrom struct {
 	// ConfigMapKeyRef references a key in a Kubernetes ConfigMap.
 	// +optional
 	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
+}
+
+// GCPDocAITask calls GCP Document AI's BatchProcessDocuments API.
+// The operation name is captured as the task result, and the full batch
+// process metadata (with per-document output URIs) is captured as the artifact.
+// Field names align with the Document AI BatchProcessRequest proto.
+type GCPDocAITask struct {
+	// ProcessorName is the full resource name of the Document AI processor or processor version.
+	// Format: projects/{project}/locations/{location}/processors/{processor}
+	// or: projects/{project}/locations/{location}/processors/{processor}/processorVersions/{version}
+	// Supports expressions like {{params.processorName}}.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	ProcessorName string `json:"processorName"`
+
+	// Location is the GCP region for the regional Document AI endpoint (e.g., "us", "eu").
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Location string `json:"location"`
+
+	// InputDocuments specifies the GCS input documents to process.
+	// Aligns with documentaipb.BatchDocumentsInputConfig.
+	// +kubebuilder:validation:Required
+	InputDocuments GCPDocAIInputConfig `json:"inputDocuments"`
+
+	// OutputConfig specifies where to write the processed results in GCS.
+	// Aligns with documentaipb.DocumentOutputConfig.
+	// +kubebuilder:validation:Required
+	OutputConfig GCPDocAIOutputConfig `json:"outputConfig"`
+
+	// ProcessOptions configures processing behavior (layout, chunking, etc.).
+	// Aligns with documentaipb.ProcessOptions.
+	// +optional
+	ProcessOptions *GCPDocAIProcessOptions `json:"processOptions,omitempty"`
+
+	// SkipHumanReview skips the human review step when true.
+	// +optional
+	SkipHumanReview bool `json:"skipHumanReview,omitempty"`
+
+	// Timeout is the maximum duration to wait for the batch operation to complete.
+	// Defaults to 10 minutes if not specified.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+}
+
+// GCPDocAIInputConfig specifies the input documents for Document AI processing.
+// Exactly one of Documents or GCSPrefix must be specified.
+// Aligns with documentaipb.BatchDocumentsInputConfig.
+type GCPDocAIInputConfig struct {
+	// Documents is a list of individual GCS documents to process.
+	// Aligns with documentaipb.BatchDocumentsInputConfig_GcsDocuments.
+	// +optional
+	Documents []GCPDocAIGCSDocument `json:"documents,omitempty"`
+
+	// GCSPrefix processes all matching documents under a GCS prefix.
+	// Aligns with documentaipb.BatchDocumentsInputConfig_GcsPrefix.
+	// +optional
+	GCSPrefix *GCPDocAIGCSPrefix `json:"gcsPrefix,omitempty"`
+}
+
+// GCPDocAIGCSDocument specifies an individual GCS document.
+// Aligns with documentaipb.GcsDocument.
+type GCPDocAIGCSDocument struct {
+	// GCSUri is the GCS URI of the document (e.g., "gs://bucket/path/doc.pdf").
+	// Supports expressions like {{params.inputUri}}.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	GCSUri string `json:"gcsUri"`
+
+	// MimeType is the MIME type of the document (e.g., "application/pdf").
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	MimeType string `json:"mimeType"`
+}
+
+// GCPDocAIGCSPrefix specifies a GCS prefix for batch input.
+// Aligns with documentaipb.GcsPrefix.
+type GCPDocAIGCSPrefix struct {
+	// GCSUriPrefix is the GCS URI prefix (e.g., "gs://bucket/input/").
+	// Supports expressions.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	GCSUriPrefix string `json:"gcsUriPrefix"`
+}
+
+// GCPDocAIOutputConfig specifies the output destination for processed documents.
+// Aligns with documentaipb.DocumentOutputConfig.GcsOutputConfig.
+type GCPDocAIOutputConfig struct {
+	// GCSUri is the GCS URI prefix for output (e.g., "gs://bucket/output/").
+	// Supports expressions like {{params.outputUri}}.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	GCSUri string `json:"gcsUri"`
+
+	// FieldMask specifies which Document fields to include in the output.
+	// If not set, all fields are included.
+	// +optional
+	FieldMask string `json:"fieldMask,omitempty"`
+}
+
+// GCPDocAIProcessOptions configures Document AI processing behavior.
+// Aligns with documentaipb.ProcessOptions.
+type GCPDocAIProcessOptions struct {
+	// LayoutConfig configures layout analysis options.
+	// Aligns with documentaipb.ProcessOptions_LayoutConfig.
+	// +optional
+	LayoutConfig *GCPDocAILayoutConfig `json:"layoutConfig,omitempty"`
+}
+
+// GCPDocAILayoutConfig configures layout analysis.
+// Aligns with documentaipb.ProcessOptions_LayoutConfig.
+type GCPDocAILayoutConfig struct {
+	// ChunkingConfig configures document chunking.
+	// Aligns with documentaipb.ProcessOptions_LayoutConfig_ChunkingConfig.
+	// +optional
+	ChunkingConfig *GCPDocAIChunkingConfig `json:"chunkingConfig,omitempty"`
+}
+
+// GCPDocAIChunkingConfig configures document chunking behavior.
+// Aligns with documentaipb.ProcessOptions_LayoutConfig_ChunkingConfig.
+type GCPDocAIChunkingConfig struct {
+	// ChunkSize is the target chunk size in characters.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	ChunkSize *int32 `json:"chunkSize,omitempty"`
+
+	// IncludeAncestorHeadings includes ancestor headings in each chunk.
+	// +optional
+	IncludeAncestorHeadings bool `json:"includeAncestorHeadings,omitempty"`
 }
 
 // SwitchCase defines a conditional branch in a switch task.

@@ -371,6 +371,53 @@ argo:
           - ALL
       readOnlyRootFilesystem: true
 
+  gcpDocAIPlugin:
+    # -- Deploy the GCP Document AI executor plugin
+    enabled: false
+
+    image:
+      # -- GCP Document AI plugin image registry
+      registry: ghcr.io
+      # -- GCP Document AI plugin image repository
+      repository: danielnyari/flokoa-gcpdocai-plugin
+      # -- GCP Document AI plugin image tag (defaults to appVersion)
+      tag: ""
+
+    # -- Namespace where the Argo executor plugin will be created
+    namespace: argo
+
+    # -- Plugin resource requests and limits
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+
+    # -- Plugin container security context
+    # runAsGroup: 0 is required so the sidecar can read the Argo auth token
+    # created by the argoexec init container (owned by root group).
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 0
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+
+    # -- GCP authentication configuration
+    gcp:
+      # -- Mount a GCP service account key from a Kubernetes secret
+      serviceAccountKey:
+        enabled: false
+        # -- Name of the Kubernetes secret containing the GCP service account key
+        secretName: ""
+        # -- Key in the secret that contains the JSON key file
+        key: "key.json"
+
 # =============================================================================
 # Extra manifests
 # =============================================================================
