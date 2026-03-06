@@ -9,12 +9,13 @@ A ModelProvider:
 - Can be shared across multiple Model resources
 - Supports multiple LLM providers
 - Handles authentication and endpoint configuration
+- The provider type is inferred from which configuration block is set
 
 ## Supported Providers
 
 - **OpenAI** - OpenAI API and compatible endpoints
 - **Anthropic** - Claude models via Anthropic API
-- **Google** - Gemini models via Google AI or Vertex AI
+- **Google** - Gemini models via Google AI API or Vertex AI
 - **Bedrock** - AWS Bedrock inference
 
 ## Basic Structure
@@ -28,8 +29,9 @@ spec:
   apiKeySecretRef:
     name: api-credentials
     key: api-key
-  
-  # Exactly one provider configuration:
+
+  # Exactly one provider configuration block must be set.
+  # The provider type is inferred from which block is present.
   openai: {}
   # OR anthropic: {}
   # OR google: {}
@@ -49,16 +51,10 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  
+
   openai:
-    # Optional: override default endpoint
+    # Optional: override default endpoint (for Azure OpenAI, self-hosted, etc.)
     baseURL: "https://api.openai.com/v1"
-    
-    # Optional: organization ID
-    organizationID: "org-xxx"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60
 ```
 
 **Create the secret:**
@@ -78,13 +74,10 @@ spec:
   apiKeySecretRef:
     name: anthropic-credentials
     key: api-key
-  
+
   anthropic:
     # Optional: override default endpoint
     baseURL: "https://api.anthropic.com"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60
 ```
 
 **Create the secret:**
@@ -106,12 +99,11 @@ spec:
   apiKeySecretRef:
     name: google-credentials
     key: api-key
-  
-  google:
-    timeoutSeconds: 60
+
+  google: {}
 ```
 
-For Vertex AI (requires service account):
+For Vertex AI (requires service account and project):
 
 ```yaml
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -122,12 +114,10 @@ spec:
   google:
     project: "my-gcp-project"
     location: "us-central1"
-    
+
     serviceAccountKeySecretRef:
       name: gcp-sa-credentials
       key: service-account.json
-    
-    timeoutSeconds: 60
 ```
 
 **Create the service account secret:**
@@ -146,9 +136,6 @@ metadata:
 spec:
   bedrock:
     region: "us-east-1"
-    
-    # Optional: inference profile ARN
-    inferenceProfileARN: "arn:aws:bedrock:us-east-1:123456789012:inference-profile/xxx"
 ```
 
 For Bedrock, AWS credentials are typically provided via:
@@ -160,7 +147,7 @@ For Bedrock, AWS credentials are typically provided via:
 
 ### Custom Endpoints
 
-Use custom or self-hosted LLM endpoints:
+Use custom or self-hosted LLM endpoints with OpenAI-compatible APIs:
 
 ```yaml
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -171,11 +158,10 @@ spec:
   apiKeySecretRef:
     name: custom-api-credentials
     key: api-key
-  
+
   openai:
     baseURL: "https://my-custom-llm.example.com/v1"
-    timeoutSeconds: 120
-  
+
   # Custom headers for authentication or routing
   defaultHeaders:
     X-Custom-Header: "value"
@@ -195,20 +181,20 @@ spec:
   apiKeySecretRef:
     name: api-credentials
     key: api-key
-  
+
   openai:
     baseURL: "https://internal-llm.company.local/v1"
-  
+
   tls:
-    # Option 1: Skip verification (not recommended for production)
+    # Skip verification (not recommended for production)
     insecureSkipVerify: false
-    
-    # Option 2: Provide custom CA certificate
+
+    # Provide custom CA certificate
     caSecretRef:
       name: custom-ca-cert
       key: ca.crt
-    
-    # Include system CAs in addition to custom CA
+
+    # Include system CAs in addition to custom CA (default: true)
     useSystemCAs: true
 ```
 
@@ -218,12 +204,37 @@ kubectl create secret generic custom-ca-cert \
   --from-file=ca.crt=/path/to/ca.crt
 ```
 
+### Default Headers
+
+Add custom headers to all requests made through this provider:
+
+```yaml
+spec:
+  defaultHeaders:
+    X-Environment: "production"
+    X-Request-Source: "flokoa"
+    api-version: "2024-02-01"  # Useful for Azure OpenAI
+```
+
+## Spec Fields Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `apiKeySecretRef` | SecretKeySelector | No | Reference to secret containing the API key |
+| `openai` | Object | No* | OpenAI-specific config (baseURL) |
+| `anthropic` | Object | No* | Anthropic-specific config (baseURL) |
+| `google` | Object | No* | Google-specific config (project, location, serviceAccountKeySecretRef) |
+| `bedrock` | Object | No* | Bedrock-specific config (region) |
+| `tls` | Object | No | TLS configuration for custom endpoints |
+| `defaultHeaders` | map[string]string | No | Headers to include in all requests |
+
+\* Exactly one provider block must be set.
+
 ## Examples
 
 ### Shared Provider for Multiple Models
 
 ```yaml
-# Provider configuration
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelProvider
 metadata:
@@ -233,8 +244,7 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  openai:
-    organizationID: "org-xxx"
+  openai: {}
 ---
 # Multiple models using the same provider
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -263,7 +273,6 @@ spec:
 ### Multi-Provider Setup
 
 ```yaml
-# OpenAI Provider
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelProvider
 metadata:
@@ -274,7 +283,6 @@ spec:
     key: api-key
   openai: {}
 ---
-# Anthropic Provider
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelProvider
 metadata:
@@ -285,7 +293,6 @@ spec:
     key: api-key
   anthropic: {}
 ---
-# Google Provider
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelProvider
 metadata:
@@ -308,73 +315,28 @@ spec:
   apiKeySecretRef:
     name: azure-credentials
     key: api-key
-  
+
   openai:
     baseURL: "https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-    timeoutSeconds: 60
-  
+
   defaultHeaders:
     api-version: "2024-02-01"
 ```
 
-### Development vs Production
-
-Development (less strict):
-```yaml
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: ModelProvider
-metadata:
-  name: dev-provider
-  namespace: development
-spec:
-  apiKeySecretRef:
-    name: dev-credentials
-    key: api-key
-  
-  openai:
-    timeoutSeconds: 30
-```
-
-Production (with monitoring and failover):
-```yaml
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: ModelProvider
-metadata:
-  name: prod-provider
-  namespace: production
-  labels:
-    environment: production
-    monitoring: enabled
-spec:
-  apiKeySecretRef:
-    name: prod-credentials
-    key: api-key
-  
-  openai:
-    organizationID: "org-prod"
-    timeoutSeconds: 120
-  
-  defaultHeaders:
-    X-Environment: "production"
-    X-Request-Source: "flokoa"
-```
-
 ## Status Fields
-
-The operator maintains status information:
 
 ```yaml
 status:
   provider: openai  # Resolved provider type
   ready: true
-  
+
   conditions:
     - type: Ready
       status: "True"
       lastTransitionTime: "2026-01-15T10:30:00Z"
       reason: SecretFound
       message: "Provider is configured and ready"
-  
+
   observedGeneration: 1
   secretHash: "abc123..."  # For detecting secret changes
 ```
@@ -402,7 +364,7 @@ kubectl create secret generic openai-credentials \
   --from-literal=api-key=sk-proj-new-key \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# The operator will detect the change automatically
+# The operator will detect the change automatically via secretHash
 ```
 
 ### Using Providers Across Namespaces
@@ -411,8 +373,8 @@ kubectl create secret generic openai-credentials \
 # Create provider in shared namespace
 kubectl apply -f provider.yaml -n shared-resources
 
-# Reference from different namespace
-kubectl apply -f model.yaml -n my-app
+# Reference from different namespace in Model spec
+# providerRef.namespace: shared-resources
 ```
 
 ## Security Best Practices
@@ -425,40 +387,6 @@ kubectl apply -f model.yaml -n my-app
 6. **Audit secret access** using Kubernetes audit logs
 7. **Consider external secret management** (e.g., Vault, AWS Secrets Manager)
 8. **Use service accounts** (IRSA/Workload Identity) when possible instead of API keys
-
-### Example: Restricting Secret Access
-
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: agent-sa
-  namespace: my-namespace
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: secret-reader
-  namespace: my-namespace
-rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  resourceNames: ["openai-credentials"]  # Only specific secrets
-  verbs: ["get"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: agent-secret-reader
-  namespace: my-namespace
-subjects:
-- kind: ServiceAccount
-  name: agent-sa
-roleRef:
-  kind: Role
-  name: secret-reader
-  apiGroup: rbac.authorization.k8s.io
-```
 
 ## Troubleshooting
 
@@ -473,7 +401,7 @@ Common issues:
 - Secret not found or wrong name/key
 - Invalid API key in secret
 - Network connectivity issues to provider API
-- Invalid provider configuration
+- No provider configuration block set
 
 ### Authentication Errors
 
@@ -487,14 +415,14 @@ kubectl get modelprovider openai-provider -o yaml
 
 ### Connection Timeouts
 
-- Increase `timeoutSeconds` if requests are timing out
 - Check network policies allowing egress to provider APIs
 - Verify DNS resolution works for provider endpoints
 - Check firewall rules and proxy configurations
+- Set `timeOut` on the Model resource parameters if needed
 
 ### Testing Provider Connection
 
-Create a test Model and Agent to verify connectivity:
+Create a test Model to verify connectivity:
 
 ```yaml
 apiVersion: agent.flokoa.ai/v1alpha1

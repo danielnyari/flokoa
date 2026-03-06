@@ -5,52 +5,51 @@ This document provides an overview of how Flokoa components interact and the ove
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Kubernetes Cluster                        │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │           Flokoa Operator (Control Plane)          │    │
-│  │                                                     │    │
-│  │  • Watches CRDs (Agent, Model, ModelProvider, etc) │    │
-│  │  • Reconciles desired state                        │    │
-│  │  • Creates Deployments, Services, ConfigMaps       │    │
-│  │  • Manages agent lifecycle                         │    │
-│  └────────────────────────────────────────────────────┘    │
-│                          │                                  │
-│                          │ creates/manages                  │
-│                          ▼                                  │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │              Agent Runtime Resources                │    │
-│  │                                                     │    │
-│  │  ┌──────────────────────────────────────────────┐ │    │
-│  │  │         Agent Deployment (Pods)              │ │    │
-│  │  │                                              │ │    │
-│  │  │  • AI Agent Container                        │ │    │
-│  │  │  • Runs your agent code                      │ │    │
-│  │  │  • Connects to LLM providers                 │ │    │
-│  │  │  • Uses tools to call APIs                   │ │    │
-│  │  └──────────────────────────────────────────────┘ │    │
-│  │                                                     │    │
-│  │  ┌──────────────────────────────────────────────┐ │    │
-│  │  │         Agent Service (Load Balancer)        │ │    │
-│  │  │                                              │ │    │
-│  │  │  • Exposes agent pods                        │ │    │
-│  │  │  • Provides stable endpoint                  │ │    │
-│  │  └──────────────────────────────────────────────┘ │    │
-│  └────────────────────────────────────────────────────┘    │
-│                          │                                  │
-│                          │ uses                             │
-│                          ▼                                  │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │            Configuration Resources                  │    │
-│  │                                                     │    │
-│  │  • ModelProvider (LLM connection config)           │    │
-│  │  • Model (LLM parameters)                          │    │
-│  │  • AgentTool (External API integrations)           │    │
-│  │  • Secrets (API keys, credentials)                 │    │
-│  │  • ConfigMaps (Configuration data)                 │    │
-│  └────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                       Kubernetes Cluster                             │
+│                                                                      │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │              Flokoa Operator (Control Plane)                  │  │
+│  │                                                                │  │
+│  │  • Watches 6 CRDs (Agent, Model, ModelProvider,               │  │
+│  │    AgentTool, Instruction, AgentWorkflow)                      │  │
+│  │  • Reconciles desired state → Deployments, Services           │  │
+│  │  • Compiles AgentWorkflows → Argo WorkflowTemplates           │  │
+│  │  • gRPC API server with OIDC auth                             │  │
+│  │  • OpenTelemetry observability                                │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                          │                                           │
+│            creates/manages│                                          │
+│                          ▼                                           │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                  Agent Runtime Resources                      │  │
+│  │                                                                │  │
+│  │  ┌─────────────────────┐     ┌──────────────────────────┐    │  │
+│  │  │  Agent Deployment   │     │  Agent Service           │    │  │
+│  │  │  (Pods)             │     │                          │    │  │
+│  │  │  • AI agent code    │◄───►│  • Stable endpoint       │    │  │
+│  │  │  • A2A endpoints    │     │  • Load balancing        │    │  │
+│  │  └─────────────────────┘     └──────────────────────────┘    │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                          │                                           │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │               Argo Workflows Integration                      │  │
+│  │                                                                │  │
+│  │  • AgentWorkflow → Argo WorkflowTemplate compilation          │  │
+│  │  • A2A Executor Plugin (sidecar, port 4355)                   │  │
+│  │  • DAG-based multi-agent orchestration                        │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                          │                                           │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                Configuration Resources                        │  │
+│  │                                                                │  │
+│  │  • ModelProvider (LLM connection config)                      │  │
+│  │  • Model (LLM parameters)                                    │  │
+│  │  • AgentTool (External API integrations)                      │  │
+│  │  • Instruction (System prompts → ConfigMaps)                  │  │
+│  │  • Secrets (API keys, credentials)                            │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────┘
                           │
                           │ calls
                           ▼
@@ -59,7 +58,7 @@ This document provides an overview of how Flokoa components interact and the ove
         │                                           │
         │  • OpenAI API                             │
         │  • Anthropic API                          │
-        │  • Google Gemini API                      │
+        │  • Google Gemini API / Vertex AI          │
         │  • AWS Bedrock                            │
         │  • External HTTP APIs (via AgentTools)    │
         └──────────────────────────────────────────┘
@@ -72,11 +71,18 @@ This document provides an overview of how Flokoa components interact and the ove
 The Kubernetes operator that manages the lifecycle of AI agents:
 
 **Responsibilities:**
-- Watches for changes to Agent, Model, ModelProvider, and AgentTool resources
-- Creates and manages underlying Kubernetes resources (Deployments, Services)
+- Watches for changes to all six CRDs
+- Creates and manages Kubernetes resources (Deployments, Services, ConfigMaps)
+- Compiles AgentWorkflows into Argo WorkflowTemplates
 - Handles updates, scaling, and deletion of agents
 - Reports status and health information
-- Detects AI frameworks used by agents
+
+**Architecture Layers:**
+- **API layer** (`api/v1alpha1/`) - CRD type definitions with kubebuilder markers
+- **Controller layer** (`internal/controller/`) - Kubernetes reconciliation loops and provider implementations
+- **Domain layer** (`internal/app/agent/`) - Business logic for agent reconciliation (tools, instructions, models)
+- **Infrastructure layer** (`internal/infra/`) - Kubernetes resource builders and repository pattern
+- **Server layer** (`internal/server/`) - gRPC API with OIDC auth and grpc-gateway REST proxy
 
 **Controller Reconciliation Loop:**
 ```
@@ -90,6 +96,8 @@ Resolves Model and ModelProvider references
          ↓
 Resolves AgentTool references
          ↓
+Resolves Instruction (inline or ref)
+         ↓
 Creates/Updates Deployment
          ↓
 Creates/Updates Service
@@ -99,7 +107,17 @@ Updates Agent status
 Continues monitoring
 ```
 
-### 2. Custom Resource Definitions (CRDs)
+### 2. gRPC API Server
+
+The operator includes a gRPC server for programmatic access:
+- CRUD operations for all CRD resources
+- OIDC authentication via go-oidc
+- REST API via grpc-gateway
+- Protobuf definitions managed with buf
+
+### 3. Custom Resource Definitions (CRDs)
+
+The operator manages six CRDs under `agent.flokoa.ai/v1alpha1`:
 
 #### Agent
 The main resource representing a deployed AI agent.
@@ -107,6 +125,7 @@ The main resource representing a deployed AI agent.
 **Key Interactions:**
 - **References** → Model (for LLM access)
 - **References** → AgentTool (for external capabilities)
+- **References/Creates** → Instruction (system prompt)
 - **Creates** → Deployment (pod runtime)
 - **Creates** → Service (network endpoint)
 
@@ -125,12 +144,28 @@ Specific LLM model with parameters.
 - **Referenced by** → Agent (model selection)
 
 #### AgentTool
-External tool/API integration.
+External tool/API integration backed by OpenAPI specifications.
 
 **Key Interactions:**
 - **May reference** → Service (internal Kubernetes service)
 - **May reference** → ConfigMap (OpenAPI specs)
 - **Referenced by** → Agent (tool usage)
+
+#### Instruction
+System prompt management.
+
+**Key Interactions:**
+- **Creates** → ConfigMap (instruction text)
+- **Referenced by** → Agent (system prompt)
+- **Can be created by** → Agent (inline template)
+
+#### AgentWorkflow
+Multi-agent workflow definitions.
+
+**Key Interactions:**
+- **References** → Agent (task targets via A2A)
+- **Creates** → Argo WorkflowTemplate (compiled workflow)
+- **Supports** → DAG dependencies, conditions, retries
 
 ## Resource Relationships
 
@@ -151,20 +186,27 @@ External tool/API integration.
                           │
                           │ references
                           │
-                          ▼
-┌─────────────────┐     ┌───────────────────┐     ┌──────────────┐
-│   AgentTool     │ ◄───│      Agent        │────►│  Deployment  │
-│                 │     │                   │     │              │
-│  • Type         │     │  • Card (meta)    │     │  • Pods      │
-│  • Description  │     │  • Runtime        │     │  • Replicas  │
-│  • HTTP API     │     │  • Model ref      │     └──────────────┘
-│  • Schema       │     │  • Tools          │
-└─────────────────┘     └───────────────────┘     ┌──────────────┐
-                                │                  │   Service    │
-                                └─────────────────►│              │
-                                                   │  • Endpoint  │
-                                                   │  • Port      │
-                                                   └──────────────┘
+┌──────────────┐         ▼
+│ Instruction  │   ┌───────────────────┐     ┌──────────────┐
+│              │◄──│      Agent        │────►│  Deployment  │
+│ • Content    │   │                   │     │  • Pods      │
+│ → ConfigMap  │   │  • Card (A2A)     │     │  • Replicas  │
+└──────────────┘   │  • Runtime        │     └──────────────┘
+                   │  • Model ref      │
+┌──────────────┐   │  • Instruction    │     ┌──────────────┐
+│  AgentTool   │◄──│  • Tools          │────►│   Service    │
+│              │   └────────┬──────────┘     │  • Endpoint  │
+│ • OpenAPI    │            │                └──────────────┘
+│ • URL/SvcRef │            │
+└──────────────┘            │ referenced by
+                            ▼
+                   ┌───────────────────┐     ┌──────────────────┐
+                   │  AgentWorkflow    │────►│ Argo Workflow    │
+                   │                   │     │ Template         │
+                   │  • Tasks (DAG)    │     │ (compiled)       │
+                   │  • Params         │     └──────────────────┘
+                   │  • Conditions     │
+                   └───────────────────┘
 ```
 
 ## Agent Lifecycle
@@ -177,14 +219,25 @@ kind: Agent
 metadata:
   name: my-agent
 spec:
+  card:
+    name: "My Agent"
+    description: "Example agent"
+    version: "1.0.0"
+    skills:
+      - id: "main"
+        name: "Main"
+        description: "Main capability"
+        tags: ["general"]
   model:
     name: gpt-4o-model
+  instruction:
+    template: "You are a helpful assistant."
   tools:
     - toolRef:
         name: weather-tool
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         image: my-agent:v1.0.0
 ```
@@ -194,13 +247,14 @@ spec:
 2. Operator validates the spec
 3. Operator resolves model reference → checks if Model exists and is ready
 4. Operator resolves tool references → checks if AgentTools exist
-5. Operator creates Deployment with agent container
-6. Operator creates Service to expose agent
-7. Operator updates Agent status to "Pending"
-8. Pods start, containers pull image
-9. Containers become ready
-10. Operator updates Agent status to "Running"
-11. Agent URL is available in status
+5. Operator processes instruction (creates Instruction CR if inline template)
+6. Operator creates Deployment with agent container
+7. Operator creates Service to expose agent
+8. Operator updates Agent status to "Pending"
+9. Pods start, containers pull image
+10. Containers become ready
+11. Operator updates Agent status to "Running"
+12. Agent URL is available in status
 
 ### 2. Agent Update
 
@@ -216,14 +270,8 @@ When you update an Agent:
 
 ```bash
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/replicas", "value": 5}]'
+  -p='[{"op": "replace", "path": "/spec/runtime/standard/replicas", "value": 5}]'
 ```
-
-**What happens:**
-1. Agent spec updated with new replica count
-2. Operator updates Deployment
-3. Kubernetes scales pods up or down
-4. Status reflects new replica counts
 
 ### 4. Agent Deletion
 
@@ -237,7 +285,8 @@ kubectl delete agent my-agent
 3. Deployment is deleted
 4. Pods are terminated gracefully
 5. Service is deleted
-6. Agent resource is removed
+6. Child Instruction CR (if any) is deleted
+7. Agent resource is removed
 
 ## Runtime Backends
 
@@ -248,8 +297,7 @@ The default runtime backend using Kubernetes Deployments:
 **Components Created:**
 - **Deployment**: Manages agent pod replicas
 - **Service**: ClusterIP service exposing agent
-- **ConfigMap** (optional): For configuration data
-- **Secrets** (via references): For sensitive data
+- **ConfigMap** (optional): For instruction and configuration data
 
 **Features:**
 - Pod replica management
@@ -260,6 +308,47 @@ The default runtime backend using Kubernetes Deployments:
 - Affinity/anti-affinity
 - Node selection
 - Security contexts
+
+### Template Runtime
+
+Operator-managed runtime using a generic image:
+
+**Components Created:**
+- **Deployment**: With `flokoa-managed-agent` image
+- **Service**: ClusterIP service
+- **ConfigMap**: Mounted configuration (model, tools, instruction, output schema)
+- **Secret**: Mounted API credentials
+
+**Features:**
+- No custom container image needed
+- Agent behavior defined via Instruction and output schema
+- Uses pydantic-ai framework internally
+- Supports all standard scheduling options
+
+## AgentWorkflow Compilation
+
+AgentWorkflow CRDs are compiled into Argo Workflow resources:
+
+```
+AgentWorkflow spec.tasks
+         ↓
+Compiler (agentworkflow_compiler.go)
+         ↓
+Translates to Argo DAG template
+         ↓
+Task types mapped:
+  • agent → A2A executor plugin template
+  • agentTask → Container template (flokoa-managed-task)
+  • container → Container template
+  • http → HTTP template
+  • switch → Argo condition/when
+         ↓
+Creates Argo WorkflowTemplate CR
+         ↓
+Status.workflowTemplateName updated
+```
+
+The A2A executor plugin runs as a sidecar in workflow pods, calling agents via the A2A protocol.
 
 ## Tool Integration
 
@@ -282,8 +371,6 @@ Calls external API
   ↓
 Receives response
   ↓
-Parses using output schema
-  ↓
 Returns to LLM
 ```
 
@@ -299,10 +386,6 @@ openApi:
   openApiSchema:
     endpointPath: "/openapi.json"
 ```
-- Calls Kubernetes service
-- No external network required
-- Faster, more secure
-- No authentication typically needed
 
 **External (url):**
 ```yaml
@@ -311,10 +394,6 @@ openApi:
   openApiSchema:
     endpointPath: "/openapi.json"
 ```
-- Calls external HTTP API
-- Requires egress network access
-- May need authentication
-- Subject to external rate limits
 
 ## Model Resolution
 
@@ -346,10 +425,8 @@ Agent container gets:
 
 ```
 namespace: default
-  • agents
-  • models
-  • modelproviders
-  • agenttools
+  • agents, models, modelproviders,
+    agenttools, instructions, agentworkflows
 ```
 
 Good for: Small deployments, development
@@ -358,44 +435,23 @@ Good for: Small deployments, development
 
 ```
 namespace: shared-resources
-  • modelproviders (OpenAI, Anthropic, etc.)
-  
+  • modelproviders, instructions (shared prompts)
+
 namespace: shared-models
-  • models (GPT-4, Claude, etc.)
+  • models
 
 namespace: shared-tools
-  • agenttools (common integrations)
+  • agenttools
 
 namespace: app-1
-  • agents (specific to this app)
-  • models (app-specific configs)
-  • agenttools (app-specific tools)
-  
+  • agents, agentworkflows
+  • app-specific models, tools, instructions
+
 namespace: app-2
-  • agents
-  • models
-  • agenttools
+  • agents, agentworkflows
 ```
 
 Good for: Multi-team, multi-app deployments
-
-### Environment Isolation
-
-```
-namespace: dev
-  • All development resources
-  
-namespace: staging
-  • Staging resources
-  • May share models/providers with prod
-  
-namespace: production
-  • Production agents
-  • Production models
-  • Production providers
-```
-
-Good for: Environment separation, security
 
 ## Security Architecture
 
@@ -413,137 +469,28 @@ ModelProvider    AgentTool
 Referenced by:   Used by:
     ↓                 ↓
   Model            Agent
-    ↓                 ↓
-Referenced by:   ┌───┴───┐
-    ↓            ↓       ↓
-  Agent        Reads    Executes
-               at        at
-             startup    runtime
+    ↓
+Referenced by:
+    ↓
+  Agent
 ```
 
-### RBAC Recommendations
+### RBAC
 
-**For Users:**
-```yaml
-# Can create/manage agents
-kind: Role
-rules:
-- apiGroups: ["agent.flokoa.ai"]
-  resources: ["agents"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
-- apiGroups: ["agent.flokoa.ai"]
-  resources: ["agenttools"]
-  verbs: ["get", "list"]
-```
-
-**For Agents:**
-```yaml
-# Agent service account - minimal permissions
-kind: Role
-rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  resourceNames: ["specific-secret-name"]
-  verbs: ["get"]
-```
-
-**For Operator:**
-```yaml
-# Operator needs broad permissions
-kind: ClusterRole
-rules:
-- apiGroups: ["agent.flokoa.ai"]
-  resources: ["*"]
-  verbs: ["*"]
-- apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["*"]
-- apiGroups: [""]
-  resources: ["services", "secrets", "configmaps"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
-```
-
-## Networking
-
-### Service Discovery
-
-Agents are exposed via ClusterIP services:
-```
-Agent: my-agent
-  ↓
-Service: my-agent.default.svc.cluster.local:8080
-  ↓
-Pods: my-agent-xxxx, my-agent-yyyy
-```
-
-### Ingress/Load Balancer
-
-To expose agents externally:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: agent-ingress
-spec:
-  rules:
-  - host: agents.example.com
-    http:
-      paths:
-      - path: /my-agent
-        pathType: Prefix
-        backend:
-          service:
-            name: my-agent
-            port:
-              number: 8080
-```
-
-### Network Policies
-
-Restrict agent communication:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: agent-netpol
-spec:
-  podSelector:
-    matchLabels:
-      flokoa.ai/agent: my-agent
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: ingress-nginx
-  egress:
-  - to:
-    - namespaceSelector: {}
-      podSelector:
-        matchLabels:
-          app: inventory-service
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: kube-system
-    ports:
-    - protocol: UDP
-      port: 53
-```
+The operator provides pre-built roles:
+- **Admin** - Full CRUD on all Flokoa CRDs
+- **Editor** - Create/update/delete
+- **Viewer** - Read-only access
 
 ## Observability
 
 ### Metrics
 
-Agents can expose Prometheus metrics:
+The operator exposes Prometheus metrics. Agents can expose custom metrics:
 ```yaml
 spec:
   runtime:
-    spec:
+    standard:
       container:
         ports:
         - containerPort: 8080
@@ -554,40 +501,34 @@ spec:
 
 ### Logging
 
-Agent logs available via:
 ```bash
 kubectl logs -l flokoa.ai/agent=my-agent
 ```
 
 ### Tracing
 
-Agents can integrate with OpenTelemetry:
+Agents and the operator integrate with OpenTelemetry:
 ```yaml
 env:
 - name: OTEL_ENDPOINT
   value: "http://otel-collector:4317"
-- name: OTEL_SERVICE_NAME
-  value: "my-agent"
 ```
 
 ### Status Conditions
 
-Operator maintains conditions on resources:
+Operator maintains conditions on all resources:
 ```yaml
 status:
   conditions:
   - type: Ready
     status: "True"
     reason: DeploymentAvailable
-  - type: ModelResolved
-    status: "True"
-    reason: ModelFound
 ```
 
 ## Best Practices
 
 1. **Separation of Concerns**: Keep providers, models, and agents in appropriate namespaces
-2. **Reuse Resources**: Share ModelProviders and common tools across agents
+2. **Reuse Resources**: Share ModelProviders, Instructions, and common tools across agents
 3. **Security First**: Use secrets, RBAC, network policies
 4. **Resource Limits**: Always set CPU/memory limits
 5. **Health Checks**: Configure liveness and readiness probes

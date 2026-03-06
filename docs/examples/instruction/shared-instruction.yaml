@@ -1,0 +1,76 @@
+# Shared Instruction deployed in a common namespace,
+# referenced by agents across multiple team namespaces.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Instruction
+metadata:
+  name: shared-support-guidelines
+  namespace: shared-resources
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+    flokoa.ai/purpose: support
+spec:
+  content: |
+    You are a customer support agent for Acme Corp. Follow these guidelines:
+
+    ## Interaction Protocol
+    1. Greet the customer by name if available
+    2. Acknowledge their issue with empathy
+    3. Classify the issue: billing, technical, account, or general
+    4. Resolve the issue or escalate to the appropriate team
+
+    ## Response Format
+    - Keep responses under 200 words when possible
+    - Use bullet points for multi-step instructions
+    - Always end with a summary of actions taken or next steps
+
+    ## Escalation Rules
+    - Billing disputes over $500: escalate to billing-senior
+    - Security concerns: escalate immediately to security-team
+    - Unresolved after 3 exchanges: offer human agent transfer
+
+    Tone: Professional, empathetic, solution-oriented.
+---
+# Agent in team-a namespace referencing the shared instruction
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: support-agent
+  namespace: team-a
+spec:
+  instruction:
+    instructionRef:
+      name: shared-support-guidelines
+      namespace: shared-resources
+  model:
+    name: gpt-4o
+  runtime:
+    type: standard
+    spec:
+      container:
+        name: agent
+        image: ghcr.io/example/support-agent:latest
+        ports:
+        - containerPort: 8080
+---
+# Agent in team-b namespace referencing the same shared instruction
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: support-agent
+  namespace: team-b
+spec:
+  instruction:
+    instructionRef:
+      name: shared-support-guidelines
+      namespace: shared-resources
+  model:
+    name: gpt-4o
+  runtime:
+    type: standard
+    spec:
+      container:
+        name: agent
+        image: ghcr.io/example/support-agent:latest
+        ports:
+        - containerPort: 8080

@@ -9,9 +9,8 @@ spec:
   apiKeySecretRef:
     name: google-credentials
     key: api-key
-  
-  google:
-    timeoutSeconds: 60
+
+  google: {}
 ---
 # Google Vertex AI Provider (requires service account)
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -26,10 +25,8 @@ spec:
     # GCP project and location
     project: "my-gcp-project-id"
     location: "us-central1"
-    
+
     # Service account key
     serviceAccountKeySecretRef:
       name: gcp-sa-credentials
       key: service-account.json
-    
-    timeoutSeconds: 60

@@ -5,7 +5,7 @@ metadata:
 spec:
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: ghcr.io/example/simple-agent:latest

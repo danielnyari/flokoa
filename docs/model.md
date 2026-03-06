@@ -534,7 +534,7 @@ spec:
     name: gpt-4o-default
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: ghcr.io/example/test-agent:latest

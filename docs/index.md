@@ -12,6 +12,7 @@ New to Flokoa? Start here:
 
 1. **[Getting Started Guide](getting-started.md)** - Installation, quick start, and core concepts
 2. **[Architecture Overview](architecture.md)** - How Flokoa components work together
+3. **[Python SDK](python-sdk.md)** - Build and run agents locally with the CLI and SDK
 
 ## Resource Documentation
 
@@ -21,6 +22,8 @@ Learn about each Custom Resource Definition (CRD):
 - **[ModelProvider](modelprovider.md)** - Connect to LLM providers (OpenAI, Anthropic, Google, Bedrock)
 - **[Model](model.md)** - Configure LLM models with parameters
 - **[AgentTool](agenttool.md)** - Give agents access to external APIs and services
+- **[Instruction](instruction.md)** - Manage and share system prompts
+- **[AgentWorkflow](agentworkflow.md)** - Orchestrate multi-agent workflows (compiled to Argo Workflows)
 
 ## Examples
 
@@ -59,12 +62,16 @@ Browse example configurations in the [`examples/`](examples/) directory:
 - [`agenttool/create-order.yaml`](examples/agenttool/create-order.yaml) - Complex nested schemas
 - [`agenttool/search-kb.yaml`](examples/agenttool/search-kb.yaml) - Search knowledge base
 
+### Instruction Examples
+- [`instruction/basic-instruction.yaml`](examples/instruction/basic-instruction.yaml) - Simple system prompt
+- [`instruction/shared-instruction.yaml`](examples/instruction/shared-instruction.yaml) - Shared across agents
+
+### AgentWorkflow Examples
+- [`agentworkflow/simple-workflow.yaml`](examples/agentworkflow/simple-workflow.yaml) - Simple sequential workflow
+- [`agentworkflow/multi-agent-workflow.yaml`](examples/agentworkflow/multi-agent-workflow.yaml) - Multi-agent DAG workflow
+
 ### Complete Examples
 - [`complete-example.yaml`](examples/complete-example.yaml) - End-to-end customer service agent with all resources
-
-## Testing
-
-- **[End-to-End Test Plan](e2e-test-plan.md)** - Operator + Python SDK integration testing strategy
 
 ## Quick Reference
 
@@ -78,7 +85,7 @@ metadata:
 spec:
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: your-agent:v1.0.0
@@ -93,6 +100,16 @@ spec:
   model:
     name: gpt-4o-model
     namespace: shared-models  # optional
+```
+
+### Add an Instruction
+
+```yaml
+spec:
+  instruction:
+    template: |
+      You are a helpful customer service agent.
+      Always be polite and professional.
 ```
 
 ### Add Tools
@@ -122,7 +139,7 @@ spec:
 # 3. Deploy agent with single replica
 spec:
   runtime:
-    spec:
+    standard:
       replicas: 1
       container:
         resources:
@@ -139,7 +156,7 @@ spec:
 # 3. Deploy agent with high availability
 spec:
   runtime:
-    spec:
+    standard:
       replicas: 3
       container:
         resources:
@@ -187,6 +204,8 @@ kubectl get agents
 kubectl get models
 kubectl get modelproviders
 kubectl get agenttools
+kubectl get instructions
+kubectl get agentworkflows
 
 # Get detailed information
 kubectl describe agent my-agent
@@ -204,7 +223,7 @@ kubectl edit agent my-agent
 
 # Patch specific fields
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/replicas", "value": 5}]'
+  -p='[{"op": "replace", "path": "/spec/runtime/standard/replicas", "value": 5}]'
 
 # Apply updated manifest
 kubectl apply -f agent.yaml
@@ -226,6 +245,20 @@ kubectl get events --sort-by='.lastTimestamp'
 # Check agent status
 kubectl get agent my-agent -o jsonpath='{.status.phase}'
 ```
+
+## Python SDK
+
+Run agents locally without a Kubernetes cluster:
+
+```bash
+# Install the SDK
+pip install flokoa[pydantic-ai]
+
+# Run an agent
+flokoa run -m my_module:my_agent --framework pydantic-ai
+```
+
+See the [Python SDK documentation](python-sdk.md) for full details.
 
 ## Troubleshooting
 
@@ -275,8 +308,7 @@ kubectl get agent my-agent -o jsonpath='{.status.phase}'
 ## Additional Resources
 
 - [GitHub Repository](https://github.com/danielnyari/flokoa)
-- [Python SDK Documentation](../sdk/python/README.md)
-- [Operator Documentation](../operator/README.md)
+- [Quick Reference](quick-reference.md)
 
 ## Contributing
 
@@ -284,4 +316,4 @@ Found an issue or want to improve the documentation? Please open an issue or pul
 
 ## License
 
-Flokoa is licensed under the Apache License 2.0. See the [LICENSE](../LICENSE) file for details.
+Flokoa is licensed under the Apache License 2.0.

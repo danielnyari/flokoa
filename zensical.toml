@@ -11,13 +11,13 @@
 # The site_name is shown in the page header and the browser window title
 #
 # Read more: https://zensical.org/docs/setup/basics/#site_name
-site_name = "Documentation"
+site_name = "Flokoa Documentation"
 
 # The site_description is included in the HTML head and should contain a
 # meaningful description of the site content for use by search engines.
 #
 # Read more: https://zensical.org/docs/setup/basics/#site_description
-site_description = "A new project generated from the default template project."
+site_description = "Flokoa is a Kubernetes-native platform for deploying and managing AI agents."
 
 # The site_author attribute. This is used in the HTML head element.
 #
@@ -44,10 +44,19 @@ Copyright &copy; 2026 The authors
 # can be defined using TOML syntax.
 #
 # Read more: https://zensical.org/docs/setup/navigation/
-# nav = [
-#   { "Get started" = "index.md" },
-#   { "Markdown in 5min" = "markdown.md" },
-# ]
+nav = [
+  { "Home" = "index.md" },
+  { "Getting Started" = "getting-started.md" },
+  { "Architecture" = "architecture.md" },
+  { "Agent" = "agent.md" },
+  { "ModelProvider" = "modelprovider.md" },
+  { "Model" = "model.md" },
+  { "AgentTool" = "agenttool.md" },
+  { "Instruction" = "instruction.md" },
+  { "AgentWorkflow" = "agentworkflow.md" },
+  { "Python SDK" = "python-sdk.md" },
+  { "Quick Reference" = "quick-reference.md" },
+]
 
 # With the "extra_css" option you can add your own CSS styling to customize
 # your Zensical project according to your needs. You can add any number of

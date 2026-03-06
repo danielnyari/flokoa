@@ -9,10 +9,7 @@ spec:
   apiKeySecretRef:
     name: anthropic-credentials
     key: api-key
-  
+
   anthropic:
     # Optional: override default endpoint
     # baseURL: "https://api.anthropic.com"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60

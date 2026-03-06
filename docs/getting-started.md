@@ -10,6 +10,10 @@ Flokoa consists of several key components:
 - **ModelProvider**: Configuration for connecting to LLM providers (OpenAI, Anthropic, Google, AWS Bedrock)
 - **Model**: Definition of a specific LLM model with its parameters
 - **AgentTool**: External tools that agents can use to interact with APIs and services
+- **Instruction**: System prompt management, shareable across agents
+- **AgentWorkflow**: Multi-agent workflows compiled to Argo Workflows
+
+Additionally, the **Python SDK** lets you build and run agents locally with a CLI.
 
 ## Quick Start
 
@@ -22,8 +26,9 @@ Flokoa consists of several key components:
 ### Install the Operator
 
 ```bash
-# Apply the Flokoa operator manifests
-kubectl apply -f https://github.com/danielnyari/flokoa/releases/latest/download/install.yaml
+# Install CRDs and deploy the operator via Helm
+helm install flokoa oci://ghcr.io/danielnyari/flokoa/charts/flokoa \
+  --namespace flokoa-system --create-namespace
 
 # Verify the operator is running
 kubectl get pods -n flokoa-system
@@ -39,9 +44,18 @@ kind: Agent
 metadata:
   name: my-first-agent
 spec:
+  card:
+    name: "My First Agent"
+    description: "A simple example agent"
+    version: "1.0.0"
+    skills:
+      - id: "hello"
+        name: "Hello"
+        description: "Responds to greetings"
+        tags: ["demo"]
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: ghcr.io/example/simple-agent:latest
@@ -73,20 +87,67 @@ kubectl describe agent my-first-agent
 Flokoa supports two runtime backends:
 
 - **standard** - Creates a Kubernetes Deployment using your own container image, along with a Service to expose it. Manages pod lifecycle, scaling, and health checks.
-- **template** - Uses a generic runtime image managed by the operator. The agent's behavior is defined entirely in the CR via instructions and output schema.
+- **template** - Uses a generic runtime image managed by the operator. The agent's behavior is defined entirely in the CR via instructions and output schema. No custom container image needed.
 
-### Framework Detection
+### Framework Declaration
 
-Flokoa can automatically detect which AI framework your agent uses:
-- pydantic-ai
-- langchain
-- google-adk
-- crewai
-- marvin
-- autogen
-- a2a (Agent-to-Agent protocol)
+You can declare which AI framework your agent uses for observability:
 
-You can also explicitly declare the framework in your Agent spec for better observability.
+- `pydantic-ai` - Pydantic AI framework
+- `langchain` - LangChain framework
+- `crewai` - CrewAI framework
+- `marvin` - Marvin AI framework
+- `autogen` - Microsoft AutoGen
+- `a2a` - Agent-to-Agent protocol
+
+### A2A Protocol
+
+Flokoa uses the A2A (Agent-to-Agent) protocol across the platform:
+
+- Agents expose A2A-compatible HTTP endpoints
+- The `card` field on Agent CRs defines A2A metadata (skills, capabilities)
+- The Argo Workflows executor plugin communicates with agents via A2A
+- The Python SDK serves agents via A2A endpoints using FastAPI
+
+### Instructions
+
+System prompts can be managed as first-class resources:
+
+```yaml
+# Inline instruction in Agent spec
+spec:
+  instruction:
+    template: "You are a helpful customer service agent."
+
+# Or reference a shared Instruction resource
+spec:
+  instruction:
+    instructionRef:
+      name: shared-prompt
+      namespace: shared-resources
+```
+
+### AgentWorkflows
+
+Orchestrate multiple agents with declarative workflows:
+
+```yaml
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: research-pipeline
+spec:
+  tasks:
+    - name: research
+      agent:
+        name: researcher-agent
+        text: "Research the topic: {{params.topic}}"
+    - name: summarize
+      agent:
+        name: writer-agent
+        text: "Summarize this research: {{tasks.research.output}}"
+      dependsOn: [research]
+```
 
 ## Resource Organization
 
@@ -113,12 +174,29 @@ spec:
     namespace: shared-models  # Optional, defaults to agent's namespace
 ```
 
+## Python SDK
+
+Run agents locally without a Kubernetes cluster:
+
+```bash
+# Install the SDK
+pip install flokoa[pydantic-ai]
+
+# Run an agent
+flokoa run -m my_module:my_agent --framework pydantic-ai --port 8000
+```
+
+See the [Python SDK documentation](python-sdk.md) for details.
+
 ## Next Steps
 
 - Learn about [Agents](agent.md) - How to deploy and configure AI agents
 - Learn about [ModelProviders](modelprovider.md) - How to connect to LLM providers
 - Learn about [Models](model.md) - How to configure LLM models
 - Learn about [AgentTools](agenttool.md) - How to give agents access to external APIs
+- Learn about [Instructions](instruction.md) - How to manage system prompts
+- Learn about [AgentWorkflows](agentworkflow.md) - How to orchestrate multi-agent pipelines
+- Learn about the [Python SDK](python-sdk.md) - How to build and run agents locally
 
 ## Common Patterns
 
@@ -128,7 +206,7 @@ For development:
 ```yaml
 spec:
   runtime:
-    spec:
+    standard:
       replicas: 1
       container:
         resources:
@@ -141,7 +219,7 @@ For production:
 ```yaml
 spec:
   runtime:
-    spec:
+    standard:
       replicas: 3
       container:
         resources:
@@ -202,7 +280,7 @@ kubectl logs -l flokoa.ai/agent=<agent-name>
 **Agent stuck in Pending**
 - Check if the container image is accessible
 - Verify resource requests can be satisfied by the cluster
-- Check for image pull secrets if using private registries
+- Check image pull secrets if using private registries
 
 **Agent pods crashing**
 - Check pod logs: `kubectl logs <pod-name>`

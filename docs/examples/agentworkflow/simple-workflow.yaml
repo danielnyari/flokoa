@@ -1,0 +1,26 @@
+# Simple sequential AgentWorkflow example
+# Two agents work in sequence: one researches a topic, the other summarizes it.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: simple-workflow
+spec:
+  description: "Research a topic and produce a summary"
+  timeout: 15m
+  params:
+    - name: topic
+      description: "The topic to research and summarize"
+      value: "Kubernetes operators"
+  tasks:
+    - name: research
+      timeout: 10m
+      agent:
+        name: researcher-agent
+        text: "Research the following topic in depth: {{params.topic}}"
+    - name: summarize
+      dependsOn:
+        - research
+      timeout: 5m
+      agent:
+        name: summarizer-agent
+        text: "Summarize the following research into a concise report: {{tasks.research.output}}"

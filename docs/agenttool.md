@@ -193,7 +193,7 @@ spec:
 
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: ghcr.io/example/agent:v1.0.0
@@ -221,7 +221,7 @@ spec:
 
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: ghcr.io/example/agent:v1.0.0
@@ -333,7 +333,7 @@ spec:
 
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: ghcr.io/example/admin-agent:v1.0.0

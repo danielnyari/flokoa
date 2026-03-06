@@ -9,13 +9,7 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  
+
   openai:
     # Optional: override default endpoint
     # baseURL: "https://api.openai.com/v1"
-    
-    # Optional: organization ID
-    # organizationID: "org-xxx"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60

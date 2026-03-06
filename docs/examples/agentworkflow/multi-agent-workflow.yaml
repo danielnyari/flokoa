@@ -1,0 +1,121 @@
+# Multi-agent workflow with parallel tasks, conditional routing, and mixed task types.
+# 1. Fetches data from an API and researches two topics in parallel
+# 2. Classifies the combined results
+# 3. Routes to different handlers based on classification
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: multi-agent-workflow
+spec:
+  description: "Multi-agent pipeline with parallel research, classification, and conditional routing"
+  timeout: 1h
+  retryStrategy:
+    limit: 2
+    backoff:
+      duration: "30s"
+      factor: 2
+  params:
+    - name: query
+      description: "The main query to process"
+    - name: api-endpoint
+      description: "External API endpoint to fetch context from"
+      value: "https://api.example.com/context"
+  tasks:
+    # Phase 1: Gather data in parallel
+    - name: fetch-context
+      timeout: 2m
+      retryStrategy:
+        limit: 3
+        backoff:
+          duration: "10s"
+          factor: 2
+      http:
+        url: "{{params.api-endpoint}}?q={{params.query}}"
+        method: GET
+        headers:
+          - name: Accept
+            value: "application/json"
+          - name: Authorization
+            valueFrom:
+              secretKeyRef:
+                name: api-credentials
+                key: token
+        successCondition: "response.statusCode == 200"
+
+    - name: research-technical
+      timeout: 10m
+      agent:
+        name: technical-researcher
+        text: "Research the technical aspects of: {{params.query}}"
+
+    - name: research-business
+      timeout: 10m
+      agent:
+        name: business-researcher
+        text: "Research the business implications of: {{params.query}}"
+
+    # Phase 2: Combine and classify
+    - name: combine-findings
+      dependsOn:
+        - fetch-context
+        - research-technical
+        - research-business
+      agent:
+        name: analyst-agent
+        text: >-
+          Combine and analyze the following findings:
+          Context: {{tasks.fetch-context.output}}
+          Technical: {{tasks.research-technical.output}}
+          Business: {{tasks.research-business.output}}
+
+    - name: classify-priority
+      dependsOn:
+        - combine-findings
+      agentTask:
+        type: classify
+        input: "{{tasks.combine-findings.output}}"
+        labels:
+          - high-priority
+          - medium-priority
+          - low-priority
+        model:
+          name: gpt-4o-model
+
+    # Phase 3: Route based on classification
+    - name: route
+      dependsOn:
+        - classify-priority
+      switch:
+        - condition: "'{{tasks.classify-priority.output}}' == 'high-priority'"
+          then: detailed-report
+        - condition: "'{{tasks.classify-priority.output}}' == 'medium-priority'"
+          then: standard-report
+        - default: brief-summary
+
+    - name: detailed-report
+      dependsOn:
+        - route
+      timeout: 20m
+      agent:
+        name: senior-writer-agent
+        text: >-
+          Create a detailed executive report with recommendations based on:
+          {{tasks.combine-findings.output}}
+
+    - name: standard-report
+      dependsOn:
+        - route
+      timeout: 15m
+      agent:
+        name: writer-agent
+        text: >-
+          Create a standard report summarizing:
+          {{tasks.combine-findings.output}}
+
+    - name: brief-summary
+      dependsOn:
+        - route
+      timeout: 5m
+      agent:
+        name: summarizer-agent
+        text: "Provide a brief summary of: {{tasks.combine-findings.output}}"

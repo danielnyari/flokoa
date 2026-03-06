@@ -12,7 +12,7 @@ spec:
 
   runtime:
     type: standard
-    spec:
+    standard:
       replicas: 3
 
       # Service account for RBAC
@@ -20,37 +20,37 @@ spec:
 
       # Container configuration
       container:
-      name: agent
-      image: ghcr.io/example/langchain-agent:v2.1.0
+        name: agent
+        image: ghcr.io/example/langchain-agent:v2.1.0
 
-      ports:
-      - containerPort: 8080
-        name: http
-        protocol: TCP
-      - containerPort: 9090
-        name: metrics
-        protocol: TCP
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
 
-      env:
-      - name: AGENT_MODE
-        value: "production"
-      - name: ENABLE_TRACING
-        value: "true"
-      - name: OTEL_ENDPOINT
-        value: "http://otel-collector:4317"
-      - name: API_KEY
-        valueFrom:
-          secretKeyRef:
-            name: agent-secrets
-            key: api-key
+        env:
+        - name: AGENT_MODE
+          value: "production"
+        - name: ENABLE_TRACING
+          value: "true"
+        - name: OTEL_ENDPOINT
+          value: "http://otel-collector:4317"
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agent-secrets
+              key: api-key
 
-      resources:
-        requests:
-          cpu: "200m"
-          memory: "256Mi"
-        limits:
-          cpu: "1000m"
-          memory: "1Gi"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
 
         # Volume mounts for configuration
         volumeMounts:

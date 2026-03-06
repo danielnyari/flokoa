@@ -10,6 +10,3 @@ spec:
   bedrock:
     # AWS region
     region: "us-east-1"
-    
-    # Optional: inference profile ARN
-    # inferenceProfileARN: "arn:aws:bedrock:us-east-1:123456789012:inference-profile/xxx"

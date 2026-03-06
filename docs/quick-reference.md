@@ -10,6 +10,8 @@ A quick reference guide for common tasks and patterns in Flokoa.
 | **ModelProvider** | Connect to LLM | Optional* | OpenAI, Anthropic, Google credentials |
 | **Model** | Configure LLM | Optional* | GPT-4o with specific parameters |
 | **AgentTool** | External APIs | Optional | Weather API, database queries |
+| **Instruction** | System prompts | Optional | Shared behavior definitions |
+| **AgentWorkflow** | Multi-agent pipelines | Optional | Research → summarize → review |
 
 \* Not required if your agent doesn't use LLMs
 
@@ -27,6 +29,8 @@ kubectl get agents
 kubectl get models
 kubectl get modelproviders
 kubectl get agenttools
+kubectl get instructions
+kubectl get agentworkflows    # shortName: awf
 
 # Detailed information
 kubectl describe agent my-agent
@@ -67,25 +71,11 @@ kubectl port-forward svc/my-agent 8080:8080
 ```bash
 # Scale replicas
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/replicas", "value": 5}]'
+  -p='[{"op": "replace", "path": "/spec/runtime/standard/replicas", "value": 5}]'
 
 # Scale to zero
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/replicas", "value": 0}]'
-```
-
-### Updates
-
-```bash
-# Update image
-kubectl set image agent/my-agent agent=new-image:v2.0.0
-
-# Patch configuration
-kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/container/env/0/value", "value": "new-value"}]'
-
-# Edit directly
-kubectl edit agent my-agent
+  -p='[{"op": "replace", "path": "/spec/runtime/standard/replicas", "value": 0}]'
 ```
 
 ## Resource Patterns
@@ -98,9 +88,18 @@ kind: Agent
 metadata:
   name: simple
 spec:
+  card:
+    name: "Simple Agent"
+    description: "A simple agent"
+    version: "1.0.0"
+    skills:
+      - id: "default"
+        name: "Default"
+        description: "Default skill"
+        tags: ["general"]
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: my-agent:latest
@@ -108,7 +107,7 @@ spec:
         - containerPort: 8080
 ```
 
-### Agent with Model
+### Agent with Model and Instruction
 
 ```yaml
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -116,11 +115,22 @@ kind: Agent
 metadata:
   name: ai-agent
 spec:
+  card:
+    name: "AI Agent"
+    description: "An AI-powered agent"
+    version: "1.0.0"
+    skills:
+      - id: "assist"
+        name: "Assist"
+        description: "General assistance"
+        tags: ["ai"]
   model:
     name: gpt-4o-model
+  instruction:
+    template: "You are a helpful assistant."
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: my-agent:latest
@@ -136,6 +146,15 @@ kind: Agent
 metadata:
   name: tool-agent
 spec:
+  card:
+    name: "Tool Agent"
+    description: "Agent with tools"
+    version: "1.0.0"
+    skills:
+      - id: "search"
+        name: "Search"
+        description: "Search and retrieve data"
+        tags: ["tools"]
   tools:
     - toolRef:
         name: weather-api
@@ -149,7 +168,7 @@ spec:
             endpointPath: "/openapi.json"
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: my-agent:latest
@@ -165,14 +184,26 @@ kind: Agent
 metadata:
   name: prod-agent
 spec:
+  card:
+    name: "Production Agent"
+    description: "Production-grade agent"
+    version: "1.0.0"
+    skills:
+      - id: "serve"
+        name: "Serve"
+        description: "Production service"
+        tags: ["production"]
   model:
     name: gpt-4o-model
+  instruction:
+    instructionRef:
+      name: prod-prompt
   tools:
     - toolRef:
         name: api-tool
   runtime:
     type: standard
-    spec:
+    standard:
       replicas: 3
       container:
         name: agent
@@ -241,11 +272,6 @@ spec:
     name: anthropic-creds
     key: api-key
   anthropic: {}
-```
-
-```bash
-kubectl create secret generic anthropic-creds \
-  --from-literal=api-key=sk-ant-xxx
 ```
 
 ### Google (API Key)
@@ -318,11 +344,68 @@ parameters:
 
 ```yaml
 spec:
-  model: "gpt-4o-mini"  # Use cheaper model
+  model: "gpt-4o-mini"
   parameters:
-    maxTokens: 2048     # Limit output
+    maxTokens: 2048
     openai:
-      promptCacheKey: "my-cache"  # Enable caching
+      promptCacheKey: "my-cache"
+```
+
+## Instruction Patterns
+
+### Inline
+
+```yaml
+spec:
+  instruction:
+    template: |
+      You are a helpful customer service agent.
+      Always be polite and professional.
+```
+
+### Shared Reference
+
+```yaml
+# Instruction resource
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Instruction
+metadata:
+  name: shared-prompt
+  namespace: shared-resources
+spec:
+  content: "You are a helpful assistant."
+---
+# Agent referencing it
+spec:
+  instruction:
+    instructionRef:
+      name: shared-prompt
+      namespace: shared-resources
+```
+
+## Workflow Patterns
+
+### Simple Sequential
+
+```yaml
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: AgentWorkflow
+metadata:
+  name: pipeline
+spec:
+  params:
+    - name: topic
+      value: "AI safety"
+  tasks:
+    - name: research
+      agent:
+        name: researcher
+        text: "Research: {{params.topic}}"
+    - name: summarize
+      agent:
+        name: writer
+        text: "Summarize: {{tasks.research.output}}"
+      dependsOn: [research]
 ```
 
 ## Tool Patterns
@@ -362,77 +445,14 @@ spec:
       endpointPath: "/openapi.json"
 ```
 
-### OpenAPI Spec from ConfigMap
+## Python SDK
 
-```yaml
-openApi:
-  url: "https://api.example.com"
-  openApiSchema:
-    valueFrom:
-      name: api-specs
-      key: openapi.json
-```
+```bash
+# Install
+pip install flokoa[pydantic-ai]
 
-## Namespace Patterns
-
-### Single Namespace (Simple)
-
-```yaml
-# Everything in default namespace
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: ModelProvider
-metadata:
-  name: openai
-  namespace: default
----
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: Model
-metadata:
-  name: gpt-4o
-  namespace: default
-spec:
-  providerRef:
-    name: openai  # Same namespace
----
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: Agent
-metadata:
-  name: my-agent
-  namespace: default
-spec:
-  model:
-    name: gpt-4o  # Same namespace
-```
-
-### Shared Resources
-
-```yaml
-# In shared-resources namespace
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: ModelProvider
-metadata:
-  name: openai
-  namespace: shared-resources
----
-# In app namespace
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: Model
-metadata:
-  name: gpt-4o
-  namespace: my-app
-spec:
-  providerRef:
-    name: openai
-    namespace: shared-resources  # Cross-namespace ref
----
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: Agent
-metadata:
-  name: my-agent
-  namespace: my-app
-spec:
-  model:
-    name: gpt-4o  # Same namespace
+# Run an agent locally
+flokoa run -m my_module:my_agent --framework pydantic-ai --port 8000
 ```
 
 ## Troubleshooting Guide
@@ -444,9 +464,9 @@ spec:
 | Model not found | `kubectl get model <name>` | Verify model exists, check namespace |
 | Provider not ready | `kubectl describe modelprovider <name>` | Check secret exists, valid API key |
 | Tool not working | `kubectl logs -l flokoa.ai/agent=<name>` | Test endpoint, check schema |
-| Connection timeout | Network policies, DNS | Increase timeout, check connectivity |
+| Connection timeout | Network policies, DNS | Check connectivity |
+| Workflow not ready | `kubectl describe awf <name>` | Check task names, agent refs |
 | High costs | Token usage | Lower maxTokens, use cheaper model |
-| Slow responses | `kubectl top pods` | Scale up, optimize prompts |
 
 ## Best Practices Checklist
 
@@ -466,8 +486,8 @@ spec:
 - [ ] Use security contexts
 - [ ] Store secrets properly
 - [ ] Version images (no :latest)
+- [ ] Use Instruction CRDs for prompts
 - [ ] Test in staging first
-- [ ] Monitor costs
 
 ### Security
 - [ ] Never commit secrets
@@ -479,54 +499,6 @@ spec:
 - [ ] Drop all capabilities
 - [ ] Enable seccomp profile
 
-## Quick Tips
-
-1. **Test locally first**: Use `kubectl apply --dry-run=client` to validate syntax
-2. **Use labels**: Organize resources with labels for easier management
-3. **Version everything**: Tag images and track manifest versions in Git
-4. **Start simple**: Begin with minimal config, add complexity as needed
-5. **Monitor costs**: Track LLM token usage and set budgets
-6. **Cache when possible**: Use provider caching features
-7. **Scale gradually**: Start with 1 replica, scale up as needed
-8. **Document configs**: Add annotations explaining non-obvious settings
-9. **Test tools independently**: Verify tools work before giving to agents
-10. **Review logs regularly**: Catch issues early
-
-## Resource Limits Guide
-
-### Small Agent (Development)
-```yaml
-resources:
-  requests:
-    cpu: "100m"
-    memory: "128Mi"
-  limits:
-    cpu: "500m"
-    memory: "512Mi"
-```
-
-### Medium Agent (Production)
-```yaml
-resources:
-  requests:
-    cpu: "500m"
-    memory: "512Mi"
-  limits:
-    cpu: "2000m"
-    memory: "2Gi"
-```
-
-### Large Agent (High Load)
-```yaml
-resources:
-  requests:
-    cpu: "1000m"
-    memory: "1Gi"
-  limits:
-    cpu: "4000m"
-    memory: "4Gi"
-```
-
 ## Further Reading
 
 - [Getting Started](getting-started.md)
@@ -534,5 +506,8 @@ resources:
 - [Model Documentation](model.md)
 - [ModelProvider Documentation](modelprovider.md)
 - [AgentTool Documentation](agenttool.md)
+- [Instruction Documentation](instruction.md)
+- [AgentWorkflow Documentation](agentworkflow.md)
+- [Python SDK](python-sdk.md)
 - [Architecture Overview](architecture.md)
 - [Examples](examples/)

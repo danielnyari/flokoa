@@ -12,7 +12,7 @@ spec:
 
   runtime:
     type: standard
-    spec:
+    standard:
       # Number of agent replicas
       replicas: 2
 

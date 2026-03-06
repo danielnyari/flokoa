@@ -12,8 +12,7 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  openai:
-    timeoutSeconds: 60
+  openai: {}
 
 ---
 # Step 2: Create Model
@@ -153,7 +152,7 @@ spec:
   # Runtime configuration
   runtime:
     type: standard
-    spec:
+    standard:
       # High availability with 3 replicas
       replicas: 3
       
