@@ -10,7 +10,7 @@ This document is the working reference for cutting the first release. It was pro
 
 The **code is in better shape than the project's own paperwork suggests** — all five CI legs pass locally at HEAD **[verified]**, the architecture is clean and layered, and the February `AUDIT.md` P0s were mostly fixed (contrary to what a stale reading implies). What's missing for a first release is almost entirely **release engineering and packaging**, plus a handful of real product bugs:
 
-1. **CI has been 100% red on `main` since 2026-02-14** (~150 consecutive failed runs across all 5 workflows) **[verified]** — yet tests, lint, Python tests, and docs all pass locally today **[verified]**. The e2e failure cause is structural (see §6); the rest needs one fresh push to re-establish signal.
+1. **CI has been 100% red on `main` since 2026-02-14** (~150 consecutive failed runs across all 5 workflows) **[verified]** — yet tests, lint, Python tests, and docs all pass locally today **[verified]**, and a fresh push during this review came back **green: Tests ✅ and Lint ✅ on GitHub Actions (2026-06-10)** **[verified]**. The historical red was environmental, not code. Only the e2e failure cause is structural (see §6).
 2. **No release machinery exists at all**: zero git tags, zero GitHub releases **[verified]**, no release workflow, no CHANGELOG, no Helm/PyPI publishing.
 3. **Versions are chaos**: `0.0.6` / `0.0.7` / `0.1.0` / `0.0.23` / `0.0.5` / `0.0.0` across components (§7).
 4. **Three shipped-but-broken edges**: Helm chart is missing the AgentWorkflow CRD **[verified]**, the default AgentTask runtime image was never published (registry 403) **[verified]**, and webhooks can't be enabled via the chart **[verified]**.
@@ -136,7 +136,7 @@ internal/errors/       error classification: permanent (no requeue) / dependency
 
 ## 6. CI/CD: state and root causes **[verified via GitHub API]**
 
-373 workflow runs on `main`. Conclusions:
+373 workflow runs on `main`. **Fresh signal (2026-06-10, this review's branch push): Tests ✅ success, Lint ✅ success** — first green runs since January; the E2E run fails at the `OPENAI_API_KEY` guard as explained below. Historical conclusions:
 
 - **Every run from 2026-02-14 → 2026-02-28 failed** — all 5 workflows (Tests, Lint, E2E, Python SDK Tests, Documentation), every push.
 - Last observed E2E success: 2026-01-25 (Lint/Tests/Docs were already failing then).
@@ -293,5 +293,6 @@ operator/  go mod tidy          → no diff
 sdk/python/flokoa  uv run python -m pytest --cov  → 467 passed, 79% cov
 repo root  zensical build       → PASS (3 broken-link warnings)
 GitHub     releases/tags        → none; CI red on main since 2026-02-14; run logs expired (410)
+GitHub     fresh CI (this branch, 2026-06-10) → Tests ✅  Lint ✅  (E2E fails on missing OPENAI_API_KEY wiring)
 ghcr.io    flokoa-operator/server/a2a-plugin/cli :latest → exist (200); danielnyari/flokoa/managed-task → 403
 ```
