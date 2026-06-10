@@ -24,7 +24,7 @@ The **code is in better shape than the project's own paperwork suggests** — al
 
 - **History:** 178 commits, all dated 2026-02-10 → 2026-02-28 (intense 3-week sprint; CI runs exist from late January, so history was likely rebased/rewritten at some point). Dormant since Feb 28. Authors: Daniel Nyari (135), Claude (43). **[verified]**
 - **No tags, no GitHub releases.** **[verified]**
-- **The repo has evolved well past `CLAUDE.md`** (see §12): an embedded Nuxt 4 web UI, two extra Python packages (`flokoa-common`, `flokoa-codemode-mcp`), new operator layers (`internal/domain`, `internal/converter`, `internal/errors`, `internal/config`), SSE watch + AG-UI playground endpoints.
+- **The repo has evolved well past `CLAUDE.md`** (see §12): an embedded Nuxt 4 web UI, two extra Python packages (`flokoa-common`, `flokoa-codemode-mcp`), new operator layers (`operator/internal/domain`, `operator/internal/converter`, `operator/internal/errors`, `operator/internal/config`), SSE watch + AG-UI playground endpoints.
 - Two prior self-audits exist and remain useful: `operator/AUDIT.md` (2026-02-18, 32 findings — **majority of P0s since fixed**, see §11) and `OVERMOCKING_REVIEW.md` (Python test-quality findings — **unaddressed**).
 
 ### Component inventory
@@ -56,17 +56,17 @@ internal/converter/    CRD ↔ protobuf conversion (pure, well tested)
 internal/errors/       error classification: permanent (no requeue) / dependency (30s requeue) / transient (backoff)
 ```
 
-- **Agent** controller owns Deployment + Service + ConfigMaps; watches AgentTool/Instruction/ConfigMap/Secret/Model/ModelProvider for cross-resource reactions. Two runtime modes: `standard` (user image) and `template` (managed runtime image, default `ghcr.io/danielnyari/flokoa-cli:latest` — `internal/infra/builder/deployment.go:16`).
+- **Agent** controller owns Deployment + Service + ConfigMaps; watches AgentTool/Instruction/ConfigMap/Secret/Model/ModelProvider for cross-resource reactions. Two runtime modes: `standard` (user image) and `template` (managed runtime image, default `ghcr.io/danielnyari/flokoa-cli:latest` — `operator/internal/infra/builder/deployment.go:16`).
 - **AgentTool** → ConfigMap with resolved OpenAPI spec (inline value / ConfigMap ref / HTTP fetch). **Instruction** → ConfigMap with prompt. **Model**/**ModelProvider** → validation + status (provider inference, secret hash change detection).
 - **AgentWorkflow** → compiled to Argo WorkflowTemplate (SpecHash drift detection; status tracks compilation only — *run* status is intentionally surfaced via the gRPC/REST API and Argo, not the CRD).
-- All controllers use `updateStatusWithRetry` (`internal/controller/status.go`) — conflict-safe status updates **[verified]**.
-- All **6 webhooks exist and are registered** (`api/v1alpha1/*_webhook.go` for 5 CRDs + `internal/webhook/v1alpha1/agentworkflow_webhook.go` for DAG/cycle/expression validation), but only behind `--enable-webhooks` (default **false**, needs TLS) — `cmd/main.go:92,288-310` **[verified]**.
+- All controllers use `updateStatusWithRetry` (`operator/internal/controller/status.go`) — conflict-safe status updates **[verified]**.
+- All **6 webhooks exist and are registered** (`operator/api/v1alpha1/*_webhook.go` for 5 CRDs + `operator/internal/webhook/v1alpha1/agentworkflow_webhook.go` for DAG/cycle/expression validation), but only behind `--enable-webhooks` (default **false**, needs TLS) — `operator/cmd/main.go:92,288-310` **[verified]**.
 
 ### 3.2 gRPC/REST server + UI
 
 - 5 services: Agent (read-only by design), AgentTool/Model/ModelProvider (full CRUD), AgentWorkflow (Get/List + SubmitRun/ListRuns/GetRun). **No Instruction service exists** (no proto file) **[verified]**.
-- grpc-gateway REST under `/api/v1alpha1/...`; gRPC `Watch*` RPCs return `Unimplemented` — realtime is delivered instead via **SSE watch endpoints** (`internal/server/watch.go`) for all 5 resources + workflow runs.
-- **Playground**: `POST /api/v1alpha1/namespaces/{ns}/agents/{name}/playground` bridges to A2A agents and streams **AG-UI events** over SSE (`internal/server/playground.go`).
+- grpc-gateway REST under `/api/v1alpha1/...`; gRPC `Watch*` RPCs return `Unimplemented` — realtime is delivered instead via **SSE watch endpoints** (`operator/internal/server/watch.go`) for all 5 resources + workflow runs.
+- **Playground**: `POST /api/v1alpha1/namespaces/{ns}/agents/{name}/playground` bridges to A2A agents and streams **AG-UI events** over SSE (`operator/internal/server/playground.go`).
 - **Auth:** optional OIDC (`AUTH_ENABLED`, default false), bearer-token validation, claims in context. **No authorization layer** — any authenticated user can do everything. gRPC is plaintext (no TLS option); reflection enabled by default.
 - **UI:** Nuxt 4 + @nuxt/ui + TanStack Table + Vue Flow (workflow DAG). Embedded into the server binary via `operator/ui/embed.go` (`dist/` only has `.gitkeep`; the server Dockerfile builds the UI in-stage). Settings pages are front-end stubs with no backend.
 
@@ -111,10 +111,10 @@ internal/errors/       error classification: permanent (no requeue) / dependency
 
 | Check | Command | Result |
 |---|---|---|
-| Operator unit tests | `make test` (envtest, K8s 1.33) | **PASS** (exit 0) |
-| Operator lint | `make lint` (golangci-lint v2.1.0, same pin as CI) | **PASS** — 0 issues |
-| `go mod tidy` drift | `go mod tidy && git status` | **clean** |
-| `make manifests generate` drift | (runs inside `make test`) | **clean** — generated artifacts in sync |
+| Operator unit tests | `cd operator && make test` (envtest, K8s 1.33) | **PASS** (exit 0) |
+| Operator lint | `cd operator && make lint` (golangci-lint v2.1.0, same pin as CI) | **PASS** — 0 issues |
+| `go mod tidy` drift | `cd operator && go mod tidy && git status` | **clean** |
+| `make manifests generate` drift | (runs inside `cd operator && make test`) | **clean** — generated artifacts in sync |
 | Python SDK tests (CI-style) | `cd sdk/python/flokoa && uv run python -m pytest --cov` | **PASS** — 467 passed, **79% coverage** |
 | Python workspace-root pytest | `cd sdk/python && uv run pytest` | **FAILS at collection** — `flokoa-managed-agent/tests` ImportPathMismatchError + `tests/e2e` ModuleNotFoundError (config issue, not failing tests) |
 | Docs build | `zensical build --clean` | **PASS** — 3 broken-link warnings (`docs/index.md:67` → `e2e-test-plan.md`; `:278` → `../sdk/python/README.md`; `:279` → `../operator/README.md`) |
@@ -191,17 +191,17 @@ None exists (no tags/releases/workflow/CHANGELOG). Minimum viable for v0.1.0, as
 - `zensical.toml`: site name "Documentation", default-template description, `site_url` commented out.
 
 ### 7.7 Unpinned `:latest` defaults in code
-`DefaultTemplateRuntimeImage = "ghcr.io/danielnyari/flokoa-cli:latest"` (`internal/infra/builder/deployment.go:16`) and the managed-task default (§7.3). Pin to the release version at build time (ldflags or generated constant) so operator v0.1.0 deploys runtime v0.1.0.
+`DefaultTemplateRuntimeImage = "ghcr.io/danielnyari/flokoa-cli:latest"` (`operator/internal/infra/builder/deployment.go:16`) and the managed-task default (§7.3). Pin to the release version at build time (ldflags or generated constant) so operator v0.1.0 deploys runtime v0.1.0.
 
 ---
 
 ## 8. High priority (P1) — should land in or immediately after v0.1.0
 
-1. **Instruction gRPC/REST service missing** — UI/API users can't manage Instructions (`server/proto/` has no instruction service) → also absent from UI.
+1. **Instruction gRPC/REST service missing** — UI/API users can't manage Instructions (`operator/server/proto/` has no instruction service) → also absent from UI.
 2. **Webhooks unreachable in practice** **[verified]** — chart has no cert handling, no `--enable-webhooks`, no `ValidatingWebhookConfiguration` templates (grep over chart returns nothing). Either ship opt-in webhook support (cert-manager) in the chart or document that admission validation is off and rely on controller-side validation (which exists and is solid).
 3. **Security posture documentation** — auth disabled by default, no authorization layer (any authenticated user = full CRUD), gRPC plaintext, gRPC reflection on by default, server ServiceAccount permissions (AUDIT.md flagged escalation). For an alpha this can be *documented* rather than fixed, but it must be written down.
 4. **Workspace-root pytest broken** **[verified]** — `uv run pytest` from `sdk/python/` dies at collection (test module name collisions / missing packages config). Fix `conftest.py`/`rootdir`/`__init__.py` so the documented workspace commands work.
-5. **Zero-test packages**: `flokoa-common` (it underpins everything), `flokoa-managed-task`, `flokoa-codemode-mcp`; Go `telemetry`, `config`, `domain/tool`, `infra/builder`, `infra/repo` (direct).
+5. **Zero-test packages**: `flokoa-common` (it underpins everything), `flokoa-managed-task`, `flokoa-codemode-mcp`; Go `operator/internal/telemetry`, `operator/internal/config`, `operator/internal/domain/tool`, `operator/internal/infra/builder`, `operator/internal/infra/repo` (direct).
 6. **google-adk executor overmocked tests** (`OVERMOCKING_REVIEW.md`, HIGH) — fix or annotate as known debt.
 7. **`flokoa-managed-task` decision** — code complete but README claims scaffold, no tests, no image. Recommend: mark experimental, exclude from release notes, or invest a session (tests + image + README).
 8. **Image/runtime naming** — `flokoa-cli` image actually contains the managed-agent runtime; rename or document.
@@ -238,7 +238,7 @@ None exists (no tags/releases/workflow/CHANGELOG). Minimum viable for v0.1.0, as
 
 `operator/AUDIT.md` (2026-02-18, 32 findings). Re-verified during this review:
 
-**Fixed since the audit [verified]:** discarded status updates (now retry-helper everywhere; the `_ =` pattern survives only inside AUDIT.md's own examples) · `Runtime.Standard` nil validation (`internal/domain/agent/validate.go:27`) · finalizer NotFound-tolerance (`agenttool_controller.go:383-384` ignores IsNotFound; same pattern elsewhere) · A2A auth fatal-on-missing-token · A2A plugin state persistence (ConfigMap store) · structured error types.
+**Fixed since the audit [verified]:** discarded status updates (now retry-helper everywhere; the `_ =` pattern survives only inside AUDIT.md's own examples) · `Runtime.Standard` nil validation (`operator/internal/domain/agent/validate.go:27`) · finalizer NotFound-tolerance (`operator/internal/controller/agenttool_controller.go:383-384` ignores IsNotFound; same pattern elsewhere) · A2A auth fatal-on-missing-token · A2A plugin state persistence (ConfigMap store) · structured error types.
 
 **Still open:** webhooks off-by-default + no chart support (§8.2) · cross-resource reference validation at admission · all-namespace watch mappers · stuck-workflow timeout · metrics · server SA least-privilege review · `OVERMOCKING_REVIEW.md` Python findings.
 
@@ -262,7 +262,7 @@ Sized to one session each, ordered by dependency:
 Fix `test-e2e.yml` secret wiring + conditional skip; confirm Tests/Lint/Python workflows are green on a fresh push; add Go coverage upload; consider concurrency-cancel + path filters (Tests/Lint currently run on every push of every branch); resolve docs.yml vs private-repo Pages (§6). Files: `.github/workflows/*`, `operator/test/e2e/helpers_test.go`. Note: the repo is private — going public (and when) is a user decision that gates Pages, ghcr visibility expectations, and PyPI links.
 
 **WP2 — Version alignment + release workflow**
-Set 0.1.0 everywhere (§7.4 table); write `release.yml` (tag-triggered: images w/ semver tags incl. managed runtimes, install.yaml bundle, Helm OCI push, GitHub Release, optional PyPI); pin `DefaultTemplateRuntimeImage`/managed-task default to the release tag; add `CHANGELOG.md`. Files: `operator/Makefile`, `Chart.yaml`, `config/*/kustomization.yaml`, all pyprojects, `internal/infra/builder/deployment.go:16`, `internal/controller/agentworkflow_compiler.go:37`.
+Set 0.1.0 everywhere (§7.4 table); write `release.yml` (tag-triggered: images w/ semver tags incl. managed runtimes, install.yaml bundle, Helm OCI push, GitHub Release, optional PyPI); pin `DefaultTemplateRuntimeImage`/managed-task default to the release tag; add `CHANGELOG.md`. Files: `operator/Makefile`, `operator/charts/flokoa/Chart.yaml`, `operator/config/*/kustomization.yaml`, all pyprojects, `operator/internal/infra/builder/deployment.go:16`, `operator/internal/controller/agentworkflow_compiler.go:37`.
 
 **WP3 — Helm chart completeness**
 Add `files/crds/agent.flokoa.ai_agentworkflows.yaml` + sync check; chart README; optional webhook support (cert-manager) or documented limitation; decide Argo install story (docs vs subchart); validate `helm template` against a Kind cluster.
@@ -277,7 +277,7 @@ Either productionize managed-task (tests, image target + publish, README) or gat
 Add InstructionService (proto + impl + converter + UI); TLS option for gRPC; reflection default off; document security posture (authn/authz state); review server ServiceAccount RBAC.
 
 **WP7 — Test debt**
-`flokoa-common` test suite; fix workspace-root pytest collection; google-adk overmocking fix; unit tests for `infra/builder`, `domain/tool`, `internal/config`; UI Playwright smoke test.
+`flokoa-common` test suite; fix workspace-root pytest collection; google-adk overmocking fix; unit tests for `operator/internal/infra/builder`, `operator/internal/domain/tool`, `operator/internal/config`; UI Playwright smoke test.
 
 **WP8 — AUDIT close-out**
 Re-triage AUDIT.md + OVERMOCKING_REVIEW.md per §11, convert remainder to issues, remove both files from the repo.
