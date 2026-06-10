@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	DefaultTemplateRuntimeImage = "ghcr.io/danielnyari/flokoa-cli:latest"
+	DefaultTemplateRuntimeImage = "ghcr.io/danielnyari/flokoa-cli:0.1.0"
 
 	TemplateConfigVolumeName   = "template-config"
 	TemplateConfigConfigMapKey = "template-config.json"

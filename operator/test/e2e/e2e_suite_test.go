@@ -61,7 +61,7 @@ var (
 	petstoreImage = "petstore:test"
 
 	// cliImage is the flokoa-cli image used by template runtime agents
-	cliImage = "ghcr.io/danielnyari/flokoa-cli:latest"
+	cliImage = "ghcr.io/danielnyari/flokoa-cli:0.1.0"
 
 	// k8sClient is the Kubernetes client for interacting with the cluster
 	k8sClient client.Client
