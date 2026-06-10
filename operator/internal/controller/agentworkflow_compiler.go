@@ -34,7 +34,7 @@ import (
 
 const (
 	// defaultManagedTaskImage is the default flokoa runtime image for Marvin agent tasks.
-	defaultManagedTaskImage = "ghcr.io/danielnyari/flokoa/managed-task:latest"
+	defaultManagedTaskImage = "ghcr.io/danielnyari/flokoa-managed-task:0.1.0"
 
 	// dagEntrypointName is the name of the DAG entrypoint template.
 	dagEntrypointName = "main"

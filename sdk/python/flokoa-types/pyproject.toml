@@ -1,6 +1,6 @@
 [project]
 name = "flokoa-types"
-version = "0.0.5"
+version = "0.1.0"
 description = "Auto-generated Pydantic models from Flokoa Kubernetes CRD schemas"
 readme = "README.md"
 requires-python = ">=3.13"

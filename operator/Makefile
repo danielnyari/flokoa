@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.6
+VERSION ?= 0.1.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -63,6 +63,10 @@ A2A_PLUGIN_IMG ?= $(A2A_PLUGIN_IMAGE_TAG_BASE):$(VERSION)
 # Flokoa CLI image settings (Python SDK)
 FLOKOA_CLI_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-cli
 FLOKOA_CLI_IMG ?= $(FLOKOA_CLI_IMAGE_TAG_BASE):$(VERSION)
+
+# Flokoa managed-task image settings (Python SDK, Marvin task runtime)
+MANAGED_TASK_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-managed-task
+MANAGED_TASK_IMG ?= $(MANAGED_TASK_IMAGE_TAG_BASE):$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -519,6 +523,15 @@ docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
 docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.
 	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
 	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
+
+.PHONY: docker-build-managed-task
+docker-build-managed-task: ## Build docker image for the Flokoa managed-task runtime (Python SDK).
+	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-task/Dockerfile -t ${MANAGED_TASK_IMG} -t $(MANAGED_TASK_IMAGE_TAG_BASE):latest ../sdk/python
+
+.PHONY: docker-push-managed-task
+docker-push-managed-task: ## Push docker image for the Flokoa managed-task runtime.
+	$(CONTAINER_TOOL) push ${MANAGED_TASK_IMG}
+	$(CONTAINER_TOOL) push $(MANAGED_TASK_IMAGE_TAG_BASE):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
