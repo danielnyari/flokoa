@@ -433,6 +433,14 @@ func deletePod(name, ns string) {
 	_ = k8sClient.Delete(ctx, pod)
 }
 
+// skipIfNoOpenAIKey skips the current container when OPENAI_API_KEY is not set,
+// so runs without the secret (e.g. CI without paid-API access) stay green.
+func skipIfNoOpenAIKey() {
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		Skip("OPENAI_API_KEY not set; skipping specs that make real LLM calls")
+	}
+}
+
 // ensureOpenAIAPIKeySecret creates or updates the openai-api-key secret from OPENAI_API_KEY env var.
 func ensureOpenAIAPIKeySecret(ns string) error {
 	apiKey := os.Getenv("OPENAI_API_KEY")

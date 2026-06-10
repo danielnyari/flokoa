@@ -112,7 +112,9 @@ help: ## Display this help.
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	# Quote bare '=' in enum lists — controller-gen emits it unquoted, which is invalid YAML 1.2
-	find config/crd/bases charts/flokoa/files/crds -name "*.yaml" -exec sed -i'' -e "s/- =$$$/- '='/" {} +
+	# sed -i with an explicit backup suffix is the only form portable across GNU and BSD sed
+	find config/crd/bases charts/flokoa/files/crds -name "*.yaml" -exec sed -i.sedbak -e 's/- =$$/- '"'"'='"'"'/' {} +
+	find config/crd/bases charts/flokoa/files/crds -name "*.sedbak" -delete
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -155,7 +157,7 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
 	@KUBECONFIG_FILE=$$(mktemp); \
 	$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $$KUBECONFIG_FILE; \
-	KIND_CLUSTER=$(KIND_CLUSTER) KUBECONFIG=$$KUBECONFIG_FILE go test ./test/e2e/ -v -ginkgo.v; \
+	KIND_CLUSTER=$(KIND_CLUSTER) KUBECONFIG=$$KUBECONFIG_FILE go test ./test/e2e/ -v -ginkgo.v -timeout 60m; \
 	STATUS=$$?; \
 	rm -f $$KUBECONFIG_FILE; \
 	exit $$STATUS

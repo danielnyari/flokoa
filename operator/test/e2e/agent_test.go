@@ -47,6 +47,7 @@ var _ = Describe("Agent", Ordered, func() {
 	Context("Template Agent E2E Test", func() {
 		BeforeAll(func() {
 			By("ensuring OPENAI_API_KEY is available for real e2e run")
+			skipIfNoOpenAIKey()
 			err := ensureOpenAIAPIKeySecret(namespace)
 			Expect(err).NotTo(HaveOccurred(), "Failed to configure openai-api-key secret")
 		})

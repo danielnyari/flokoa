@@ -42,6 +42,9 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 
 	Context("A2A Plugin Integration", func() {
 		BeforeAll(func() {
+			By("checking OPENAI_API_KEY availability")
+			skipIfNoOpenAIKey()
+
 			By("building the A2A plugin image")
 			cmd := exec.Command("docker", "build",
 				"-f", "plugins/a2a/Dockerfile",

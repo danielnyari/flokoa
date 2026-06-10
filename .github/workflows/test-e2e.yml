@@ -33,6 +33,8 @@ jobs:
 
       - name: Running Test e2e
         working-directory: ./operator
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           go mod tidy
           make test-e2e
