@@ -142,7 +142,7 @@ internal/errors/       error classification: permanent (no requeue) / dependency
 - Last observed E2E success: 2026-01-25 (Lint/Tests/Docs were already failing then).
 - **Historical logs are expired (HTTP 410)** — root causes for Tests/Lint/Python/Docs can't be recovered from GitHub. But since all of them **pass locally today at the same pinned versions**, the next push will give clean signal.
 - **E2E failure cause is structural and still present:** `test/e2e/helpers_test.go:438-440` hard-fails without `OPENAI_API_KEY`, and `.github/workflows/test-e2e.yml` passes **no env/secrets at all**. E2E also runs on *every push of any branch* and makes real (paid) OpenAI calls.
-- `docs.yml` deploys to GitHub Pages (`environment: github-pages`) — failure may be Pages configuration, not the build (build passes locally).
+- `docs.yml` deploys to GitHub Pages (`environment: github-pages`) — the build passes locally, and **the repo is currently private** **[verified]**; GitHub Pages on private repos requires a paid plan, which is the most likely cause of the Documentation failures. Decide: make the repo public at release time (Pages then works) or drop/disable `docs.yml` until then.
 - **Image publishing:** only `flokoa-operator` is pushed by CI (test.yml `build-image`, main-only, gated on the failing test job — so it has been stale since CI went red). `flokoa-server`, `flokoa-a2a-plugin`, `flokoa-cli` are pushed manually via `make docker-push*`. All four exist on ghcr.io with `:latest` **[verified — registry returns 200]**.
 
 ---
@@ -259,7 +259,7 @@ None exists (no tags/releases/workflow/CHANGELOG). Minimum viable for v0.1.0, as
 Sized to one session each, ordered by dependency:
 
 **WP1 — CI resurrection** *(do first; everything else needs signal)*
-Fix `test-e2e.yml` secret wiring + conditional skip; confirm Tests/Lint/Python workflows are green on a fresh push; add Go coverage upload; consider concurrency-cancel + path filters (Tests/Lint currently run on every push of every branch); investigate Pages deployment for docs.yml. Files: `.github/workflows/*`, `operator/test/e2e/helpers_test.go`.
+Fix `test-e2e.yml` secret wiring + conditional skip; confirm Tests/Lint/Python workflows are green on a fresh push; add Go coverage upload; consider concurrency-cancel + path filters (Tests/Lint currently run on every push of every branch); resolve docs.yml vs private-repo Pages (§6). Files: `.github/workflows/*`, `operator/test/e2e/helpers_test.go`. Note: the repo is private — going public (and when) is a user decision that gates Pages, ghcr visibility expectations, and PyPI links.
 
 **WP2 — Version alignment + release workflow**
 Set 0.1.0 everywhere (§7.4 table); write `release.yml` (tag-triggered: images w/ semver tags incl. managed runtimes, install.yaml bundle, Helm OCI push, GitHub Release, optional PyPI); pin `DefaultTemplateRuntimeImage`/managed-task default to the release tag; add `CHANGELOG.md`. Files: `operator/Makefile`, `Chart.yaml`, `config/*/kustomization.yaml`, all pyprojects, `internal/infra/builder/deployment.go:16`, `internal/controller/agentworkflow_compiler.go:37`.
