@@ -418,7 +418,7 @@ kubectl get modelprovider openai-provider -o yaml
 - Check network policies allowing egress to provider APIs
 - Verify DNS resolution works for provider endpoints
 - Check firewall rules and proxy configurations
-- Set `timeOut` on the Model resource parameters if needed
+- Review application-level request timeout settings when calling the provider API
 
 ### Testing Provider Connection
 
