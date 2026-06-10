@@ -1,83 +1,67 @@
-# Flokoa Agent Harness Roadmap
+# Flokoa Roadmap — Pivot v2.1 ("Agent Harness for Kubernetes")
 
-This directory contains the implementation roadmap for evolving Flokoa from an agent deployment platform into a credible **agent harness** (see `AGENT_HARNESS_REVIEW.md` at the repo root for the gap analysis against AWS Bedrock AgentCore).
+This roadmap implements the approved [Product Brief v2.1](00-product-brief.md): **flokoa is the open-source agent harness for Kubernetes — what AgentCore is for AWS** — a Kubernetes-native runtime for single agents and swarms of **pydantic-ai** agents: declarative definitions, packaged capabilities, isolated sessions, event triggers, and an A2A gateway, on your own cluster.
 
-Each numbered document is a **self-contained implementation unit** sized to be handed to Claude Code (or any engineer) as a single task. Every spec is grounded in the current code: it names the real types, files, and patterns to extend, states the target design, and defines acceptance criteria.
+**This supersedes the previous roadmap set** (the AgentCore gap-analysis-driven specs, removed in this commit; see git history and `AGENT_HARNESS_REVIEW.md` for the analysis that led here). Old specs 05 (endpoint auth) and 11 (gateway) thread into the session router; 06 (control-plane hardening) and 08 (observability) thread through all pillars (see [16-cross-cutting.md](16-cross-cutting.md)).
 
-## How to use these specs with Claude Code
+Each numbered document is a self-contained implementation unit sized to hand to Claude Code as a single task, grounded in the codebase as of `main@ac123b5`.
 
-Hand over one spec at a time, e.g.:
+## Ground truth this roadmap is planned against (verified 2026-06-10)
 
-> Implement `docs/roadmap/03-agent-sessions.md`. Read the spec fully, then read the module CLAUDE.md files it references before writing code. Follow the existing architectural patterns named in the spec. Run the verification steps in the Testing section before finishing.
+- **No flokoa-owned data path exists.** A2A traffic goes client → agent Service → pods. The session router is a new build.
+- **AgentWorkflow is template-only**: the controller still compiles to Argo `WorkflowTemplate`s (`compileAndApply`), but `SubmitRun`/run-tracking is gone from the codebase. Frozen per brief §7.
+- **AgentTrigger runs on Argo Events**: `AgentTriggerSpec` references EventSource/EventBus with Sensor data-filter semantics; Sensors POST to `flokoa-server`'s invoke endpoint (`internal/server/trigger_handler.go`), with rate limiting (`trigger_limiter.go`), session-key extraction (`trigger_session.go`), and A2A push-notification delivery (`push_gateway.go`). `docs/agenttrigger-rfc.md` describes the stale Knative design — reconciled in Phase 0.
+- **Release machinery exists**: `release.yml` (tag-triggered, 5-image matrix incl. managed-task), `CHANGELOG.md`, versions aligned at 0.1.0. Phase 0 is deletions + residual gaps, not a build-out.
+- **Deletions to perform** (still present): google-adk integration, the integrations registry, `flokoa-managed-task` (+ its release-matrix entry), Argo Workflows *run* docs/samples.
 
-Conventions that apply to **every** unit:
+## Units by phase
 
-- **Operator changes** follow the existing layering: `internal/controller` (thin orchestration) → `internal/app/agent` (domain services on `repo` interfaces) → `internal/infra/{repo,builder}` (I/O adapters and pure builders). Tests use the fakes in `internal/infra/repo/fakes/`.
-- **CRD changes** are additive and optional (`+optional`, pointer fields), follow the discriminated-union style already used by `RuntimeSpec` / `AgentToolSpec` / `ModelProviderSpec`, and always run the full pipeline: `make manifests generate` then `make generate-python-models` (in `operator/`).
-- **Python changes** follow the ports-and-adapters style of `flokoa/integrations` (`_try_load` optional imports, protocol-typed dependencies, optional extras in `pyproject.toml`).
-- **Operator → runtime contract** changes (mounted files under `/etc/flokoa/`, `FLOKOA_*` env vars) must stay backward compatible: the runtime falls back gracefully when new config is absent (the existing unified-vs-legacy config loading in `flokoa_managed_agent/config.py` is the precedent).
-
-## Units
-
-### Phase 0 — Table stakes (release engineering)
-
-| # | Spec | Size | Depends on |
-|---|------|------|-----------|
-| 01 | [Helm chart: webhooks, network policies, completeness](01-helm-chart-webhooks.md) | M | — |
-| 02 | [Release pipeline, version alignment, public READMEs](02-release-pipeline.md) | M | 01 (chart publish) |
-
-### Phase 1 — Minimum credible harness
-
-| # | Spec | Size | Depends on |
-|---|------|------|-----------|
-| 03 | [Conversation sessions in the agent runtime](03-agent-sessions.md) | L | — |
-| 04 | [Memory backends + `Agent.spec.memory` CRD field](04-memory-backends.md) | M | 03 |
-| 05 | [Inbound auth on agent A2A endpoints](05-agent-endpoint-auth.md) | L | — |
-| 06 | [Control-plane hardening: TLS + authorization](06-control-plane-hardening.md) | M | — |
-| 07 | [MCP tool support](07-mcp-tools.md) | L | — |
-| 08 | [GenAI observability by default](08-genai-observability.md) | M | — |
-| 09 | [CLI harness verbs: init / deploy / invoke / logs](09-cli-harness-verbs.md) | M | 02 |
-| 10 | [Quickstart, docs IA, Grafana dashboard](10-quickstart-and-docs.md) | M | 03–09 |
-
-### Phase 2 — Differentiation (design sketches, decide before building)
-
-| # | Spec | Size | Depends on |
-|---|------|------|-----------|
-| 11 | [Tool gateway and policy](11-tool-gateway.md) | XL | 07 |
-| 12 | [Cost controls and usage limits](12-cost-controls.md) | M | 08 |
-| 13 | [Runtime lifecycle: probes, HPA, hot reload, isolation](13-runtime-lifecycle.md) | L | — |
-| 14 | [Scaffold package cleanup](14-scaffold-cleanup.md) | S | — |
+| Phase | # | Spec | Size |
+|---|---|------|------|
+| — | 00 | [Product Brief v2.1](00-product-brief.md) (canonical strategy) | — |
+| — | 01 | [Target architecture](01-target-architecture.md) | — |
+| **Phase 0** | 02 | [Cleanup & release baseline](02-phase0-cleanup-and-release.md) | M |
+| **P0a** | 03 | [Runtime contract (keystone)](03-runtime-contract.md) | M |
+| **P0a** | 04 | [Agent CRD as composition root + spec compiler](04-agent-crd-composition.md) | XL |
+| **P0a** | 05 | [Generic runner](05-generic-runner.md) | L |
+| **P0a** | 06 | [Virtual endpoint identity](06-virtual-endpoint-identity.md) | S |
+| **P0a** | 07 | [Platform-injected capabilities](07-platform-injected-capabilities.md) | M |
+| **P0b** | 08 | [Capability CRD + admission](08-capability-crd.md) | L |
+| **P0b** | 09 | [Capability artifacts & delivery](09-capability-artifacts-delivery.md) | L |
+| **P0b** | 10 | [Capability CLI & registry seeding](10-capability-cli-and-registry.md) | L |
+| **P1** | 11 | [Pod-churn spike (gate)](11-pod-churn-spike.md) | M |
+| **P1** | 12 | [Session router](12-session-router.md) | XL |
+| **P1** | 13 | [Sessions state backend (Postgres)](13-sessions-state-backend.md) | L |
+| **P1** | 14 | [Isolation tiers & warm pools](14-isolation-tiers-and-pools.md) | L |
+| **P2** | 15 | [SwarmRun (design sketch)](15-swarmrun.md) | XL |
+| — | 16 | [Cross-cutting threads: observability & hardening](16-cross-cutting.md) | ongoing |
 
 ## Dependency graph
 
 ```mermaid
 graph LR
-    subgraph "Phase 0"
-        U01[01 Helm] --> U02[02 Release]
-    end
-    subgraph "Phase 1"
-        U03[03 Sessions] --> U04[04 Memory CRD]
-        U05[05 Endpoint auth]
-        U06[06 Control-plane hardening]
-        U07[07 MCP tools]
-        U08[08 Observability]
-        U02 --> U09[09 CLI verbs]
-        U04 --> U10[10 Docs & quickstart]
-        U05 --> U10
-        U07 --> U10
-        U08 --> U10
-        U09 --> U10
-    end
-    subgraph "Phase 2"
-        U07 --> U11[11 Tool gateway]
-        U08 --> U12[12 Cost controls]
-        U13[13 Runtime lifecycle]
-        U14[14 Scaffold cleanup]
-    end
+    P0[02 Phase 0] --> RC[03 Runtime contract]
+    RC --> COMP[04 Composition compiler]
+    RC --> RUN[05 Generic runner]
+    COMP --> RUN
+    COMP --> VEI[06 Virtual endpoint]
+    RUN --> INJ[07 Injected capabilities]
+    RC --> CAP[08 Capability CRD]
+    CAP --> DEL[09 Artifacts & delivery]
+    DEL --> CLI[10 CLI & seeding]
+    VEI --> SR[12 Session router]
+    SPIKE[11 Pod-churn spike] -->|gates| SR
+    SR --> SS[13 Sessions backend]
+    SR --> ISO[14 Isolation & pools]
+    INJ --> SS
+    ISO --> SW[15 SwarmRun]
+    SS --> SW
 ```
 
-Units 03/05/06/07/08 are mutually independent and can be worked in parallel branches. Unit 14 can run any time.
+04+05 are co-designed against 03 (the contract) and must merge together with a working end-to-end path. 08–10 can proceed in parallel with 05–07 once 03 lands. 11 runs any time before 12 commits publicly.
 
-## Target architecture
+## How to hand a unit to Claude Code
 
-See [00-target-architecture.md](00-target-architecture.md) for the high-level design all units build toward, including the component diagram, the operator↔runtime config contract, and the architectural tenets each spec applies.
+> Implement `docs/roadmap/NN-….md`. Read the spec fully, then `docs/roadmap/00-product-brief.md` §(referenced sections) and the module CLAUDE.md files it names. Follow the existing layering (controller → app → infra; ports-and-adapters in Python). Run the verification steps before finishing.
+
+Conventions: CRD changes are additive where possible and always run `make manifests generate` + `make generate-python-models`; secrets only via `SecretKeySelector` projection; new behavior behind Helm values/flags; the operator↔runner contract (03) is versioned and changes to it are PR-blocking review items.
