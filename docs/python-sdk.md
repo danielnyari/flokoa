@@ -227,7 +227,7 @@ When you run `flokoa run`, the CLI:
 The server exposes:
 
 - A2A protocol endpoints for agent communication
-- Health check endpoints at `/healthz` and `/readyz`
+- Health check endpoints at `/health` and `/ready`
 - An agent card endpoint describing the agent's skills and capabilities
 
 ### Agent Card
