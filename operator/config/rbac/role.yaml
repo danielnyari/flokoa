@@ -30,6 +30,7 @@ rules:
   resources:
   - agents
   - agenttools
+  - agenttriggers
   - agentworkflows
   - instructions
   - modelproviders
@@ -47,6 +48,7 @@ rules:
   resources:
   - agents/finalizers
   - agenttools/finalizers
+  - agenttriggers/finalizers
   - agentworkflows/finalizers
   - instructions/finalizers
   - modelproviders/finalizers
@@ -58,6 +60,7 @@ rules:
   resources:
   - agents/status
   - agenttools/status
+  - agenttriggers/status
   - agentworkflows/status
   - instructions/status
   - modelproviders/status
@@ -81,6 +84,16 @@ rules:
 - apiGroups:
   - argoproj.io
   resources:
+  - eventbus
+  - eventsources
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - sensors
   - workflows
   - workflowtemplates
   verbs:

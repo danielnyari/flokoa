@@ -81,6 +81,7 @@ func main() {
 	modelProviderService := server.NewModelProviderService(k8sClient)
 	agentToolService := server.NewAgentToolService(k8sClient)
 	agentWorkflowService := server.NewAgentWorkflowService(k8sClient)
+	agentTriggerService := server.NewAgentTriggerService(k8sClient)
 
 	// Create and start gRPC server
 	grpcServer := server.NewServer(
@@ -96,6 +97,7 @@ func main() {
 		modelProviderService,
 		agentToolService,
 		agentWorkflowService,
+		agentTriggerService,
 	)
 
 	if err := grpcServer.Start(ctx); err != nil {

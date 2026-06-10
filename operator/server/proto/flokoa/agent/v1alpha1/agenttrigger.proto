@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// AgentTriggerPhase represents the lifecycle phase of an AgentTrigger.
+enum AgentTriggerPhase {
+  AGENT_TRIGGER_PHASE_UNSPECIFIED = 0;
+  AGENT_TRIGGER_PHASE_PENDING = 1;
+  AGENT_TRIGGER_PHASE_RUNNING = 2;
+  AGENT_TRIGGER_PHASE_FAILED = 3;
+}
+
+// EventSourceRef references an Argo Events EventSource and a specific event within it.
+message EventSourceRef {
+  string name = 1;
+  string event_name = 2;
+}
+
+// EventBusRef references an Argo Events EventBus.
+message EventBusRef {
+  string name = 1;
+}
+
+// AgentRef references a flokoa Agent by name and optional namespace.
+message AgentRef {
+  string name = 1;
+  string namespace = 2;
+}
+
+// DataFilter defines a single payload-level filter using JSONPath.
+message DataFilter {
+  string path = 1;
+  string type = 2;
+  repeated string value = 3;
+  string comparator = 4;
+}
+
+// ExprFilter defines a filter using a CEL expression for complex logic.
+message ExprFilter {
+  string expr = 1;
+  map<string, string> fields = 2;
+}
+
+// TriggerFilter specifies which events should be delivered to the agent.
+message TriggerFilter {
+  repeated DataFilter data = 1;
+  repeated ExprFilter exprs = 2;
+}
+
+// TriggerPushAuth specifies how the agent authenticates to the push notification destination.
+message TriggerPushAuth {
+  repeated string schemes = 1;
+  SecretKeySelector credentials_ref = 2;
+}
+
+// PushNotificationTarget defines where the Agent should deliver async results.
+message PushNotificationTarget {
+  AgentRef agent_ref = 1;
+  string url = 2;
+  TriggerPushAuth authentication = 3;
+  SecretKeySelector token_ref = 4;
+}
+
+// TriggerTaskConfig controls how events are translated to A2A tasks.
+message TriggerTaskConfig {
+  string session_key_from = 1;
+  map<string, string> metadata = 2;
+}
+
+// TriggerLimits defines rate and cost controls for event-driven agent invocations.
+message TriggerLimits {
+  int32 max_invocations_per_hour = 1;
+  int32 max_concurrent_tasks = 2;
+  int32 token_budget_per_event = 3;
+  int64 token_budget_per_hour = 4;
+  DeadLetterSinkRef dead_letter_sink = 5;
+}
+
+// DeadLetterSinkRef references a destination for dropped events.
+message DeadLetterSinkRef {
+  string uri = 1;
+}
+
+// InvocationCounters tracks trigger activity.
+message InvocationCounters {
+  int64 total = 1;
+  int64 delivered = 2;
+  int64 dropped = 3;
+  int64 dead_lettered = 4;
+}
+
+// AgentTriggerSpec defines the desired state of an AgentTrigger.
+message AgentTriggerSpec {
+  EventSourceRef event_source = 1;
+  EventBusRef event_bus = 2;
+  TriggerFilter filter = 3;
+  AgentRef agent = 4;
+  TriggerTaskConfig task = 5;
+  PushNotificationTarget push_notification = 6;
+  TriggerLimits limits = 7;
+}
+
+// AgentTriggerStatus defines the observed state of an AgentTrigger.
+message AgentTriggerStatus {
+  AgentTriggerPhase phase = 1;
+  repeated Condition conditions = 2;
+  int64 observed_generation = 3;
+  string agent_endpoint = 4;
+  string sensor_name = 5;
+  InvocationCounters invocations = 6;
+}
+
+// AgentTrigger is the top-level AgentTrigger resource.
+message AgentTrigger {
+  ObjectMeta metadata = 1;
+  AgentTriggerSpec spec = 2;
+  AgentTriggerStatus status = 3;
+}
+
+// AgentTriggerList contains a list of AgentTrigger resources.
+message AgentTriggerList {
+  ListMeta metadata = 1;
+  repeated AgentTrigger items = 2;
+}

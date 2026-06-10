@@ -201,6 +201,26 @@ func (f *FakeSecretRepo) GetSecret(_ context.Context, key types.NamespacedName) 
 	return secret.DeepCopy(), nil
 }
 
+// FakeAgentRepo implements repo.AgentReader for testing.
+type FakeAgentRepo struct {
+	mu     sync.RWMutex
+	Agents map[types.NamespacedName]*agentv1alpha1.Agent
+}
+
+func NewFakeAgentRepo() *FakeAgentRepo {
+	return &FakeAgentRepo{Agents: make(map[types.NamespacedName]*agentv1alpha1.Agent)}
+}
+
+func (f *FakeAgentRepo) GetAgent(_ context.Context, key types.NamespacedName) (*agentv1alpha1.Agent, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	agent, ok := f.Agents[key]
+	if !ok {
+		return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "agents"}, key.Name)
+	}
+	return agent.DeepCopy(), nil
+}
+
 // FakeOwnerSetter implements repo.OwnerSetter for testing (no-op).
 type FakeOwnerSetter struct {
 	SetOwnerErr error

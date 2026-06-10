@@ -67,6 +67,7 @@ func NewServer(
 	modelProviderService pb.ModelProviderServiceServer,
 	agentToolService pb.AgentToolServiceServer,
 	agentWorkflowService pb.AgentWorkflowServiceServer,
+	agentTriggerService pb.AgentTriggerServiceServer,
 ) *Server {
 	// Build interceptor chains
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
@@ -97,6 +98,7 @@ func NewServer(
 	pb.RegisterModelProviderServiceServer(grpcServer, modelProviderService)
 	pb.RegisterAgentToolServiceServer(grpcServer, agentToolService)
 	pb.RegisterAgentWorkflowServiceServer(grpcServer, agentWorkflowService)
+	pb.RegisterAgentTriggerServiceServer(grpcServer, agentTriggerService)
 
 	// Register health service
 	healthServer := health.NewServer()
@@ -212,6 +214,9 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	if err := pb.RegisterAgentWorkflowServiceHandlerFromEndpoint(ctx, gwMux, grpcAddr, opts); err != nil {
 		return fmt.Errorf("failed to register agent workflow gateway: %w", err)
 	}
+	if err := pb.RegisterAgentTriggerServiceHandlerFromEndpoint(ctx, gwMux, grpcAddr, opts); err != nil {
+		return fmt.Errorf("failed to register agent trigger gateway: %w", err)
+	}
 
 	// Create HTTP mux
 	mux := http.NewServeMux()
@@ -250,6 +255,16 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		}
 		mux.Handle("POST /api/v1alpha1/namespaces/{namespace}/agents/{name}/playground",
 			authMiddleware(s.authInterceptor)(playgroundHandler))
+
+		// Register AgentTrigger invoke endpoint (Argo Events Sensor → flokoa-server).
+		triggerHandler := NewTriggerHandler(s.watchClient, s.log.WithName("trigger"))
+		mux.Handle("POST /api/v1alpha1/namespaces/{namespace}/agenttriggers/{name}/invoke",
+			authMiddleware(s.authInterceptor)(triggerHandler))
+
+		// Register push notification gateway (agent → agent push forwarding).
+		pushGateway := NewPushGatewayHandler(s.watchClient, s.log.WithName("push-gateway"))
+		mux.Handle("POST /api/v1alpha1/namespaces/{namespace}/agents/{name}/push",
+			authMiddleware(s.authInterceptor)(pushGateway))
 	}
 
 	// Handle API requests with gateway

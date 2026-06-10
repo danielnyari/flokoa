@@ -12,6 +12,9 @@
       "name": "AgentToolService"
     },
     {
+      "name": "AgentTriggerService"
+    },
+    {
       "name": "AgentWorkflowService"
     },
     {
@@ -138,6 +141,62 @@
         ],
         "tags": [
           "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/agenttriggers": {
+      "get": {
+        "summary": "ListAgentTriggers lists AgentTriggers in a namespace or across all namespaces.",
+        "operationId": "AgentTriggerService_ListAgentTriggers",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTriggerList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
         ]
       }
     },
@@ -416,6 +475,115 @@
         ],
         "tags": [
           "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{agentTrigger.metadata.namespace}/agenttriggers/{agentTrigger.metadata.name}": {
+      "put": {
+        "summary": "UpdateAgentTrigger updates an existing AgentTrigger.",
+        "operationId": "AgentTriggerService_UpdateAgentTrigger",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTrigger"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "agentTrigger.metadata.namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "agentTrigger.metadata.name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "agentTrigger",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "metadata": {
+                  "type": "object",
+                  "properties": {
+                    "uid": {
+                      "type": "string"
+                    },
+                    "resourceVersion": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "string",
+                      "format": "int64"
+                    },
+                    "creationTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletionTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "ownerReferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "$ref": "#/definitions/v1alpha1OwnerReference"
+                      }
+                    },
+                    "finalizers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "title": "ObjectMeta contains metadata that all persisted resources must have.\nSimplified version of k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"
+                },
+                "spec": {
+                  "$ref": "#/definitions/v1alpha1AgentTriggerSpec"
+                },
+                "status": {
+                  "$ref": "#/definitions/v1alpha1AgentTriggerStatus"
+                }
+              },
+              "description": "AgentTrigger is the top-level AgentTrigger resource."
+            }
+          },
+          {
+            "name": "updateMask",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
         ]
       }
     },
@@ -953,6 +1121,231 @@
         ],
         "tags": [
           "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agenttriggers": {
+      "get": {
+        "summary": "ListAgentTriggers lists AgentTriggers in a namespace or across all namespaces.",
+        "operationId": "AgentTriggerService_ListAgentTriggers2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTriggerList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
+        ]
+      },
+      "post": {
+        "summary": "CreateAgentTrigger creates a new AgentTrigger.",
+        "operationId": "AgentTriggerService_CreateAgentTrigger",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTrigger"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "agentTrigger",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTrigger"
+            }
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agenttriggers/{name}": {
+      "get": {
+        "summary": "GetAgentTrigger retrieves an AgentTrigger by name and namespace.",
+        "operationId": "AgentTriggerService_GetAgentTrigger",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTrigger"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
+        ]
+      },
+      "delete": {
+        "summary": "DeleteAgentTrigger deletes an AgentTrigger.",
+        "operationId": "AgentTriggerService_DeleteAgentTrigger",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1DeleteAgentTriggerResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.propagationPolicy",
+            "description": "Propagation policy: Orphan, Background, Foreground",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.gracePeriodSeconds",
+            "description": "Grace period in seconds",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
+        ]
+      }
+    },
+    "/api/v1alpha1/namespaces/{namespace}/agenttriggers/{name}/status": {
+      "put": {
+        "summary": "UpdateAgentTriggerStatus updates only the status subresource.",
+        "operationId": "AgentTriggerService_UpdateAgentTriggerStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTrigger"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1alpha1AgentTriggerStatus"
+            }
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
         ]
       }
     },
@@ -1778,6 +2171,71 @@
         ]
       }
     },
+    "/api/v1alpha1/watch/agenttriggers": {
+      "get": {
+        "summary": "WatchAgentTriggers watches for changes to AgentTriggers.",
+        "operationId": "AgentTriggerService_WatchAgentTriggers",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchAgentTriggersResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchAgentTriggersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
+        ]
+      }
+    },
     "/api/v1alpha1/watch/modelproviders": {
       "get": {
         "summary": "WatchModelProviders watches for changes to ModelProviders.",
@@ -2035,6 +2493,71 @@
         ],
         "tags": [
           "AgentToolService"
+        ]
+      }
+    },
+    "/api/v1alpha1/watch/namespaces/{namespace}/agenttriggers": {
+      "get": {
+        "summary": "WatchAgentTriggers watches for changes to AgentTriggers.",
+        "operationId": "AgentTriggerService_WatchAgentTriggers2",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1alpha1WatchAgentTriggersResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1alpha1WatchAgentTriggersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "options.labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.fieldSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "options.limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "options.continue",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentTriggerService"
         ]
       }
     },
@@ -2364,6 +2887,18 @@
       "default": "AGENT_PHASE_UNSPECIFIED",
       "description": "AgentPhase represents the current phase of the agent lifecycle."
     },
+    "v1alpha1AgentRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      },
+      "description": "AgentRef references a flokoa Agent by name and optional namespace."
+    },
     "v1alpha1AgentSkill": {
       "type": "object",
       "properties": {
@@ -2548,6 +3083,104 @@
       ],
       "default": "AGENT_TOOL_TYPE_UNSPECIFIED",
       "description": "AgentToolType represents the type of tool."
+    },
+    "v1alpha1AgentTrigger": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ObjectMeta"
+        },
+        "spec": {
+          "$ref": "#/definitions/v1alpha1AgentTriggerSpec"
+        },
+        "status": {
+          "$ref": "#/definitions/v1alpha1AgentTriggerStatus"
+        }
+      },
+      "description": "AgentTrigger is the top-level AgentTrigger resource."
+    },
+    "v1alpha1AgentTriggerList": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/v1alpha1ListMeta"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1AgentTrigger"
+          }
+        }
+      },
+      "description": "AgentTriggerList contains a list of AgentTrigger resources."
+    },
+    "v1alpha1AgentTriggerPhase": {
+      "type": "string",
+      "enum": [
+        "AGENT_TRIGGER_PHASE_UNSPECIFIED",
+        "AGENT_TRIGGER_PHASE_PENDING",
+        "AGENT_TRIGGER_PHASE_RUNNING",
+        "AGENT_TRIGGER_PHASE_FAILED"
+      ],
+      "default": "AGENT_TRIGGER_PHASE_UNSPECIFIED",
+      "description": "AgentTriggerPhase represents the lifecycle phase of an AgentTrigger."
+    },
+    "v1alpha1AgentTriggerSpec": {
+      "type": "object",
+      "properties": {
+        "eventSource": {
+          "$ref": "#/definitions/v1alpha1EventSourceRef"
+        },
+        "eventBus": {
+          "$ref": "#/definitions/v1alpha1EventBusRef"
+        },
+        "filter": {
+          "$ref": "#/definitions/v1alpha1TriggerFilter"
+        },
+        "agent": {
+          "$ref": "#/definitions/v1alpha1AgentRef"
+        },
+        "task": {
+          "$ref": "#/definitions/v1alpha1TriggerTaskConfig"
+        },
+        "pushNotification": {
+          "$ref": "#/definitions/v1alpha1PushNotificationTarget"
+        },
+        "limits": {
+          "$ref": "#/definitions/v1alpha1TriggerLimits"
+        }
+      },
+      "description": "AgentTriggerSpec defines the desired state of an AgentTrigger."
+    },
+    "v1alpha1AgentTriggerStatus": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "#/definitions/v1alpha1AgentTriggerPhase"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1Condition"
+          }
+        },
+        "observedGeneration": {
+          "type": "string",
+          "format": "int64"
+        },
+        "agentEndpoint": {
+          "type": "string"
+        },
+        "sensorName": {
+          "type": "string"
+        },
+        "invocations": {
+          "$ref": "#/definitions/v1alpha1InvocationCounters"
+        }
+      },
+      "description": "AgentTriggerStatus defines the observed state of an AgentTrigger."
     },
     "v1alpha1AgentWorkflow": {
       "type": "object",
@@ -2980,9 +3613,43 @@
       },
       "description": "ContainerPort represents a port on a container."
     },
+    "v1alpha1DataFilter": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "comparator": {
+          "type": "string"
+        }
+      },
+      "description": "DataFilter defines a single payload-level filter using JSONPath."
+    },
+    "v1alpha1DeadLetterSinkRef": {
+      "type": "object",
+      "properties": {
+        "uri": {
+          "type": "string"
+        }
+      },
+      "description": "DeadLetterSinkRef references a destination for dropped events."
+    },
     "v1alpha1DeleteAgentToolResponse": {
       "type": "object",
       "description": "DeleteAgentToolResponse is the response for DeleteAgentTool."
+    },
+    "v1alpha1DeleteAgentTriggerResponse": {
+      "type": "object",
+      "description": "DeleteAgentTriggerResponse is the response for DeleteAgentTrigger."
     },
     "v1alpha1DeleteModelProviderResponse": {
       "type": "object",
@@ -3099,6 +3766,27 @@
       },
       "description": "EnvVarSource represents a source for an environment variable's value."
     },
+    "v1alpha1EventBusRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "description": "EventBusRef references an Argo Events EventBus."
+    },
+    "v1alpha1EventSourceRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "eventName": {
+          "type": "string"
+        }
+      },
+      "description": "EventSourceRef references an Argo Events EventSource and a specific event within it."
+    },
     "v1alpha1ExecAction": {
       "type": "object",
       "properties": {
@@ -3110,6 +3798,21 @@
         }
       },
       "description": "ExecAction describes a command to execute."
+    },
+    "v1alpha1ExprFilter": {
+      "type": "object",
+      "properties": {
+        "expr": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "ExprFilter defines a filter using a CEL expression for complex logic."
     },
     "v1alpha1Framework": {
       "type": "string",
@@ -3294,6 +3997,28 @@
       ],
       "default": "INPUT_OUTPUT_MODE_UNSPECIFIED",
       "description": "InputOutputMode represents supported input/output modes."
+    },
+    "v1alpha1InvocationCounters": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "delivered": {
+          "type": "string",
+          "format": "int64"
+        },
+        "dropped": {
+          "type": "string",
+          "format": "int64"
+        },
+        "deadLettered": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "description": "InvocationCounters tracks trigger activity."
     },
     "v1alpha1KeyToPath": {
       "type": "object",
@@ -4121,6 +4846,24 @@
       "default": "PROVIDER_TYPE_UNSPECIFIED",
       "description": "ProviderType represents the LLM provider type."
     },
+    "v1alpha1PushNotificationTarget": {
+      "type": "object",
+      "properties": {
+        "agentRef": {
+          "$ref": "#/definitions/v1alpha1AgentRef"
+        },
+        "url": {
+          "type": "string"
+        },
+        "authentication": {
+          "$ref": "#/definitions/v1alpha1TriggerPushAuth"
+        },
+        "tokenRef": {
+          "$ref": "#/definitions/v1alpha1SecretKeySelector"
+        }
+      },
+      "description": "PushNotificationTarget defines where the Agent should deliver async results."
+    },
     "v1alpha1ReasoningEffort": {
       "type": "string",
       "enum": [
@@ -4550,6 +5293,81 @@
       },
       "description": "ToolRef references an AgentTool resource."
     },
+    "v1alpha1TriggerFilter": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1DataFilter"
+          }
+        },
+        "exprs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1alpha1ExprFilter"
+          }
+        }
+      },
+      "description": "TriggerFilter specifies which events should be delivered to the agent."
+    },
+    "v1alpha1TriggerLimits": {
+      "type": "object",
+      "properties": {
+        "maxInvocationsPerHour": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "maxConcurrentTasks": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "tokenBudgetPerEvent": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "tokenBudgetPerHour": {
+          "type": "string",
+          "format": "int64"
+        },
+        "deadLetterSink": {
+          "$ref": "#/definitions/v1alpha1DeadLetterSinkRef"
+        }
+      },
+      "description": "TriggerLimits defines rate and cost controls for event-driven agent invocations."
+    },
+    "v1alpha1TriggerPushAuth": {
+      "type": "object",
+      "properties": {
+        "schemes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "credentialsRef": {
+          "$ref": "#/definitions/v1alpha1SecretKeySelector"
+        }
+      },
+      "description": "TriggerPushAuth specifies how the agent authenticates to the push notification destination."
+    },
+    "v1alpha1TriggerTaskConfig": {
+      "type": "object",
+      "properties": {
+        "sessionKeyFrom": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "TriggerTaskConfig controls how events are translated to A2A tasks."
+    },
     "v1alpha1Volume": {
       "type": "object",
       "properties": {
@@ -4641,6 +5459,30 @@
       "description": "WatchAgentToolsResponse is a single event in the watch stream."
     },
     "v1alpha1WatchAgentToolsResponseEventType": {
+      "type": "string",
+      "enum": [
+        "EVENT_TYPE_UNSPECIFIED",
+        "EVENT_TYPE_ADDED",
+        "EVENT_TYPE_MODIFIED",
+        "EVENT_TYPE_DELETED",
+        "EVENT_TYPE_BOOKMARK",
+        "EVENT_TYPE_ERROR"
+      ],
+      "default": "EVENT_TYPE_UNSPECIFIED"
+    },
+    "v1alpha1WatchAgentTriggersResponse": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1alpha1WatchAgentTriggersResponseEventType"
+        },
+        "agentTrigger": {
+          "$ref": "#/definitions/v1alpha1AgentTrigger"
+        }
+      },
+      "description": "WatchAgentTriggersResponse is a single event in the watch stream."
+    },
+    "v1alpha1WatchAgentTriggersResponseEventType": {
       "type": "string",
       "enum": [
         "EVENT_TYPE_UNSPECIFIED",

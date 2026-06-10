@@ -41,6 +41,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	agentapp "github.com/danielnyari/flokoa/internal/app/agent"
+	triggerapp "github.com/danielnyari/flokoa/internal/app/trigger"
 	"github.com/danielnyari/flokoa/internal/controller"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
 	"github.com/danielnyari/flokoa/internal/telemetry"
@@ -310,6 +311,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "AgentWorkflow")
 			os.Exit(1)
 		}
+		if err := agentv1alpha1.SetupAgentTriggerWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "AgentTrigger")
+			os.Exit(1)
+		}
 	}
 	if err := (&controller.AgentWorkflowReconciler{
 		Client: mgr.GetClient(),
@@ -320,6 +325,22 @@ func main() {
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AgentWorkflow")
+		os.Exit(1)
+	}
+
+	// Build trigger app service and register AgentTrigger controller.
+	triggerAppService := triggerapp.NewService(triggerapp.Deps{
+		Agents:      &repo.AgentRepoImpl{Client: k8sClient},
+		ConfigMaps:  &repo.ConfigMapRepoImpl{Client: k8sClient},
+		Secrets:     &repo.SecretRepoImpl{Client: k8sClient},
+		OwnerSetter: &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
+	})
+	if err := (&controller.AgentTriggerReconciler{
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		AppService: triggerAppService,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AgentTrigger")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

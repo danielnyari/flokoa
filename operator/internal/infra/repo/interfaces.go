@@ -63,6 +63,11 @@ type SecretReader interface {
 	GetSecret(ctx context.Context, key types.NamespacedName) (*corev1.Secret, error)
 }
 
+// AgentReader reads Agent resources.
+type AgentReader interface {
+	GetAgent(ctx context.Context, key types.NamespacedName) (*agentv1alpha1.Agent, error)
+}
+
 // OwnerSetter sets controller owner references.
 type OwnerSetter interface {
 	SetOwner(owner, controlled metav1.Object) error

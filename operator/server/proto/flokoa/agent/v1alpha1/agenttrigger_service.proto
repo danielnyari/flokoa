@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package flokoa.agent.v1alpha1;
+
+import "flokoa/agent/v1alpha1/agenttrigger.proto";
+import "flokoa/agent/v1alpha1/common.proto";
+import "google/protobuf/field_mask.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1;agentv1alpha1";
+
+// AgentTriggerService provides CRUD operations for AgentTrigger resources.
+service AgentTriggerService {
+  // GetAgentTrigger retrieves an AgentTrigger by name and namespace.
+  rpc GetAgentTrigger(GetAgentTriggerRequest) returns (AgentTrigger) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/namespaces/{namespace}/agenttriggers/{name}"
+    };
+  }
+
+  // ListAgentTriggers lists AgentTriggers in a namespace or across all namespaces.
+  rpc ListAgentTriggers(ListAgentTriggersRequest) returns (AgentTriggerList) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/agenttriggers"
+      additional_bindings {
+        get: "/api/v1alpha1/namespaces/{namespace}/agenttriggers"
+      }
+    };
+  }
+
+  // CreateAgentTrigger creates a new AgentTrigger.
+  rpc CreateAgentTrigger(CreateAgentTriggerRequest) returns (AgentTrigger) {
+    option (google.api.http) = {
+      post: "/api/v1alpha1/namespaces/{namespace}/agenttriggers"
+      body: "agent_trigger"
+    };
+  }
+
+  // UpdateAgentTrigger updates an existing AgentTrigger.
+  rpc UpdateAgentTrigger(UpdateAgentTriggerRequest) returns (AgentTrigger) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{agent_trigger.metadata.namespace}/agenttriggers/{agent_trigger.metadata.name}"
+      body: "agent_trigger"
+    };
+  }
+
+  // DeleteAgentTrigger deletes an AgentTrigger.
+  rpc DeleteAgentTrigger(DeleteAgentTriggerRequest) returns (DeleteAgentTriggerResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1alpha1/namespaces/{namespace}/agenttriggers/{name}"
+    };
+  }
+
+  // WatchAgentTriggers watches for changes to AgentTriggers.
+  rpc WatchAgentTriggers(WatchAgentTriggersRequest) returns (stream WatchAgentTriggersResponse) {
+    option (google.api.http) = {
+      get: "/api/v1alpha1/watch/agenttriggers"
+      additional_bindings {
+        get: "/api/v1alpha1/watch/namespaces/{namespace}/agenttriggers"
+      }
+    };
+  }
+
+  // UpdateAgentTriggerStatus updates only the status subresource.
+  rpc UpdateAgentTriggerStatus(UpdateAgentTriggerStatusRequest) returns (AgentTrigger) {
+    option (google.api.http) = {
+      put: "/api/v1alpha1/namespaces/{namespace}/agenttriggers/{name}/status"
+      body: "status"
+    };
+  }
+}
+
+// GetAgentTriggerRequest is the request for GetAgentTrigger.
+message GetAgentTriggerRequest {
+  string namespace = 1;
+  string name = 2;
+}
+
+// ListAgentTriggersRequest is the request for ListAgentTriggers.
+message ListAgentTriggersRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// CreateAgentTriggerRequest is the request for CreateAgentTrigger.
+message CreateAgentTriggerRequest {
+  string namespace = 1;
+  AgentTrigger agent_trigger = 2;
+}
+
+// UpdateAgentTriggerRequest is the request for UpdateAgentTrigger.
+message UpdateAgentTriggerRequest {
+  AgentTrigger agent_trigger = 1;
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// DeleteAgentTriggerRequest is the request for DeleteAgentTrigger.
+message DeleteAgentTriggerRequest {
+  string namespace = 1;
+  string name = 2;
+  DeleteOptions options = 3;
+}
+
+// DeleteAgentTriggerResponse is the response for DeleteAgentTrigger.
+message DeleteAgentTriggerResponse {}
+
+// WatchAgentTriggersRequest is the request for WatchAgentTriggers.
+message WatchAgentTriggersRequest {
+  string namespace = 1;
+  ListOptions options = 2;
+}
+
+// WatchAgentTriggersResponse is a single event in the watch stream.
+message WatchAgentTriggersResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_ADDED = 1;
+    EVENT_TYPE_MODIFIED = 2;
+    EVENT_TYPE_DELETED = 3;
+    EVENT_TYPE_BOOKMARK = 4;
+    EVENT_TYPE_ERROR = 5;
+  }
+  EventType type = 1;
+  AgentTrigger agent_trigger = 2;
+}
+
+// UpdateAgentTriggerStatusRequest is the request for UpdateAgentTriggerStatus.
+message UpdateAgentTriggerStatusRequest {
+  string namespace = 1;
+  string name = 2;
+  AgentTriggerStatus status = 3;
+}
