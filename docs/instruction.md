@@ -96,7 +96,7 @@ spec:
     name: gpt-4o
   runtime:
     type: standard
-    spec:
+    standard:
       container:
         name: agent
         image: ghcr.io/example/support-agent:latest
