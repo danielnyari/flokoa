@@ -202,6 +202,11 @@ lint: golangci-lint ## Run golangci-lint linter
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+.PHONY: verify-endpoint-refs
+verify-endpoint-refs: ## CI lint: docs/samples must use the published endpoint, never the -runtime workload Service.
+	@! grep -rn -- "-runtime\.\(.*\)\?svc\.cluster\.local" ../docs config/samples test/e2e/testdata 2>/dev/null 		|| (echo "❌ direct workload-Service (-runtime) references found — callers use status.url / the published Service" && exit 1)
+	@echo "✅ no direct workload-Service references"
+
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify

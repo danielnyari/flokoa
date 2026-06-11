@@ -275,12 +275,26 @@ func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.
 	return s.deps.Deployments.EnsureDeployment(ctx, desired)
 }
 
+// reconcileServices keeps the two operator-owned Services in step: the
+// published endpoint ({agent}, the virtual endpoint behind status.url whose
+// backend flokoa may change) and the internal workload Service
+// ({agent}-runtime). The published Service's existing selector is what the
+// session router flips for session-tier agents (P1) — EnsureService only
+// rewrites ports here, never an externally-managed selector swap.
 func (s *Service) reconcileServices(ctx context.Context, agent *agentv1alpha1.Agent) (*corev1.Service, error) {
-	desired := builder.BuildService(agent.Name, agent.Namespace, agentdomain.Labels(agent))
+	labels := agentdomain.Labels(agent)
 
-	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
+	runtime := builder.BuildRuntimeService(agent.Name, agent.Namespace, labels)
+	if err := s.deps.OwnerSetter.SetOwner(agent, runtime); err != nil {
 		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
+	if _, err := s.deps.Services.EnsureService(ctx, runtime); err != nil {
+		return nil, err
+	}
 
-	return s.deps.Services.EnsureService(ctx, desired)
+	published := builder.BuildPublishedService(agent.Name, agent.Namespace, labels)
+	if err := s.deps.OwnerSetter.SetOwner(agent, published); err != nil {
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+	return s.deps.Services.EnsureService(ctx, published)
 }

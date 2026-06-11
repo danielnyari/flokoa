@@ -11,22 +11,23 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// Resolver resolves agent names to their A2A endpoint URLs
+// Resolver resolves agent names to their published A2A endpoint URLs.
 type Resolver struct {
 	k8sClient client.Client
 }
 
-// NewResolver creates a new Resolver with the given Kubernetes client
-// If k8sClient is nil, the resolver will only use convention-based resolution
+// NewResolver creates a new Resolver with the given Kubernetes client.
 func NewResolver(k8sClient client.Client) *Resolver {
 	return &Resolver{
 		k8sClient: k8sClient,
 	}
 }
 
-// Resolve resolves an agent name and namespace to its A2A endpoint URL.
-// It first attempts to read the endpoint from the Agent CR's status.url field.
-// If that fails or is empty, it falls back to a convention-based URL.
+// Resolve resolves an agent to its published endpoint via the Agent CR's
+// status.url — the flokoa-owned virtual endpoint. There is deliberately no
+// DNS-convention fallback: the URL is an opaque contract whose backing
+// topology may change (e.g. the session router), so guessing Service names
+// would silently bypass it.
 func (r *Resolver) Resolve(ctx context.Context, agent, namespace string) (string, error) {
 	if agent == "" {
 		return "", fmt.Errorf("agent name is required")
@@ -34,42 +35,20 @@ func (r *Resolver) Resolve(ctx context.Context, agent, namespace string) (string
 	if namespace == "" {
 		return "", fmt.Errorf("namespace is required")
 	}
-
-	// Try to resolve from Agent CR status
-	if r.k8sClient != nil {
-		endpoint, err := r.resolveFromCR(ctx, agent, namespace)
-		if err == nil && endpoint != "" {
-			log.Printf("Resolved agent endpoint from CR: agent=%s namespace=%s endpoint=%s", agent, namespace, endpoint)
-			return endpoint, nil
-		}
-		log.Printf("Warning: failed to resolve endpoint from CR for agent=%s namespace=%s: %v", agent, namespace, err)
+	if r.k8sClient == nil {
+		return "", fmt.Errorf("no Kubernetes client configured to resolve agent %s/%s", namespace, agent)
 	}
 
-	// Fallback to convention-based URL
-	log.Printf("Using convention-based endpoint for agent=%s namespace=%s", agent, namespace)
-	return r.conventionBasedURL(agent, namespace), nil
-}
-
-// resolveFromCR attempts to get the endpoint from the Agent CR's status
-func (r *Resolver) resolveFromCR(ctx context.Context, agent, namespace string) (string, error) {
 	var agentCR agentv1alpha1.Agent
-	key := types.NamespacedName{
-		Name:      agent,
-		Namespace: namespace,
-	}
-
+	key := types.NamespacedName{Name: agent, Namespace: namespace}
 	if err := r.k8sClient.Get(ctx, key, &agentCR); err != nil {
-		return "", fmt.Errorf("failed to get Agent CR: %w", err)
+		return "", fmt.Errorf("failed to get Agent CR %s/%s: %w", namespace, agent, err)
 	}
 
 	if agentCR.Status.URL == "" {
-		return "", fmt.Errorf("Agent CR has no URL in status")
+		return "", fmt.Errorf("agent %s/%s has no published endpoint yet (status.url is empty)", namespace, agent)
 	}
 
+	log.Printf("Resolved agent endpoint: agent=%s namespace=%s endpoint=%s", agent, namespace, agentCR.Status.URL)
 	return agentCR.Status.URL, nil
-}
-
-// conventionBasedURL returns the convention-based A2A endpoint URL
-func (r *Resolver) conventionBasedURL(agent, namespace string) string {
-	return fmt.Sprintf("http://%s.%s.svc.cluster.local/", agent, namespace)
 }

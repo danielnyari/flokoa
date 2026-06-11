@@ -201,3 +201,27 @@ one release train.
 - Runner release procedure: bump the pin in `flokoa-runner/pyproject.toml` →
   `make runner-contract` → commit lockfile + manifest + schema → CI gates on
   drift (`make verify-runner-contract`) and on the no-harness rule.
+
+## 9. The published endpoint (virtual endpoint identity)
+
+An Agent's published endpoint is a **flokoa-owned identity**:
+
+```
+status.url = http://{agent}.{namespace}.svc.cluster.local:{port}/
+```
+
+This format is normative for in-cluster resolution, but callers must treat
+the URL as **opaque**: port, path, and backing topology may change behind it
+(the session-tier router inserts as a backend swap of the published Service,
+never as a caller migration). The agent card served at the endpoint is the
+discovery mechanism.
+
+Two operator-owned Services exist per agent:
+
+| Service | Role |
+|---|---|
+| `{agent}` | The published endpoint — the only name callers may use. |
+| `{agent}-runtime` | Internal workload Service for the runner pods. **Not part of the public contract**; CI lints docs/samples for direct references. |
+
+Every flokoa component (playground, trigger invoke, push gateway, the Argo
+A2A plugin) resolves agents exclusively through `status.url`.
