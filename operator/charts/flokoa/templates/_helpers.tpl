@@ -154,3 +154,24 @@ Usage: {{ include "flokoa.image" (dict "image" .Values.controller.image "appVers
 {{- printf "%s:%s" .image.repository $tag -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Webhook service name.
+*/}}
+{{- define "flokoa.webhook.serviceName" -}}
+{{- printf "%s-webhook" (include "flokoa.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Webhook certificate name (cert-manager Certificate resource).
+*/}}
+{{- define "flokoa.webhook.certificateName" -}}
+{{- printf "%s-webhook-cert" (include "flokoa.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Webhook serving certificate secret name.
+*/}}
+{{- define "flokoa.webhook.certSecretName" -}}
+{{- default (printf "%s-webhook-server-cert" (include "flokoa.fullname" .) | trunc 63 | trimSuffix "-") .Values.webhooks.certSecretName }}
+{{- end }}

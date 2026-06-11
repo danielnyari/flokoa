@@ -1,7 +1,6 @@
 """Agent builder factory with ``_parse_config()`` hook.
 
-Implements the factory method pattern inspired by Google ADK's
-``BaseAgent.from_config()`` design:
+Implements a factory method pattern:
 
 1. ``from_config()`` is ``@final`` — subclasses cannot change the overall flow.
 2. ``_create_base_kwargs()`` handles fields shared across all agent types.
@@ -18,9 +17,7 @@ import inspect
 import logging
 from typing import Any, ClassVar, final
 
-from flokoa_types import IntegrationType
-
-from flokoa.config.agent_config import BaseAgentConfig, LlmAgentConfig, TaskAgentConfig
+from flokoa.config.agent_config import BaseAgentConfig, LlmAgentConfig
 from flokoa.config.code_ref import resolve_code_ref
 from flokoa.config.tool_config import ToolConfig, ToolRefType
 
@@ -223,143 +220,42 @@ class PydanticAIAgentBuilder(BaseAgentBuilder):
         return Agent(**agent_kwargs)
 
 
-class GoogleADKAgentBuilder(BaseAgentBuilder):
-    """Builds a ``google.adk.agents.LlmAgent`` from :class:`LlmAgentConfig`."""
-
-    config_type: ClassVar[type[BaseAgentConfig]] = LlmAgentConfig
-
-    @classmethod
-    def _parse_config(
-        cls,
-        config: BaseAgentConfig,
-        kwargs: dict[str, Any],
-    ) -> dict[str, Any]:
-        if not isinstance(config, LlmAgentConfig):
-            raise TypeError(f"Expected LlmAgentConfig, got {type(config)}")
-
-        if config.before_model_callbacks:
-            kwargs["before_model_callbacks"] = [resolve_code_ref(ref) for ref in config.before_model_callbacks]
-        if config.after_model_callbacks:
-            kwargs["after_model_callbacks"] = [resolve_code_ref(ref) for ref in config.after_model_callbacks]
-        if config.agent_class:
-            kwargs["agent_class"] = resolve_code_ref(config.agent_class)
-
-        return kwargs
-
-    @classmethod
-    def _build(cls, config: BaseAgentConfig, kwargs: dict[str, Any]) -> Any:
-        from google.adk.agents import LlmAgent
-
-        if not isinstance(config, LlmAgentConfig):
-            raise TypeError(f"Expected LlmAgentConfig, got {type(config)}")
-
-        agent_kwargs: dict[str, Any] = {
-            "name": kwargs["name"],
-        }
-        if kwargs.get("description"):
-            agent_kwargs["description"] = kwargs["description"]
-        if kwargs.get("instruction"):
-            agent_kwargs["instruction"] = kwargs["instruction"]
-
-        custom_cls = kwargs.get("agent_class")
-        if custom_cls is not None:
-            if inspect.isclass(custom_cls) and issubclass(custom_cls, LlmAgent):
-                return custom_cls(**agent_kwargs)
-            raise TypeError(f"agent_class must be a subclass of google.adk.agents.LlmAgent, got: {custom_cls}")
-
-        return LlmAgent(**agent_kwargs)
-
-
-class MarvinTaskBuilder(BaseAgentBuilder):
-    """Builds and executes a Marvin task from :class:`TaskAgentConfig`.
-
-    Unlike LLM builders that return a persistent agent, :meth:`_build`
-    returns a dict of kwargs ready for :func:`marvin.run` / :func:`marvin.classify`
-    / etc.  The actual execution is handled by the executor.
-    """
-
-    config_type: ClassVar[type[BaseAgentConfig]] = TaskAgentConfig
-
-    @classmethod
-    def _parse_config(
-        cls,
-        config: BaseAgentConfig,
-        kwargs: dict[str, Any],
-    ) -> dict[str, Any]:
-        if not isinstance(config, TaskAgentConfig):
-            raise TypeError(f"Expected TaskAgentConfig, got {type(config)}")
-
-        kwargs["task_type"] = config.task_type
-        if config.result_type is not None:
-            kwargs["result_type"] = config.result_type
-        if config.input is not None:
-            kwargs["input"] = config.input
-        if config.labels is not None:
-            kwargs["labels"] = config.labels
-        if config.multi_label is not None:
-            kwargs["multi_label"] = config.multi_label
-        if config.count is not None:
-            kwargs["count"] = config.count
-        if config.context is not None:
-            kwargs["context"] = config.context
-
-        return kwargs
-
-    @classmethod
-    def _build(cls, config: BaseAgentConfig, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Return the kwargs dict for the managed-task executor.
-
-        The executor calls the appropriate ``marvin.*`` function with these kwargs.
-        """
-        return kwargs
-
-
 # ---------------------------------------------------------------------------
 # Builder registry
 # ---------------------------------------------------------------------------
 
-_BUILDER_REGISTRY: dict[tuple[str, str], type[BaseAgentBuilder]] = {
-    ("llm", IntegrationType.PYDANTIC_AI): PydanticAIAgentBuilder,
-    ("llm", IntegrationType.GOOGLE_ADK): GoogleADKAgentBuilder,
-    ("task", "marvin"): MarvinTaskBuilder,
+_BUILDER_REGISTRY: dict[str, type[BaseAgentBuilder]] = {
+    "llm": PydanticAIAgentBuilder,
 }
 
 
 def register_builder(
     agent_type: str,
-    framework: str,
     builder_cls: type[BaseAgentBuilder],
 ) -> None:
-    """Register a custom builder for an (agent_type, framework) pair.
+    """Register a custom builder for an agent type.
 
     Args:
-        agent_type: The agent type discriminator value (e.g., ``"llm"``, ``"task"``).
-        framework: The framework identifier (e.g., ``"pydantic-ai"``, ``"google-adk"``).
+        agent_type: The agent type discriminator value (e.g., ``"llm"``).
         builder_cls: The builder class to register.
     """
-    _BUILDER_REGISTRY[(agent_type, framework)] = builder_cls
+    _BUILDER_REGISTRY[agent_type] = builder_cls
 
 
-def get_builder(
-    agent_type: str,
-    framework: str,
-) -> type[BaseAgentBuilder]:
-    """Look up a builder for the given (agent_type, framework) pair.
+def get_builder(agent_type: str) -> type[BaseAgentBuilder]:
+    """Look up a builder for the given agent type.
 
     Args:
         agent_type: The agent type discriminator value.
-        framework: The framework identifier.
 
     Returns:
         The registered builder class.
 
     Raises:
-        KeyError: If no builder is registered for the given pair.
+        KeyError: If no builder is registered for the given agent type.
     """
-    key = (agent_type, framework)
-    if key not in _BUILDER_REGISTRY:
+    if agent_type not in _BUILDER_REGISTRY:
         raise KeyError(
-            f"No builder registered for (agent_type={agent_type!r}, framework={framework!r}). "
-            f"Available: {list(_BUILDER_REGISTRY.keys())}"
+            f"No builder registered for agent_type={agent_type!r}. Available: {list(_BUILDER_REGISTRY.keys())}"
         )
-    return _BUILDER_REGISTRY[key]
+    return _BUILDER_REGISTRY[agent_type]

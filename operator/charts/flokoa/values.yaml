@@ -23,6 +23,32 @@ crds:
   install: true
 
 # =============================================================================
+# Admission webhooks
+# =============================================================================
+webhooks:
+  # -- Enable validating admission webhooks for all flokoa CRDs.
+  # The webhook server runs inside the controller pod on port 9443.
+  enabled: true
+
+  # -- Webhook failure policy (Fail or Ignore)
+  failurePolicy: Fail
+
+  certManager:
+    # -- Issue the webhook serving certificate with cert-manager
+    # (requires cert-manager to be installed in the cluster).
+    enabled: true
+
+  # -- Name of an existing TLS secret (keys tls.crt/tls.key) with the webhook
+  # serving certificate. Only needed when certManager.enabled is false;
+  # defaults to "<release>-flokoa-webhook-server-cert".
+  certSecretName: ""
+
+  # -- Base64-encoded CA bundle for the ValidatingWebhookConfiguration.
+  # Only needed when certManager.enabled is false (cert-manager injects the
+  # CA automatically via the inject-ca-from annotation).
+  caBundle: ""
+
+# =============================================================================
 # Controller (Operator)
 # =============================================================================
 controller:

@@ -7,7 +7,7 @@ This document provides guidance for AI assistants working with the Flokoa codeba
 Flokoa is an open-source platform for managing AI Agents in Kubernetes clusters. It consists of:
 
 1. **Kubernetes Operator** (Go) - Declarative deployment and lifecycle management of AI agents through CRDs, with a gRPC API server, Helm chart, and Argo Workflows executor plugin
-2. **Python SDK** - Client library and CLI for building and running agents locally, with framework integrations (pydantic-ai, google-adk) and A2A protocol support
+2. **Python SDK** - Client library and CLI for building and running pydantic-ai agents locally, with A2A protocol support
 
 - **Domain**: `flokoa.ai`
 - **Repository**: `github.com/danielnyari/flokoa`
@@ -41,16 +41,17 @@ flokoa/
 │   └── go.mod                     # Go 1.24.10 module
 ├── sdk/
 │   └── python/                    # Python SDK (uv workspace, Python >= 3.13)
-│       ├── pyproject.toml         # Workspace root (4 members)
+│       ├── pyproject.toml         # Workspace root
 │       ├── uv.lock                # Shared lockfile
 │       ├── Makefile               # Workspace-level targets
-│       ├── flokoa/                # Public SDK package (v0.0.5)
+│       ├── flokoa/                # Public SDK package
 │       │   ├── CLAUDE.md          # SDK-specific guidance
-│       │   ├── src/flokoa/        # Source: CLI, integrations, tools, utils
+│       │   ├── src/flokoa/        # Source: CLI, pydantic-ai integration, tools, utils
 │       │   └── tests/             # pytest tests
 │       ├── flokoa-types/          # Auto-generated Pydantic v2 models from CRD schemas
 │       ├── flokoa-managed-agent/  # Operator-deployed pydantic-ai agent runtime
-│       └── flokoa-managed-task/   # Operator-deployed Marvin task runtime (scaffold)
+│       ├── flokoa-codemode-mcp/   # Code-mode MCP server package
+│       └── flokoa-common/         # Shared internal helpers
 ├── docs/                          # Documentation (Zensical/MkDocs site)
 │   ├── *.md                       # Architecture, getting-started, CRD docs
 │   └── examples/                  # 27 example YAML files (agents, tools, models, providers)
@@ -69,24 +70,27 @@ Each module has its own CLAUDE.md with detailed instructions:
 
 ## Version Information
 
+Component versions are aligned and driven by the release process: pushing a
+`v*` tag runs `.github/workflows/release.yml`, which derives the version from
+the tag for all images, the Helm chart, and the PyPI packages (see
+`CHANGELOG.md` for history). Don't hand-maintain version numbers in docs.
+
 | Component | Version |
 |-----------|---------|
-| Operator (Makefile) | 0.0.6 |
-| Helm Chart (appVersion) | 0.0.7 |
-| Python SDK (`flokoa`) | 0.0.5 |
 | API Version | v1alpha1 |
-| Go | 1.24.10 |
+| Go | 1.24 |
 | Python | >= 3.13 |
 
 ## Core CRDs
 
-The operator manages six CRDs under `agent.flokoa.ai/v1alpha1`:
+The operator manages seven CRDs under `agent.flokoa.ai/v1alpha1`:
 
 | CRD | Purpose | Key Fields |
 |-----|---------|------------|
 | **Agent** | AI agent deployment and lifecycle | `framework`, `runtime` (standard/template), `model`, `instruction`, `tools`, `card` (A2A metadata) |
 | **AgentTool** | Tool definitions for agents | `type` (openapi), `source` (URL/ServiceRef), `schema`, `headers`, `timeout` |
-| **AgentWorkflow** | Multi-agent workflows compiled to Argo Workflows | `tasks`, `params`, conditions, dependencies |
+| **AgentWorkflow** | **Frozen** template-only A2A composition between deployed Agents (compiled to Argo WorkflowTemplates; no new features — see roadmap §7) | `tasks`, `params`, conditions, dependencies |
+| **AgentTrigger** | Event-driven agent invocation via Argo Events | `eventSource`, `filter`, `agent`, `task`, `pushNotification`, `limits` |
 | **Model** | LLM model configuration | Provider-specific parameters (temperature, maxTokens, reasoning, etc.) |
 | **ModelProvider** | Provider connection config | OpenAI, Anthropic, Google, Bedrock, API key refs, base URLs, TLS |
 | **Instruction** | System prompt management | `content` (prompt text), creates ConfigMap |
@@ -111,13 +115,10 @@ The Agent-to-Agent (A2A) protocol is used across the platform:
 - The Argo Workflows executor plugin communicates with agents via A2A
 - Agent cards (A2A metadata with skills) are defined on the Agent CRD
 
-### Framework Integrations
+### Framework
 
-Currently supported AI frameworks:
-- **pydantic-ai** - Primary integration (`flokoa[pydantic-ai]`)
-- **google-adk** - Google Agent Development Kit (`flokoa[google-adk]`)
-
-The `flokoa-managed-agent` runtime (deployed by the operator) uses pydantic-ai.
+flokoa targets **pydantic-ai** exclusively (`flokoa[pydantic-ai]`). The
+`flokoa-managed-agent` runtime (deployed by the operator) uses pydantic-ai.
 
 ## CI/CD Pipelines
 
@@ -128,6 +129,7 @@ The `flokoa-managed-agent` runtime (deployed by the operator) uses pydantic-ai.
 | E2E Tests | `test-e2e.yml` | Push/PR | Kind cluster creation, `make test-e2e` |
 | Lint | `lint.yml` | Push/PR | golangci-lint v2.1.0 |
 | Documentation | `docs.yml` | Push to main | Zensical build + GitHub Pages deploy |
+| Release | `release.yml` | `v*` tag | Test gate, image build matrix, Helm chart push (OCI), install.yaml bundle, GitHub Release, optional PyPI publish |
 
 ## Quick Reference: Common Commands
 
@@ -192,9 +194,9 @@ All images use multi-stage builds. The operator uses `gcr.io/distroless/static:n
 - Helm chart for deployment
 
 ### Python SDK
-- uv workspace with 4 packages
+- uv workspace (flokoa, flokoa-types, flokoa-managed-agent, flokoa-codemode-mcp, flokoa-common)
 - FastAPI + a2a-sdk for HTTP/A2A protocol
-- pydantic-ai >= 1.44.0, google-adk >= 1.14.1 (optional)
+- pydantic-ai >= 1.44.0 (the only framework integration)
 - Ruff for linting, ty for type checking, pytest for tests
 - Pre-commit hooks configured
 
@@ -218,17 +220,13 @@ All images use multi-stage builds. The operator uses `gcr.io/distroless/static:n
 7. Run `make generate-python-models` if needed
 8. Add tests
 
-### Adding a New Framework Integration (Python SDK)
-1. Create `sdk/python/flokoa/src/flokoa/integrations/<framework>/`
-2. Implement `FlokoaAgentExecutor` subclass
-3. Register in `integrations/__init__.py` (add to `IntegrationType` enum + `_EXTRA_NAMES` + `_try_load()`)
-4. Add optional dependency in `sdk/python/flokoa/pyproject.toml`
 
 ## Project Status
 
-This project is in early development. Key architectural components are in place:
-- Six CRDs with controllers, webhooks, and gRPC services
-- Python SDK with CLI, framework integrations, and OpenAPI tooling
+This project is in early development, executing the Pivot v2.1 roadmap
+(`docs/roadmap/`). Key architectural components are in place:
+- Seven CRDs with controllers, admission webhooks, and gRPC services
+- Python SDK with CLI, pydantic-ai integration, and OpenAPI tooling
 - Argo Workflows integration with A2A executor plugin
 - Helm chart for deployment
 - CI/CD with unit tests, e2e tests, linting, and documentation

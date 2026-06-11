@@ -30,8 +30,6 @@ const (
 	Framework_FRAMEWORK_UNSPECIFIED Framework = 0
 	Framework_FRAMEWORK_PYDANTIC_AI Framework = 1
 	Framework_FRAMEWORK_LANGCHAIN   Framework = 2
-	Framework_FRAMEWORK_GOOGLE_ADK  Framework = 3
-	Framework_FRAMEWORK_MARVIN      Framework = 4
 	Framework_FRAMEWORK_AUTOGEN     Framework = 5
 	Framework_FRAMEWORK_A2A         Framework = 6
 )
@@ -42,8 +40,6 @@ var (
 		0: "FRAMEWORK_UNSPECIFIED",
 		1: "FRAMEWORK_PYDANTIC_AI",
 		2: "FRAMEWORK_LANGCHAIN",
-		3: "FRAMEWORK_GOOGLE_ADK",
-		4: "FRAMEWORK_MARVIN",
 		5: "FRAMEWORK_AUTOGEN",
 		6: "FRAMEWORK_A2A",
 	}
@@ -51,8 +47,6 @@ var (
 		"FRAMEWORK_UNSPECIFIED": 0,
 		"FRAMEWORK_PYDANTIC_AI": 1,
 		"FRAMEWORK_LANGCHAIN":   2,
-		"FRAMEWORK_GOOGLE_ADK":  3,
-		"FRAMEWORK_MARVIN":      4,
 		"FRAMEWORK_AUTOGEN":     5,
 		"FRAMEWORK_A2A":         6,
 	}
@@ -4936,15 +4930,13 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x06status\x18\x03 \x01(\v2\".flokoa.agent.v1alpha1.AgentStatusR\x06status\"|\n" +
 	"\tAgentList\x12;\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1f.flokoa.agent.v1alpha1.ListMetaR\bmetadata\x122\n" +
-	"\x05items\x18\x02 \x03(\v2\x1c.flokoa.agent.v1alpha1.AgentR\x05items*\xb4\x01\n" +
+	"\x05items\x18\x02 \x03(\v2\x1c.flokoa.agent.v1alpha1.AgentR\x05items*\x90\x01\n" +
 	"\tFramework\x12\x19\n" +
 	"\x15FRAMEWORK_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15FRAMEWORK_PYDANTIC_AI\x10\x01\x12\x17\n" +
-	"\x13FRAMEWORK_LANGCHAIN\x10\x02\x12\x18\n" +
-	"\x14FRAMEWORK_GOOGLE_ADK\x10\x03\x12\x14\n" +
-	"\x10FRAMEWORK_MARVIN\x10\x04\x12\x15\n" +
+	"\x13FRAMEWORK_LANGCHAIN\x10\x02\x12\x15\n" +
 	"\x11FRAMEWORK_AUTOGEN\x10\x05\x12\x11\n" +
-	"\rFRAMEWORK_A2A\x10\x06*s\n" +
+	"\rFRAMEWORK_A2A\x10\x06\"\x04\b\x03\x10\x03\"\x04\b\x04\x10\x04*s\n" +
 	"\n" +
 	"AgentPhase\x12\x1b\n" +
 	"\x17AGENT_PHASE_UNSPECIFIED\x10\x00\x12\x17\n" +

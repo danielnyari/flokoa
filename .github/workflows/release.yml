@@ -8,7 +8,7 @@ name: Release
 # The pipeline:
 #   1. Runs unit tests + lint (gate).
 #   2. Builds & pushes all images with the semver tag (+ `latest`):
-#      operator, server, a2a-plugin, flokoa-cli, managed-task.
+#      operator, server, a2a-plugin, flokoa-cli.
 #   3. Packages the Helm chart and pushes it to the GHCR OCI registry.
 #   4. Generates a single-file `install.yaml` kustomize bundle.
 #   5. Creates a GitHub Release with the CHANGELOG notes + install.yaml asset.
@@ -91,9 +91,6 @@ jobs:
           - image: flokoa-cli
             context: sdk/python
             dockerfile: sdk/python/flokoa-managed-agent/Dockerfile
-          - image: flokoa-managed-task
-            context: sdk/python
-            dockerfile: sdk/python/flokoa-managed-task/Dockerfile
     steps:
       - name: Clone the code
         uses: actions/checkout@v4

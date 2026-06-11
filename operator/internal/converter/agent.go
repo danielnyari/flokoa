@@ -226,10 +226,6 @@ func FrameworkToProto(f agentv1alpha1.Framework) pb.Framework {
 		return pb.Framework_FRAMEWORK_PYDANTIC_AI
 	case agentv1alpha1.FrameworkLangChain:
 		return pb.Framework_FRAMEWORK_LANGCHAIN
-	case agentv1alpha1.FrameworkADK:
-		return pb.Framework_FRAMEWORK_GOOGLE_ADK
-	case agentv1alpha1.FrameworkMarvin:
-		return pb.Framework_FRAMEWORK_MARVIN
 	case agentv1alpha1.FrameworkAutogen:
 		return pb.Framework_FRAMEWORK_AUTOGEN
 	case agentv1alpha1.FrameworkA2A:

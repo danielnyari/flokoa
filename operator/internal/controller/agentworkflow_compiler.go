@@ -33,9 +33,6 @@ import (
 )
 
 const (
-	// defaultManagedTaskImage is the default flokoa runtime image for Marvin agent tasks.
-	defaultManagedTaskImage = "ghcr.io/danielnyari/flokoa-managed-task:0.1.0"
-
 	// dagEntrypointName is the name of the DAG entrypoint template.
 	dagEntrypointName = "main"
 
@@ -48,9 +45,6 @@ const (
 	// agentTaskArtifactParam is the output parameter name for the A2A Artifact JSON.
 	agentTaskArtifactParam = "artifact"
 
-	// taskConfigEnvVar is the environment variable name for the serialized task config.
-	taskConfigEnvVar = "FLOKOA_TASK_CONFIG"
-
 	// traceparentEnvVar is the env var used to propagate W3C traceparent into agent task pods.
 	traceparentEnvVar = "FLOKOA_TRACEPARENT"
 
@@ -59,11 +53,6 @@ const (
 
 	// defaultWorkflowServiceAccount is the default ServiceAccount for workflow pods.
 	defaultWorkflowServiceAccount = "flokoa-workflow"
-
-	// Mount paths for resolved ConfigMaps in agent task containers.
-	agentTaskModelMountPath       = "/etc/flokoa/model.json"
-	agentTaskToolsMountPath       = "/etc/flokoa/tools"
-	agentTaskInstructionMountPath = "/etc/flokoa/instruction.txt"
 )
 
 // CompilerOptions holds operator-level settings that affect compilation.
@@ -80,8 +69,7 @@ var expressionRe = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 // compileToArgoWorkflowTemplate translates an AgentWorkflow DSL into an Argo WorkflowTemplate CR.
 // Each AgentWorkflow compiles to a single WorkflowTemplate; individual runs are Argo Workflow CRs
 // created from the template via WorkflowTemplateRef.
-// resolvedTasks contains pre-resolved Model/Tool ConfigMap info for agentTask tasks, keyed by task name.
-func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTasks map[string]*resolvedAgentTaskInfo, opts CompilerOptions) (*wfv1.WorkflowTemplate, error) {
+func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, opts CompilerOptions) (*wfv1.WorkflowTemplate, error) {
 	wft := &wfv1.WorkflowTemplate{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
@@ -159,20 +147,8 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 	for _, task := range awf.Spec.Tasks {
 		templateName := task.Name
 
-		// Look up resolved info for agentTask tasks; return an error if resolution
-		// was expected but the entry is missing (e.g. resolution was skipped due to
-		// an earlier error that was silently ignored).
-		var resolved *resolvedAgentTaskInfo
-		if task.AgentTask != nil {
-			var ok bool
-			resolved, ok = resolvedTasks[task.Name]
-			if !ok {
-				return nil, fmt.Errorf("task %q: missing resolved agent task info", task.Name)
-			}
-		}
-
 		// Build the template for this task
-		tmpl, err := buildTemplate(awf, task, resolved, opts)
+		tmpl, err := buildTemplate(awf, task, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build template for task %q: %w", task.Name, err)
 		}
@@ -248,7 +224,7 @@ func compileToArgoWorkflowTemplate(awf *agentv1alpha1.AgentWorkflow, resolvedTas
 }
 
 // buildTemplate creates an Argo template for a single workflow task.
-func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.WorkflowTask, resolved *resolvedAgentTaskInfo, opts CompilerOptions) (*wfv1.Template, error) {
+func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.WorkflowTask, opts CompilerOptions) (*wfv1.Template, error) {
 	tmpl := &wfv1.Template{
 		Name: task.Name,
 	}
@@ -276,10 +252,11 @@ func buildTemplate(awf *agentv1alpha1.AgentWorkflow, task agentv1alpha1.Workflow
 		if err := buildAgentTemplate(tmpl, task.Agent); err != nil {
 			return nil, err
 		}
-	case task.AgentTask != nil:
-		if err := buildAgentTaskTemplate(tmpl, task.AgentTask, resolved); err != nil {
-			return nil, err
-		}
+	case task.AgentTask != nil: //nolint:staticcheck // the freeze guard must inspect the deprecated field
+		// The agentTask runtime was removed in the v2.1 pivot; AgentWorkflow is
+		// frozen as a template-only resource. The webhook rejects new agentTask
+		// usage; this guards pre-existing objects.
+		return nil, fmt.Errorf("agentTask is no longer supported: its runtime was removed and the AgentWorkflow API is frozen (use an agent task calling a deployed Agent instead)")
 	case task.Container != nil:
 		buildContainerTemplate(tmpl, task.Container, opts)
 	case task.HTTP != nil:
@@ -460,224 +437,6 @@ func buildPluginSendConfig(cfg *agentv1alpha1.MessageSendConfig) map[string]inte
 		result["pushNotificationConfig"] = pushCfg
 	}
 	return result
-}
-
-// resolvedAgentTaskInfo holds pre-resolved ConfigMap info for a single agentTask.
-// Populated by the AgentWorkflow controller before compilation.
-type resolvedAgentTaskInfo struct {
-	// modelInfo is the resolved Model/ModelProvider configuration (ConfigMap name, env vars, secrets).
-	modelInfo *resolvedModelInfo
-	// toolConfigMaps contains resolved tool ConfigMap info for volume mounting.
-	toolConfigMaps []toolConfigMapInfo
-	// agentModelInfo is the resolved model for the inline agent (if different from task-level).
-	agentModelInfo *resolvedModelInfo
-	// instructionConfigMapName is the name of the ConfigMap for an instruction ref.
-	instructionConfigMapName string
-}
-
-// agentTaskConfig is the JSON structure serialized into the FLOKOA_TASK_CONFIG env var.
-// It contains all inline configuration for the Marvin task runtime.
-type agentTaskConfig struct {
-	Type         string                `json:"type"`
-	Instructions string                `json:"instructions,omitempty"`
-	Input        string                `json:"input,omitempty"`
-	ResultType   *agentTaskResultType  `json:"resultType,omitempty"`
-	Labels       []string              `json:"labels,omitempty"`
-	MultiLabel   *bool                 `json:"multiLabel,omitempty"`
-	Count        *int32                `json:"count,omitempty"`
-	Context      map[string]string     `json:"context,omitempty"`
-	Agent        *agentTaskAgentConfig `json:"agent,omitempty"`
-}
-
-type agentTaskResultType struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	JSONSchema  json.RawMessage `json:"jsonSchema"`
-}
-
-type agentTaskAgentConfig struct {
-	Name         string `json:"name"`
-	Instructions string `json:"instructions,omitempty"`
-}
-
-// buildAgentTaskTemplate populates a template with a container spec for a Marvin agent task.
-func buildAgentTaskTemplate(tmpl *wfv1.Template, agentTask *agentv1alpha1.AgentTask, resolved *resolvedAgentTaskInfo) error {
-	image := agentTask.Image
-	if image == "" {
-		image = defaultManagedTaskImage
-	}
-
-	// Build the task config JSON
-	cfg := agentTaskConfig{
-		Type: string(agentTask.Type),
-	}
-
-	// Instruction (inline only — instructionRef is handled via volume mount)
-	if agentTask.Instruction != nil && agentTask.Instruction.Template != "" {
-		cfg.Instructions = TranslateExpressions(agentTask.Instruction.Template)
-	}
-
-	// Input with expression translation
-	if agentTask.Input != "" {
-		cfg.Input = TranslateExpressions(agentTask.Input)
-	}
-
-	// ResultType
-	if agentTask.ResultType != nil {
-		rt := &agentTaskResultType{
-			Name:        agentTask.ResultType.Name,
-			Description: agentTask.ResultType.Description,
-		}
-		if agentTask.ResultType.JSONSchema != nil {
-			rt.JSONSchema = agentTask.ResultType.JSONSchema.Raw
-		}
-		cfg.ResultType = rt
-	}
-
-	// Classify-specific fields
-	if len(agentTask.Labels) > 0 {
-		cfg.Labels = agentTask.Labels
-	}
-	if agentTask.MultiLabel != nil {
-		cfg.MultiLabel = agentTask.MultiLabel
-	}
-
-	// Generate-specific fields
-	if agentTask.Count != nil {
-		cfg.Count = agentTask.Count
-	}
-
-	// Context with expression translation
-	if len(agentTask.Context) > 0 {
-		cfg.Context = make(map[string]string, len(agentTask.Context))
-		for k, v := range agentTask.Context {
-			cfg.Context[k] = TranslateExpressions(v)
-		}
-	}
-
-	// Inline agent config
-	if agentTask.Agent != nil {
-		cfg.Agent = &agentTaskAgentConfig{
-			Name:         agentTask.Agent.Name,
-			Instructions: agentTask.Agent.Instructions,
-		}
-	}
-
-	taskConfigJSON, err := json.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal agent task config: %w", err)
-	}
-
-	container := corev1.Container{
-		Image:   image,
-		Command: []string{"python", "-m", "flokoa_managed_task"},
-		Env: append([]corev1.EnvVar{
-			{
-				Name:  taskConfigEnvVar,
-				Value: string(taskConfigJSON),
-			},
-			{
-				// Propagate W3C traceparent into the agent task container so the
-				// Python runtime can restore the trace context for OpenTelemetry.
-				Name:  traceparentEnvVar,
-				Value: fmt.Sprintf("{{workflow.parameters.%s}}", traceparentWorkflowParam),
-			},
-		}, agentTask.Env...),
-	}
-
-	// Resource requirements
-	if agentTask.Resources != nil {
-		container.Resources = *agentTask.Resources
-	}
-
-	// Volumes and volume mounts from resolved info
-	var volumes []corev1.Volume
-
-	if resolved != nil {
-		// Mount model ConfigMap
-		if resolved.modelInfo != nil && resolved.modelInfo.configMapName != "" {
-			volumes = append(volumes, corev1.Volume{
-				Name: "model-config",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: resolved.modelInfo.configMapName},
-					},
-				},
-			})
-			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-				Name:      "model-config",
-				MountPath: agentTaskModelMountPath,
-				SubPath:   "model.json",
-				ReadOnly:  true,
-			})
-			// Add non-secret env vars from model provider
-			container.Env = append(container.Env, resolved.modelInfo.envVars...)
-			// Add secret env vars from model provider
-			container.Env = append(container.Env, resolved.modelInfo.secretEnvVars...)
-		}
-
-		// Mount tool ConfigMaps
-		for _, toolCM := range resolved.toolConfigMaps {
-			volumeName := fmt.Sprintf("tool-%s", toolCM.toolName)
-			volumes = append(volumes, corev1.Volume{
-				Name: volumeName,
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: toolCM.configMapName},
-					},
-				},
-			})
-			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-				Name:      volumeName,
-				MountPath: fmt.Sprintf("%s/%s.json", agentTaskToolsMountPath, toolCM.toolName),
-				SubPath:   "spec.json",
-				ReadOnly:  true,
-			})
-		}
-
-		// Mount instruction ConfigMap (for instructionRef)
-		if resolved.instructionConfigMapName != "" {
-			volumes = append(volumes, corev1.Volume{
-				Name: "instruction",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: resolved.instructionConfigMapName},
-					},
-				},
-			})
-			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-				Name:      "instruction",
-				MountPath: agentTaskInstructionMountPath,
-				SubPath:   "instruction.txt",
-				ReadOnly:  true,
-			})
-		}
-	}
-
-	tmpl.Container = &container
-	if len(volumes) > 0 {
-		tmpl.Volumes = volumes
-	}
-
-	// Output parameters: the container writes plain text to /tmp/result and A2A Artifact JSON to /tmp/artifact
-	tmpl.Outputs = wfv1.Outputs{
-		Parameters: []wfv1.Parameter{
-			{
-				Name: agentTaskOutputParam,
-				ValueFrom: &wfv1.ValueFrom{
-					Path: "/tmp/result",
-				},
-			},
-			{
-				Name: agentTaskArtifactParam,
-				ValueFrom: &wfv1.ValueFrom{
-					Path: "/tmp/artifact",
-				},
-			},
-		},
-	}
-
-	return nil
 }
 
 // buildContainerTemplate populates a template for an arbitrary container task.

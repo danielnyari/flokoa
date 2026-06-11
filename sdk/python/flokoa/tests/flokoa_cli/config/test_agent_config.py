@@ -1,19 +1,17 @@
-"""Tests for flokoa.config.agent_config — AgentConfig discriminated union."""
+"""Tests for flokoa.config.agent_config — AgentConfig validation."""
 
 import pytest
-from flokoa_types import IntegrationType
 from pydantic import ValidationError
 
 from flokoa.config.agent_config import (
     AgentConfig,
     LlmAgentConfig,
-    TaskAgentConfig,
 )
 
 
-class TestAgentConfigDiscrimination:
+class TestAgentConfigValidation:
     def test_defaults_to_llm(self):
-        """When agentType is absent, defaults to LlmAgentConfig."""
+        """When agentType is absent, defaults to 'llm'."""
         config = AgentConfig.model_validate({
             "name": "test_agent",
             "instruction": "Be helpful.",
@@ -28,22 +26,20 @@ class TestAgentConfigDiscrimination:
         })
         assert isinstance(config.root, LlmAgentConfig)
 
-    def test_task_agent(self):
-        config = AgentConfig.model_validate({
-            "agentType": "task",
-            "name": "classifier",
-            "taskType": "classify",
-            "labels": ["positive", "negative"],
-        })
-        assert isinstance(config.root, TaskAgentConfig)
-        assert config.root.task_type.value == "classify"
-        assert config.root.labels == ["positive", "negative"]
-
     def test_invalid_agent_type_raises(self):
         with pytest.raises(ValidationError):
             AgentConfig.model_validate({
                 "agentType": "unknown",
                 "name": "test",
+            })
+
+    def test_task_agent_type_rejected(self):
+        """The task agent type was removed in the v2.1 pivot."""
+        with pytest.raises(ValidationError):
+            AgentConfig.model_validate({
+                "agentType": "task",
+                "name": "classifier",
+                "taskType": "classify",
             })
 
 
@@ -53,7 +49,6 @@ class TestLlmAgentConfig:
             "name": "my_agent",
             "description": "A helpful agent",
             "instruction": "You are helpful.",
-            "framework": "pydantic-ai",
             "model": {
                 "provider": {"type": "openai"},
                 "model": "gpt-4o",
@@ -73,22 +68,10 @@ class TestLlmAgentConfig:
         assert inner.name == "my_agent"
         assert inner.description == "A helpful agent"
         assert inner.instruction == "You are helpful."
-        assert inner.framework == IntegrationType.PYDANTIC_AI
         assert inner.model is not None
         assert inner.model.model == "gpt-4o"
         assert inner.output_schema is not None
         assert inner.output_schema.name == "Answer"
-
-    def test_default_framework(self):
-        config = AgentConfig.model_validate({"name": "test"})
-        assert config.root.framework == IntegrationType.PYDANTIC_AI
-
-    def test_google_adk_framework(self):
-        config = AgentConfig.model_validate({
-            "name": "test",
-            "framework": "google-adk",
-        })
-        assert config.root.framework == IntegrationType.GOOGLE_ADK
 
     def test_with_tools(self):
         config = AgentConfig.model_validate({
@@ -134,78 +117,12 @@ class TestLlmAgentConfig:
                 "unknownField": "bad",
             })
 
-
-class TestTaskAgentConfig:
-    def test_run_task(self):
-        config = AgentConfig.model_validate({
-            "agentType": "task",
-            "name": "runner",
-            "taskType": "run",
-            "instruction": "Summarize the text.",
-        })
-        inner = config.root
-        assert isinstance(inner, TaskAgentConfig)
-        assert inner.task_type.value == "run"
-        assert inner.instruction == "Summarize the text."
-
-    def test_classify_task(self):
-        config = AgentConfig.model_validate({
-            "agentType": "task",
-            "name": "classifier",
-            "taskType": "classify",
-            "labels": ["spam", "not_spam"],
-            "multiLabel": True,
-            "input": "Buy now! Limited offer!",
-        })
-        inner = config.root
-        assert inner.labels == ["spam", "not_spam"]
-        assert inner.multi_label is True
-        assert inner.input == "Buy now! Limited offer!"
-
-    def test_generate_task(self):
-        config = AgentConfig.model_validate({
-            "agentType": "task",
-            "name": "generator",
-            "taskType": "generate",
-            "count": 5,
-            "resultType": {
-                "name": "Joke",
-                "description": "A joke",
-                "jsonSchema": {"type": "object", "properties": {"text": {"type": "string"}}},
-            },
-        })
-        inner = config.root
-        assert inner.count == 5
-        assert inner.result_type is not None
-        assert inner.result_type.name == "Joke"
-
-    def test_with_model_config(self):
-        config = AgentConfig.model_validate({
-            "agentType": "task",
-            "name": "test",
-            "taskType": "run",
-            "model": {
-                "provider": {"type": "anthropic"},
-                "model": "claude-sonnet-4-20250514",
-            },
-        })
-        assert config.root.model is not None
-        assert config.root.model.model == "claude-sonnet-4-20250514"
-
-    def test_task_requires_task_type(self):
+    def test_framework_field_removed(self):
+        """The framework selector was removed — pydantic-ai is the only framework."""
         with pytest.raises(ValidationError):
             AgentConfig.model_validate({
-                "agentType": "task",
                 "name": "test",
-            })
-
-    def test_count_must_be_positive(self):
-        with pytest.raises(ValidationError):
-            AgentConfig.model_validate({
-                "agentType": "task",
-                "name": "test",
-                "taskType": "generate",
-                "count": 0,
+                "framework": "pydantic-ai",
             })
 
 

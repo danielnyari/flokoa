@@ -4,7 +4,7 @@ This document provides guidance for AI assistants working with the Flokoa Python
 
 ## Overview
 
-The Flokoa Python SDK provides a CLI and library for building and running AI agents locally. It integrates with the A2A (Agent-to-Agent) protocol and supports multiple AI frameworks.
+The Flokoa Python SDK provides a CLI and library for building and running pydantic-ai agents locally. It integrates with the A2A (Agent-to-Agent) protocol. pydantic-ai is the only supported framework.
 
 - **Package**: `flokoa`
 - **Python**: >= 3.13
@@ -12,7 +12,7 @@ The Flokoa Python SDK provides a CLI and library for building and running AI age
 
 ## Workspace Structure
 
-The SDK is organized as a **uv workspace** with four packages:
+The SDK is organized as a **uv workspace**:
 
 ```
 sdk/python/                          # Workspace root
@@ -24,19 +24,18 @@ sdk/python/                          # Workspace root
 │   │   ├── __init__.py
 │   │   ├── __main__.py             # CLI: flokoa run -m module:agent
 │   │   ├── agent_executor/         # Base executor interface
-│   │   ├── integrations/           # Framework integrations (pydantic-ai, google-adk)
+│   │   ├── integrations/           # pydantic-ai integration (the only framework)
 │   │   ├── tools/                  # Tool implementations (OpenAPI, etc.)
 │   │   └── utils/                  # Config loaders, agent card builder
 │   └── tests/
 ├── flokoa-types/                    # Auto-generated Pydantic models from CRD schemas (DO NOT EDIT generated files)
 │   ├── pyproject.toml
 │   └── src/flokoa_types/
-│       ├── __init__.py             # Re-exports + IntegrationType, ToolType, ToolDefinition (hand-maintained)
+│       ├── __init__.py             # Re-exports + ToolType, ToolDefinition (hand-maintained)
 │       ├── agentcard.py            # Generated: AgentCard
 │       ├── agenttool.py            # Generated: AgentToolSpec
 │       ├── agentworkflow.py        # Generated: AgentWorkflow
 │       ├── modelconfig.py          # Generated: ModelConfig, ProviderType, etc.
-│       ├── taskconfig.py           # Generated: TaskConfig, TaskAgentConfig
 │       └── templateconfig.py       # Generated: TemplateConfig
 ├── flokoa-managed-agent/           # Operator-deployed pydantic-ai agent runtime
 │   ├── pyproject.toml              # Depends on flokoa[pydantic-ai]
@@ -47,21 +46,15 @@ sdk/python/                          # Workspace root
 │   │   ├── bootstrap.py            # Instantiates pydantic-ai agent from config
 │   │   └── agent_executor.py       # TemplatedPydanticAIAgentExecutor
 │   └── tests/
-└── flokoa-managed-task/            # Operator-deployed Marvin task runtime (scaffold)
-    ├── pyproject.toml              # Depends on marvin
-    ├── Dockerfile
-    └── src/flokoa_managed_task/
-        ├── __main__.py
-        ├── config.py
-        └── bootstrap.py
+├── flokoa-codemode-mcp/            # Code-mode MCP server package
+└── flokoa-common/                  # Shared internal helpers
 ```
 
 ### Package Relationships
 
-- `flokoa` — the public SDK, installable via `pip install flokoa`. Core dependencies: a2a-sdk, click, fastapi, flokoa-types, pydantic. Optional extras: `pydantic-ai`, `google-adk`.
+- `flokoa` — the public SDK, installable via `pip install flokoa`. Core dependencies: a2a-sdk, click, fastapi, flokoa-types, pydantic. Optional extras: `pydantic-ai`, `tracing`.
 - `flokoa-types` — auto-generated Pydantic v2 models from Kubernetes CRD schemas. Shared dependency for all packages that need CRD types. Import as `flokoa_types`.
 - `flokoa-managed-agent` — internal package, never published to PyPI. Built into a container image by the operator. Depends on `flokoa[pydantic-ai]`.
-- `flokoa-managed-task` — internal package, scaffold only. Will depend on `marvin`.
 
 ## Tech Stack
 
@@ -111,7 +104,6 @@ This uses `datamodel-codegen` to extract JSON schemas from CRD YAML files and pr
 | `agentcard.py` | `agent.flokoa.ai_agents` (card field) | `AgentCard` |
 | `agentworkflow.py` | `agent.flokoa.ai_agentworkflows` | `AgentWorkflow` |
 | `modelconfig.py` | Combined from `Models` + `ModelProviders` | `ModelConfig`, `ProviderType`, provider-specific configs |
-| `taskconfig.py` | Task configuration | `TaskConfig`, `TaskAgentConfig`, `TaskResultType` |
 | `templateconfig.py` | `agent.flokoa.ai_agents` (runtime.template.config) | `TemplateConfig` |
 
 The generation pipeline:
@@ -129,8 +121,8 @@ Import types using `from flokoa_types import ...` (not `from flokoa.types`).
 The `flokoa` CLI runs agents locally:
 
 ```bash
-# Run an agent with a specific framework
-flokoa run -m my_module:my_agent --framework pydantic-ai
+# Run an agent (requires the pydantic-ai extra)
+flokoa run -m my_module:my_agent
 
 # Specify host and port
 flokoa run -m my_module:my_agent --host 0.0.0.0 --port 8000
@@ -138,27 +130,18 @@ flokoa run -m my_module:my_agent --host 0.0.0.0 --port 8000
 
 The agent argument uses `module:object` syntax (similar to uvicorn).
 
-## Framework Integrations
+## Framework Integration
 
-Integrations are loaded dynamically based on installed extras:
+flokoa targets **pydantic-ai** exclusively. The executor lives in
+`flokoa.integrations.pydantic_ai` and requires the `pydantic-ai` extra:
 
 ```bash
-# Install with pydantic-ai support
 pip install flokoa[pydantic-ai]
 ```
 
-Currently supported:
-- **pydantic-ai**: `flokoa.integrations.pydantic_ai`
-- **google-adk**: `flokoa.integrations.google_adk`
-
-### Adding a New Integration
-
-1. Create a new directory in `src/flokoa/integrations/`
-2. Implement `FlokoaAgentExecutor` subclass
-3. Register in `integrations/__init__.py`:
-   - Add to `IntegrationType` enum
-   - Add to `_EXTRA_NAMES` mapping
-   - Add `_try_load()` call
+```python
+from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
+```
 
 ## Code Conventions
 
@@ -214,7 +197,6 @@ Core dependencies (flokoa):
 
 Optional extras:
 - `pydantic-ai` - Pydantic AI framework support (>= 1.44.0)
-- `google-adk` - Google ADK framework support (>= 1.14.1)
 - `tracing` - OpenTelemetry tracing support (opentelemetry-sdk, OTLP exporter, FastAPI instrumentation)
 
 Dev dependencies (in `dependency-groups`):
@@ -256,23 +238,6 @@ class MyFrameworkExecutor(FlokoaAgentExecutor):
     async def execute(self, request):
         # Handle the request
         pass
-```
-
-### Registering an Integration
-
-In `integrations/__init__.py`:
-
-```python
-class IntegrationType(StrEnum):
-    MY_FRAMEWORK = "my-framework"
-
-_EXTRA_NAMES[IntegrationType.MY_FRAMEWORK] = "my-framework"
-
-_try_load(
-    IntegrationType.MY_FRAMEWORK,
-    "flokoa.integrations.my_framework.agent_executor",
-    "MyFrameworkExecutor",
-)
 ```
 
 ## OpenAPI Tool System

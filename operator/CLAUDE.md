@@ -114,7 +114,7 @@ operator/
 
 ## Core CRDs
 
-The operator manages six CRDs under `agent.flokoa.ai/v1alpha1`:
+The operator manages seven CRDs under `agent.flokoa.ai/v1alpha1`:
 
 ### Agent
 Manages AI agents. Key spec fields: `framework`, `runtime` (standard/template), `model`, `instruction`, `tools`, `card` (A2A protocol metadata with skills).
@@ -132,7 +132,10 @@ Provider connection config. Supports OpenAI, Anthropic, Google, Bedrock with API
 System prompt management. Content field holds the prompt text; controller creates a ConfigMap.
 
 ### AgentWorkflow
-Multi-agent workflow definitions compiled to Argo Workflows. Supports tasks with agent references, parameters, conditions, dependencies, and lifecycle phases (Pending, Compiling, Running, Succeeded, Failed, Error).
+**Frozen** (template-only, per the v2.1 pivot): static A2A composition between deployed Agents, compiled to Argo WorkflowTemplates. Supports tasks with agent references, parameters, conditions, and dependencies. The `agentTask` task type is unsupported — the admission webhook rejects new usage. No new features until SwarmRun ships (see `docs/roadmap/`).
+
+### AgentTrigger
+Event-driven agent invocation built on Argo Events. References an EventSource/EventBus, compiles to a Sensor that POSTs matching events to flokoa-server's invoke endpoint, with filters, rate/budget limits, session-key extraction, and A2A push-notification delivery. See `docs/agenttrigger.md`.
 
 ## Development Commands
 
@@ -397,7 +400,6 @@ This extracts JSON schemas from generated CRDs and uses `datamodel-codegen` to p
 - `sdk/python/flokoa-types/src/flokoa_types/modelconfig.py` - ModelConfig (combined provider + model params)
 - `sdk/python/flokoa-types/src/flokoa_types/templateconfig.py` - TemplateConfig (managed runtime config)
 - `sdk/python/flokoa-types/src/flokoa_types/agentworkflow.py` - AgentWorkflow
-- `sdk/python/flokoa-types/src/flokoa_types/taskconfig.py` - TaskConfig
 
 **Prerequisite**: Requires `yq` installed on the system. The target automatically creates a Python venv with `datamodel-code-generator`.
 

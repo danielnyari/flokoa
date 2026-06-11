@@ -90,7 +90,12 @@ type WorkflowTask struct {
 	// +optional
 	Agent *AgentCall `json:"agent,omitempty"`
 
-	// AgentTask runs a Marvin-powered task in an ephemeral container.
+	// AgentTask is no longer supported. The AgentWorkflow API is frozen and
+	// the agentTask runtime was removed in the v2.1 pivot; the field is kept
+	// only for API compatibility with existing objects. The admission webhook
+	// rejects new usage and the compiler refuses to compile it.
+	//
+	// Deprecated: use an agent task calling a deployed Agent instead.
 	// +optional
 	AgentTask *AgentTask `json:"agentTask,omitempty"`
 
@@ -337,29 +342,31 @@ type PushNotificationAuth struct {
 	Credentials string `json:"credentials,omitempty"`
 }
 
-// MarvinTaskType represents the Marvin operation to perform.
+// AgentTaskType represents the operation an agentTask performs.
 // +kubebuilder:validation:Enum=run;classify;extract;cast;generate
-type MarvinTaskType string
+type AgentTaskType string
 
 const (
-	// MarvinTaskTypeRun executes a general-purpose task via marvin.run().
-	MarvinTaskTypeRun MarvinTaskType = "run"
-	// MarvinTaskTypeClassify classifies input into predefined labels via marvin.classify().
-	MarvinTaskTypeClassify MarvinTaskType = "classify"
-	// MarvinTaskTypeExtract extracts entities from input via marvin.extract().
-	MarvinTaskTypeExtract MarvinTaskType = "extract"
-	// MarvinTaskTypeCast transforms input into a target type via marvin.cast().
-	MarvinTaskTypeCast MarvinTaskType = "cast"
-	// MarvinTaskTypeGenerate generates structured objects via marvin.generate().
-	MarvinTaskTypeGenerate MarvinTaskType = "generate"
+	// AgentTaskTypeRun executes a general-purpose task.
+	AgentTaskTypeRun AgentTaskType = "run"
+	// AgentTaskTypeClassify classifies input into predefined labels.
+	AgentTaskTypeClassify AgentTaskType = "classify"
+	// AgentTaskTypeExtract extracts entities from input.
+	AgentTaskTypeExtract AgentTaskType = "extract"
+	// AgentTaskTypeCast transforms input into a target type.
+	AgentTaskTypeCast AgentTaskType = "cast"
+	// AgentTaskTypeGenerate generates structured objects.
+	AgentTaskTypeGenerate AgentTaskType = "generate"
 )
 
-// AgentTask defines a Marvin-powered task that runs in a short-lived container.
-// The Type field determines which marvin.* function is called.
+// AgentTask defined a task that ran in a short-lived container.
+//
+// Deprecated: the agentTask runtime was removed in the v2.1 pivot. The type
+// is kept only for API compatibility with existing objects.
 type AgentTask struct {
-	// Type is the Marvin operation: run, classify, extract, cast, or generate.
+	// Type is the operation: run, classify, extract, cast, or generate.
 	// +kubebuilder:validation:Required
-	Type MarvinTaskType `json:"type"`
+	Type AgentTaskType `json:"type"`
 
 	// Instruction provides the prompt or guidance for the task.
 	// - run: the main prompt (required)
@@ -387,19 +394,16 @@ type AgentTask struct {
 	ResultType *StructuredIOSchema `json:"resultType,omitempty"`
 
 	// Labels for classify operations.
-	// Maps to marvin.classify(labels=[...]).
 	// Required when type=classify.
 	// +optional
 	Labels []string `json:"labels,omitempty"`
 
 	// MultiLabel enables multi-label classification (returns list instead of single label).
-	// Maps to marvin.classify(multi_label=True).
 	// Only used when type=classify.
 	// +optional
 	MultiLabel *bool `json:"multiLabel,omitempty"`
 
 	// Count is the number of items to generate.
-	// Maps to marvin.generate(n=...).
 	// Only used when type=generate. Defaults to 1.
 	// +kubebuilder:validation:Minimum=1
 	// +optional
@@ -414,17 +418,16 @@ type AgentTask struct {
 	// +optional
 	Tools []ToolEntry `json:"tools,omitempty"`
 
-	// Context is key-value data passed to the Marvin task.
+	// Context is key-value data passed to the task.
 	// Values support expressions like {{tasks.prev.output}}.
 	// +optional
 	Context map[string]string `json:"context,omitempty"`
 
-	// Agent defines an inline Marvin agent for execution.
-	// Maps to the agent parameter in marvin.run(), marvin.classify(), etc.
+	// Agent defines an inline agent for execution.
 	// +optional
-	Agent *MarvinAgentSpec `json:"agent,omitempty"`
+	Agent *InlineAgentSpec `json:"agent,omitempty"`
 
-	// Image overrides the container image. Defaults to the flokoa managed-task runtime.
+	// Image overrides the container image.
 	// +optional
 	Image string `json:"image,omitempty"`
 
@@ -437,9 +440,10 @@ type AgentTask struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// MarvinAgentSpec defines an inline Marvin agent configuration.
-// Maps to marvin.Agent() constructor parameters.
-type MarvinAgentSpec struct {
+// InlineAgentSpec defines an inline agent configuration for an agentTask.
+//
+// Deprecated: kept only for API compatibility (see AgentTask).
+type InlineAgentSpec struct {
 	// Name of the agent.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1

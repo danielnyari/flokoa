@@ -6,8 +6,8 @@ Supports three tool types:
 - **function** — Plain Python functions resolved by dotted path
 - **class** — Tool classes instantiated from config
 
-Inspired by Google ADK's multi-strategy tool resolution (instance, class,
-factory function, plain function) adapted for Flokoa's declarative config.
+Multi-strategy tool resolution (instance, class, factory function, plain
+function) adapted for Flokoa's declarative config.
 """
 
 from __future__ import annotations

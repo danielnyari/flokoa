@@ -64,10 +64,6 @@ A2A_PLUGIN_IMG ?= $(A2A_PLUGIN_IMAGE_TAG_BASE):$(VERSION)
 FLOKOA_CLI_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-cli
 FLOKOA_CLI_IMG ?= $(FLOKOA_CLI_IMAGE_TAG_BASE):$(VERSION)
 
-# Flokoa managed-task image settings (Python SDK, Marvin task runtime)
-MANAGED_TASK_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-managed-task
-MANAGED_TASK_IMG ?= $(MANAGED_TASK_IMAGE_TAG_BASE):$(VERSION)
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -376,14 +372,14 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.title = "FilePart"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.file.properties.file.title = "FileContent"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agent.properties.message.properties.parts.items.properties.text.title = "TextPart"' /tmp/agentworkflow_schema.json
-	@# Agent task types (Marvin)
+	@# Agent task types (frozen agentTask)
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.title = "AgentTask"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.type.title = "MarvinTaskType"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.type.title = "AgentTaskType"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.instruction.title = "InstructionEntry"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.instruction.properties.instructionRef.title = "InstructionRef"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.resultType.title = "StructuredIOSchema"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.model.title = "AgentModelRef"' /tmp/agentworkflow_schema.json
-	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.agent.title = "MarvinAgentSpec"' /tmp/agentworkflow_schema.json
+	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.agent.title = "InlineAgentSpec"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.agent.properties.model.title = "AgentModelRef"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.title = "ToolEntry"' /tmp/agentworkflow_schema.json
 	@yq eval -i -o json '.properties.tasks.items.properties.agentTask.properties.tools.items.properties.toolRef.title = "ToolRef"' /tmp/agentworkflow_schema.json
@@ -413,20 +409,6 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/agentworkflow.py
 	@rm /tmp/agentworkflow_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentworkflow.py"
-	@# Generate TaskConfig Pydantic v2 model from static schema
-	@echo "Building TaskConfig schema..."
-	@$(DATAMODEL_CODEGEN) \
-		--input config/schemas/taskconfig_schema.json \
-		--input-file-type jsonschema \
-		--output-model-type pydantic_v2.BaseModel \
-		--snake-case-field \
-		--use-annotated \
-		--allow-population-by-field-name \
-		--use-title-as-name \
-		--class-name TaskConfig \
-		--output $(PYTHON_MODELS_DIR)/taskconfig.py
-	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/taskconfig.py
-	@echo "Generated TaskConfig at $(PYTHON_MODELS_DIR)/taskconfig.py"
 
 ##@ gRPC Server
 
@@ -527,15 +509,6 @@ docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
 docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.
 	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
 	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
-
-.PHONY: docker-build-managed-task
-docker-build-managed-task: ## Build docker image for the Flokoa managed-task runtime (Python SDK).
-	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-task/Dockerfile -t ${MANAGED_TASK_IMG} -t $(MANAGED_TASK_IMAGE_TAG_BASE):latest ../sdk/python
-
-.PHONY: docker-push-managed-task
-docker-push-managed-task: ## Push docker image for the Flokoa managed-task runtime.
-	$(CONTAINER_TOOL) push ${MANAGED_TASK_IMG}
-	$(CONTAINER_TOOL) push $(MANAGED_TASK_IMAGE_TAG_BASE):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
