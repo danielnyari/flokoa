@@ -1,0 +1,47 @@
+[project]
+name = "flokoa-runner"
+version = "0.2.0"
+description = "Flokoa generic runner: hydrates compiled AgentSpecs into served pydantic-ai agents"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "flokoa[pydantic-ai,tracing]",
+    # The runner baseline pin. This is "the platform" (runtime contract, contractVersion 1):
+    # one exact pydantic-ai version per runner release. Bumping it requires regenerating
+    # runner.lock, runner-manifest.json, and the embedded AgentSpec JSON schema
+    # (make runner-contract), and is a PR-blocking review item.
+    "pydantic-ai==1.107.0",
+    "pyyaml>=6.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+    "opentelemetry-instrumentation-fastapi>=0.41b0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flokoa_runner"]
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+flokoa = { workspace = true }
+flokoa-types = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "a2a-sdk>=0.3.22",
+    "anyio>=4.0",
+    "httpx>=0.27",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-timeout>=2.3",
+    "ruff>=0.14.14",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

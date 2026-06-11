@@ -36,6 +36,38 @@ build-flokoa: ## Build flokoa wheel
 	@echo "🚀 Building flokoa wheel"
 	@cd flokoa && uvx --from build pyproject-build --installer uv
 
+# =============================================================================
+# Runtime contract (docs/reference/runtime-contract.md) — pin/lock/manifest/schema
+# =============================================================================
+
+.PHONY: runner-lock
+runner-lock: ## Export the runner baseline lockfile (runner.lock)
+	@echo "🔒 Exporting flokoa-runner lockfile"
+	@uv export --package flokoa-runner --no-dev --no-emit-workspace --no-hashes \
+		--format requirements.txt -o flokoa-runner/runner.lock -q
+
+.PHONY: gen-agentspec-schema
+gen-agentspec-schema: ## Generate the AgentSpec JSON schema for the pinned pydantic-ai
+	@echo "📜 Generating AgentSpec JSON schema"
+	@uv run --package flokoa-runner python flokoa-runner/hack/gen_agentspec_schema.py
+
+.PHONY: runner-manifest
+runner-manifest: ## Generate runner-manifest.json from runner.lock + schema
+	@echo "🧾 Generating runner manifest"
+	@uv run --package flokoa-runner python flokoa-runner/hack/gen_runner_manifest.py
+
+.PHONY: runner-contract
+runner-contract: runner-lock gen-agentspec-schema runner-manifest ## Regenerate lockfile + schema + manifest coherently
+
+.PHONY: verify-runner-contract
+verify-runner-contract: runner-contract ## CI gate: fail on drift between pin, lock, manifest, and embedded schema
+	@git diff --exit-code -- flokoa-runner/runner.lock flokoa-runner/runner-manifest.json \
+		../../operator/internal/spec/schemas \
+		|| (echo "❌ runner contract artifacts drifted — run 'make runner-contract' and commit" && exit 1)
+	@! grep -i "pydantic-ai-harness" flokoa-runner/runner.lock \
+		|| (echo "❌ pydantic-ai-harness must not be in the runner baseline (brief §4)" && exit 1)
+	@echo "✅ runner contract artifacts are coherent"
+
 .PHONY: clean
 clean: ## Clean build artifacts
 	@echo "🚀 Removing build artifacts"
