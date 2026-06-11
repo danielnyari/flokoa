@@ -2,6 +2,25 @@
 
 **Date:** 2026-06-10 · **Commit reviewed:** `3a1b01d` (tip of `main`) · **Scope:** entire repo, current feature set, PRs disregarded.
 
+---
+
+## Status addendum (2026-06-11, Phase 0 of the v2.1 pivot)
+
+This review predates the [Pivot v2.1 roadmap](docs/roadmap/README.md) and the
+v0.1.0 release; several items below have since been closed. Closed items —
+do not re-do:
+
+- **§7.2 Helm chart missing AgentWorkflow CRD** — CLOSED: all seven CRDs ship in `files/crds/`.
+- **§7.3 / WP5 managed-task disposition** — CLOSED by deletion: `flokoa-managed-task` was removed entirely in the pivot (Phase 0); the `agentTask` task type is frozen and rejected by the webhook.
+- **§7.4 Version alignment** — CLOSED: versions aligned at 0.1.0; `release.yml` derives versions from the tag.
+- **§7.5 Release machinery** — CLOSED: tag-triggered `release.yml` (test gate, image matrix, Helm OCI push, install.yaml, GitHub Release, opt-in PyPI) plus `CHANGELOG.md`.
+- **§7.6 root README** — CLOSED: root `README.md` carries the v2.1 positioning + quickstart. (operator README / pyproject metadata polish still open.)
+- **§8.2 webhooks unreachable via chart** — CLOSED: the chart ships webhook Service, ValidatingWebhookConfiguration, cert-manager Certificate, and controller wiring (`webhooks.enabled`, default true).
+- **§8.6 google-adk overmocked tests** — MOOT: google-adk support was deleted in the pivot.
+- **§12 stale CLAUDE.md / agenttrigger docs** — CLOSED: CLAUDE.md files refreshed; `docs/agenttrigger-rfc.md` replaced by `docs/agenttrigger.md` (Argo Events design).
+
+Still open (carry forward): §7.1 CI e2e secret wiring, §7.7 `:latest` template-runtime default, §8.1 Instruction service, §8.3 security posture doc, §8.4 workspace-root pytest, §8.5 zero-test packages, §8.9 docs site gaps, §9 polish items, WP6–WP8.
+
 This document is the working reference for cutting the first release. It was produced by a full repo review: parallel deep-dives into every subsystem, plus local execution of all CI legs and GitHub-side verification (releases, tags, workflow-run history, ghcr.io image registry). Facts marked **[verified]** were executed/checked directly during this review; unmarked findings come from code exploration.
 
 ---

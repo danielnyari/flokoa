@@ -118,17 +118,11 @@ Explicitly declare which AI framework your agent uses:
 
 ```yaml
 spec:
-  framework: pydantic-ai  # or: langchain, google-adk, crewai, marvin, autogen, a2a
+  framework: pydantic-ai
 ```
 
-Supported frameworks:
-- `pydantic-ai` - Pydantic AI framework
-- `langchain` - LangChain framework
-- `google-adk` - Google Agent Development Kit
-- `crewai` - CrewAI framework
-- `marvin` - Marvin AI framework
-- `autogen` - Microsoft AutoGen
-- `a2a` - Agent-to-Agent protocol
+flokoa targets **pydantic-ai** exclusively. Other enum values are legacy
+and scheduled for removal in the Agent CRD refactor.
 
 ### Model Configuration
 

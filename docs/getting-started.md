@@ -75,18 +75,15 @@ Flokoa supports two runtime backends:
 - **standard** - Creates a Kubernetes Deployment using your own container image, along with a Service to expose it. Manages pod lifecycle, scaling, and health checks.
 - **template** - Uses a generic runtime image managed by the operator. The agent's behavior is defined entirely in the CR via instructions and output schema.
 
-### Framework Detection
+### Framework
 
-Flokoa can automatically detect which AI framework your agent uses:
-- pydantic-ai
-- langchain
-- google-adk
-- crewai
-- marvin
-- autogen
-- a2a (Agent-to-Agent protocol)
+flokoa targets **pydantic-ai** exclusively. Declare it in your Agent spec
+for observability:
 
-You can also explicitly declare the framework in your Agent spec for better observability.
+```yaml
+spec:
+  framework: pydantic-ai
+```
 
 ## Resource Organization
 

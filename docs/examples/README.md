@@ -66,7 +66,7 @@ kubectl logs -l flokoa.ai/agent=basic-agent
 - `spec.runtime.spec.container.image` - Container image
 
 ### Common Optional Fields
-- `spec.framework` - Framework type (pydantic-ai, langchain, google-adk, crewai, marvin, autogen, a2a)
+- `spec.framework` - Framework type (`pydantic-ai`)
 - `spec.runtime.spec.replicas` - Number of pod replicas (default: 1)
 - `spec.runtime.spec.container.ports` - Container ports
 - `spec.runtime.spec.container.env` - Environment variables

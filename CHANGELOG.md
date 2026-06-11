@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-11
+
+First post-pivot release, executing Phase 0 of the
+[Pivot v2.1 roadmap](docs/roadmap/README.md): flokoa is the open-source agent
+harness for Kubernetes, targeting **pydantic-ai exclusively**.
+
+### Added
+
+- **Admission webhooks in the Helm chart**: webhook Service,
+  `ValidatingWebhookConfiguration` for all seven CRDs, cert-manager
+  Issuer/Certificate (with a manual cert/CA path for clusters without
+  cert-manager), and controller wiring — enabled by default via
+  `webhooks.enabled`. Chart installs now have admission validation active.
+- Root `README.md` with positioning and quickstart, and
+  `docs/agenttrigger.md` documenting the shipped Argo Events-based
+  AgentTrigger design (replacing the stale Knative-era RFC).
+
+### Changed
+
+- **AgentWorkflow is frozen** as a template-only resource (static A2A
+  composition between deployed Agents). The `agentTask` task type is
+  unsupported: the admission webhook rejects new usage and the compiler
+  refuses to compile it; the field remains only for API compatibility.
+- The Python builder/toolset registries are single-framework: builders are
+  keyed by agent type, toolset builders by tool type, and
+  `LlmAgentConfig.framework` / `IntegrationType` were removed.
+
+### Removed
+
+- **google-adk integration**: the executor, its tests, the `google-adk`
+  extra, and the ADK-specific agent-card machinery.
+- **The integrations registry** (`flokoa.integrations` dispatch);
+  `PydanticAIAgentExecutor` is the only executor and is imported directly.
+- **`flokoa-managed-task`** (the Marvin task runtime): the package, its
+  Dockerfile and image targets, its release build-matrix entry, the
+  `taskconfig` generated types, and the `agentTask` samples.
+- The `flokoa run --framework` CLI flag (pydantic-ai is the framework).
+- The removed frameworks' values from the Agent CRD `framework` enum and the
+  gRPC `Framework` enum.
+
 ## [0.1.0] - 2026-06-10
 
 First public alpha release of Flokoa — an open-source platform for managing AI
@@ -46,5 +86,6 @@ agents in Kubernetes.
   Marvin task image is `ghcr.io/danielnyari/flokoa-managed-task:0.1.0`
   (renamed from the previous inconsistent `flokoa/managed-task` path).
 
-[Unreleased]: https://github.com/danielnyari/flokoa/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/danielnyari/flokoa/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/danielnyari/flokoa/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/danielnyari/flokoa/releases/tag/v0.1.0

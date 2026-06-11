@@ -147,7 +147,6 @@ The SDK is a uv workspace with multiple packages:
 | `flokoa` | `sdk/python/flokoa/` | Public SDK package and CLI |
 | `flokoa-types` | `sdk/python/flokoa-types/` | Auto-generated Pydantic models from CRDs |
 | `flokoa-managed-agent` | `sdk/python/flokoa-managed-agent/` | Operator-deployed pydantic-ai agent runtime |
-| `flokoa-managed-task` | `sdk/python/flokoa-managed-task/` | Operator-deployed Marvin task runtime (scaffold) |
 
 ## Troubleshooting
 
