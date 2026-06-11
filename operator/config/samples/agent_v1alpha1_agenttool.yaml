@@ -6,15 +6,25 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: agenttool-sample
 spec:
-  type: openapi
-  description: "Search for products in the catalog"
+  type: mcp
+  description: "Search and manage products via the catalog MCP server"
 
-  openApi:
-    url: "https://api.example.com/v2"
-    timeoutSeconds: 30
-    headers:
-      Accept: "application/json"
+  # In-cluster MCP server (mutually exclusive with url)
+  serviceRef:
+    name: catalog-mcp
+    port: 8080
+  path: /mcp
+  transport: streamableHTTP
 
-    # The OpenAPI schema is fetched from the service endpoint
-    openApiSchema:
-      endpointPath: "/docs/openapi.json"
+  headers:
+    Accept: "application/json"
+
+  # Prefix tool names from this server to avoid collisions
+  toolPrefix: catalog
+
+  # Only expose these tools to the agent
+  allowedTools:
+    - searchProducts
+    - getProduct
+
+  timeoutSeconds: 30

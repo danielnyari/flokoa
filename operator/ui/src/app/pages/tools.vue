@@ -56,9 +56,9 @@ const toolTypeLabel: Record<string | number, string> = {
 }
 
 function getToolSource(tool: AgentTool): string {
-  if (tool.spec.openApi?.url) return tool.spec.openApi.url
-  if (tool.spec.openApi?.serviceRef) {
-    const ref = tool.spec.openApi.serviceRef
+  if (tool.spec.url) return tool.spec.url
+  if (tool.spec.serviceRef) {
+    const ref = tool.spec.serviceRef
     const port = ref.port ?? ref.portName ?? ''
     return `${ref.name}${port ? `:${port}` : ''}`
   }
@@ -135,7 +135,7 @@ const columns: TableColumn<AgentTool>[] = [
     id: 'timeout',
     header: 'Timeout',
     cell: ({ row }) => {
-      const timeout = row.original.spec.openApi?.timeoutSeconds ?? 30
+      const timeout = row.original.spec.timeoutSeconds ?? 30
       return `${timeout}s`
     }
   },

@@ -3,34 +3,53 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	"github.com/danielnyari/flokoa/internal/app/agent/compiler"
 	agentdomain "github.com/danielnyari/flokoa/internal/domain/agent"
 	"github.com/danielnyari/flokoa/internal/domain/hash"
-	modeldomain "github.com/danielnyari/flokoa/internal/domain/model"
+	flokoaerrors "github.com/danielnyari/flokoa/internal/errors"
 	"github.com/danielnyari/flokoa/internal/infra/builder"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
 )
 
 // Deps holds the repository dependencies for the agent application service.
 type Deps struct {
-	AgentTools   repo.AgentToolReader
-	AgentToolW   repo.AgentToolWriter
-	Models       repo.ModelReader
-	Providers    repo.ModelProviderReader
-	Instructions repo.InstructionReader
-	InstructionW repo.InstructionWriter
-	ConfigMaps   repo.ConfigMapRepo
-	Deployments  repo.DeploymentRepo
-	Services     repo.ServiceRepo
-	Secrets      repo.SecretReader
-	OwnerSetter  repo.OwnerSetter
+	AgentTools    repo.AgentToolReader
+	Models        repo.ModelReader
+	Providers     repo.ModelProviderReader
+	Instructions  repo.InstructionReader
+	ConfigMaps    repo.ConfigMapRepo
+	Deployments   repo.DeploymentRepo
+	Services      repo.ServiceRepo
+	ServiceReader repo.ServiceReader
+	Secrets       repo.SecretReader
+	OwnerSetter   repo.OwnerSetter
+}
+
+// Config carries cluster-level policy into the agent service.
+type Config struct {
+	// DefaultRunnerVersion is the operator's pinned runner release.
+	DefaultRunnerVersion string
+
+	// RunnerImageRepository is the generic runner image without a tag; the
+	// effective runner version selects the tag.
+	RunnerImageRepository string
+
+	// Injected platform capabilities appended to every compiled spec.
+	Injected []compiler.InjectedCapability
+
+	// OTLPEndpoint configures OTEL_EXPORTER_OTLP_ENDPOINT on runner pods
+	// (empty disables export).
+	OTLPEndpoint string
 }
 
 // ReconcileResult holds the result of a reconciliation.
@@ -41,43 +60,31 @@ type ReconcileResult struct {
 	Error error
 }
 
-// Service is the application-layer orchestrator for Agent reconciliation.
-// It uses repository interfaces for all I/O, making it testable with fakes.
+// Service is the application-layer orchestrator for Agent reconciliation:
+// it compiles the composition, emits the spec ConfigMap, and keeps the
+// Deployment and Services in step. All I/O goes through repo interfaces.
 type Service struct {
-	deps               Deps
-	toolReconciler     *ToolReconciler
-	modelReconciler    *ModelReconciler
-	instrReconciler    *InstructionReconciler
-	getProviderHandler func(agentv1alpha1.ProviderType) (modeldomain.ProviderHandler, bool)
+	deps     Deps
+	config   Config
+	compiler *compiler.Compiler
 }
 
 // NewService creates a new agent application service.
-func NewService(deps Deps) *Service {
-	s := &Service{
-		deps:               deps,
-		getProviderHandler: modeldomain.GetProviderHandler,
+func NewService(deps Deps, config Config) *Service {
+	return &Service{
+		deps:   deps,
+		config: config,
+		compiler: compiler.New(compiler.Deps{
+			Models:       deps.Models,
+			Providers:    deps.Providers,
+			Instructions: deps.Instructions,
+			AgentTools:   deps.AgentTools,
+			Services:     deps.ServiceReader,
+		}, compiler.Options{
+			DefaultRunnerVersion: config.DefaultRunnerVersion,
+			Injected:             config.Injected,
+		}),
 	}
-	s.toolReconciler = &ToolReconciler{
-		agentTools: deps.AgentTools,
-		agentToolW: deps.AgentToolW,
-		configMaps: deps.ConfigMaps,
-		owner:      deps.OwnerSetter,
-	}
-	s.modelReconciler = &ModelReconciler{
-		models:             deps.Models,
-		providers:          deps.Providers,
-		configMaps:         deps.ConfigMaps,
-		secrets:            deps.Secrets,
-		owner:              deps.OwnerSetter,
-		getProviderHandler: s.getProviderHandler,
-	}
-	s.instrReconciler = &InstructionReconciler{
-		instructions: deps.Instructions,
-		instructionW: deps.InstructionW,
-		configMaps:   deps.ConfigMaps,
-		owner:        deps.OwnerSetter,
-	}
-	return s
 }
 
 // Reconcile performs the full agent reconciliation.
@@ -86,99 +93,73 @@ func NewService(deps Deps) *Service {
 func (s *Service) Reconcile(ctx context.Context, agent *agentv1alpha1.Agent) ReconcileResult {
 	logger := log.FromContext(ctx)
 
-	// Validate the agent spec
 	if err := agentdomain.ValidateSpec(agent); err != nil {
 		logger.Error(err, "Agent validation failed")
 		agent.Status.Phase = agentv1alpha1.AgentPhaseFailed
-		agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonValidationFailed, err.Error())
+		agentdomain.SetCondition(agent, agentdomain.ConditionTypeSpecValid, metav1.ConditionFalse, agentdomain.ReasonValidationFailed, err.Error())
 		return ReconcileResult{} // Don't requeue on validation errors
 	}
 
-	// Reconcile tools
-	toolConfigMaps, err := s.toolReconciler.Reconcile(ctx, agent)
+	compiled, err := s.compiler.Compile(ctx, agent)
 	if err != nil {
-		logger.Error(err, "Failed to reconcile tools")
-		agentdomain.SetCondition(agent, agentdomain.ConditionTypeToolsReady, metav1.ConditionFalse, agentdomain.ReasonToolSyncFailed, err.Error())
-		return ReconcileResult{Requeue: true, Error: err}
-	}
-	if len(agent.Spec.Tools) > 0 {
-		agentdomain.SetCondition(agent, agentdomain.ConditionTypeToolsReady, metav1.ConditionTrue, agentdomain.ReasonToolsSynced, fmt.Sprintf("Synced %d tools", len(toolConfigMaps)))
-		now := metav1.Now()
-		agent.Status.LastToolSync = &now
-	}
-
-	// Reconcile Instruction
-	var instructionConfigMapName string
-	if agent.Spec.Instruction != nil {
-		instructionConfigMapName, err = s.instrReconciler.Reconcile(ctx, agent)
-		if err != nil {
-			logger.Error(err, "Failed to reconcile Instruction")
-			agentdomain.SetCondition(agent, agentdomain.ConditionTypeInstructionReady, metav1.ConditionFalse, agentdomain.ReasonInstructionSyncFailed, err.Error())
+		var verr *compiler.ValidationError
+		switch {
+		case errors.As(err, &verr):
+			// Bad composition: surface SpecValid=False and leave the last
+			// good Deployment running. Watches re-trigger on edits.
+			logger.Info("Compiled spec failed schema validation", "error", verr.Error())
+			agentdomain.SetCondition(agent, agentdomain.ConditionTypeSpecValid, metav1.ConditionFalse, agentdomain.ReasonSpecInvalid, verr.Error())
+			return ReconcileResult{}
+		case flokoaerrors.IsDependency(err):
+			agentdomain.SetCondition(agent, agentdomain.ConditionTypeSpecValid, metav1.ConditionFalse, agentdomain.ReasonDependencyMissing, err.Error())
+			return ReconcileResult{Requeue: true, Error: err}
+		case flokoaerrors.IsPermanent(err):
+			agent.Status.Phase = agentv1alpha1.AgentPhaseFailed
+			agentdomain.SetCondition(agent, agentdomain.ConditionTypeSpecValid, metav1.ConditionFalse, agentdomain.ReasonValidationFailed, err.Error())
+			return ReconcileResult{}
+		default:
+			agentdomain.SetCondition(agent, agentdomain.ConditionTypeSpecValid, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
 			return ReconcileResult{Requeue: true, Error: err}
 		}
-		agentdomain.SetCondition(agent, agentdomain.ConditionTypeInstructionReady, metav1.ConditionTrue, agentdomain.ReasonInstructionResolved, "Instruction resolved")
 	}
 
-	// Reconcile AgentCard ConfigMap
-	agentCardConfigMap, err := s.reconcileAgentCardConfigMap(ctx, agent)
+	agentdomain.SetCondition(agent, agentdomain.ConditionTypeSpecValid, metav1.ConditionTrue, agentdomain.ReasonSpecCompiled,
+		fmt.Sprintf("Compiled spec %s for runner %s", compiled.Hash, compiled.RunnerVersion))
+	agent.Status.SpecHash = compiled.Hash
+	agent.Status.RunnerVersion = compiled.RunnerVersion
+	agent.Status.InjectedCapabilities = compiled.Injected
+
+	specConfigMap, err := s.reconcileSpecConfigMap(ctx, agent, compiled)
 	if err != nil {
-		logger.Error(err, "Failed to reconcile AgentCard ConfigMap")
+		logger.Error(err, "Failed to reconcile spec ConfigMap")
 		agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
 		return ReconcileResult{Requeue: true, Error: err}
 	}
 
-	// Reconcile Model
-	var modelInfo *resolvedModelInfo
-	if agent.Spec.Model != nil {
-		modelInfo, err = s.modelReconciler.Reconcile(ctx, agent)
-		if err != nil {
-			logger.Error(err, "Failed to reconcile Model")
-			agentdomain.SetCondition(agent, agentdomain.ConditionTypeModelReady, metav1.ConditionFalse, agentdomain.ReasonModelResolveFailed, err.Error())
-			agentdomain.SetCondition(agent, agentdomain.ConditionTypeModelSecretsReady, metav1.ConditionFalse, agentdomain.ReasonModelResolveFailed, "Model resolution failed")
-			return ReconcileResult{Requeue: true, Error: err}
-		}
-		agentdomain.SetCondition(agent, agentdomain.ConditionTypeModelReady, metav1.ConditionTrue, agentdomain.ReasonModelResolved,
-			fmt.Sprintf("Model %s/%s resolved", modelInfo.provider, modelInfo.model))
-		if len(modelInfo.missingSecretRefs) > 0 {
-			agentdomain.SetCondition(agent, agentdomain.ConditionTypeModelSecretsReady, metav1.ConditionFalse, agentdomain.ReasonModelSecretsMissing,
-				fmt.Sprintf("Missing model secrets: %v", modelInfo.missingSecretRefs))
-		} else {
-			agentdomain.SetCondition(agent, agentdomain.ConditionTypeModelSecretsReady, metav1.ConditionTrue, agentdomain.ReasonModelSecretsResolved, "All model secrets are present")
-		}
+	secretsHash, missingSecrets := s.secretsState(ctx, agent.Namespace, compiled)
+	if len(missingSecrets) > 0 {
+		agentdomain.SetCondition(agent, agentdomain.ConditionTypeSecretsReady, metav1.ConditionFalse, agentdomain.ReasonSecretsMissing,
+			fmt.Sprintf("Missing secrets: %v", missingSecrets))
+	} else {
+		agentdomain.SetCondition(agent, agentdomain.ConditionTypeSecretsReady, metav1.ConditionTrue, agentdomain.ReasonSecretsResolved, "All referenced secrets are present")
 	}
 
-	// Reconcile template config ConfigMap (if managed runtime)
-	var templateConfigMapName string
-	var templateConfigHash string
-	if agent.Spec.Runtime.Type == agentv1alpha1.RuntimeTypeTemplate {
-		templateConfigMapName, templateConfigHash, err = s.reconcileTemplateConfigMap(ctx, agent)
-		if err != nil {
-			logger.Error(err, "Failed to reconcile managed config ConfigMap")
-			agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
-			return ReconcileResult{Requeue: true, Error: err}
-		}
-	}
-
-	// Build and ensure Deployment
-	deployment, err := s.reconcileDeployment(ctx, agent, toolConfigMaps, agentCardConfigMap, modelInfo, templateConfigMapName, templateConfigHash, instructionConfigMapName)
+	deployment, err := s.reconcileDeployment(ctx, agent, compiled, specConfigMap, secretsHash)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
 		return ReconcileResult{Requeue: true, Error: err}
 	}
 
-	// Build and ensure Service
-	service, err := s.reconcileService(ctx, agent)
+	service, err := s.reconcileServices(ctx, agent)
 	if err != nil {
-		logger.Error(err, "Failed to reconcile Service")
+		logger.Error(err, "Failed to reconcile Services")
 		agentdomain.SetCondition(agent, agentdomain.ConditionTypeReady, metav1.ConditionFalse, agentdomain.ReasonReconcileError, err.Error())
 		return ReconcileResult{Requeue: true, Error: err}
 	}
 
-	// Update status
 	agent.Status.Phase = agentdomain.CalculatePhase(deployment)
-	agent.Status.Backend = "core"
-	agent.Status.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local", service.Name, service.Namespace)
+	agent.Status.URL = builder.PublishedURL(service.Name, service.Namespace)
 	agent.Status.Replicas = deployment.Status.Replicas
 	agent.Status.AvailableReplicas = deployment.Status.AvailableReplicas
 	agent.Status.ObservedGeneration = agent.Generation
@@ -192,77 +173,34 @@ func (s *Service) Reconcile(ctx context.Context, agent *agentv1alpha1.Agent) Rec
 	return ReconcileResult{}
 }
 
-func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, toolConfigMaps []toolConfigMapInfo, agentCardConfigMap string, modelInfo *resolvedModelInfo, templateConfigMapName string, templateConfigHash string, instructionConfigMapName string) (*appsv1.Deployment, error) {
-	toolMounts := make([]builder.ToolMount, 0, len(toolConfigMaps))
-	for _, t := range toolConfigMaps {
-		toolMounts = append(toolMounts, builder.ToolMount{
-			ToolName:      t.toolName,
-			ConfigMapName: t.configMapName,
-			DataHash:      t.dataHash,
-		})
-	}
+// reconcileSpecConfigMap emits the single compiled-spec ConfigMap: the
+// agent-spec.yaml document plus the A2A card (runtime contract §2).
+func (s *Service) reconcileSpecConfigMap(ctx context.Context, agent *agentv1alpha1.Agent, compiled *compiler.Result) (string, error) {
+	name := builder.SpecConfigMapName(agent.Name)
 
-	var modelMount *builder.ModelMount
-	if modelInfo != nil {
-		modelMount = &builder.ModelMount{
-			ConfigMapName:  modelInfo.configMapName,
-			EnvVars:        modelInfo.envVars,
-			SecretEnvVars:  modelInfo.secretEnvVars,
-			SecretRefsHash: modelInfo.secretRefsHash,
-		}
-	}
-
-	desired := builder.BuildDeployment(builder.DeploymentParams{
-		AgentName:          agent.Name,
-		AgentNamespace:     agent.Namespace,
-		Labels:             agentdomain.Labels(agent),
-		Runtime:            agent.Spec.Runtime,
-		ToolMounts:         toolMounts,
-		AgentCardCM:        agentCardConfigMap,
-		ModelInfo:          modelMount,
-		TemplateCMName:     templateConfigMapName,
-		TemplateCMDataHash: templateConfigHash,
-		InstructionCMName:  instructionConfigMapName,
-	})
-
-	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
-	return s.deps.Deployments.EnsureDeployment(ctx, desired)
-}
-
-func (s *Service) reconcileService(ctx context.Context, agent *agentv1alpha1.Agent) (*corev1.Service, error) {
-	desired := builder.BuildService(agent.Name, agent.Namespace, agentdomain.Labels(agent), agent.Spec.Runtime)
-
-	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
-	return s.deps.Services.EnsureService(ctx, desired)
-}
-
-// reconcileAgentCardConfigMap creates or updates a ConfigMap containing the AgentCard as JSON.
-func (s *Service) reconcileAgentCardConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, error) {
-	configMapName := fmt.Sprintf("%s-agent-card", agent.Name)
-
-	cardJSON, err := json.Marshal(agent.Spec.CardOverride)
+	cardJSON, err := json.Marshal(agent.Spec.Card)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal AgentCard to JSON: %w", err)
+		return "", fmt.Errorf("failed to marshal agent card to JSON: %w", err)
 	}
 
 	desired := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
+			Name:      name,
 			Namespace: agent.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       agent.Name,
-				"app.kubernetes.io/component":  "agent-card",
+				"app.kubernetes.io/component":  "agent-spec",
 				"app.kubernetes.io/managed-by": "flokoa-operator",
 				"flokoa.ai/agent":              agent.Name,
 			},
+			Annotations: map[string]string{
+				"flokoa.ai/spec-hash":      compiled.Hash,
+				"flokoa.ai/runner-version": compiled.RunnerVersion,
+				"flokoa.ai/schema-digest":  compiled.SchemaDigest,
+			},
 		},
 		Data: map[string]string{
+			builder.AgentSpecConfigMapKey: string(compiled.YAML),
 			builder.AgentCardConfigMapKey: string(cardJSON),
 		},
 	}
@@ -274,63 +212,75 @@ func (s *Service) reconcileAgentCardConfigMap(ctx context.Context, agent *agentv
 	if err := s.deps.ConfigMaps.EnsureConfigMap(ctx, desired); err != nil {
 		return "", err
 	}
-
-	return configMapName, nil
+	return name, nil
 }
 
-// reconcileTemplateConfigMap creates or updates the ConfigMap containing the managed agent configuration.
-// It returns the ConfigMap name and a hash of its data for change detection.
-func (s *Service) reconcileTemplateConfigMap(ctx context.Context, agent *agentv1alpha1.Agent) (string, string, error) {
-	configMapName := fmt.Sprintf("%s-template-config", agent.Name)
+// secretsState fetches every secret the compiled spec references and returns
+// a deterministic hash of their resource versions (pods roll on rotation)
+// plus the list of missing ones.
+func (s *Service) secretsState(ctx context.Context, namespace string, compiled *compiler.Result) (string, []string) {
+	versions := map[string]string{}
+	var missing []string
 
-	managed := agent.Spec.Runtime.Template
-	if managed == nil {
-		return "", "", fmt.Errorf("managed spec is nil")
-	}
-
-	config := templateConfig{}
-	if managed.Config != nil {
-		if managed.Config.OutputSchema != nil {
-			config.OutputSchema = managed.Config.OutputSchema
+	record := func(envs []corev1.EnvVar) {
+		for _, env := range envs {
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				continue
+			}
+			name := env.ValueFrom.SecretKeyRef.Name
+			if _, seen := versions[name]; seen {
+				continue
+			}
+			secret, err := s.deps.Secrets.GetSecret(ctx, types.NamespacedName{Name: name, Namespace: namespace})
+			if err != nil {
+				versions[name] = "missing"
+				missing = append(missing, name)
+				continue
+			}
+			versions[name] = secret.ResourceVersion
 		}
 	}
+	record(compiled.SecretEnv)
+	record(compiled.ProviderSecretEnv)
 
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to marshal managed config to JSON: %w", err)
+	if len(versions) == 0 {
+		return "", nil
 	}
-
-	cmData := map[string]string{
-		builder.TemplateConfigConfigMapKey: string(configJSON),
-	}
-
-	desired := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: agent.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       agent.Name,
-				"app.kubernetes.io/component":  "template-config",
-				"app.kubernetes.io/managed-by": "flokoa-operator",
-				"flokoa.ai/agent":              agent.Name,
-			},
-		},
-		Data: cmData,
-	}
-
-	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
-		return "", "", fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
-	if err := s.deps.ConfigMaps.EnsureConfigMap(ctx, desired); err != nil {
-		return "", "", err
-	}
-
-	return configMapName, hash.ConfigMapData(cmData), nil
+	return hash.SecretVersions(versions), missing
 }
 
-// templateConfig represents the configuration written to the managed agent's ConfigMap.
-type templateConfig struct {
-	OutputSchema interface{} `json:"outputSchema,omitempty"`
-	InputSchema  interface{} `json:"inputSchema,omitempty"`
+func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, compiled *compiler.Result, specConfigMap, secretsHash string) (*appsv1.Deployment, error) {
+	desired := builder.BuildDeployment(builder.DeploymentParams{
+		AgentName:             agent.Name,
+		AgentNamespace:        agent.Namespace,
+		Labels:                agentdomain.Labels(agent),
+		Runtime:               agent.Spec.Runtime,
+		RunnerImageRepository: s.config.RunnerImageRepository,
+		RunnerVersion:         compiled.RunnerVersion,
+		SchemaDigest:          compiled.SchemaDigest,
+		SpecConfigMapName:     specConfigMap,
+		SpecHash:              compiled.Hash,
+		SecretsHash:           secretsHash,
+		SecretEnv:             compiled.SecretEnv,
+		ProviderEnv:           compiled.ProviderEnv,
+		ProviderSecretEnv:     compiled.ProviderSecretEnv,
+		PublishedURL:          builder.PublishedURL(agent.Name, agent.Namespace),
+		OTLPEndpoint:          s.config.OTLPEndpoint,
+	})
+
+	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	return s.deps.Deployments.EnsureDeployment(ctx, desired)
+}
+
+func (s *Service) reconcileServices(ctx context.Context, agent *agentv1alpha1.Agent) (*corev1.Service, error) {
+	desired := builder.BuildService(agent.Name, agent.Namespace, agentdomain.Labels(agent))
+
+	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {
+		return nil, fmt.Errorf("failed to set owner reference: %w", err)
+	}
+
+	return s.deps.Services.EnsureService(ctx, desired)
 }

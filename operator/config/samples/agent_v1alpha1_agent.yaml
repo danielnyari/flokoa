@@ -6,46 +6,43 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: agent-sample
 spec:
-  framework: pydantic-ai
+  card:
+    name: agent-sample
+    description: "Sample agent running a custom container image"
+    version: "0.1.0"
+    defaultInputModes:
+      - application/json
+    defaultOutputModes:
+      - application/json
+    capabilities:
+      streaming: false
+    skills:
+      - id: assistant
+        name: Assistant
+        description: "Answers questions"
+        tags: [sample]
+
+  modelRef:
+    name: gpt4o-creative
 
   runtime:
-    type: standard
-    standard:
-      replicas: 1
+    # Custom image escape hatch: replaces the generic runner image.
+    # Custom images own their bootstrap and must honor the runtime
+    # contract (read /etc/flokoa/agent-spec.yaml, serve A2A over HTTP).
+    image: ghcr.io/example/agent:latest
 
-      container:
-        name: agent
-        image: ghcr.io/example/agent:latest
+    replicas: 1
 
-        ports:
-        - containerPort: 8080
-          name: http
-          protocol: TCP
+    env:
+      - name: AGENT_MODE
+        value: "development"
+      - name: LOG_LEVEL
+        value: "info"
 
-        env:
-        - name: AGENT_MODE
-          value: "development"
-        - name: LOG_LEVEL
-          value: "info"
-
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"

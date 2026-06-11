@@ -1,13 +1,10 @@
 package converter
 
 import (
-	"encoding/json"
+	corev1 "k8s.io/api/core/v1"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
-	"google.golang.org/protobuf/types/known/structpb"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // AgentToolToProto converts a Kubernetes AgentTool to proto.
@@ -30,81 +27,49 @@ func AgentToolSpecToProto(spec *agentv1alpha1.AgentToolSpec) *pb.AgentToolSpec {
 	}
 
 	pbSpec := &pb.AgentToolSpec{
-		Type:        AgentToolTypeToProto(spec.Type),
-		Description: spec.Description,
+		Type:         AgentToolTypeToProto(spec.Type),
+		Description:  spec.Description,
+		Url:          spec.URL,
+		Path:         spec.Path,
+		Transport:    MCPTransportToProto(spec.Transport),
+		Headers:      spec.Headers,
+		ToolPrefix:   spec.ToolPrefix,
+		AllowedTools: spec.AllowedTools,
 	}
-
-	if spec.OpenApi != nil {
-		pbSpec.OpenApi = OpenApiToolSpecToProto(spec.OpenApi)
+	if spec.ServiceRef != nil {
+		pbSpec.ServiceRef = ServiceRefToProto(spec.ServiceRef)
 	}
-
-	return pbSpec
-}
-
-// OpenApiToolSpecToProto converts OpenApiToolSpec to proto.
-func OpenApiToolSpecToProto(spec *agentv1alpha1.OpenApiToolSpec) *pb.OpenApiToolSpec {
-	if spec == nil {
-		return nil
+	for _, hs := range spec.HeaderSecrets {
+		pbSpec.HeaderSecrets = append(pbSpec.HeaderSecrets, &pb.SecretHeader{
+			Name: hs.Name,
+			SecretRef: &pb.SecretKeySelector{
+				Name:     hs.SecretRef.Name,
+				Key:      hs.SecretRef.Key,
+				Optional: hs.SecretRef.Optional != nil && *hs.SecretRef.Optional,
+			},
+		})
 	}
-
-	pbSpec := &pb.OpenApiToolSpec{
-		Url: spec.URL,
-	}
-
 	if spec.TimeoutSeconds != nil {
 		pbSpec.TimeoutSeconds = *spec.TimeoutSeconds
 	}
 
-	if spec.Headers != nil {
-		pbSpec.Headers = spec.Headers
-	}
-
-	if spec.ServiceRef != nil {
-		pbSpec.ServiceRef = &pb.ServiceRef{
-			Name:      spec.ServiceRef.Name,
-			Namespace: spec.ServiceRef.Namespace,
-			PortName:  spec.ServiceRef.PortName,
-		}
-		if spec.ServiceRef.Port != nil {
-			pbSpec.ServiceRef.Port = *spec.ServiceRef.Port
-		}
-	}
-
-	pbSpec.OpenApiSchema = OpenApiSchemaToProto(&spec.OpenApiSchema)
-
 	return pbSpec
 }
 
-// OpenApiSchemaToProto converts OpenApiSchema to proto.
-func OpenApiSchemaToProto(schema *agentv1alpha1.OpenApiSchema) *pb.OpenApiSchema {
-	if schema == nil {
+// ServiceRefToProto converts a ServiceRef to proto.
+func ServiceRefToProto(ref *agentv1alpha1.ServiceRef) *pb.ServiceRef {
+	if ref == nil {
 		return nil
 	}
-
-	pbSchema := &pb.OpenApiSchema{
-		EndpointPath: schema.EndpointPath,
+	pbRef := &pb.ServiceRef{
+		Name:      ref.Name,
+		Namespace: ref.Namespace,
+		PortName:  ref.PortName,
 	}
-
-	if schema.ValueFrom != nil {
-		pbSchema.ValueFrom = &pb.ConfigMapKeySelector{
-			Name: schema.ValueFrom.Name,
-			Key:  schema.ValueFrom.Key,
-		}
-		if schema.ValueFrom.Optional != nil {
-			pbSchema.ValueFrom.Optional = *schema.ValueFrom.Optional
-		}
+	if ref.Port != nil {
+		pbRef.Port = *ref.Port
 	}
-
-	if schema.Value != nil && len(schema.Value.Raw) > 0 {
-		var value map[string]any
-		if err := json.Unmarshal(schema.Value.Raw, &value); err == nil {
-			if protoValue, err := structpb.NewStruct(value); err == nil {
-				pbSchema.Value = protoValue
-			}
-		}
-	}
-
-	return pbSchema
+	return pbRef
 }
 
 // AgentToolStatusToProto converts AgentToolStatus to proto.
@@ -136,7 +101,7 @@ func AgentToolListToProto(list *agentv1alpha1.AgentToolList) *pb.AgentToolList {
 	return pbList
 }
 
-// AgentToolFromProto converts proto AgentTool to Kubernetes.
+// AgentToolFromProto converts a proto AgentTool to the Kubernetes type.
 func AgentToolFromProto(proto *pb.AgentTool) *agentv1alpha1.AgentTool {
 	if proto == nil {
 		return nil
@@ -152,88 +117,58 @@ func AgentToolFromProto(proto *pb.AgentTool) *agentv1alpha1.AgentTool {
 	return tool
 }
 
-// AgentToolSpecFromProto converts proto AgentToolSpec to Kubernetes.
+// AgentToolSpecFromProto converts a proto AgentToolSpec to the Kubernetes type.
 func AgentToolSpecFromProto(proto *pb.AgentToolSpec) *agentv1alpha1.AgentToolSpec {
 	if proto == nil {
 		return nil
 	}
 
 	spec := &agentv1alpha1.AgentToolSpec{
-		Type:        AgentToolTypeFromProto(proto.Type),
-		Description: proto.Description,
+		Type:         AgentToolTypeFromProto(proto.Type),
+		Description:  proto.Description,
+		URL:          proto.Url,
+		Path:         proto.Path,
+		Transport:    MCPTransportFromProto(proto.Transport),
+		Headers:      proto.Headers,
+		ToolPrefix:   proto.ToolPrefix,
+		AllowedTools: proto.AllowedTools,
 	}
-
-	if proto.OpenApi != nil {
-		spec.OpenApi = OpenApiToolSpecFromProto(proto.OpenApi)
-	}
-
-	return spec
-}
-
-// OpenApiToolSpecFromProto converts proto OpenApiToolSpec to Kubernetes.
-func OpenApiToolSpecFromProto(proto *pb.OpenApiToolSpec) *agentv1alpha1.OpenApiToolSpec {
-	if proto == nil {
-		return nil
-	}
-
-	spec := &agentv1alpha1.OpenApiToolSpec{
-		URL:     proto.Url,
-		Headers: proto.Headers,
-	}
-
-	if proto.TimeoutSeconds > 0 {
-		spec.TimeoutSeconds = &proto.TimeoutSeconds
-	}
-
 	if proto.ServiceRef != nil {
 		spec.ServiceRef = &agentv1alpha1.ServiceRef{
 			Name:      proto.ServiceRef.Name,
 			Namespace: proto.ServiceRef.Namespace,
 			PortName:  proto.ServiceRef.PortName,
 		}
-		if proto.ServiceRef.Port > 0 {
+		if proto.ServiceRef.Port != 0 {
 			spec.ServiceRef.Port = &proto.ServiceRef.Port
 		}
 	}
-
-	if proto.OpenApiSchema != nil {
-		spec.OpenApiSchema = *OpenApiSchemaFromProto(proto.OpenApiSchema)
+	for _, hs := range proto.HeaderSecrets {
+		header := agentv1alpha1.SecretHeader{Name: hs.Name}
+		if hs.SecretRef != nil {
+			header.SecretRef = corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: hs.SecretRef.Name},
+				Key:                  hs.SecretRef.Key,
+			}
+			if hs.SecretRef.Optional {
+				optional := true
+				header.SecretRef.Optional = &optional
+			}
+		}
+		spec.HeaderSecrets = append(spec.HeaderSecrets, header)
+	}
+	if proto.TimeoutSeconds != 0 {
+		spec.TimeoutSeconds = &proto.TimeoutSeconds
 	}
 
 	return spec
 }
 
-// OpenApiSchemaFromProto converts proto OpenApiSchema to Kubernetes.
-func OpenApiSchemaFromProto(proto *pb.OpenApiSchema) *agentv1alpha1.OpenApiSchema {
-	if proto == nil {
-		return nil
-	}
-
-	schema := &agentv1alpha1.OpenApiSchema{
-		EndpointPath: proto.EndpointPath,
-	}
-
-	if proto.ValueFrom != nil {
-		schema.ValueFrom = &corev1.ConfigMapKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: proto.ValueFrom.Name},
-			Key:                  proto.ValueFrom.Key,
-		}
-		optional := proto.ValueFrom.Optional
-		schema.ValueFrom.Optional = &optional
-	}
-
-	if proto.Value != nil {
-		if raw, err := proto.Value.MarshalJSON(); err == nil {
-			schema.Value = &runtime.RawExtension{Raw: raw}
-		}
-	}
-
-	return schema
-}
-
-// AgentToolTypeToProto converts AgentToolType enum to proto.
+// AgentToolTypeToProto converts the tool type enum to proto.
 func AgentToolTypeToProto(t agentv1alpha1.AgentToolType) pb.AgentToolType {
 	switch t {
+	case agentv1alpha1.AgentToolTypeMCP:
+		return pb.AgentToolType_AGENT_TOOL_TYPE_MCP
 	case agentv1alpha1.AgentToolTypeOpenAPI:
 		return pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI
 	default:
@@ -241,11 +176,37 @@ func AgentToolTypeToProto(t agentv1alpha1.AgentToolType) pb.AgentToolType {
 	}
 }
 
-// AgentToolTypeFromProto converts proto AgentToolType to Kubernetes.
+// AgentToolTypeFromProto converts the proto tool type to the Kubernetes enum.
 func AgentToolTypeFromProto(t pb.AgentToolType) agentv1alpha1.AgentToolType {
 	switch t {
+	case pb.AgentToolType_AGENT_TOOL_TYPE_MCP:
+		return agentv1alpha1.AgentToolTypeMCP
 	case pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI:
 		return agentv1alpha1.AgentToolTypeOpenAPI
+	default:
+		return ""
+	}
+}
+
+// MCPTransportToProto converts the transport enum to proto.
+func MCPTransportToProto(t agentv1alpha1.MCPTransport) pb.MCPTransport {
+	switch t {
+	case agentv1alpha1.MCPTransportStreamableHTTP:
+		return pb.MCPTransport_MCP_TRANSPORT_STREAMABLE_HTTP
+	case agentv1alpha1.MCPTransportSSE:
+		return pb.MCPTransport_MCP_TRANSPORT_SSE
+	default:
+		return pb.MCPTransport_MCP_TRANSPORT_UNSPECIFIED
+	}
+}
+
+// MCPTransportFromProto converts the proto transport to the Kubernetes enum.
+func MCPTransportFromProto(t pb.MCPTransport) agentv1alpha1.MCPTransport {
+	switch t {
+	case pb.MCPTransport_MCP_TRANSPORT_STREAMABLE_HTTP:
+		return agentv1alpha1.MCPTransportStreamableHTTP
+	case pb.MCPTransport_MCP_TRANSPORT_SSE:
+		return agentv1alpha1.MCPTransportSSE
 	default:
 		return ""
 	}

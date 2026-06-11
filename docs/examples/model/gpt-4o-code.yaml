@@ -13,7 +13,7 @@ spec:
   providerRef:
     name: openai-provider
   
-  parameters:
+  settings:
     # Lower temperature for more deterministic code
     temperature: "0.2"
     

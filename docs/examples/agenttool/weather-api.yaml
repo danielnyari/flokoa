@@ -1,4 +1,6 @@
 # Simple external API tool
+# The MCP server fronts the underlying API (the OpenAPI tool type is
+# retired; front REST APIs with an MCP adapter or a Capability).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
@@ -6,13 +8,9 @@ metadata:
   labels:
     category: weather
 spec:
-  type: openapi
-  description: "Get current weather information for a location"
-
-  openApi:
-    url: "https://api.weather.com/v1"
-    timeoutSeconds: 30
-    headers:
-      Accept: "application/json"
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  type: mcp
+  description: Get current weather information for a location
+  url: https://api.weather.com/v1/mcp
+  headers:
+    Accept: application/json
+  timeoutSeconds: 30

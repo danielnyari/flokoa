@@ -1,4 +1,6 @@
 # Order creation tool using internal service
+# The MCP server fronts the underlying API (the OpenAPI tool type is
+# retired; front REST APIs with an MCP adapter or a Capability).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
@@ -6,14 +8,11 @@ metadata:
   labels:
     category: orders
 spec:
-  type: openapi
-  description: "Create a new customer order with multiple items"
-
-  openApi:
-    serviceRef:
-      name: order-service
-      namespace: backend
-      port: 8080
-    timeoutSeconds: 30
-    openApiSchema:
-      endpointPath: "/api/v1/openapi.json"
+  type: mcp
+  description: Create a new customer order with multiple items
+  serviceRef:
+    name: order-service
+    namespace: backend
+    port: 8080
+  path: /mcp
+  timeoutSeconds: 30

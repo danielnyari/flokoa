@@ -1,18 +1,37 @@
 package model
 
 import (
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// ProviderHandler defines the interface for provider-specific model configuration.
-// Each provider implements this interface to handle its specific requirements.
+// ResolvedProvider is what a ModelProvider contributes to a compiled agent:
+// the pydantic-ai provider prefix for the model identifier, and the
+// environment variables (connection config + API-key secret projections) the
+// runner pod needs for that provider's SDK.
+type ResolvedProvider struct {
+	// Type is the provider type.
+	Type agentv1alpha1.ProviderType
+
+	// ModelPrefix is the pydantic-ai model identifier prefix
+	// (e.g. "openai" for "openai:gpt-5-mini").
+	ModelPrefix string
+
+	// EnvVars are non-secret environment variables to set on the container.
+	EnvVars []corev1.EnvVar
+
+	// SecretEnvVars are environment variables sourced from secrets.
+	SecretEnvVars []corev1.EnvVar
+}
+
+// ProviderHandler resolves provider-specific connection configuration.
 type ProviderHandler interface {
-	// BuildConfig builds the provider-specific configuration.
-	// Takes the ModelProvider (connection config) and Model (model + parameters).
-	// Returns the resolved config map and any environment variables needed.
-	BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error)
+	// Resolve derives the model prefix and environment projection from the
+	// ModelProvider's connection configuration.
+	Resolve(provider *agentv1alpha1.ModelProvider) (*ResolvedProvider, error)
 }
 
 // providerRegistry maps providers to their handlers
@@ -29,44 +48,26 @@ func GetProviderHandler(providerType agentv1alpha1.ProviderType) (ProviderHandle
 	return handler, ok
 }
 
-// BuildBaseConfig creates the base ResolvedModelConfig with common fields.
-func BuildBaseConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) *ResolvedModelConfig {
-	providerType := provider.GetProviderType()
-
-	config := &ResolvedModelConfig{
-		Provider: ProviderConfig{
-			Type:           providerType,
-			DefaultHeaders: provider.Spec.DefaultHeaders,
-		},
-		Model:      model.Spec.Model,
-		Parameters: model.Spec.Parameters,
-	}
-
-	// Set the appropriate provider spec based on type
-	switch providerType {
-	case agentv1alpha1.ProviderTypeOpenAI:
-		config.Provider.OpenAI = provider.Spec.OpenAI
-	case agentv1alpha1.ProviderTypeAnthropic:
-		config.Provider.Anthropic = provider.Spec.Anthropic
-	case agentv1alpha1.ProviderTypeGoogle:
-		config.Provider.Google = provider.Spec.Google
-	case agentv1alpha1.ProviderTypeBedrock:
-		config.Provider.Bedrock = provider.Spec.Bedrock
-	}
-
-	return config
-}
-
 // AddAPIKeyEnvVar adds the API key secret reference as an environment variable.
-func AddAPIKeyEnvVar(config *ResolvedModelConfig, secretRef *corev1.SecretKeySelector, envVarName string) {
+func AddAPIKeyEnvVar(resolved *ResolvedProvider, secretRef *corev1.SecretKeySelector, envVarName string) {
 	if secretRef == nil {
 		return
 	}
 
-	config.SecretEnvVars = append(config.SecretEnvVars, corev1.EnvVar{
+	resolved.SecretEnvVars = append(resolved.SecretEnvVars, corev1.EnvVar{
 		Name: envVarName,
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: secretRef,
 		},
 	})
+}
+
+// QualifiedModelName joins a provider prefix with a model identifier into a
+// pydantic-ai model string (e.g. "openai" + "gpt-5-mini" → "openai:gpt-5-mini").
+// Identifiers that already carry a prefix are returned unchanged.
+func QualifiedModelName(prefix, model string) string {
+	if strings.Contains(model, ":") {
+		return model
+	}
+	return prefix + ":" + model
 }

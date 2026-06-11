@@ -8,7 +8,7 @@ const props = defineProps<{
 const open = defineModel<boolean>('open', { default: false })
 
 const conditions = computed(() => props.model.status?.conditions ?? [])
-const params = computed(() => props.model.spec.parameters)
+const params = computed(() => props.model.spec.settings)
 
 function conditionColor(c: Condition): 'success' | 'error' | 'warning' {
   if (c.status === 'True') return 'success'
@@ -25,7 +25,7 @@ const paramEntries = computed(() => {
   if (params.value.topK !== undefined) entries.push({ label: 'Top K', value: String(params.value.topK) })
   if (params.value.presencePenalty !== undefined) entries.push({ label: 'Presence Penalty', value: String(params.value.presencePenalty) })
   if (params.value.frequencyPenalty !== undefined) entries.push({ label: 'Frequency Penalty', value: String(params.value.frequencyPenalty) })
-  if (params.value.timeOut !== undefined) entries.push({ label: 'Timeout', value: `${params.value.timeOut}s` })
+  if (params.value.timeoutSeconds !== undefined) entries.push({ label: 'Timeout', value: `${params.value.timeoutSeconds}s` })
   if (params.value.parallelToolCalls !== undefined) entries.push({ label: 'Parallel Tool Calls', value: params.value.parallelToolCalls ? 'Yes' : 'No' })
   if (params.value.seed !== undefined) entries.push({ label: 'Seed', value: String(params.value.seed) })
   if (params.value.stopSequences?.length) entries.push({ label: 'Stop Sequences', value: params.value.stopSequences.join(', ') })

@@ -43,7 +43,9 @@ import (
 	agentapp "github.com/danielnyari/flokoa/internal/app/agent"
 	triggerapp "github.com/danielnyari/flokoa/internal/app/trigger"
 	"github.com/danielnyari/flokoa/internal/controller"
+	"github.com/danielnyari/flokoa/internal/infra/builder"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
+	"github.com/danielnyari/flokoa/internal/spec"
 	"github.com/danielnyari/flokoa/internal/telemetry"
 	webhookagentv1alpha1 "github.com/danielnyari/flokoa/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
@@ -92,6 +94,10 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", false,
 		"Enable admission webhooks. Requires TLS certificates (e.g., from cert-manager).")
+
+	var runnerImageRepository string
+	flag.StringVar(&runnerImageRepository, "runner-image-repository", builder.DefaultRunnerImageRepository,
+		"Generic runner image repository (no tag); the runner version selects the tag.")
 
 	var artifactIOEnabled bool
 	var artifactGCStrategy string
@@ -236,18 +242,21 @@ func main() {
 	k8sClient := mgr.GetClient()
 	agentToolRepo := &repo.AgentToolRepoImpl{Client: k8sClient}
 	instructionRepo := &repo.InstructionRepoImpl{Client: k8sClient}
+	serviceRepo := &repo.ServiceRepoImpl{Client: k8sClient}
 	agentAppService := agentapp.NewService(agentapp.Deps{
-		AgentTools:   agentToolRepo,
-		AgentToolW:   agentToolRepo,
-		Models:       &repo.ModelRepoImpl{Client: k8sClient},
-		Providers:    &repo.ModelProviderRepoImpl{Client: k8sClient},
-		Instructions: instructionRepo,
-		InstructionW: instructionRepo,
-		ConfigMaps:   &repo.ConfigMapRepoImpl{Client: k8sClient},
-		Deployments:  &repo.DeploymentRepoImpl{Client: k8sClient},
-		Services:     &repo.ServiceRepoImpl{Client: k8sClient},
-		Secrets:      &repo.SecretRepoImpl{Client: k8sClient},
-		OwnerSetter:  &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
+		AgentTools:    agentToolRepo,
+		Models:        &repo.ModelRepoImpl{Client: k8sClient},
+		Providers:     &repo.ModelProviderRepoImpl{Client: k8sClient},
+		Instructions:  instructionRepo,
+		ConfigMaps:    &repo.ConfigMapRepoImpl{Client: k8sClient},
+		Deployments:   &repo.DeploymentRepoImpl{Client: k8sClient},
+		Services:      serviceRepo,
+		ServiceReader: serviceRepo,
+		Secrets:       &repo.SecretRepoImpl{Client: k8sClient},
+		OwnerSetter:   &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
+	}, agentapp.Config{
+		DefaultRunnerVersion:  spec.DefaultRunnerVersion,
+		RunnerImageRepository: runnerImageRepository,
 	})
 
 	if err := (&controller.AgentReconciler{

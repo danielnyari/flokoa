@@ -177,27 +177,31 @@ kind: Agent
 metadata:
   name: my-agent
 spec:
-  model:
+  card:
+    name: my-agent
+    description: "Demo agent"
+    version: "1.0.0"
+    skills:
+      - {id: demo, name: Demo, description: "Demo", tags: [demo]}
+  modelRef:
     name: gpt-4o-model
   tools:
-    - toolRef:
-        name: weather-tool
-  runtime:
-    type: standard
-    spec:
-      container:
-        image: my-agent:v1.0.0
+    - name: weather-tool
 ```
 
 **What happens:**
-1. User applies Agent manifest
-2. Operator validates the spec
-3. Operator resolves model reference → checks if Model exists and is ready
-4. Operator resolves tool references → checks if AgentTools exist
-5. Operator creates Deployment with agent container
-6. Operator creates Service to expose agent
-7. Operator updates Agent status to "Pending"
-8. Pods start, containers pull image
+1. User applies the Agent manifest
+2. The admission webhook validates the composition statically
+3. The compiler resolves the Model (+ ModelProvider), Instructions, and
+   AgentTools, merges them with the inline fragment into one resolved
+   pydantic-ai AgentSpec, and validates it against the runner's pinned
+   AgentSpec JSON Schema (`SpecValid` condition; `status.specHash`)
+4. The operator writes the `<agent>-agent-spec` ConfigMap
+   (agent-spec.yaml + agent-card.json)
+5. The operator creates the Deployment (generic runner image) and the
+   published Service behind `status.url`
+6. The runner pod hydrates the spec (resolving `${secret:…}` placeholders
+   from env), constructs the agent via `Agent.from_spec`, and serves A2A
 9. Containers become ready
 10. Operator updates Agent status to "Running"
 11. Agent URL is available in status
@@ -291,13 +295,13 @@ Returns to LLM
 
 **Internal (serviceRef):**
 ```yaml
-openApi:
+spec:
+  type: mcp
   serviceRef:
     name: inventory-service
     namespace: backend
     port: 8080
-  openApiSchema:
-    endpointPath: "/openapi.json"
+  path: /mcp
 ```
 - Calls Kubernetes service
 - No external network required
@@ -306,10 +310,9 @@ openApi:
 
 **External (url):**
 ```yaml
-openApi:
-  url: "https://api.external.com"
-  openApiSchema:
-    endpointPath: "/openapi.json"
+spec:
+  type: mcp
+  url: "https://mcp.external.com/mcp"
 ```
 - Calls external HTTP API
 - Requires egress network access

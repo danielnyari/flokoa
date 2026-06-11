@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -73,51 +74,45 @@ func (v *ModelCustomValidator) ValidateDelete(_ context.Context, _ runtime.Objec
 func validateModel(model *Model) error {
 	var allErrs field.ErrorList
 
-	if model.Spec.Parameters != nil {
-		paramsPath := field.NewPath("spec", "parameters")
+	if model.Spec.Settings != nil && model.Spec.Settings.Extra != nil {
+		extraPath := field.NewPath("spec", "settings", "extra")
 
-		// M1: At most one provider-specific parameter block
-		if err := validateAtMostOneOf(
-			paramsPath,
-			[]string{"openai", "anthropic", "google", "bedrock"},
-			[]bool{
-				model.Spec.Parameters.OpenAI != nil,
-				model.Spec.Parameters.Anthropic != nil,
-				model.Spec.Parameters.Google != nil,
-				model.Spec.Parameters.Bedrock != nil,
-			},
-		); err != nil {
-			allErrs = append(allErrs, err)
-		}
-
-		// M2/M3: Anthropic thinking validation
-		if model.Spec.Parameters.Anthropic != nil && model.Spec.Parameters.Anthropic.Thinking != nil {
-			thinking := model.Spec.Parameters.Anthropic.Thinking
-			thinkingPath := paramsPath.Child("anthropic", "thinking")
-
-			// M2: type=enabled requires budgetTokens
-			if thinking.Type == ThinkingTypeEnabled && thinking.BudgetTokens == nil {
-				allErrs = append(allErrs, field.Required(
-					thinkingPath.Child("budgetTokens"),
-					"budgetTokens is required when thinking type is \"enabled\"",
-				))
-			}
-
-			// M3: budgetTokens must be < maxTokens (if both set)
-			if thinking.BudgetTokens != nil && model.Spec.Parameters.MaxTokens != nil {
-				if *thinking.BudgetTokens >= *model.Spec.Parameters.MaxTokens {
-					allErrs = append(allErrs, field.Invalid(
-						thinkingPath.Child("budgetTokens"),
-						*thinking.BudgetTokens,
-						fmt.Sprintf("budgetTokens (%d) must be less than maxTokens (%d)",
-							*thinking.BudgetTokens, *model.Spec.Parameters.MaxTokens),
-					))
+		// Extra must be a JSON object: its keys merge into the compiled
+		// model_settings, and typed fields win conflicts.
+		var extra map[string]json.RawMessage
+		if err := json.Unmarshal(model.Spec.Settings.Extra.Raw, &extra); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				extraPath, string(model.Spec.Settings.Extra.Raw),
+				"extra must be a JSON object of model settings"))
+		} else {
+			for key := range extra {
+				if typedSettingsKeys[key] {
+					allErrs = append(allErrs, field.Forbidden(
+						extraPath.Key(key),
+						fmt.Sprintf("%q has a typed field on spec.settings; set it there", key)))
 				}
 			}
 		}
 	}
 
 	return aggregateErrors("Model", model.Name, allErrs)
+}
+
+// typedSettingsKeys are the compiled model_settings keys owned by typed
+// ModelSettings fields. Entries in settings.extra may not shadow them.
+var typedSettingsKeys = map[string]bool{
+	"max_tokens":          true,
+	"temperature":         true,
+	"top_p":               true,
+	"top_k":               true,
+	"timeout":             true,
+	"parallel_tool_calls": true,
+	"seed":                true,
+	"presence_penalty":    true,
+	"frequency_penalty":   true,
+	"logit_bias":          true,
+	"stop_sequences":      true,
+	"extra_headers":       true,
 }
 
 // validateReferences checks that cross-resource references exist.

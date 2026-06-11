@@ -23,7 +23,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,9 +34,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	agentdomain "github.com/danielnyari/flokoa/internal/domain/agent"
 )
 
-// Negative/error path tests verify graceful degradation (fixes #99).
+// Negative/error path tests verify graceful degradation.
 var _ = Describe("Error Path Tests", func() {
 	const (
 		namespace = "default"
@@ -69,7 +73,7 @@ var _ = Describe("Error Path Tests", func() {
 					Namespace: namespace,
 				},
 				Spec: agentv1alpha1.ModelSpec{
-					Model: "gpt-4o",
+					Model: "gpt-5-mini",
 					ProviderRef: agentv1alpha1.ProviderRef{
 						Name: "non-existent-provider",
 					},
@@ -119,7 +123,7 @@ var _ = Describe("Error Path Tests", func() {
 					Namespace: namespace,
 				},
 				Spec: agentv1alpha1.ModelSpec{
-					Model:       "gpt-4o",
+					Model:       "gpt-5-mini",
 					ProviderRef: agentv1alpha1.ProviderRef{Name: providerName},
 				},
 			}
@@ -149,7 +153,7 @@ var _ = Describe("Error Path Tests", func() {
 					Namespace: namespace,
 				},
 				Spec: agentv1alpha1.ModelSpec{
-					Model:       "gpt-4o",
+					Model:       "gpt-5-mini",
 					ProviderRef: agentv1alpha1.ProviderRef{Name: providerName},
 				},
 			}
@@ -362,6 +366,12 @@ var _ = Describe("Error Path Tests", func() {
 			cleanupAgent(ctx, agentNN)
 		})
 
+		expectNoDeployment := func() {
+			GinkgoHelper()
+			err := k8sClient.Get(ctx, agentNN, &appsv1.Deployment{})
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "no Deployment must exist for %s", agentNN)
+		}
+
 		It("should handle reconcile of deleted Agent gracefully", func() {
 			By("Reconciling a non-existent Agent")
 			r := newAgentReconciler()
@@ -369,7 +379,7 @@ var _ = Describe("Error Path Tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should set NotReady when Agent references non-existent Model", func() {
+		It("should set SpecValid=False/DependencyMissing and requeue when the referenced Model is missing", func() {
 			By("Creating an Agent referencing a non-existent Model")
 			agent := &agentv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
@@ -377,89 +387,189 @@ var _ = Describe("Error Path Tests", func() {
 					Namespace: namespace,
 				},
 				Spec: agentv1alpha1.AgentSpec{
-					CardOverride: minimalCard(),
-					Runtime: agentv1alpha1.RuntimeSpec{
-						Type: agentv1alpha1.RuntimeTypeStandard,
-						Standard: &agentv1alpha1.StandardRuntimeSpec{
-							Container: corev1.Container{
-								Name:  "agent",
-								Image: "nginx:latest",
-							},
-						},
-					},
-					Model: &agentv1alpha1.AgentModelRef{
-						Name: "does-not-exist",
-					},
+					ModelRef: &agentv1alpha1.NamespacedRef{Name: "does-not-exist"},
+					Card:     minimalCard(),
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			By("Reconciling the Agent (finalizer + reconcile)")
+			By("Reconciling the Agent (finalizer + compile attempt)")
 			r := newAgentReconciler()
 
 			// First reconcile adds finalizer
-			_, _ = reconcileOnce(ctx, r, agentNN)
+			_, err := reconcileOnce(ctx, r, agentNN)
+			Expect(err).NotTo(HaveOccurred())
 
-			// Second reconcile: dependency error → requeue
+			// Second reconcile: dependency error → fixed-interval requeue
 			result, err := reconcileOnce(ctx, r, agentNN)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(30 * time.Second))
 
-			By("Verifying ModelReady condition is false")
+			By("Verifying SpecValid condition reports the missing dependency")
 			agent = getAgent(ctx, agentNN)
-			cond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
+			cond := meta.FindStatusCondition(agent.Status.Conditions, agentdomain.ConditionTypeSpecValid)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-			Expect(cond.Reason).To(Equal(ReasonModelResolveFailed))
+			Expect(cond.Reason).To(Equal(agentdomain.ReasonDependencyMissing))
+			Expect(cond.Message).To(ContainSubstring("does-not-exist"))
+
+			By("Verifying no Deployment was created")
+			expectNoDeployment()
 		})
 
-		It("should handle Agent deletion with finalizer cleanup", func() {
-			By("Creating a minimal Agent")
+		It("should set SpecValid=False/SpecInvalid without requeue for a schema-invalid fragment", func() {
+			By("Creating an Agent whose extra layer carries an unknown top-level field")
 			agent := &agentv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentName,
 					Namespace: namespace,
 				},
 				Spec: agentv1alpha1.AgentSpec{
-					CardOverride: minimalCard(),
-					Runtime: agentv1alpha1.RuntimeSpec{
-						Type: agentv1alpha1.RuntimeTypeStandard,
-						Standard: &agentv1alpha1.StandardRuntimeSpec{
-							Container: corev1.Container{
-								Name:  "agent",
-								Image: "nginx:latest",
-							},
-						},
+					Spec: &agentv1alpha1.AgentSpecFragment{
+						Model: "openai:gpt-5-mini",
+						Extra: &apiextensionsv1.JSON{Raw: []byte(`{"bogus_field": true}`)},
 					},
+					Card: minimalCard(),
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
 
-			By("Reconciling to add finalizer")
+			r := newAgentReconciler()
+			_, err := reconcileOnce(ctx, r, agentNN) // finalizer
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := reconcileOnce(ctx, r, agentNN)
+			Expect(err).NotTo(HaveOccurred(), "schema-invalid specs are not retried")
+			Expect(result.RequeueAfter).To(BeZero(), "no requeue: only an edit can fix the composition")
+
+			By("Verifying SpecValid=False with reason SpecInvalid")
+			agent = getAgent(ctx, agentNN)
+			cond := meta.FindStatusCondition(agent.Status.Conditions, agentdomain.ConditionTypeSpecValid)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(agentdomain.ReasonSpecInvalid))
+			Expect(agent.Status.SpecHash).To(BeEmpty(), "no spec ever compiled")
+
+			By("Verifying no Deployment was created")
+			expectNoDeployment()
+		})
+
+		It("should keep the last good Deployment when the composition turns invalid", func() {
+			By("Creating a valid Agent and reconciling it")
+			Expect(k8sClient.Create(ctx, minimalAgent(agentNN))).To(Succeed())
+
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, agentNN)
+
+			agent := getAgent(ctx, agentNN)
+			goodHash := agent.Status.SpecHash
+			Expect(goodHash).NotTo(BeEmpty())
+
+			By("Breaking the composition with an unknown top-level field")
+			agent.Spec.Spec.Extra = &apiextensionsv1.JSON{Raw: []byte(`{"bogus_field": true}`)}
+			Expect(k8sClient.Update(ctx, agent)).To(Succeed())
+
+			result, err := reconcileOnce(ctx, r, agentNN)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeZero())
+
+			By("Verifying SpecValid=False but the last good spec keeps running")
+			agent = getAgent(ctx, agentNN)
+			cond := meta.FindStatusCondition(agent.Status.Conditions, agentdomain.ConditionTypeSpecValid)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(agentdomain.ReasonSpecInvalid))
+			Expect(agent.Status.SpecHash).To(Equal(goodHash), "status keeps the last good hash")
+
+			deployment := getDeployment(ctx, agentNN)
+			Expect(deployment.Spec.Template.Annotations).To(
+				HaveKeyWithValue("flokoa.ai/spec-hash", goodHash),
+				"the Deployment must stay on the last good spec",
+			)
+		})
+
+		It("should fail validation for the session isolation tier (not available yet)", func() {
+			// The admission webhook also rejects this, but it is not running
+			// in this suite — domain validation is the backstop under test.
+			agent := minimalAgent(agentNN)
+			agent.Spec.Runtime.Isolation = agentv1alpha1.IsolationSession
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+			r := newAgentReconciler()
+			_, err := reconcileOnce(ctx, r, agentNN) // finalizer
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := reconcileOnce(ctx, r, agentNN)
+			Expect(err).NotTo(HaveOccurred(), "validation failures are permanent, not retried")
+			Expect(result.RequeueAfter).To(BeZero())
+
+			agent = getAgent(ctx, agentNN)
+			Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
+
+			cond := meta.FindStatusCondition(agent.Status.Conditions, agentdomain.ConditionTypeSpecValid)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(agentdomain.ReasonValidationFailed))
+			Expect(cond.Message).To(ContainSubstring("isolation"))
+
+			expectNoDeployment()
+		})
+
+		It("should fail validation when no model source is set", func() {
+			agent := &agentv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentName,
+					Namespace: namespace,
+				},
+				Spec: agentv1alpha1.AgentSpec{
+					// Neither spec.spec.model nor spec.modelRef.
+					Spec: &agentv1alpha1.AgentSpecFragment{Description: "no model anywhere"},
+					Card: minimalCard(),
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
 			r := newAgentReconciler()
 			_, _ = reconcileOnce(ctx, r, agentNN)
-
-			By("Verifying finalizer was added")
-			Expect(k8sClient.Get(ctx, agentNN, agent)).To(Succeed())
-			Expect(controllerutil.ContainsFinalizer(agent, agentFinalizer)).To(BeTrue())
-
-			By("Deleting the Agent")
-			Expect(k8sClient.Delete(ctx, agent)).To(Succeed())
-
-			By("Reconciling the deletion")
 			_, err := reconcileOnce(ctx, r, agentNN)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying finalizer was removed (Agent can be garbage collected)")
-			// After deletion reconcile, the object might already be gone
-			// or the finalizer should be removed
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, agentNN, agent)
-				if err != nil {
-					return true // already deleted
-				}
-				return !controllerutil.ContainsFinalizer(agent, agentFinalizer)
-			}, timeout, interval).Should(BeTrue())
+			agent = getAgent(ctx, agentNN)
+			Expect(agent.Status.Phase).To(Equal(agentv1alpha1.AgentPhaseFailed))
+
+			cond := meta.FindStatusCondition(agent.Status.Conditions, agentdomain.ConditionTypeSpecValid)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal(agentdomain.ReasonValidationFailed))
+			Expect(cond.Message).To(ContainSubstring("model is required"))
+
+			expectNoDeployment()
+		})
+
+		It("should report missing secrets via SecretsReady=False but still deploy", func() {
+			agent := minimalAgent(agentNN)
+			agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
+				"github-token": {
+					LocalObjectReference: corev1.LocalObjectReference{Name: "no-such-secret"},
+					Key:                  "token",
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+			r := newAgentReconciler()
+			reconcileAgent(ctx, r, agentNN)
+
+			agent = getAgent(ctx, agentNN)
+			cond := meta.FindStatusCondition(agent.Status.Conditions, agentdomain.ConditionTypeSecretsReady)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(agentdomain.ReasonSecretsMissing))
+			Expect(cond.Message).To(ContainSubstring("no-such-secret"))
+
+			By("The Deployment is still created (the pod will crash-loop until the secret appears)")
+			deployment := getDeployment(ctx, agentNN)
+			env := envByName(firstContainer(deployment))
+			Expect(env).To(HaveKey("FLOKOA_SECRET_GITHUB_TOKEN"))
+			Expect(env["FLOKOA_SECRET_GITHUB_TOKEN"].ValueFrom.SecretKeyRef.Name).To(Equal("no-such-secret"))
 		})
 	})
 

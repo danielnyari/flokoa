@@ -85,6 +85,16 @@ func (f *FakeServiceRepo) EnsureService(_ context.Context, desired *corev1.Servi
 	return desired.DeepCopy(), nil
 }
 
+func (f *FakeServiceRepo) GetService(_ context.Context, key types.NamespacedName) (*corev1.Service, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	svc, ok := f.Services[key]
+	if !ok {
+		return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "services"}, key.Name)
+	}
+	return svc.DeepCopy(), nil
+}
+
 // FakeAgentToolRepo implements repo.AgentToolReader and repo.AgentToolWriter.
 type FakeAgentToolRepo struct {
 	mu         sync.RWMutex

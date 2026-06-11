@@ -1,6 +1,11 @@
 package converter
 
 import (
+	"encoding/json"
+
+	"google.golang.org/protobuf/types/known/structpb"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
 )
@@ -25,29 +30,83 @@ func AgentSpecToProto(spec *agentv1alpha1.AgentSpec) *pb.AgentSpec {
 	}
 
 	pbSpec := &pb.AgentSpec{
-		Framework: FrameworkToProto(spec.Framework),
+		Card:    AgentCardToProto(&spec.Card),
+		Runtime: AgentRuntimeToProto(&spec.Runtime),
+		Spec:    fragmentToStruct(spec.Spec),
 	}
 
-	// Convert Card
-	pbSpec.Card = AgentCardToProto(&spec.CardOverride)
-
-	// Convert Runtime
-	pbSpec.Runtime = RuntimeSpecToProto(&spec.Runtime)
-
-	// Convert Model reference
-	if spec.Model != nil {
-		pbSpec.Model = &pb.AgentModelRef{
-			Name:      spec.Model.Name,
-			Namespace: spec.Model.Namespace,
+	if spec.ModelRef != nil {
+		pbSpec.ModelRef = NamespacedRefToProto(spec.ModelRef)
+	}
+	for i := range spec.InstructionRefs {
+		pbSpec.InstructionRefs = append(pbSpec.InstructionRefs, NamespacedRefToProto(&spec.InstructionRefs[i]))
+	}
+	for i := range spec.Tools {
+		pbSpec.Tools = append(pbSpec.Tools, NamespacedRefToProto(&spec.Tools[i]))
+	}
+	for i := range spec.Capabilities {
+		att := &spec.Capabilities[i]
+		pbSpec.Capabilities = append(pbSpec.Capabilities, &pb.CapabilityAttachment{
+			Ref:    NamespacedRefToProto(&att.Ref),
+			Config: jsonToStruct(att.Config),
+		})
+	}
+	if len(spec.SecretRefs) > 0 {
+		pbSpec.SecretRefs = map[string]*pb.SecretKeySelector{}
+		for name, sel := range spec.SecretRefs {
+			pbSpec.SecretRefs[name] = &pb.SecretKeySelector{
+				Name:     sel.Name,
+				Key:      sel.Key,
+				Optional: sel.Optional != nil && *sel.Optional,
+			}
 		}
 	}
 
-	// Convert Tools
-	for _, tool := range spec.Tools {
-		pbSpec.Tools = append(pbSpec.Tools, ToolEntryToProto(&tool))
-	}
-
 	return pbSpec
+}
+
+// NamespacedRefToProto converts a NamespacedRef to proto.
+func NamespacedRefToProto(ref *agentv1alpha1.NamespacedRef) *pb.NamespacedRef {
+	if ref == nil {
+		return nil
+	}
+	return &pb.NamespacedRef{Name: ref.Name, Namespace: ref.Namespace}
+}
+
+// fragmentToStruct renders the inline AgentSpec fragment in its JSON form.
+func fragmentToStruct(frag *agentv1alpha1.AgentSpecFragment) *structpb.Struct {
+	if frag == nil {
+		return nil
+	}
+	raw, err := json.Marshal(frag)
+	if err != nil {
+		return nil
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil
+	}
+	s, err := structpb.NewStruct(data)
+	if err != nil {
+		return nil
+	}
+	return s
+}
+
+// jsonToStruct converts an apiextensions JSON object to a proto Struct.
+func jsonToStruct(j *apiextensionsv1.JSON) *structpb.Struct {
+	if j == nil || len(j.Raw) == 0 {
+		return nil
+	}
+	var data map[string]any
+	if err := json.Unmarshal(j.Raw, &data); err != nil {
+		return nil
+	}
+	s, err := structpb.NewStruct(data)
+	if err != nil {
+		return nil
+	}
+	return s
 }
 
 // AgentCardToProto converts AgentCard to proto.
@@ -62,7 +121,6 @@ func AgentCardToProto(card *agentv1alpha1.AgentCardOverride) *pb.AgentCard {
 		Version:     card.Version,
 	}
 
-	// Convert input/output modes
 	for _, mode := range card.DefaultInputModes {
 		pbCard.DefaultInputModes = append(pbCard.DefaultInputModes, InputOutputModeToProto(mode))
 	}
@@ -70,10 +128,8 @@ func AgentCardToProto(card *agentv1alpha1.AgentCardOverride) *pb.AgentCard {
 		pbCard.DefaultOutputModes = append(pbCard.DefaultOutputModes, InputOutputModeToProto(mode))
 	}
 
-	// Convert capabilities
 	pbCard.Capabilities = AgentCapabilitiesToProto(&card.Capabilities)
 
-	// Convert skills
 	for _, skill := range card.Skills {
 		pbCard.Skills = append(pbCard.Skills, AgentSkillToProto(&skill))
 	}
@@ -111,75 +167,42 @@ func AgentSkillToProto(skill *agentv1alpha1.AgentSkill) *pb.AgentSkill {
 	}
 }
 
-// RuntimeSpecToProto converts RuntimeSpec to proto.
-func RuntimeSpecToProto(runtime *agentv1alpha1.RuntimeSpec) *pb.RuntimeSpec {
+// AgentRuntimeToProto converts AgentRuntime to proto.
+func AgentRuntimeToProto(runtime *agentv1alpha1.AgentRuntime) *pb.AgentRuntime {
 	if runtime == nil {
 		return nil
 	}
 
-	pbRuntime := &pb.RuntimeSpec{
-		Type: RuntimeTypeToProto(runtime.Type),
+	pbRuntime := &pb.AgentRuntime{
+		Image:              runtime.Image,
+		RunnerVersion:      runtime.RunnerVersion,
+		Isolation:          IsolationTierToProto(runtime.Isolation),
+		ServiceAccountName: runtime.ServiceAccountName,
+		NodeSelector:       runtime.NodeSelector,
 	}
-
-	if runtime.Standard != nil {
-		pbRuntime.Spec = StandardRuntimeSpecToProto(runtime.Standard)
+	if runtime.Replicas != nil {
+		pbRuntime.Replicas = *runtime.Replicas
+	}
+	for _, env := range runtime.Env {
+		pbRuntime.Env = append(pbRuntime.Env, &pb.EnvVar{Name: env.Name, Value: env.Value})
+	}
+	if runtime.Resources != nil {
+		pbRuntime.Resources = &pb.ResourceRequirements{
+			Limits:   map[string]string{},
+			Requests: map[string]string{},
+		}
+		for name, qty := range runtime.Resources.Limits {
+			pbRuntime.Resources.Limits[string(name)] = qty.String()
+		}
+		for name, qty := range runtime.Resources.Requests {
+			pbRuntime.Resources.Requests[string(name)] = qty.String()
+		}
+	}
+	for _, ref := range runtime.ImagePullSecrets {
+		pbRuntime.ImagePullSecrets = append(pbRuntime.ImagePullSecrets, &pb.LocalObjectReference{Name: ref.Name})
 	}
 
 	return pbRuntime
-}
-
-// StandardRuntimeSpecToProto converts StandardRuntimeSpec to proto.
-func StandardRuntimeSpecToProto(spec *agentv1alpha1.StandardRuntimeSpec) *pb.StandardRuntimeSpec {
-	if spec == nil {
-		return nil
-	}
-
-	pbSpec := &pb.StandardRuntimeSpec{
-		ServiceAccountName: spec.ServiceAccountName,
-		NodeSelector:       spec.NodeSelector,
-	}
-
-	if spec.Replicas != nil {
-		pbSpec.Replicas = *spec.Replicas
-	}
-
-	// Container conversion is complex - simplified for now
-	pbSpec.Container = &pb.Container{
-		Name:            spec.Container.Name,
-		Image:           spec.Container.Image,
-		Command:         spec.Container.Command,
-		Args:            spec.Container.Args,
-		WorkingDir:      spec.Container.WorkingDir,
-		ImagePullPolicy: string(spec.Container.ImagePullPolicy),
-	}
-
-	return pbSpec
-}
-
-// ToolEntryToProto converts ToolEntry to proto.
-func ToolEntryToProto(entry *agentv1alpha1.ToolEntry) *pb.ToolEntry {
-	if entry == nil {
-		return nil
-	}
-
-	pbEntry := &pb.ToolEntry{
-		Name: entry.Name,
-	}
-
-	if entry.Template != nil {
-		pbEntry.Tool = &pb.ToolEntry_Inline{
-			Inline: AgentToolSpecToProto(entry.Template),
-		}
-	} else if entry.ToolRef != nil {
-		pbEntry.Tool = &pb.ToolEntry_ToolRef{
-			ToolRef: &pb.ToolRef{
-				Name:      entry.ToolRef.Name,
-				Namespace: entry.ToolRef.Namespace,
-			},
-		}
-	}
-
-	return pbEntry
 }
 
 // AgentStatusToProto converts AgentStatus to proto.
@@ -188,18 +211,17 @@ func AgentStatusToProto(status *agentv1alpha1.AgentStatus) *pb.AgentStatus {
 		return nil
 	}
 
-	pbStatus := &pb.AgentStatus{
-		Phase:              AgentPhaseToProto(status.Phase),
-		Backend:            status.Backend,
-		Url:                status.URL,
-		Replicas:           status.Replicas,
-		AvailableReplicas:  status.AvailableReplicas,
-		DetectedFramework:  FrameworkToProto(status.DetectedFramework),
-		Conditions:         ConditionsToProto(status.Conditions),
-		ObservedGeneration: status.ObservedGeneration,
+	return &pb.AgentStatus{
+		Phase:                AgentPhaseToProto(status.Phase),
+		Url:                  status.URL,
+		SpecHash:             status.SpecHash,
+		RunnerVersion:        status.RunnerVersion,
+		InjectedCapabilities: status.InjectedCapabilities,
+		Replicas:             status.Replicas,
+		AvailableReplicas:    status.AvailableReplicas,
+		Conditions:           ConditionsToProto(status.Conditions),
+		ObservedGeneration:   status.ObservedGeneration,
 	}
-
-	return pbStatus
 }
 
 // AgentListToProto converts a Kubernetes AgentList to proto.
@@ -219,22 +241,6 @@ func AgentListToProto(list *agentv1alpha1.AgentList) *pb.AgentList {
 	return pbList
 }
 
-// FrameworkToProto converts Framework enum to proto.
-func FrameworkToProto(f agentv1alpha1.Framework) pb.Framework {
-	switch f {
-	case agentv1alpha1.FrameworkPydanticAI:
-		return pb.Framework_FRAMEWORK_PYDANTIC_AI
-	case agentv1alpha1.FrameworkLangChain:
-		return pb.Framework_FRAMEWORK_LANGCHAIN
-	case agentv1alpha1.FrameworkAutogen:
-		return pb.Framework_FRAMEWORK_AUTOGEN
-	case agentv1alpha1.FrameworkA2A:
-		return pb.Framework_FRAMEWORK_A2A
-	default:
-		return pb.Framework_FRAMEWORK_UNSPECIFIED
-	}
-}
-
 // AgentPhaseToProto converts AgentPhase enum to proto.
 func AgentPhaseToProto(phase agentv1alpha1.AgentPhase) pb.AgentPhase {
 	switch phase {
@@ -249,15 +255,15 @@ func AgentPhaseToProto(phase agentv1alpha1.AgentPhase) pb.AgentPhase {
 	}
 }
 
-// RuntimeTypeToProto converts RuntimeType enum to proto.
-func RuntimeTypeToProto(rt agentv1alpha1.RuntimeType) pb.RuntimeType {
-	switch rt {
-	case agentv1alpha1.RuntimeTypeStandard:
-		return pb.RuntimeType_RUNTIME_TYPE_STANDARD
-	case agentv1alpha1.RuntimeTypeTemplate:
-		return pb.RuntimeType_RUNTIME_TYPE_TEMPLATE
+// IsolationTierToProto converts IsolationTier enum to proto.
+func IsolationTierToProto(tier agentv1alpha1.IsolationTier) pb.IsolationTier {
+	switch tier {
+	case agentv1alpha1.IsolationShared:
+		return pb.IsolationTier_ISOLATION_TIER_SHARED
+	case agentv1alpha1.IsolationSession:
+		return pb.IsolationTier_ISOLATION_TIER_SESSION
 	default:
-		return pb.RuntimeType_RUNTIME_TYPE_UNSPECIFIED
+		return pb.IsolationTier_ISOLATION_TIER_UNSPECIFIED
 	}
 }
 

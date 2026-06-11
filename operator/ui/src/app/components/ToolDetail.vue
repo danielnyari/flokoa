@@ -16,32 +16,26 @@ function conditionColor(c: Condition): 'success' | 'error' | 'warning' {
 }
 
 const sourceInfo = computed(() => {
-  const api = props.tool.spec.openApi
-  if (!api) return null
-
-  if (api.url) return { type: 'URL', value: api.url }
-  if (api.serviceRef) {
-    const ref = api.serviceRef
+  const spec = props.tool.spec
+  if (spec.url) return { type: 'URL', value: spec.url }
+  if (spec.serviceRef) {
+    const ref = spec.serviceRef
     const port = ref.port ?? ref.portName ?? ''
     return {
       type: 'Service',
-      value: `${ref.name}${ref.namespace ? '.' + ref.namespace : ''}${port ? ':' + port : ''}`
+      value: `${ref.name}${ref.namespace ? '.' + ref.namespace : ''}${port ? ':' + port : ''}${spec.path ?? '/mcp'}`
     }
   }
   return null
 })
 
 const schemaInfo = computed(() => {
-  const schema = props.tool.spec.openApi?.openApiSchema
-  if (!schema) return null
-
-  if (schema.endpointPath) return { type: 'Endpoint', value: schema.endpointPath }
-  if (schema.valueFrom) return { type: 'ConfigMap', value: `${schema.valueFrom.name}:${schema.valueFrom.key}` }
-  if (schema.value) return { type: 'Inline', value: JSON.stringify(schema.value, null, 2) }
+  const spec = props.tool.spec
+  if (spec.transport) return { type: 'Transport', value: spec.transport }
   return null
 })
 
-const headers = computed(() => props.tool.spec.openApi?.headers ?? {})
+const headers = computed(() => props.tool.spec.headers ?? {})
 </script>
 
 <template>
@@ -98,13 +92,13 @@ const headers = computed(() => props.tool.spec.openApi?.headers ?? {})
         </section>
 
         <!-- Timeout -->
-        <section v-if="tool.spec.openApi?.timeoutSeconds">
+        <section v-if="tool.spec.timeoutSeconds">
           <h4 class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
             Timeout
           </h4>
           <div class="p-3 rounded-lg border border-default bg-elevated/50 flex items-center gap-2">
             <UIcon name="i-lucide-clock" class="size-4 text-muted" />
-            <span class="text-sm font-medium">{{ tool.spec.openApi.timeoutSeconds }}s</span>
+            <span class="text-sm font-medium">{{ tool.spec.timeoutSeconds }}s</span>
           </div>
         </section>
 

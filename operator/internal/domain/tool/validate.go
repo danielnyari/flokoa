@@ -2,44 +2,39 @@ package tool
 
 import (
 	"fmt"
+	"strings"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// ValidateSpec validates the AgentTool spec (non-I/O parts).
-// ConfigMap reference validation requires I/O and is not included here.
+// ValidateSpec validates the AgentTool spec (non-I/O parts). The admission
+// webhook performs the same checks with field paths; this guards direct API
+// writes that bypassed it.
 func ValidateSpec(agentTool *agentv1alpha1.AgentTool) error {
-	if agentTool.Spec.OpenApi == nil {
-		return fmt.Errorf("openApi is required when type is %q", agentTool.Spec.Type)
+	spec := &agentTool.Spec
+
+	if spec.Type == agentv1alpha1.AgentToolTypeOpenAPI {
+		return fmt.Errorf("the openapi tool type is retired: front REST APIs with an MCP adapter or a Capability instead")
 	}
 
-	// Validate that exactly one of URL or ServiceRef is specified
-	openApi := agentTool.Spec.OpenApi
-	if openApi.URL == "" && openApi.ServiceRef == nil {
+	if spec.URL == "" && spec.ServiceRef == nil {
 		return fmt.Errorf("either url or serviceRef must be specified")
 	}
-	if openApi.URL != "" && openApi.ServiceRef != nil {
+	if spec.URL != "" && spec.ServiceRef != nil {
 		return fmt.Errorf("url and serviceRef are mutually exclusive")
 	}
 
-	// Validate the OpenAPI schema source
-	schema := &openApi.OpenApiSchema
-	sources := 0
-	if schema.Value != nil && schema.Value.Raw != nil {
-		sources++
-	}
-	if schema.ValueFrom != nil {
-		sources++
-	}
-	if schema.EndpointPath != "" {
-		sources++
+	if spec.Path != "" {
+		if spec.ServiceRef == nil {
+			return fmt.Errorf("path applies only with serviceRef; put the path in the url instead")
+		}
+		if !strings.HasPrefix(spec.Path, "/") {
+			return fmt.Errorf("path must start with /")
+		}
 	}
 
-	if sources == 0 {
-		return fmt.Errorf("openApiSchema is required: exactly one of value, valueFrom, or endpointPath must be specified")
-	}
-	if sources > 1 {
-		return fmt.Errorf("openApiSchema: only one of value, valueFrom, or endpointPath may be specified")
+	if spec.ServiceRef != nil && spec.ServiceRef.Port != nil && spec.ServiceRef.PortName != "" {
+		return fmt.Errorf("serviceRef.port and serviceRef.portName are mutually exclusive")
 	}
 
 	return nil

@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	agentdomain "github.com/danielnyari/flokoa/internal/domain/agent"
 )
 
 // Integration tests verify cross-controller resource flows end-to-end (fixes #98).
@@ -111,7 +112,7 @@ var _ = Describe("Cross-Controller Integration", func() {
 		})
 	})
 
-	Context("AgentTool → ConfigMap flow", func() {
+	Context("AgentTool validation flow", func() {
 		var (
 			ctx           context.Context
 			agentToolName string
@@ -127,69 +128,36 @@ var _ = Describe("Cross-Controller Integration", func() {
 		AfterEach(func() {
 			agentTool := &agentv1alpha1.AgentTool{}
 			if err := k8sClient.Get(ctx, toolNN, agentTool); err == nil {
-				if controllerutil.ContainsFinalizer(agentTool, agentToolFinalizer) {
-					controllerutil.RemoveFinalizer(agentTool, agentToolFinalizer)
-					_ = k8sClient.Update(ctx, agentTool)
-				}
 				_ = k8sClient.Delete(ctx, agentTool)
-			}
-			cmName := fmt.Sprintf("%s-spec", agentToolName)
-			cm := &corev1.ConfigMap{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm); err == nil {
-				_ = k8sClient.Delete(ctx, cm)
 			}
 		})
 
-		It("should create a spec ConfigMap for an AgentTool", func() {
+		It("should validate an MCP AgentTool and surface the condition", func() {
 			By("Creating an AgentTool resource")
+			port := int32(8080)
 			agentTool := &agentv1alpha1.AgentTool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      agentToolName,
 					Namespace: namespace,
 				},
 				Spec: agentv1alpha1.AgentToolSpec{
-					Type:        agentv1alpha1.AgentToolTypeOpenAPI,
-					Description: "Integration test tool",
-					OpenApi: &agentv1alpha1.OpenApiToolSpec{
-						URL: "https://api.example.com",
-						OpenApiSchema: agentv1alpha1.OpenApiSchema{
-							EndpointPath: "/openapi.json",
-						},
-					},
+					Type:        agentv1alpha1.AgentToolTypeMCP,
+					Description: "Integration test MCP endpoint",
+					ServiceRef:  &agentv1alpha1.ServiceRef{Name: "tool-svc", Port: &port},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agentTool)).To(Succeed())
 
 			By("Reconciling the AgentTool")
-			r := &AgentToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), HTTPClient: mockHTTPClient()}
-
-			// First reconcile adds finalizer
-			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: toolNN})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			// Second reconcile creates ConfigMap
-			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: toolNN})
+			r := &AgentToolReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: toolNN})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying the spec ConfigMap was created")
-			cmName := fmt.Sprintf("%s-spec", agentToolName)
-			cm := &corev1.ConfigMap{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm)
-			}, timeout, interval).Should(Succeed())
-
-			Expect(cm.Data).To(HaveKey("spec.json"))
-
-			By("Verifying Validated and Stored conditions are True")
+			By("Verifying the Validated condition is True")
 			Expect(k8sClient.Get(ctx, toolNN, agentTool)).To(Succeed())
 			validatedCond := meta.FindStatusCondition(agentTool.Status.Conditions, ConditionTypeValidated)
 			Expect(validatedCond).NotTo(BeNil())
 			Expect(validatedCond.Status).To(Equal(metav1.ConditionTrue))
-
-			storedCond := meta.FindStatusCondition(agentTool.Status.Conditions, ConditionTypeStored)
-			Expect(storedCond).NotTo(BeNil())
-			Expect(storedCond.Status).To(Equal(metav1.ConditionTrue))
 		})
 	})
 
@@ -359,19 +327,8 @@ var _ = Describe("Cross-Controller Integration", func() {
 					Namespace: namespace,
 				},
 				Spec: agentv1alpha1.AgentSpec{
-					CardOverride: minimalCard(),
-					Runtime: agentv1alpha1.RuntimeSpec{
-						Type: agentv1alpha1.RuntimeTypeStandard,
-						Standard: &agentv1alpha1.StandardRuntimeSpec{
-							Container: corev1.Container{
-								Name:  "agent",
-								Image: "nginx:latest",
-							},
-						},
-					},
-					Model: &agentv1alpha1.AgentModelRef{
-						Name: modelName,
-					},
+					Card:     minimalCard(),
+					ModelRef: &agentv1alpha1.NamespacedRef{Name: modelName},
 				},
 			}
 			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
@@ -389,11 +346,12 @@ var _ = Describe("Cross-Controller Integration", func() {
 			service := getService(ctx, agentNN)
 			Expect(service).NotTo(BeNil())
 
-			By("Verifying Agent status conditions")
+			By("Verifying the compiled spec and conditions")
 			agent = getAgent(ctx, agentNN)
-			modelReadyCond := meta.FindStatusCondition(agent.Status.Conditions, ConditionTypeModelReady)
-			Expect(modelReadyCond).NotTo(BeNil())
-			Expect(modelReadyCond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(agent.Status.SpecHash).NotTo(BeEmpty())
+			specValid := meta.FindStatusCondition(agent.Status.Conditions, agentdomain.ConditionTypeSpecValid)
+			Expect(specValid).NotTo(BeNil())
+			Expect(specValid.Status).To(Equal(metav1.ConditionTrue))
 		})
 	})
 })

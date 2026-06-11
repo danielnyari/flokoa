@@ -47,7 +47,6 @@ rules:
   - agent.flokoa.ai
   resources:
   - agents/finalizers
-  - agenttools/finalizers
   - agenttriggers/finalizers
   - agentworkflows/finalizers
   - instructions/finalizers

@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -46,7 +47,7 @@ func (v *AgentToolCustomValidator) ValidateCreate(_ context.Context, obj runtime
 	if !ok {
 		return nil, fmt.Errorf("expected an AgentTool but got %T", obj)
 	}
-	return nil, validateAgentTool(tool)
+	return collectAgentToolWarnings(tool), validateAgentTool(tool)
 }
 
 func (v *AgentToolCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
@@ -54,73 +55,70 @@ func (v *AgentToolCustomValidator) ValidateUpdate(_ context.Context, _, newObj r
 	if !ok {
 		return nil, fmt.Errorf("expected an AgentTool but got %T", newObj)
 	}
-	return nil, validateAgentTool(tool)
+	return collectAgentToolWarnings(tool), validateAgentTool(tool)
 }
 
 func (v *AgentToolCustomValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-func validateAgentTool(tool *AgentTool) error {
-	return validateAgentToolSpec(&tool.Spec, field.NewPath("spec"), "AgentTool", tool.Name)
+func collectAgentToolWarnings(tool *AgentTool) admission.Warnings {
+	var warnings admission.Warnings
+	// SSE servers conventionally serve under /sse; a mismatched explicit path
+	// usually means the transport field and the endpoint disagree.
+	if tool.Spec.Transport == MCPTransportSSE && tool.Spec.URL != "" && !strings.HasSuffix(strings.TrimSuffix(tool.Spec.URL, "/"), "/sse") {
+		warnings = append(warnings,
+			"transport is \"sse\" but the URL does not end in /sse; the MCP client infers the transport from the URL")
+	}
+	return warnings
 }
 
-// validateAgentToolSpec validates the AgentToolSpec. Extracted so it can also
-// be used for inline tool templates in Agent validation.
-func validateAgentToolSpec(spec *AgentToolSpec, specPath *field.Path, kind, name string) error {
+func validateAgentTool(tool *AgentTool) error {
 	var allErrs field.ErrorList
+	specPath := field.NewPath("spec")
+	spec := &tool.Spec
 
-	// T1: When type=openapi, openApi must be set
+	// The OpenAPI tool type is retired with the v2.1 pivot.
 	if spec.Type == AgentToolTypeOpenAPI {
-		if spec.OpenApi == nil {
-			allErrs = append(allErrs, field.Required(
-				specPath.Child("openApi"),
-				"openApi configuration is required when type is \"openapi\"",
-			))
-		} else {
-			allErrs = append(allErrs, validateOpenApiToolSpec(spec.OpenApi, specPath.Child("openApi"))...)
-		}
+		allErrs = append(allErrs, field.Forbidden(
+			specPath.Child("type"),
+			"the openapi tool type is retired: front REST APIs with an MCP adapter or a Capability instead "+
+				"(see docs/agenttool.md for the migration path)",
+		))
+		return aggregateErrors("AgentTool", tool.Name, allErrs)
 	}
 
-	return aggregateErrors(kind, name, allErrs)
-}
-
-func validateOpenApiToolSpec(spec *OpenApiToolSpec, fldPath *field.Path) field.ErrorList {
-	var allErrs field.ErrorList
-
-	// T2: Exactly one of url or serviceRef
+	// Exactly one of url or serviceRef.
 	if err := validateExactlyOneOf(
-		fldPath,
+		specPath,
 		[]string{"url", "serviceRef"},
 		[]bool{spec.URL != "", spec.ServiceRef != nil},
 	); err != nil {
 		allErrs = append(allErrs, err)
 	}
 
-	// T5: URL must be a valid HTTP/HTTPS URL (prevents SSRF via file://, gopher://, etc.)
+	// URL must be a valid HTTP/HTTPS URL (prevents SSRF via file://, gopher://, etc.)
 	if spec.URL != "" {
-		if err := validateHTTPURL(fldPath.Child("url"), spec.URL); err != nil {
+		if err := validateHTTPURL(specPath.Child("url"), spec.URL); err != nil {
 			allErrs = append(allErrs, err)
 		}
 	}
 
-	// T3: Exactly one of value, valueFrom, or endpointPath
-	if err := validateExactlyOneOf(
-		fldPath.Child("openApiSchema"),
-		[]string{"value", "valueFrom", "endpointPath"},
-		[]bool{
-			spec.OpenApiSchema.Value != nil,
-			spec.OpenApiSchema.ValueFrom != nil,
-			spec.OpenApiSchema.EndpointPath != "",
-		},
-	); err != nil {
-		allErrs = append(allErrs, err)
+	// Path only applies to serviceRef-based endpoints and must be absolute.
+	if spec.Path != "" {
+		if spec.ServiceRef == nil {
+			allErrs = append(allErrs, field.Forbidden(specPath.Child("path"),
+				"path applies only with serviceRef; put the path in the url instead"))
+		} else if !strings.HasPrefix(spec.Path, "/") {
+			allErrs = append(allErrs, field.Invalid(specPath.Child("path"), spec.Path,
+				"path must start with /"))
+		}
 	}
 
-	// T4: ServiceRef port exclusivity
+	// ServiceRef port exclusivity.
 	if spec.ServiceRef != nil {
 		if err := validateExactlyOneOf(
-			fldPath.Child("serviceRef"),
+			specPath.Child("serviceRef"),
 			[]string{"port", "portName"},
 			[]bool{spec.ServiceRef.Port != nil, spec.ServiceRef.PortName != ""},
 		); err != nil {
@@ -128,5 +126,20 @@ func validateOpenApiToolSpec(spec *OpenApiToolSpec, fldPath *field.Path) field.E
 		}
 	}
 
-	return allErrs
+	// Header secrets must not collide with static headers or each other.
+	seenHeaders := map[string]string{}
+	for name := range spec.Headers {
+		seenHeaders[strings.ToLower(name)] = "headers"
+	}
+	for i, hs := range spec.HeaderSecrets {
+		key := strings.ToLower(hs.Name)
+		if prev, dup := seenHeaders[key]; dup {
+			allErrs = append(allErrs, field.Duplicate(
+				specPath.Child("headerSecrets").Index(i).Child("name"),
+				fmt.Sprintf("%s (already set via %s)", hs.Name, prev)))
+		}
+		seenHeaders[key] = "headerSecrets"
+	}
+
+	return aggregateErrors("AgentTool", tool.Name, allErrs)
 }

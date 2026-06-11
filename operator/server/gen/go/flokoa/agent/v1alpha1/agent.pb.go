@@ -10,7 +10,6 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -22,62 +21,6 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
-
-// Framework represents the AI framework used by the agent.
-type Framework int32
-
-const (
-	Framework_FRAMEWORK_UNSPECIFIED Framework = 0
-	Framework_FRAMEWORK_PYDANTIC_AI Framework = 1
-	Framework_FRAMEWORK_LANGCHAIN   Framework = 2
-	Framework_FRAMEWORK_AUTOGEN     Framework = 5
-	Framework_FRAMEWORK_A2A         Framework = 6
-)
-
-// Enum value maps for Framework.
-var (
-	Framework_name = map[int32]string{
-		0: "FRAMEWORK_UNSPECIFIED",
-		1: "FRAMEWORK_PYDANTIC_AI",
-		2: "FRAMEWORK_LANGCHAIN",
-		5: "FRAMEWORK_AUTOGEN",
-		6: "FRAMEWORK_A2A",
-	}
-	Framework_value = map[string]int32{
-		"FRAMEWORK_UNSPECIFIED": 0,
-		"FRAMEWORK_PYDANTIC_AI": 1,
-		"FRAMEWORK_LANGCHAIN":   2,
-		"FRAMEWORK_AUTOGEN":     5,
-		"FRAMEWORK_A2A":         6,
-	}
-)
-
-func (x Framework) Enum() *Framework {
-	p := new(Framework)
-	*p = x
-	return p
-}
-
-func (x Framework) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Framework) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agent_proto_enumTypes[0].Descriptor()
-}
-
-func (Framework) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agent_proto_enumTypes[0]
-}
-
-func (x Framework) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Framework.Descriptor instead.
-func (Framework) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{0}
-}
 
 // AgentPhase represents the current phase of the agent lifecycle.
 type AgentPhase int32
@@ -116,11 +59,11 @@ func (x AgentPhase) String() string {
 }
 
 func (AgentPhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agent_proto_enumTypes[1].Descriptor()
+	return file_flokoa_agent_v1alpha1_agent_proto_enumTypes[0].Descriptor()
 }
 
 func (AgentPhase) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agent_proto_enumTypes[1]
+	return &file_flokoa_agent_v1alpha1_agent_proto_enumTypes[0]
 }
 
 func (x AgentPhase) Number() protoreflect.EnumNumber {
@@ -129,57 +72,57 @@ func (x AgentPhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AgentPhase.Descriptor instead.
 func (AgentPhase) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{1}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{0}
 }
 
-// RuntimeType represents the type of runtime backend.
-type RuntimeType int32
+// IsolationTier selects how sessions map onto runner pods.
+type IsolationTier int32
 
 const (
-	RuntimeType_RUNTIME_TYPE_UNSPECIFIED RuntimeType = 0
-	RuntimeType_RUNTIME_TYPE_STANDARD    RuntimeType = 1
-	RuntimeType_RUNTIME_TYPE_TEMPLATE    RuntimeType = 2
+	IsolationTier_ISOLATION_TIER_UNSPECIFIED IsolationTier = 0
+	IsolationTier_ISOLATION_TIER_SHARED      IsolationTier = 1
+	IsolationTier_ISOLATION_TIER_SESSION     IsolationTier = 2
 )
 
-// Enum value maps for RuntimeType.
+// Enum value maps for IsolationTier.
 var (
-	RuntimeType_name = map[int32]string{
-		0: "RUNTIME_TYPE_UNSPECIFIED",
-		1: "RUNTIME_TYPE_STANDARD",
-		2: "RUNTIME_TYPE_TEMPLATE",
+	IsolationTier_name = map[int32]string{
+		0: "ISOLATION_TIER_UNSPECIFIED",
+		1: "ISOLATION_TIER_SHARED",
+		2: "ISOLATION_TIER_SESSION",
 	}
-	RuntimeType_value = map[string]int32{
-		"RUNTIME_TYPE_UNSPECIFIED": 0,
-		"RUNTIME_TYPE_STANDARD":    1,
-		"RUNTIME_TYPE_TEMPLATE":    2,
+	IsolationTier_value = map[string]int32{
+		"ISOLATION_TIER_UNSPECIFIED": 0,
+		"ISOLATION_TIER_SHARED":      1,
+		"ISOLATION_TIER_SESSION":     2,
 	}
 )
 
-func (x RuntimeType) Enum() *RuntimeType {
-	p := new(RuntimeType)
+func (x IsolationTier) Enum() *IsolationTier {
+	p := new(IsolationTier)
 	*p = x
 	return p
 }
 
-func (x RuntimeType) String() string {
+func (x IsolationTier) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (RuntimeType) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agent_proto_enumTypes[2].Descriptor()
+func (IsolationTier) Descriptor() protoreflect.EnumDescriptor {
+	return file_flokoa_agent_v1alpha1_agent_proto_enumTypes[1].Descriptor()
 }
 
-func (RuntimeType) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agent_proto_enumTypes[2]
+func (IsolationTier) Type() protoreflect.EnumType {
+	return &file_flokoa_agent_v1alpha1_agent_proto_enumTypes[1]
 }
 
-func (x RuntimeType) Number() protoreflect.EnumNumber {
+func (x IsolationTier) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use RuntimeType.Descriptor instead.
-func (RuntimeType) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use IsolationTier.Descriptor instead.
+func (IsolationTier) EnumDescriptor() ([]byte, []int) {
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{1}
 }
 
 // InputOutputMode represents supported input/output modes.
@@ -216,11 +159,11 @@ func (x InputOutputMode) String() string {
 }
 
 func (InputOutputMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_flokoa_agent_v1alpha1_agent_proto_enumTypes[3].Descriptor()
+	return file_flokoa_agent_v1alpha1_agent_proto_enumTypes[2].Descriptor()
 }
 
 func (InputOutputMode) Type() protoreflect.EnumType {
-	return &file_flokoa_agent_v1alpha1_agent_proto_enumTypes[3]
+	return &file_flokoa_agent_v1alpha1_agent_proto_enumTypes[2]
 }
 
 func (x InputOutputMode) Number() protoreflect.EnumNumber {
@@ -229,7 +172,7 @@ func (x InputOutputMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use InputOutputMode.Descriptor instead.
 func (InputOutputMode) EnumDescriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{3}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{2}
 }
 
 // AgentSkill describes a specific capability or function.
@@ -655,29 +598,29 @@ func (x *AgentCard) GetSkills() []*AgentSkill {
 	return nil
 }
 
-// AgentModelRef references a Model resource.
-type AgentModelRef struct {
+// CapabilityAttachment references a Capability resource with per-agent config.
+type CapabilityAttachment struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Ref           *NamespacedRef         `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	Config        *structpb.Struct       `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AgentModelRef) Reset() {
-	*x = AgentModelRef{}
+func (x *CapabilityAttachment) Reset() {
+	*x = CapabilityAttachment{}
 	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AgentModelRef) String() string {
+func (x *CapabilityAttachment) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AgentModelRef) ProtoMessage() {}
+func (*CapabilityAttachment) ProtoMessage() {}
 
-func (x *AgentModelRef) ProtoReflect() protoreflect.Message {
+func (x *CapabilityAttachment) ProtoReflect() protoreflect.Message {
 	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -689,547 +632,23 @@ func (x *AgentModelRef) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AgentModelRef.ProtoReflect.Descriptor instead.
-func (*AgentModelRef) Descriptor() ([]byte, []int) {
+// Deprecated: Use CapabilityAttachment.ProtoReflect.Descriptor instead.
+func (*CapabilityAttachment) Descriptor() ([]byte, []int) {
 	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *AgentModelRef) GetName() string {
+func (x *CapabilityAttachment) GetRef() *NamespacedRef {
 	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *AgentModelRef) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-// ToolRef references an AgentTool resource.
-type ToolRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ToolRef) Reset() {
-	*x = ToolRef{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ToolRef) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ToolRef) ProtoMessage() {}
-
-func (x *ToolRef) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ToolRef.ProtoReflect.Descriptor instead.
-func (*ToolRef) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *ToolRef) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ToolRef) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-// ToolEntry represents either an inline tool or a reference.
-type ToolEntry struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Types that are valid to be assigned to Tool:
-	//
-	//	*ToolEntry_Inline
-	//	*ToolEntry_ToolRef
-	Tool          isToolEntry_Tool `protobuf_oneof:"tool"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ToolEntry) Reset() {
-	*x = ToolEntry{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ToolEntry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ToolEntry) ProtoMessage() {}
-
-func (x *ToolEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ToolEntry.ProtoReflect.Descriptor instead.
-func (*ToolEntry) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *ToolEntry) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ToolEntry) GetTool() isToolEntry_Tool {
-	if x != nil {
-		return x.Tool
+		return x.Ref
 	}
 	return nil
 }
 
-func (x *ToolEntry) GetInline() *AgentToolSpec {
+func (x *CapabilityAttachment) GetConfig() *structpb.Struct {
 	if x != nil {
-		if x, ok := x.Tool.(*ToolEntry_Inline); ok {
-			return x.Inline
-		}
+		return x.Config
 	}
 	return nil
-}
-
-func (x *ToolEntry) GetToolRef() *ToolRef {
-	if x != nil {
-		if x, ok := x.Tool.(*ToolEntry_ToolRef); ok {
-			return x.ToolRef
-		}
-	}
-	return nil
-}
-
-type isToolEntry_Tool interface {
-	isToolEntry_Tool()
-}
-
-type ToolEntry_Inline struct {
-	Inline *AgentToolSpec `protobuf:"bytes,2,opt,name=inline,proto3,oneof"`
-}
-
-type ToolEntry_ToolRef struct {
-	ToolRef *ToolRef `protobuf:"bytes,3,opt,name=tool_ref,json=toolRef,proto3,oneof"`
-}
-
-func (*ToolEntry_Inline) isToolEntry_Tool() {}
-
-func (*ToolEntry_ToolRef) isToolEntry_Tool() {}
-
-// RuntimeSpec defines the runtime backend configuration.
-type RuntimeSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          RuntimeType            `protobuf:"varint,1,opt,name=type,proto3,enum=flokoa.agent.v1alpha1.RuntimeType" json:"type,omitempty"`
-	Spec          *StandardRuntimeSpec   `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RuntimeSpec) Reset() {
-	*x = RuntimeSpec{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RuntimeSpec) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RuntimeSpec) ProtoMessage() {}
-
-func (x *RuntimeSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RuntimeSpec.ProtoReflect.Descriptor instead.
-func (*RuntimeSpec) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *RuntimeSpec) GetType() RuntimeType {
-	if x != nil {
-		return x.Type
-	}
-	return RuntimeType_RUNTIME_TYPE_UNSPECIFIED
-}
-
-func (x *RuntimeSpec) GetSpec() *StandardRuntimeSpec {
-	if x != nil {
-		return x.Spec
-	}
-	return nil
-}
-
-// StandardRuntimeSpec defines the Deployment-based runtime configuration.
-type StandardRuntimeSpec struct {
-	state              protoimpl.MessageState  `protogen:"open.v1"`
-	Replicas           int32                   `protobuf:"varint,1,opt,name=replicas,proto3" json:"replicas,omitempty"`
-	Container          *Container              `protobuf:"bytes,2,opt,name=container,proto3" json:"container,omitempty"`
-	Volumes            []*Volume               `protobuf:"bytes,3,rep,name=volumes,proto3" json:"volumes,omitempty"`
-	ImagePullSecrets   []*LocalObjectReference `protobuf:"bytes,4,rep,name=image_pull_secrets,json=imagePullSecrets,proto3" json:"image_pull_secrets,omitempty"`
-	ServiceAccountName string                  `protobuf:"bytes,5,opt,name=service_account_name,json=serviceAccountName,proto3" json:"service_account_name,omitempty"`
-	SecurityContext    *PodSecurityContext     `protobuf:"bytes,6,opt,name=security_context,json=securityContext,proto3" json:"security_context,omitempty"`
-	NodeSelector       map[string]string       `protobuf:"bytes,7,rep,name=node_selector,json=nodeSelector,proto3" json:"node_selector,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Tolerations        []*Toleration           `protobuf:"bytes,8,rep,name=tolerations,proto3" json:"tolerations,omitempty"`
-	Affinity           *Affinity               `protobuf:"bytes,9,opt,name=affinity,proto3" json:"affinity,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
-}
-
-func (x *StandardRuntimeSpec) Reset() {
-	*x = StandardRuntimeSpec{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StandardRuntimeSpec) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StandardRuntimeSpec) ProtoMessage() {}
-
-func (x *StandardRuntimeSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StandardRuntimeSpec.ProtoReflect.Descriptor instead.
-func (*StandardRuntimeSpec) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *StandardRuntimeSpec) GetReplicas() int32 {
-	if x != nil {
-		return x.Replicas
-	}
-	return 0
-}
-
-func (x *StandardRuntimeSpec) GetContainer() *Container {
-	if x != nil {
-		return x.Container
-	}
-	return nil
-}
-
-func (x *StandardRuntimeSpec) GetVolumes() []*Volume {
-	if x != nil {
-		return x.Volumes
-	}
-	return nil
-}
-
-func (x *StandardRuntimeSpec) GetImagePullSecrets() []*LocalObjectReference {
-	if x != nil {
-		return x.ImagePullSecrets
-	}
-	return nil
-}
-
-func (x *StandardRuntimeSpec) GetServiceAccountName() string {
-	if x != nil {
-		return x.ServiceAccountName
-	}
-	return ""
-}
-
-func (x *StandardRuntimeSpec) GetSecurityContext() *PodSecurityContext {
-	if x != nil {
-		return x.SecurityContext
-	}
-	return nil
-}
-
-func (x *StandardRuntimeSpec) GetNodeSelector() map[string]string {
-	if x != nil {
-		return x.NodeSelector
-	}
-	return nil
-}
-
-func (x *StandardRuntimeSpec) GetTolerations() []*Toleration {
-	if x != nil {
-		return x.Tolerations
-	}
-	return nil
-}
-
-func (x *StandardRuntimeSpec) GetAffinity() *Affinity {
-	if x != nil {
-		return x.Affinity
-	}
-	return nil
-}
-
-// Container spec (simplified from corev1.Container)
-type Container struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Image           string                 `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
-	Command         []string               `protobuf:"bytes,3,rep,name=command,proto3" json:"command,omitempty"`
-	Args            []string               `protobuf:"bytes,4,rep,name=args,proto3" json:"args,omitempty"`
-	WorkingDir      string                 `protobuf:"bytes,5,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
-	Ports           []*ContainerPort       `protobuf:"bytes,6,rep,name=ports,proto3" json:"ports,omitempty"`
-	Env             []*EnvVar              `protobuf:"bytes,7,rep,name=env,proto3" json:"env,omitempty"`
-	EnvFrom         []*EnvFromSource       `protobuf:"bytes,8,rep,name=env_from,json=envFrom,proto3" json:"env_from,omitempty"`
-	Resources       *ResourceRequirements  `protobuf:"bytes,9,opt,name=resources,proto3" json:"resources,omitempty"`
-	VolumeMounts    []*VolumeMount         `protobuf:"bytes,10,rep,name=volume_mounts,json=volumeMounts,proto3" json:"volume_mounts,omitempty"`
-	LivenessProbe   *Probe                 `protobuf:"bytes,11,opt,name=liveness_probe,json=livenessProbe,proto3" json:"liveness_probe,omitempty"`
-	ReadinessProbe  *Probe                 `protobuf:"bytes,12,opt,name=readiness_probe,json=readinessProbe,proto3" json:"readiness_probe,omitempty"`
-	StartupProbe    *Probe                 `protobuf:"bytes,13,opt,name=startup_probe,json=startupProbe,proto3" json:"startup_probe,omitempty"`
-	ImagePullPolicy string                 `protobuf:"bytes,14,opt,name=image_pull_policy,json=imagePullPolicy,proto3" json:"image_pull_policy,omitempty"`
-	SecurityContext *SecurityContext       `protobuf:"bytes,15,opt,name=security_context,json=securityContext,proto3" json:"security_context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *Container) Reset() {
-	*x = Container{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Container) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Container) ProtoMessage() {}
-
-func (x *Container) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Container.ProtoReflect.Descriptor instead.
-func (*Container) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *Container) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Container) GetImage() string {
-	if x != nil {
-		return x.Image
-	}
-	return ""
-}
-
-func (x *Container) GetCommand() []string {
-	if x != nil {
-		return x.Command
-	}
-	return nil
-}
-
-func (x *Container) GetArgs() []string {
-	if x != nil {
-		return x.Args
-	}
-	return nil
-}
-
-func (x *Container) GetWorkingDir() string {
-	if x != nil {
-		return x.WorkingDir
-	}
-	return ""
-}
-
-func (x *Container) GetPorts() []*ContainerPort {
-	if x != nil {
-		return x.Ports
-	}
-	return nil
-}
-
-func (x *Container) GetEnv() []*EnvVar {
-	if x != nil {
-		return x.Env
-	}
-	return nil
-}
-
-func (x *Container) GetEnvFrom() []*EnvFromSource {
-	if x != nil {
-		return x.EnvFrom
-	}
-	return nil
-}
-
-func (x *Container) GetResources() *ResourceRequirements {
-	if x != nil {
-		return x.Resources
-	}
-	return nil
-}
-
-func (x *Container) GetVolumeMounts() []*VolumeMount {
-	if x != nil {
-		return x.VolumeMounts
-	}
-	return nil
-}
-
-func (x *Container) GetLivenessProbe() *Probe {
-	if x != nil {
-		return x.LivenessProbe
-	}
-	return nil
-}
-
-func (x *Container) GetReadinessProbe() *Probe {
-	if x != nil {
-		return x.ReadinessProbe
-	}
-	return nil
-}
-
-func (x *Container) GetStartupProbe() *Probe {
-	if x != nil {
-		return x.StartupProbe
-	}
-	return nil
-}
-
-func (x *Container) GetImagePullPolicy() string {
-	if x != nil {
-		return x.ImagePullPolicy
-	}
-	return ""
-}
-
-func (x *Container) GetSecurityContext() *SecurityContext {
-	if x != nil {
-		return x.SecurityContext
-	}
-	return nil
-}
-
-// ContainerPort represents a port on a container.
-type ContainerPort struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ContainerPort int32                  `protobuf:"varint,2,opt,name=container_port,json=containerPort,proto3" json:"container_port,omitempty"`
-	Protocol      string                 `protobuf:"bytes,3,opt,name=protocol,proto3" json:"protocol,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ContainerPort) Reset() {
-	*x = ContainerPort{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ContainerPort) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ContainerPort) ProtoMessage() {}
-
-func (x *ContainerPort) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ContainerPort.ProtoReflect.Descriptor instead.
-func (*ContainerPort) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ContainerPort) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ContainerPort) GetContainerPort() int32 {
-	if x != nil {
-		return x.ContainerPort
-	}
-	return 0
-}
-
-func (x *ContainerPort) GetProtocol() string {
-	if x != nil {
-		return x.Protocol
-	}
-	return ""
 }
 
 // EnvVar represents an environment variable.
@@ -1244,7 +663,7 @@ type EnvVar struct {
 
 func (x *EnvVar) Reset() {
 	*x = EnvVar{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[13]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1256,7 +675,7 @@ func (x *EnvVar) String() string {
 func (*EnvVar) ProtoMessage() {}
 
 func (x *EnvVar) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[13]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1269,7 +688,7 @@ func (x *EnvVar) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvVar.ProtoReflect.Descriptor instead.
 func (*EnvVar) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{13}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *EnvVar) GetName() string {
@@ -1306,7 +725,7 @@ type EnvVarSource struct {
 
 func (x *EnvVarSource) Reset() {
 	*x = EnvVarSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[14]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1318,7 +737,7 @@ func (x *EnvVarSource) String() string {
 func (*EnvVarSource) ProtoMessage() {}
 
 func (x *EnvVarSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[14]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1331,7 +750,7 @@ func (x *EnvVarSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvVarSource.ProtoReflect.Descriptor instead.
 func (*EnvVarSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{14}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *EnvVarSource) GetSecretKeyRef() *SecretKeySelector {
@@ -1362,173 +781,6 @@ func (x *EnvVarSource) GetResourceFieldRef() *ResourceFieldSelector {
 	return nil
 }
 
-// EnvFromSource represents a source for environment variables.
-type EnvFromSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
-	ConfigMapRef  *ConfigMapEnvSource    `protobuf:"bytes,2,opt,name=config_map_ref,json=configMapRef,proto3" json:"config_map_ref,omitempty"`
-	SecretRef     *SecretEnvSource       `protobuf:"bytes,3,opt,name=secret_ref,json=secretRef,proto3" json:"secret_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EnvFromSource) Reset() {
-	*x = EnvFromSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EnvFromSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EnvFromSource) ProtoMessage() {}
-
-func (x *EnvFromSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EnvFromSource.ProtoReflect.Descriptor instead.
-func (*EnvFromSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *EnvFromSource) GetPrefix() string {
-	if x != nil {
-		return x.Prefix
-	}
-	return ""
-}
-
-func (x *EnvFromSource) GetConfigMapRef() *ConfigMapEnvSource {
-	if x != nil {
-		return x.ConfigMapRef
-	}
-	return nil
-}
-
-func (x *EnvFromSource) GetSecretRef() *SecretEnvSource {
-	if x != nil {
-		return x.SecretRef
-	}
-	return nil
-}
-
-// ConfigMapEnvSource references a ConfigMap for env vars.
-type ConfigMapEnvSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Optional      bool                   `protobuf:"varint,2,opt,name=optional,proto3" json:"optional,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ConfigMapEnvSource) Reset() {
-	*x = ConfigMapEnvSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConfigMapEnvSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConfigMapEnvSource) ProtoMessage() {}
-
-func (x *ConfigMapEnvSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConfigMapEnvSource.ProtoReflect.Descriptor instead.
-func (*ConfigMapEnvSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *ConfigMapEnvSource) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ConfigMapEnvSource) GetOptional() bool {
-	if x != nil {
-		return x.Optional
-	}
-	return false
-}
-
-// SecretEnvSource references a Secret for env vars.
-type SecretEnvSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Optional      bool                   `protobuf:"varint,2,opt,name=optional,proto3" json:"optional,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SecretEnvSource) Reset() {
-	*x = SecretEnvSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SecretEnvSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SecretEnvSource) ProtoMessage() {}
-
-func (x *SecretEnvSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SecretEnvSource.ProtoReflect.Descriptor instead.
-func (*SecretEnvSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *SecretEnvSource) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *SecretEnvSource) GetOptional() bool {
-	if x != nil {
-		return x.Optional
-	}
-	return false
-}
-
 // ObjectFieldSelector selects an APIVersioned field of an object.
 type ObjectFieldSelector struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1540,7 +792,7 @@ type ObjectFieldSelector struct {
 
 func (x *ObjectFieldSelector) Reset() {
 	*x = ObjectFieldSelector{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[18]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1552,7 +804,7 @@ func (x *ObjectFieldSelector) String() string {
 func (*ObjectFieldSelector) ProtoMessage() {}
 
 func (x *ObjectFieldSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[18]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1565,7 +817,7 @@ func (x *ObjectFieldSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectFieldSelector.ProtoReflect.Descriptor instead.
 func (*ObjectFieldSelector) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{18}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ObjectFieldSelector) GetApiVersion() string {
@@ -1594,7 +846,7 @@ type ResourceFieldSelector struct {
 
 func (x *ResourceFieldSelector) Reset() {
 	*x = ResourceFieldSelector{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[19]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1606,7 +858,7 @@ func (x *ResourceFieldSelector) String() string {
 func (*ResourceFieldSelector) ProtoMessage() {}
 
 func (x *ResourceFieldSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[19]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1619,7 +871,7 @@ func (x *ResourceFieldSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceFieldSelector.ProtoReflect.Descriptor instead.
 func (*ResourceFieldSelector) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{19}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ResourceFieldSelector) GetContainerName() string {
@@ -1654,7 +906,7 @@ type ResourceRequirements struct {
 
 func (x *ResourceRequirements) Reset() {
 	*x = ResourceRequirements{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[20]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1666,7 +918,7 @@ func (x *ResourceRequirements) String() string {
 func (*ResourceRequirements) ProtoMessage() {}
 
 func (x *ResourceRequirements) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[20]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1679,7 +931,7 @@ func (x *ResourceRequirements) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceRequirements.ProtoReflect.Descriptor instead.
 func (*ResourceRequirements) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{20}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ResourceRequirements) GetLimits() map[string]string {
@@ -1692,1566 +944,6 @@ func (x *ResourceRequirements) GetLimits() map[string]string {
 func (x *ResourceRequirements) GetRequests() map[string]string {
 	if x != nil {
 		return x.Requests
-	}
-	return nil
-}
-
-// VolumeMount describes a mounting of a Volume within a container.
-type VolumeMount struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ReadOnly         bool                   `protobuf:"varint,2,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
-	MountPath        string                 `protobuf:"bytes,3,opt,name=mount_path,json=mountPath,proto3" json:"mount_path,omitempty"`
-	SubPath          string                 `protobuf:"bytes,4,opt,name=sub_path,json=subPath,proto3" json:"sub_path,omitempty"`
-	SubPathExpr      string                 `protobuf:"bytes,5,opt,name=sub_path_expr,json=subPathExpr,proto3" json:"sub_path_expr,omitempty"`
-	MountPropagation string                 `protobuf:"bytes,6,opt,name=mount_propagation,json=mountPropagation,proto3" json:"mount_propagation,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *VolumeMount) Reset() {
-	*x = VolumeMount{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *VolumeMount) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*VolumeMount) ProtoMessage() {}
-
-func (x *VolumeMount) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use VolumeMount.ProtoReflect.Descriptor instead.
-func (*VolumeMount) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *VolumeMount) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *VolumeMount) GetReadOnly() bool {
-	if x != nil {
-		return x.ReadOnly
-	}
-	return false
-}
-
-func (x *VolumeMount) GetMountPath() string {
-	if x != nil {
-		return x.MountPath
-	}
-	return ""
-}
-
-func (x *VolumeMount) GetSubPath() string {
-	if x != nil {
-		return x.SubPath
-	}
-	return ""
-}
-
-func (x *VolumeMount) GetSubPathExpr() string {
-	if x != nil {
-		return x.SubPathExpr
-	}
-	return ""
-}
-
-func (x *VolumeMount) GetMountPropagation() string {
-	if x != nil {
-		return x.MountPropagation
-	}
-	return ""
-}
-
-// Volume represents a named volume.
-type Volume struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	VolumeSource  *VolumeSource          `protobuf:"bytes,2,opt,name=volume_source,json=volumeSource,proto3" json:"volume_source,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Volume) Reset() {
-	*x = Volume{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Volume) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Volume) ProtoMessage() {}
-
-func (x *Volume) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Volume.ProtoReflect.Descriptor instead.
-func (*Volume) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *Volume) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Volume) GetVolumeSource() *VolumeSource {
-	if x != nil {
-		return x.VolumeSource
-	}
-	return nil
-}
-
-// VolumeSource represents the source of a volume.
-type VolumeSource struct {
-	state                 protoimpl.MessageState             `protogen:"open.v1"`
-	ConfigMap             *ConfigMapVolumeSource             `protobuf:"bytes,1,opt,name=config_map,json=configMap,proto3" json:"config_map,omitempty"`
-	Secret                *SecretVolumeSource                `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
-	EmptyDir              *EmptyDirVolumeSource              `protobuf:"bytes,3,opt,name=empty_dir,json=emptyDir,proto3" json:"empty_dir,omitempty"`
-	PersistentVolumeClaim *PersistentVolumeClaimVolumeSource `protobuf:"bytes,4,opt,name=persistent_volume_claim,json=persistentVolumeClaim,proto3" json:"persistent_volume_claim,omitempty"`
-	HostPath              *HostPathVolumeSource              `protobuf:"bytes,5,opt,name=host_path,json=hostPath,proto3" json:"host_path,omitempty"`
-	Projected             *ProjectedVolumeSource             `protobuf:"bytes,6,opt,name=projected,proto3" json:"projected,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
-}
-
-func (x *VolumeSource) Reset() {
-	*x = VolumeSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *VolumeSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*VolumeSource) ProtoMessage() {}
-
-func (x *VolumeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use VolumeSource.ProtoReflect.Descriptor instead.
-func (*VolumeSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *VolumeSource) GetConfigMap() *ConfigMapVolumeSource {
-	if x != nil {
-		return x.ConfigMap
-	}
-	return nil
-}
-
-func (x *VolumeSource) GetSecret() *SecretVolumeSource {
-	if x != nil {
-		return x.Secret
-	}
-	return nil
-}
-
-func (x *VolumeSource) GetEmptyDir() *EmptyDirVolumeSource {
-	if x != nil {
-		return x.EmptyDir
-	}
-	return nil
-}
-
-func (x *VolumeSource) GetPersistentVolumeClaim() *PersistentVolumeClaimVolumeSource {
-	if x != nil {
-		return x.PersistentVolumeClaim
-	}
-	return nil
-}
-
-func (x *VolumeSource) GetHostPath() *HostPathVolumeSource {
-	if x != nil {
-		return x.HostPath
-	}
-	return nil
-}
-
-func (x *VolumeSource) GetProjected() *ProjectedVolumeSource {
-	if x != nil {
-		return x.Projected
-	}
-	return nil
-}
-
-// ConfigMapVolumeSource adapts a ConfigMap into a volume.
-type ConfigMapVolumeSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Items         []*KeyToPath           `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
-	DefaultMode   int32                  `protobuf:"varint,3,opt,name=default_mode,json=defaultMode,proto3" json:"default_mode,omitempty"`
-	Optional      bool                   `protobuf:"varint,4,opt,name=optional,proto3" json:"optional,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ConfigMapVolumeSource) Reset() {
-	*x = ConfigMapVolumeSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConfigMapVolumeSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConfigMapVolumeSource) ProtoMessage() {}
-
-func (x *ConfigMapVolumeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConfigMapVolumeSource.ProtoReflect.Descriptor instead.
-func (*ConfigMapVolumeSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *ConfigMapVolumeSource) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ConfigMapVolumeSource) GetItems() []*KeyToPath {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *ConfigMapVolumeSource) GetDefaultMode() int32 {
-	if x != nil {
-		return x.DefaultMode
-	}
-	return 0
-}
-
-func (x *ConfigMapVolumeSource) GetOptional() bool {
-	if x != nil {
-		return x.Optional
-	}
-	return false
-}
-
-// SecretVolumeSource adapts a Secret into a volume.
-type SecretVolumeSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SecretName    string                 `protobuf:"bytes,1,opt,name=secret_name,json=secretName,proto3" json:"secret_name,omitempty"`
-	Items         []*KeyToPath           `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
-	DefaultMode   int32                  `protobuf:"varint,3,opt,name=default_mode,json=defaultMode,proto3" json:"default_mode,omitempty"`
-	Optional      bool                   `protobuf:"varint,4,opt,name=optional,proto3" json:"optional,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SecretVolumeSource) Reset() {
-	*x = SecretVolumeSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SecretVolumeSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SecretVolumeSource) ProtoMessage() {}
-
-func (x *SecretVolumeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SecretVolumeSource.ProtoReflect.Descriptor instead.
-func (*SecretVolumeSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *SecretVolumeSource) GetSecretName() string {
-	if x != nil {
-		return x.SecretName
-	}
-	return ""
-}
-
-func (x *SecretVolumeSource) GetItems() []*KeyToPath {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *SecretVolumeSource) GetDefaultMode() int32 {
-	if x != nil {
-		return x.DefaultMode
-	}
-	return 0
-}
-
-func (x *SecretVolumeSource) GetOptional() bool {
-	if x != nil {
-		return x.Optional
-	}
-	return false
-}
-
-// EmptyDirVolumeSource represents an empty directory volume.
-type EmptyDirVolumeSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Medium        string                 `protobuf:"bytes,1,opt,name=medium,proto3" json:"medium,omitempty"`
-	SizeLimit     string                 `protobuf:"bytes,2,opt,name=size_limit,json=sizeLimit,proto3" json:"size_limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EmptyDirVolumeSource) Reset() {
-	*x = EmptyDirVolumeSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EmptyDirVolumeSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EmptyDirVolumeSource) ProtoMessage() {}
-
-func (x *EmptyDirVolumeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EmptyDirVolumeSource.ProtoReflect.Descriptor instead.
-func (*EmptyDirVolumeSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *EmptyDirVolumeSource) GetMedium() string {
-	if x != nil {
-		return x.Medium
-	}
-	return ""
-}
-
-func (x *EmptyDirVolumeSource) GetSizeLimit() string {
-	if x != nil {
-		return x.SizeLimit
-	}
-	return ""
-}
-
-// PersistentVolumeClaimVolumeSource references a PVC.
-type PersistentVolumeClaimVolumeSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimName     string                 `protobuf:"bytes,1,opt,name=claim_name,json=claimName,proto3" json:"claim_name,omitempty"`
-	ReadOnly      bool                   `protobuf:"varint,2,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PersistentVolumeClaimVolumeSource) Reset() {
-	*x = PersistentVolumeClaimVolumeSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PersistentVolumeClaimVolumeSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PersistentVolumeClaimVolumeSource) ProtoMessage() {}
-
-func (x *PersistentVolumeClaimVolumeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PersistentVolumeClaimVolumeSource.ProtoReflect.Descriptor instead.
-func (*PersistentVolumeClaimVolumeSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *PersistentVolumeClaimVolumeSource) GetClaimName() string {
-	if x != nil {
-		return x.ClaimName
-	}
-	return ""
-}
-
-func (x *PersistentVolumeClaimVolumeSource) GetReadOnly() bool {
-	if x != nil {
-		return x.ReadOnly
-	}
-	return false
-}
-
-// HostPathVolumeSource represents a host path volume.
-type HostPathVolumeSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HostPathVolumeSource) Reset() {
-	*x = HostPathVolumeSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[28]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HostPathVolumeSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HostPathVolumeSource) ProtoMessage() {}
-
-func (x *HostPathVolumeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[28]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HostPathVolumeSource.ProtoReflect.Descriptor instead.
-func (*HostPathVolumeSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{28}
-}
-
-func (x *HostPathVolumeSource) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *HostPathVolumeSource) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-// ProjectedVolumeSource represents a projected volume.
-type ProjectedVolumeSource struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sources       []*VolumeProjection    `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
-	DefaultMode   int32                  `protobuf:"varint,2,opt,name=default_mode,json=defaultMode,proto3" json:"default_mode,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProjectedVolumeSource) Reset() {
-	*x = ProjectedVolumeSource{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProjectedVolumeSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProjectedVolumeSource) ProtoMessage() {}
-
-func (x *ProjectedVolumeSource) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProjectedVolumeSource.ProtoReflect.Descriptor instead.
-func (*ProjectedVolumeSource) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *ProjectedVolumeSource) GetSources() []*VolumeProjection {
-	if x != nil {
-		return x.Sources
-	}
-	return nil
-}
-
-func (x *ProjectedVolumeSource) GetDefaultMode() int32 {
-	if x != nil {
-		return x.DefaultMode
-	}
-	return 0
-}
-
-// VolumeProjection is a projection of a volume source.
-type VolumeProjection struct {
-	state               protoimpl.MessageState         `protogen:"open.v1"`
-	Secret              *SecretProjection              `protobuf:"bytes,1,opt,name=secret,proto3" json:"secret,omitempty"`
-	ConfigMap           *ConfigMapProjection           `protobuf:"bytes,2,opt,name=config_map,json=configMap,proto3" json:"config_map,omitempty"`
-	DownwardApi         *DownwardAPIProjection         `protobuf:"bytes,3,opt,name=downward_api,json=downwardApi,proto3" json:"downward_api,omitempty"`
-	ServiceAccountToken *ServiceAccountTokenProjection `protobuf:"bytes,4,opt,name=service_account_token,json=serviceAccountToken,proto3" json:"service_account_token,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
-}
-
-func (x *VolumeProjection) Reset() {
-	*x = VolumeProjection{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[30]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *VolumeProjection) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*VolumeProjection) ProtoMessage() {}
-
-func (x *VolumeProjection) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[30]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use VolumeProjection.ProtoReflect.Descriptor instead.
-func (*VolumeProjection) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{30}
-}
-
-func (x *VolumeProjection) GetSecret() *SecretProjection {
-	if x != nil {
-		return x.Secret
-	}
-	return nil
-}
-
-func (x *VolumeProjection) GetConfigMap() *ConfigMapProjection {
-	if x != nil {
-		return x.ConfigMap
-	}
-	return nil
-}
-
-func (x *VolumeProjection) GetDownwardApi() *DownwardAPIProjection {
-	if x != nil {
-		return x.DownwardApi
-	}
-	return nil
-}
-
-func (x *VolumeProjection) GetServiceAccountToken() *ServiceAccountTokenProjection {
-	if x != nil {
-		return x.ServiceAccountToken
-	}
-	return nil
-}
-
-// SecretProjection projects a secret into a volume.
-type SecretProjection struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Items         []*KeyToPath           `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
-	Optional      bool                   `protobuf:"varint,3,opt,name=optional,proto3" json:"optional,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SecretProjection) Reset() {
-	*x = SecretProjection{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[31]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SecretProjection) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SecretProjection) ProtoMessage() {}
-
-func (x *SecretProjection) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[31]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SecretProjection.ProtoReflect.Descriptor instead.
-func (*SecretProjection) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{31}
-}
-
-func (x *SecretProjection) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *SecretProjection) GetItems() []*KeyToPath {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *SecretProjection) GetOptional() bool {
-	if x != nil {
-		return x.Optional
-	}
-	return false
-}
-
-// ConfigMapProjection projects a config map into a volume.
-type ConfigMapProjection struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Items         []*KeyToPath           `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
-	Optional      bool                   `protobuf:"varint,3,opt,name=optional,proto3" json:"optional,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ConfigMapProjection) Reset() {
-	*x = ConfigMapProjection{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConfigMapProjection) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConfigMapProjection) ProtoMessage() {}
-
-func (x *ConfigMapProjection) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConfigMapProjection.ProtoReflect.Descriptor instead.
-func (*ConfigMapProjection) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *ConfigMapProjection) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ConfigMapProjection) GetItems() []*KeyToPath {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *ConfigMapProjection) GetOptional() bool {
-	if x != nil {
-		return x.Optional
-	}
-	return false
-}
-
-// DownwardAPIProjection projects downward API info into a volume.
-type DownwardAPIProjection struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Items         []*DownwardAPIVolumeFile `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DownwardAPIProjection) Reset() {
-	*x = DownwardAPIProjection{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[33]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DownwardAPIProjection) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DownwardAPIProjection) ProtoMessage() {}
-
-func (x *DownwardAPIProjection) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[33]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DownwardAPIProjection.ProtoReflect.Descriptor instead.
-func (*DownwardAPIProjection) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{33}
-}
-
-func (x *DownwardAPIProjection) GetItems() []*DownwardAPIVolumeFile {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-// DownwardAPIVolumeFile represents a file with downward API info.
-type DownwardAPIVolumeFile struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Path             string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	FieldRef         *ObjectFieldSelector   `protobuf:"bytes,2,opt,name=field_ref,json=fieldRef,proto3" json:"field_ref,omitempty"`
-	ResourceFieldRef *ResourceFieldSelector `protobuf:"bytes,3,opt,name=resource_field_ref,json=resourceFieldRef,proto3" json:"resource_field_ref,omitempty"`
-	Mode             int32                  `protobuf:"varint,4,opt,name=mode,proto3" json:"mode,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *DownwardAPIVolumeFile) Reset() {
-	*x = DownwardAPIVolumeFile{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[34]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DownwardAPIVolumeFile) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DownwardAPIVolumeFile) ProtoMessage() {}
-
-func (x *DownwardAPIVolumeFile) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[34]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DownwardAPIVolumeFile.ProtoReflect.Descriptor instead.
-func (*DownwardAPIVolumeFile) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *DownwardAPIVolumeFile) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *DownwardAPIVolumeFile) GetFieldRef() *ObjectFieldSelector {
-	if x != nil {
-		return x.FieldRef
-	}
-	return nil
-}
-
-func (x *DownwardAPIVolumeFile) GetResourceFieldRef() *ResourceFieldSelector {
-	if x != nil {
-		return x.ResourceFieldRef
-	}
-	return nil
-}
-
-func (x *DownwardAPIVolumeFile) GetMode() int32 {
-	if x != nil {
-		return x.Mode
-	}
-	return 0
-}
-
-// ServiceAccountTokenProjection projects a service account token.
-type ServiceAccountTokenProjection struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Audience          string                 `protobuf:"bytes,1,opt,name=audience,proto3" json:"audience,omitempty"`
-	ExpirationSeconds int64                  `protobuf:"varint,2,opt,name=expiration_seconds,json=expirationSeconds,proto3" json:"expiration_seconds,omitempty"`
-	Path              string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *ServiceAccountTokenProjection) Reset() {
-	*x = ServiceAccountTokenProjection{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServiceAccountTokenProjection) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServiceAccountTokenProjection) ProtoMessage() {}
-
-func (x *ServiceAccountTokenProjection) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServiceAccountTokenProjection.ProtoReflect.Descriptor instead.
-func (*ServiceAccountTokenProjection) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{35}
-}
-
-func (x *ServiceAccountTokenProjection) GetAudience() string {
-	if x != nil {
-		return x.Audience
-	}
-	return ""
-}
-
-func (x *ServiceAccountTokenProjection) GetExpirationSeconds() int64 {
-	if x != nil {
-		return x.ExpirationSeconds
-	}
-	return 0
-}
-
-func (x *ServiceAccountTokenProjection) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-// KeyToPath maps a key to a file path.
-type KeyToPath struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	Mode          int32                  `protobuf:"varint,3,opt,name=mode,proto3" json:"mode,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *KeyToPath) Reset() {
-	*x = KeyToPath{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *KeyToPath) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*KeyToPath) ProtoMessage() {}
-
-func (x *KeyToPath) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use KeyToPath.ProtoReflect.Descriptor instead.
-func (*KeyToPath) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *KeyToPath) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-func (x *KeyToPath) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *KeyToPath) GetMode() int32 {
-	if x != nil {
-		return x.Mode
-	}
-	return 0
-}
-
-// Probe describes a health check.
-type Probe struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	Handler                       *ProbeHandler          `protobuf:"bytes,1,opt,name=handler,proto3" json:"handler,omitempty"`
-	InitialDelaySeconds           int32                  `protobuf:"varint,2,opt,name=initial_delay_seconds,json=initialDelaySeconds,proto3" json:"initial_delay_seconds,omitempty"`
-	TimeoutSeconds                int32                  `protobuf:"varint,3,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	PeriodSeconds                 int32                  `protobuf:"varint,4,opt,name=period_seconds,json=periodSeconds,proto3" json:"period_seconds,omitempty"`
-	SuccessThreshold              int32                  `protobuf:"varint,5,opt,name=success_threshold,json=successThreshold,proto3" json:"success_threshold,omitempty"`
-	FailureThreshold              int32                  `protobuf:"varint,6,opt,name=failure_threshold,json=failureThreshold,proto3" json:"failure_threshold,omitempty"`
-	TerminationGracePeriodSeconds int32                  `protobuf:"varint,7,opt,name=termination_grace_period_seconds,json=terminationGracePeriodSeconds,proto3" json:"termination_grace_period_seconds,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
-}
-
-func (x *Probe) Reset() {
-	*x = Probe{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[37]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Probe) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Probe) ProtoMessage() {}
-
-func (x *Probe) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[37]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Probe.ProtoReflect.Descriptor instead.
-func (*Probe) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *Probe) GetHandler() *ProbeHandler {
-	if x != nil {
-		return x.Handler
-	}
-	return nil
-}
-
-func (x *Probe) GetInitialDelaySeconds() int32 {
-	if x != nil {
-		return x.InitialDelaySeconds
-	}
-	return 0
-}
-
-func (x *Probe) GetTimeoutSeconds() int32 {
-	if x != nil {
-		return x.TimeoutSeconds
-	}
-	return 0
-}
-
-func (x *Probe) GetPeriodSeconds() int32 {
-	if x != nil {
-		return x.PeriodSeconds
-	}
-	return 0
-}
-
-func (x *Probe) GetSuccessThreshold() int32 {
-	if x != nil {
-		return x.SuccessThreshold
-	}
-	return 0
-}
-
-func (x *Probe) GetFailureThreshold() int32 {
-	if x != nil {
-		return x.FailureThreshold
-	}
-	return 0
-}
-
-func (x *Probe) GetTerminationGracePeriodSeconds() int32 {
-	if x != nil {
-		return x.TerminationGracePeriodSeconds
-	}
-	return 0
-}
-
-// ProbeHandler defines a health check action.
-type ProbeHandler struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	HttpGet       *HTTPGetAction         `protobuf:"bytes,1,opt,name=http_get,json=httpGet,proto3" json:"http_get,omitempty"`
-	TcpSocket     *TCPSocketAction       `protobuf:"bytes,2,opt,name=tcp_socket,json=tcpSocket,proto3" json:"tcp_socket,omitempty"`
-	Exec          *ExecAction            `protobuf:"bytes,3,opt,name=exec,proto3" json:"exec,omitempty"`
-	Grpc          *GRPCAction            `protobuf:"bytes,4,opt,name=grpc,proto3" json:"grpc,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProbeHandler) Reset() {
-	*x = ProbeHandler{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[38]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProbeHandler) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProbeHandler) ProtoMessage() {}
-
-func (x *ProbeHandler) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[38]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProbeHandler.ProtoReflect.Descriptor instead.
-func (*ProbeHandler) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{38}
-}
-
-func (x *ProbeHandler) GetHttpGet() *HTTPGetAction {
-	if x != nil {
-		return x.HttpGet
-	}
-	return nil
-}
-
-func (x *ProbeHandler) GetTcpSocket() *TCPSocketAction {
-	if x != nil {
-		return x.TcpSocket
-	}
-	return nil
-}
-
-func (x *ProbeHandler) GetExec() *ExecAction {
-	if x != nil {
-		return x.Exec
-	}
-	return nil
-}
-
-func (x *ProbeHandler) GetGrpc() *GRPCAction {
-	if x != nil {
-		return x.Grpc
-	}
-	return nil
-}
-
-// HTTPGetAction describes an HTTP GET request.
-type HTTPGetAction struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	Host          string                 `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
-	Scheme        string                 `protobuf:"bytes,4,opt,name=scheme,proto3" json:"scheme,omitempty"`
-	HttpHeaders   []*HTTPHeader          `protobuf:"bytes,5,rep,name=http_headers,json=httpHeaders,proto3" json:"http_headers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HTTPGetAction) Reset() {
-	*x = HTTPGetAction{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[39]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HTTPGetAction) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HTTPGetAction) ProtoMessage() {}
-
-func (x *HTTPGetAction) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[39]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HTTPGetAction.ProtoReflect.Descriptor instead.
-func (*HTTPGetAction) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{39}
-}
-
-func (x *HTTPGetAction) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *HTTPGetAction) GetPort() int32 {
-	if x != nil {
-		return x.Port
-	}
-	return 0
-}
-
-func (x *HTTPGetAction) GetHost() string {
-	if x != nil {
-		return x.Host
-	}
-	return ""
-}
-
-func (x *HTTPGetAction) GetScheme() string {
-	if x != nil {
-		return x.Scheme
-	}
-	return ""
-}
-
-func (x *HTTPGetAction) GetHttpHeaders() []*HTTPHeader {
-	if x != nil {
-		return x.HttpHeaders
-	}
-	return nil
-}
-
-// HTTPHeader represents an HTTP header.
-type HTTPHeader struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HTTPHeader) Reset() {
-	*x = HTTPHeader{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[40]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HTTPHeader) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HTTPHeader) ProtoMessage() {}
-
-func (x *HTTPHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[40]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HTTPHeader.ProtoReflect.Descriptor instead.
-func (*HTTPHeader) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{40}
-}
-
-func (x *HTTPHeader) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *HTTPHeader) GetValue() string {
-	if x != nil {
-		return x.Value
-	}
-	return ""
-}
-
-// TCPSocketAction describes a TCP socket check.
-type TCPSocketAction struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Port          int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
-	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TCPSocketAction) Reset() {
-	*x = TCPSocketAction{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[41]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TCPSocketAction) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TCPSocketAction) ProtoMessage() {}
-
-func (x *TCPSocketAction) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[41]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TCPSocketAction.ProtoReflect.Descriptor instead.
-func (*TCPSocketAction) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{41}
-}
-
-func (x *TCPSocketAction) GetPort() int32 {
-	if x != nil {
-		return x.Port
-	}
-	return 0
-}
-
-func (x *TCPSocketAction) GetHost() string {
-	if x != nil {
-		return x.Host
-	}
-	return ""
-}
-
-// ExecAction describes a command to execute.
-type ExecAction struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Command       []string               `protobuf:"bytes,1,rep,name=command,proto3" json:"command,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExecAction) Reset() {
-	*x = ExecAction{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[42]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExecAction) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExecAction) ProtoMessage() {}
-
-func (x *ExecAction) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[42]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExecAction.ProtoReflect.Descriptor instead.
-func (*ExecAction) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{42}
-}
-
-func (x *ExecAction) GetCommand() []string {
-	if x != nil {
-		return x.Command
-	}
-	return nil
-}
-
-// GRPCAction describes a gRPC health check.
-type GRPCAction struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Port          int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
-	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GRPCAction) Reset() {
-	*x = GRPCAction{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[43]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GRPCAction) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GRPCAction) ProtoMessage() {}
-
-func (x *GRPCAction) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[43]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GRPCAction.ProtoReflect.Descriptor instead.
-func (*GRPCAction) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{43}
-}
-
-func (x *GRPCAction) GetPort() int32 {
-	if x != nil {
-		return x.Port
-	}
-	return 0
-}
-
-func (x *GRPCAction) GetService() string {
-	if x != nil {
-		return x.Service
-	}
-	return ""
-}
-
-// SecurityContext holds security configuration for a container.
-type SecurityContext struct {
-	state                    protoimpl.MessageState `protogen:"open.v1"`
-	Capabilities             *Capabilities          `protobuf:"bytes,1,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
-	Privileged               bool                   `protobuf:"varint,2,opt,name=privileged,proto3" json:"privileged,omitempty"`
-	SeLinuxOptions           *SELinuxOptions        `protobuf:"bytes,3,opt,name=se_linux_options,json=seLinuxOptions,proto3" json:"se_linux_options,omitempty"`
-	RunAsUser                int64                  `protobuf:"varint,4,opt,name=run_as_user,json=runAsUser,proto3" json:"run_as_user,omitempty"`
-	RunAsGroup               int64                  `protobuf:"varint,5,opt,name=run_as_group,json=runAsGroup,proto3" json:"run_as_group,omitempty"`
-	RunAsNonRoot             bool                   `protobuf:"varint,6,opt,name=run_as_non_root,json=runAsNonRoot,proto3" json:"run_as_non_root,omitempty"`
-	ReadOnlyRootFilesystem   bool                   `protobuf:"varint,7,opt,name=read_only_root_filesystem,json=readOnlyRootFilesystem,proto3" json:"read_only_root_filesystem,omitempty"`
-	AllowPrivilegeEscalation bool                   `protobuf:"varint,8,opt,name=allow_privilege_escalation,json=allowPrivilegeEscalation,proto3" json:"allow_privilege_escalation,omitempty"`
-	ProcMount                string                 `protobuf:"bytes,9,opt,name=proc_mount,json=procMount,proto3" json:"proc_mount,omitempty"`
-	SeccompProfile           *SeccompProfile        `protobuf:"bytes,10,opt,name=seccomp_profile,json=seccompProfile,proto3" json:"seccomp_profile,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
-}
-
-func (x *SecurityContext) Reset() {
-	*x = SecurityContext{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[44]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SecurityContext) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SecurityContext) ProtoMessage() {}
-
-func (x *SecurityContext) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[44]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SecurityContext.ProtoReflect.Descriptor instead.
-func (*SecurityContext) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{44}
-}
-
-func (x *SecurityContext) GetCapabilities() *Capabilities {
-	if x != nil {
-		return x.Capabilities
-	}
-	return nil
-}
-
-func (x *SecurityContext) GetPrivileged() bool {
-	if x != nil {
-		return x.Privileged
-	}
-	return false
-}
-
-func (x *SecurityContext) GetSeLinuxOptions() *SELinuxOptions {
-	if x != nil {
-		return x.SeLinuxOptions
-	}
-	return nil
-}
-
-func (x *SecurityContext) GetRunAsUser() int64 {
-	if x != nil {
-		return x.RunAsUser
-	}
-	return 0
-}
-
-func (x *SecurityContext) GetRunAsGroup() int64 {
-	if x != nil {
-		return x.RunAsGroup
-	}
-	return 0
-}
-
-func (x *SecurityContext) GetRunAsNonRoot() bool {
-	if x != nil {
-		return x.RunAsNonRoot
-	}
-	return false
-}
-
-func (x *SecurityContext) GetReadOnlyRootFilesystem() bool {
-	if x != nil {
-		return x.ReadOnlyRootFilesystem
-	}
-	return false
-}
-
-func (x *SecurityContext) GetAllowPrivilegeEscalation() bool {
-	if x != nil {
-		return x.AllowPrivilegeEscalation
-	}
-	return false
-}
-
-func (x *SecurityContext) GetProcMount() string {
-	if x != nil {
-		return x.ProcMount
-	}
-	return ""
-}
-
-func (x *SecurityContext) GetSeccompProfile() *SeccompProfile {
-	if x != nil {
-		return x.SeccompProfile
 	}
 	return nil
 }
@@ -3273,7 +965,7 @@ type PodSecurityContext struct {
 
 func (x *PodSecurityContext) Reset() {
 	*x = PodSecurityContext{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[45]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3285,7 +977,7 @@ func (x *PodSecurityContext) String() string {
 func (*PodSecurityContext) ProtoMessage() {}
 
 func (x *PodSecurityContext) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[45]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3298,7 +990,7 @@ func (x *PodSecurityContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PodSecurityContext.ProtoReflect.Descriptor instead.
 func (*PodSecurityContext) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{45}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PodSecurityContext) GetSeLinuxOptions() *SELinuxOptions {
@@ -3357,59 +1049,6 @@ func (x *PodSecurityContext) GetSeccompProfile() *SeccompProfile {
 	return nil
 }
 
-// Capabilities adds/removes POSIX capabilities.
-type Capabilities struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Add           []string               `protobuf:"bytes,1,rep,name=add,proto3" json:"add,omitempty"`
-	Drop          []string               `protobuf:"bytes,2,rep,name=drop,proto3" json:"drop,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Capabilities) Reset() {
-	*x = Capabilities{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[46]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Capabilities) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Capabilities) ProtoMessage() {}
-
-func (x *Capabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[46]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Capabilities.ProtoReflect.Descriptor instead.
-func (*Capabilities) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{46}
-}
-
-func (x *Capabilities) GetAdd() []string {
-	if x != nil {
-		return x.Add
-	}
-	return nil
-}
-
-func (x *Capabilities) GetDrop() []string {
-	if x != nil {
-		return x.Drop
-	}
-	return nil
-}
-
 // SELinuxOptions are the SELinux context settings.
 type SELinuxOptions struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3423,7 +1062,7 @@ type SELinuxOptions struct {
 
 func (x *SELinuxOptions) Reset() {
 	*x = SELinuxOptions{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[47]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3435,7 +1074,7 @@ func (x *SELinuxOptions) String() string {
 func (*SELinuxOptions) ProtoMessage() {}
 
 func (x *SELinuxOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[47]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3448,7 +1087,7 @@ func (x *SELinuxOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SELinuxOptions.ProtoReflect.Descriptor instead.
 func (*SELinuxOptions) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{47}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SELinuxOptions) GetUser() string {
@@ -3490,7 +1129,7 @@ type SeccompProfile struct {
 
 func (x *SeccompProfile) Reset() {
 	*x = SeccompProfile{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[48]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3502,7 +1141,7 @@ func (x *SeccompProfile) String() string {
 func (*SeccompProfile) ProtoMessage() {}
 
 func (x *SeccompProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[48]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3515,7 +1154,7 @@ func (x *SeccompProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SeccompProfile.ProtoReflect.Descriptor instead.
 func (*SeccompProfile) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{48}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SeccompProfile) GetType() string {
@@ -3546,7 +1185,7 @@ type Toleration struct {
 
 func (x *Toleration) Reset() {
 	*x = Toleration{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[49]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3558,7 +1197,7 @@ func (x *Toleration) String() string {
 func (*Toleration) ProtoMessage() {}
 
 func (x *Toleration) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[49]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3571,7 +1210,7 @@ func (x *Toleration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Toleration.ProtoReflect.Descriptor instead.
 func (*Toleration) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{49}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Toleration) GetKey() string {
@@ -3621,7 +1260,7 @@ type Affinity struct {
 
 func (x *Affinity) Reset() {
 	*x = Affinity{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[50]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3633,7 +1272,7 @@ func (x *Affinity) String() string {
 func (*Affinity) ProtoMessage() {}
 
 func (x *Affinity) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[50]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3646,7 +1285,7 @@ func (x *Affinity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Affinity.ProtoReflect.Descriptor instead.
 func (*Affinity) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{50}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Affinity) GetNodeAffinity() *NodeAffinity {
@@ -3681,7 +1320,7 @@ type NodeAffinity struct {
 
 func (x *NodeAffinity) Reset() {
 	*x = NodeAffinity{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[51]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3693,7 +1332,7 @@ func (x *NodeAffinity) String() string {
 func (*NodeAffinity) ProtoMessage() {}
 
 func (x *NodeAffinity) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[51]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3706,7 +1345,7 @@ func (x *NodeAffinity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeAffinity.ProtoReflect.Descriptor instead.
 func (*NodeAffinity) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{51}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *NodeAffinity) GetRequiredDuringSchedulingIgnoredDuringExecution() *NodeSelector {
@@ -3734,7 +1373,7 @@ type PodAffinity struct {
 
 func (x *PodAffinity) Reset() {
 	*x = PodAffinity{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[52]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3746,7 +1385,7 @@ func (x *PodAffinity) String() string {
 func (*PodAffinity) ProtoMessage() {}
 
 func (x *PodAffinity) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[52]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3759,7 +1398,7 @@ func (x *PodAffinity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PodAffinity.ProtoReflect.Descriptor instead.
 func (*PodAffinity) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{52}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PodAffinity) GetRequiredDuringSchedulingIgnoredDuringExecution() []*PodAffinityTerm {
@@ -3787,7 +1426,7 @@ type PodAntiAffinity struct {
 
 func (x *PodAntiAffinity) Reset() {
 	*x = PodAntiAffinity{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[53]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3799,7 +1438,7 @@ func (x *PodAntiAffinity) String() string {
 func (*PodAntiAffinity) ProtoMessage() {}
 
 func (x *PodAntiAffinity) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[53]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3812,7 +1451,7 @@ func (x *PodAntiAffinity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PodAntiAffinity.ProtoReflect.Descriptor instead.
 func (*PodAntiAffinity) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{53}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PodAntiAffinity) GetRequiredDuringSchedulingIgnoredDuringExecution() []*PodAffinityTerm {
@@ -3839,7 +1478,7 @@ type NodeSelector struct {
 
 func (x *NodeSelector) Reset() {
 	*x = NodeSelector{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[54]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3851,7 +1490,7 @@ func (x *NodeSelector) String() string {
 func (*NodeSelector) ProtoMessage() {}
 
 func (x *NodeSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[54]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3864,7 +1503,7 @@ func (x *NodeSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeSelector.ProtoReflect.Descriptor instead.
 func (*NodeSelector) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{54}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *NodeSelector) GetNodeSelectorTerms() []*NodeSelectorTerm {
@@ -3885,7 +1524,7 @@ type NodeSelectorTerm struct {
 
 func (x *NodeSelectorTerm) Reset() {
 	*x = NodeSelectorTerm{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[55]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3897,7 +1536,7 @@ func (x *NodeSelectorTerm) String() string {
 func (*NodeSelectorTerm) ProtoMessage() {}
 
 func (x *NodeSelectorTerm) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[55]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3910,7 +1549,7 @@ func (x *NodeSelectorTerm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeSelectorTerm.ProtoReflect.Descriptor instead.
 func (*NodeSelectorTerm) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{55}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *NodeSelectorTerm) GetMatchExpressions() []*NodeSelectorRequirement {
@@ -3939,7 +1578,7 @@ type NodeSelectorRequirement struct {
 
 func (x *NodeSelectorRequirement) Reset() {
 	*x = NodeSelectorRequirement{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[56]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3951,7 +1590,7 @@ func (x *NodeSelectorRequirement) String() string {
 func (*NodeSelectorRequirement) ProtoMessage() {}
 
 func (x *NodeSelectorRequirement) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[56]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3964,7 +1603,7 @@ func (x *NodeSelectorRequirement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeSelectorRequirement.ProtoReflect.Descriptor instead.
 func (*NodeSelectorRequirement) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{56}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *NodeSelectorRequirement) GetKey() string {
@@ -3999,7 +1638,7 @@ type PreferredSchedulingTerm struct {
 
 func (x *PreferredSchedulingTerm) Reset() {
 	*x = PreferredSchedulingTerm{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[57]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4011,7 +1650,7 @@ func (x *PreferredSchedulingTerm) String() string {
 func (*PreferredSchedulingTerm) ProtoMessage() {}
 
 func (x *PreferredSchedulingTerm) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[57]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4024,7 +1663,7 @@ func (x *PreferredSchedulingTerm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreferredSchedulingTerm.ProtoReflect.Descriptor instead.
 func (*PreferredSchedulingTerm) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{57}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *PreferredSchedulingTerm) GetWeight() int32 {
@@ -4054,7 +1693,7 @@ type PodAffinityTerm struct {
 
 func (x *PodAffinityTerm) Reset() {
 	*x = PodAffinityTerm{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[58]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4066,7 +1705,7 @@ func (x *PodAffinityTerm) String() string {
 func (*PodAffinityTerm) ProtoMessage() {}
 
 func (x *PodAffinityTerm) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[58]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4079,7 +1718,7 @@ func (x *PodAffinityTerm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PodAffinityTerm.ProtoReflect.Descriptor instead.
 func (*PodAffinityTerm) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{58}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PodAffinityTerm) GetLabelSelector() *LabelSelector {
@@ -4121,7 +1760,7 @@ type WeightedPodAffinityTerm struct {
 
 func (x *WeightedPodAffinityTerm) Reset() {
 	*x = WeightedPodAffinityTerm{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[59]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4133,7 +1772,7 @@ func (x *WeightedPodAffinityTerm) String() string {
 func (*WeightedPodAffinityTerm) ProtoMessage() {}
 
 func (x *WeightedPodAffinityTerm) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[59]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4146,7 +1785,7 @@ func (x *WeightedPodAffinityTerm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WeightedPodAffinityTerm.ProtoReflect.Descriptor instead.
 func (*WeightedPodAffinityTerm) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{59}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *WeightedPodAffinityTerm) GetWeight() int32 {
@@ -4174,7 +1813,7 @@ type LabelSelector struct {
 
 func (x *LabelSelector) Reset() {
 	*x = LabelSelector{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[60]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4186,7 +1825,7 @@ func (x *LabelSelector) String() string {
 func (*LabelSelector) ProtoMessage() {}
 
 func (x *LabelSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[60]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4199,7 +1838,7 @@ func (x *LabelSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LabelSelector.ProtoReflect.Descriptor instead.
 func (*LabelSelector) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{60}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *LabelSelector) GetMatchLabels() map[string]string {
@@ -4228,7 +1867,7 @@ type LabelSelectorRequirement struct {
 
 func (x *LabelSelectorRequirement) Reset() {
 	*x = LabelSelectorRequirement{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[61]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4240,7 +1879,7 @@ func (x *LabelSelectorRequirement) String() string {
 func (*LabelSelectorRequirement) ProtoMessage() {}
 
 func (x *LabelSelectorRequirement) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[61]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4253,7 +1892,7 @@ func (x *LabelSelectorRequirement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LabelSelectorRequirement.ProtoReflect.Descriptor instead.
 func (*LabelSelectorRequirement) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{61}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *LabelSelectorRequirement) GetKey() string {
@@ -4277,21 +1916,160 @@ func (x *LabelSelectorRequirement) GetValues() []string {
 	return nil
 }
 
-// AgentSpec defines the desired state of an Agent.
+// AgentRuntime configures how the compiled spec runs.
+type AgentRuntime struct {
+	state              protoimpl.MessageState  `protogen:"open.v1"`
+	Image              string                  `protobuf:"bytes,1,opt,name=image,proto3" json:"image,omitempty"`
+	RunnerVersion      string                  `protobuf:"bytes,2,opt,name=runner_version,json=runnerVersion,proto3" json:"runner_version,omitempty"`
+	Isolation          IsolationTier           `protobuf:"varint,3,opt,name=isolation,proto3,enum=flokoa.agent.v1alpha1.IsolationTier" json:"isolation,omitempty"`
+	Env                []*EnvVar               `protobuf:"bytes,4,rep,name=env,proto3" json:"env,omitempty"`
+	Resources          *ResourceRequirements   `protobuf:"bytes,5,opt,name=resources,proto3" json:"resources,omitempty"`
+	Replicas           int32                   `protobuf:"varint,6,opt,name=replicas,proto3" json:"replicas,omitempty"`
+	ImagePullSecrets   []*LocalObjectReference `protobuf:"bytes,7,rep,name=image_pull_secrets,json=imagePullSecrets,proto3" json:"image_pull_secrets,omitempty"`
+	ServiceAccountName string                  `protobuf:"bytes,8,opt,name=service_account_name,json=serviceAccountName,proto3" json:"service_account_name,omitempty"`
+	SecurityContext    *PodSecurityContext     `protobuf:"bytes,9,opt,name=security_context,json=securityContext,proto3" json:"security_context,omitempty"`
+	NodeSelector       map[string]string       `protobuf:"bytes,10,rep,name=node_selector,json=nodeSelector,proto3" json:"node_selector,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Tolerations        []*Toleration           `protobuf:"bytes,11,rep,name=tolerations,proto3" json:"tolerations,omitempty"`
+	Affinity           *Affinity               `protobuf:"bytes,12,opt,name=affinity,proto3" json:"affinity,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AgentRuntime) Reset() {
+	*x = AgentRuntime{}
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentRuntime) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentRuntime) ProtoMessage() {}
+
+func (x *AgentRuntime) ProtoReflect() protoreflect.Message {
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentRuntime.ProtoReflect.Descriptor instead.
+func (*AgentRuntime) Descriptor() ([]byte, []int) {
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *AgentRuntime) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *AgentRuntime) GetRunnerVersion() string {
+	if x != nil {
+		return x.RunnerVersion
+	}
+	return ""
+}
+
+func (x *AgentRuntime) GetIsolation() IsolationTier {
+	if x != nil {
+		return x.Isolation
+	}
+	return IsolationTier_ISOLATION_TIER_UNSPECIFIED
+}
+
+func (x *AgentRuntime) GetEnv() []*EnvVar {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *AgentRuntime) GetResources() *ResourceRequirements {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
+func (x *AgentRuntime) GetReplicas() int32 {
+	if x != nil {
+		return x.Replicas
+	}
+	return 0
+}
+
+func (x *AgentRuntime) GetImagePullSecrets() []*LocalObjectReference {
+	if x != nil {
+		return x.ImagePullSecrets
+	}
+	return nil
+}
+
+func (x *AgentRuntime) GetServiceAccountName() string {
+	if x != nil {
+		return x.ServiceAccountName
+	}
+	return ""
+}
+
+func (x *AgentRuntime) GetSecurityContext() *PodSecurityContext {
+	if x != nil {
+		return x.SecurityContext
+	}
+	return nil
+}
+
+func (x *AgentRuntime) GetNodeSelector() map[string]string {
+	if x != nil {
+		return x.NodeSelector
+	}
+	return nil
+}
+
+func (x *AgentRuntime) GetTolerations() []*Toleration {
+	if x != nil {
+		return x.Tolerations
+	}
+	return nil
+}
+
+func (x *AgentRuntime) GetAffinity() *Affinity {
+	if x != nil {
+		return x.Affinity
+	}
+	return nil
+}
+
+// AgentSpec defines the desired state of an Agent: the composition root of a
+// pydantic-ai AgentSpec (inline fragment + Model/Instruction/AgentTool/
+// Capability references), compiled by the operator into one resolved spec.
 type AgentSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Card          *AgentCard             `protobuf:"bytes,1,opt,name=card,proto3" json:"card,omitempty"`
-	Runtime       *RuntimeSpec           `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Model         *AgentModelRef         `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	Framework     Framework              `protobuf:"varint,4,opt,name=framework,proto3,enum=flokoa.agent.v1alpha1.Framework" json:"framework,omitempty"`
-	Tools         []*ToolEntry           `protobuf:"bytes,5,rep,name=tools,proto3" json:"tools,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Card    *AgentCard             `protobuf:"bytes,1,opt,name=card,proto3" json:"card,omitempty"`
+	Runtime *AgentRuntime          `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	// Inline pydantic-ai AgentSpec fragment (JSON form).
+	Spec            *structpb.Struct              `protobuf:"bytes,3,opt,name=spec,proto3" json:"spec,omitempty"`
+	ModelRef        *NamespacedRef                `protobuf:"bytes,4,opt,name=model_ref,json=modelRef,proto3" json:"model_ref,omitempty"`
+	InstructionRefs []*NamespacedRef              `protobuf:"bytes,5,rep,name=instruction_refs,json=instructionRefs,proto3" json:"instruction_refs,omitempty"`
+	Tools           []*NamespacedRef              `protobuf:"bytes,6,rep,name=tools,proto3" json:"tools,omitempty"`
+	Capabilities    []*CapabilityAttachment       `protobuf:"bytes,7,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	SecretRefs      map[string]*SecretKeySelector `protobuf:"bytes,8,rep,name=secret_refs,json=secretRefs,proto3" json:"secret_refs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AgentSpec) Reset() {
 	*x = AgentSpec{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[62]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4303,7 +2081,7 @@ func (x *AgentSpec) String() string {
 func (*AgentSpec) ProtoMessage() {}
 
 func (x *AgentSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[62]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4316,7 +2094,7 @@ func (x *AgentSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentSpec.ProtoReflect.Descriptor instead.
 func (*AgentSpec) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{62}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AgentSpec) GetCard() *AgentCard {
@@ -4326,53 +2104,74 @@ func (x *AgentSpec) GetCard() *AgentCard {
 	return nil
 }
 
-func (x *AgentSpec) GetRuntime() *RuntimeSpec {
+func (x *AgentSpec) GetRuntime() *AgentRuntime {
 	if x != nil {
 		return x.Runtime
 	}
 	return nil
 }
 
-func (x *AgentSpec) GetModel() *AgentModelRef {
+func (x *AgentSpec) GetSpec() *structpb.Struct {
 	if x != nil {
-		return x.Model
+		return x.Spec
 	}
 	return nil
 }
 
-func (x *AgentSpec) GetFramework() Framework {
+func (x *AgentSpec) GetModelRef() *NamespacedRef {
 	if x != nil {
-		return x.Framework
+		return x.ModelRef
 	}
-	return Framework_FRAMEWORK_UNSPECIFIED
+	return nil
 }
 
-func (x *AgentSpec) GetTools() []*ToolEntry {
+func (x *AgentSpec) GetInstructionRefs() []*NamespacedRef {
+	if x != nil {
+		return x.InstructionRefs
+	}
+	return nil
+}
+
+func (x *AgentSpec) GetTools() []*NamespacedRef {
 	if x != nil {
 		return x.Tools
 	}
 	return nil
 }
 
+func (x *AgentSpec) GetCapabilities() []*CapabilityAttachment {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *AgentSpec) GetSecretRefs() map[string]*SecretKeySelector {
+	if x != nil {
+		return x.SecretRefs
+	}
+	return nil
+}
+
 // AgentStatus defines the observed state of Agent.
 type AgentStatus struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Phase              AgentPhase             `protobuf:"varint,1,opt,name=phase,proto3,enum=flokoa.agent.v1alpha1.AgentPhase" json:"phase,omitempty"`
-	Backend            string                 `protobuf:"bytes,2,opt,name=backend,proto3" json:"backend,omitempty"`
-	Url                string                 `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
-	Replicas           int32                  `protobuf:"varint,4,opt,name=replicas,proto3" json:"replicas,omitempty"`
-	AvailableReplicas  int32                  `protobuf:"varint,5,opt,name=available_replicas,json=availableReplicas,proto3" json:"available_replicas,omitempty"`
-	LastToolSync       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_tool_sync,json=lastToolSync,proto3" json:"last_tool_sync,omitempty"`
-	DetectedFramework  Framework              `protobuf:"varint,7,opt,name=detected_framework,json=detectedFramework,proto3,enum=flokoa.agent.v1alpha1.Framework" json:"detected_framework,omitempty"`
-	Conditions         []*Condition           `protobuf:"bytes,8,rep,name=conditions,proto3" json:"conditions,omitempty"`
-	ObservedGeneration int64                  `protobuf:"varint,9,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Phase                AgentPhase             `protobuf:"varint,1,opt,name=phase,proto3,enum=flokoa.agent.v1alpha1.AgentPhase" json:"phase,omitempty"`
+	Url                  string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	SpecHash             string                 `protobuf:"bytes,3,opt,name=spec_hash,json=specHash,proto3" json:"spec_hash,omitempty"`
+	RunnerVersion        string                 `protobuf:"bytes,4,opt,name=runner_version,json=runnerVersion,proto3" json:"runner_version,omitempty"`
+	InjectedCapabilities []string               `protobuf:"bytes,5,rep,name=injected_capabilities,json=injectedCapabilities,proto3" json:"injected_capabilities,omitempty"`
+	Replicas             int32                  `protobuf:"varint,6,opt,name=replicas,proto3" json:"replicas,omitempty"`
+	AvailableReplicas    int32                  `protobuf:"varint,7,opt,name=available_replicas,json=availableReplicas,proto3" json:"available_replicas,omitempty"`
+	Conditions           []*Condition           `protobuf:"bytes,8,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	ObservedGeneration   int64                  `protobuf:"varint,9,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *AgentStatus) Reset() {
 	*x = AgentStatus{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[63]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4384,7 +2183,7 @@ func (x *AgentStatus) String() string {
 func (*AgentStatus) ProtoMessage() {}
 
 func (x *AgentStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[63]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4397,7 +2196,7 @@ func (x *AgentStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentStatus.ProtoReflect.Descriptor instead.
 func (*AgentStatus) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{63}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *AgentStatus) GetPhase() AgentPhase {
@@ -4407,18 +2206,32 @@ func (x *AgentStatus) GetPhase() AgentPhase {
 	return AgentPhase_AGENT_PHASE_UNSPECIFIED
 }
 
-func (x *AgentStatus) GetBackend() string {
-	if x != nil {
-		return x.Backend
-	}
-	return ""
-}
-
 func (x *AgentStatus) GetUrl() string {
 	if x != nil {
 		return x.Url
 	}
 	return ""
+}
+
+func (x *AgentStatus) GetSpecHash() string {
+	if x != nil {
+		return x.SpecHash
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetRunnerVersion() string {
+	if x != nil {
+		return x.RunnerVersion
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetInjectedCapabilities() []string {
+	if x != nil {
+		return x.InjectedCapabilities
+	}
+	return nil
 }
 
 func (x *AgentStatus) GetReplicas() int32 {
@@ -4433,20 +2246,6 @@ func (x *AgentStatus) GetAvailableReplicas() int32 {
 		return x.AvailableReplicas
 	}
 	return 0
-}
-
-func (x *AgentStatus) GetLastToolSync() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastToolSync
-	}
-	return nil
-}
-
-func (x *AgentStatus) GetDetectedFramework() Framework {
-	if x != nil {
-		return x.DetectedFramework
-	}
-	return Framework_FRAMEWORK_UNSPECIFIED
 }
 
 func (x *AgentStatus) GetConditions() []*Condition {
@@ -4475,7 +2274,7 @@ type Agent struct {
 
 func (x *Agent) Reset() {
 	*x = Agent{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[64]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4487,7 +2286,7 @@ func (x *Agent) String() string {
 func (*Agent) ProtoMessage() {}
 
 func (x *Agent) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[64]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4500,7 +2299,7 @@ func (x *Agent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Agent.ProtoReflect.Descriptor instead.
 func (*Agent) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{64}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *Agent) GetMetadata() *ObjectMeta {
@@ -4535,7 +2334,7 @@ type AgentList struct {
 
 func (x *AgentList) Reset() {
 	*x = AgentList{}
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[65]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4547,7 +2346,7 @@ func (x *AgentList) String() string {
 func (*AgentList) ProtoMessage() {}
 
 func (x *AgentList) ProtoReflect() protoreflect.Message {
-	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[65]
+	mi := &file_flokoa_agent_v1alpha1_agent_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4560,7 +2359,7 @@ func (x *AgentList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentList.ProtoReflect.Descriptor instead.
 func (*AgentList) Descriptor() ([]byte, []int) {
-	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{65}
+	return file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *AgentList) GetMetadata() *ListMeta {
@@ -4581,7 +2380,7 @@ var File_flokoa_agent_v1alpha1_agent_proto protoreflect.FileDescriptor
 
 const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
-	"!flokoa/agent/v1alpha1/agent.proto\x12\x15flokoa.agent.v1alpha1\x1a%flokoa/agent/v1alpha1/agenttool.proto\x1a\"flokoa/agent/v1alpha1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8e\x02\n" +
+	"!flokoa/agent/v1alpha1/agent.proto\x12\x15flokoa.agent.v1alpha1\x1a%flokoa/agent/v1alpha1/agenttool.proto\x1a\"flokoa/agent/v1alpha1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x8e\x02\n" +
 	"\n" +
 	"AgentSkill\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -4619,56 +2418,10 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x13default_input_modes\x18\x04 \x03(\x0e2&.flokoa.agent.v1alpha1.InputOutputModeR\x11defaultInputModes\x12X\n" +
 	"\x14default_output_modes\x18\x05 \x03(\x0e2&.flokoa.agent.v1alpha1.InputOutputModeR\x12defaultOutputModes\x12L\n" +
 	"\fcapabilities\x18\x06 \x01(\v2(.flokoa.agent.v1alpha1.AgentCapabilitiesR\fcapabilities\x129\n" +
-	"\x06skills\x18\a \x03(\v2!.flokoa.agent.v1alpha1.AgentSkillR\x06skills\"A\n" +
-	"\rAgentModelRef\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x02 \x01(\tR\tnamespace\";\n" +
-	"\aToolRef\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"\xa4\x01\n" +
-	"\tToolEntry\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
-	"\x06inline\x18\x02 \x01(\v2$.flokoa.agent.v1alpha1.AgentToolSpecH\x00R\x06inline\x12;\n" +
-	"\btool_ref\x18\x03 \x01(\v2\x1e.flokoa.agent.v1alpha1.ToolRefH\x00R\atoolRefB\x06\n" +
-	"\x04tool\"\x85\x01\n" +
-	"\vRuntimeSpec\x126\n" +
-	"\x04type\x18\x01 \x01(\x0e2\".flokoa.agent.v1alpha1.RuntimeTypeR\x04type\x12>\n" +
-	"\x04spec\x18\x02 \x01(\v2*.flokoa.agent.v1alpha1.StandardRuntimeSpecR\x04spec\"\xb3\x05\n" +
-	"\x13StandardRuntimeSpec\x12\x1a\n" +
-	"\breplicas\x18\x01 \x01(\x05R\breplicas\x12>\n" +
-	"\tcontainer\x18\x02 \x01(\v2 .flokoa.agent.v1alpha1.ContainerR\tcontainer\x127\n" +
-	"\avolumes\x18\x03 \x03(\v2\x1d.flokoa.agent.v1alpha1.VolumeR\avolumes\x12Y\n" +
-	"\x12image_pull_secrets\x18\x04 \x03(\v2+.flokoa.agent.v1alpha1.LocalObjectReferenceR\x10imagePullSecrets\x120\n" +
-	"\x14service_account_name\x18\x05 \x01(\tR\x12serviceAccountName\x12T\n" +
-	"\x10security_context\x18\x06 \x01(\v2).flokoa.agent.v1alpha1.PodSecurityContextR\x0fsecurityContext\x12a\n" +
-	"\rnode_selector\x18\a \x03(\v2<.flokoa.agent.v1alpha1.StandardRuntimeSpec.NodeSelectorEntryR\fnodeSelector\x12C\n" +
-	"\vtolerations\x18\b \x03(\v2!.flokoa.agent.v1alpha1.TolerationR\vtolerations\x12;\n" +
-	"\baffinity\x18\t \x01(\v2\x1f.flokoa.agent.v1alpha1.AffinityR\baffinity\x1a?\n" +
-	"\x11NodeSelectorEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x94\x06\n" +
-	"\tContainer\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05image\x18\x02 \x01(\tR\x05image\x12\x18\n" +
-	"\acommand\x18\x03 \x03(\tR\acommand\x12\x12\n" +
-	"\x04args\x18\x04 \x03(\tR\x04args\x12\x1f\n" +
-	"\vworking_dir\x18\x05 \x01(\tR\n" +
-	"workingDir\x12:\n" +
-	"\x05ports\x18\x06 \x03(\v2$.flokoa.agent.v1alpha1.ContainerPortR\x05ports\x12/\n" +
-	"\x03env\x18\a \x03(\v2\x1d.flokoa.agent.v1alpha1.EnvVarR\x03env\x12?\n" +
-	"\benv_from\x18\b \x03(\v2$.flokoa.agent.v1alpha1.EnvFromSourceR\aenvFrom\x12I\n" +
-	"\tresources\x18\t \x01(\v2+.flokoa.agent.v1alpha1.ResourceRequirementsR\tresources\x12G\n" +
-	"\rvolume_mounts\x18\n" +
-	" \x03(\v2\".flokoa.agent.v1alpha1.VolumeMountR\fvolumeMounts\x12C\n" +
-	"\x0eliveness_probe\x18\v \x01(\v2\x1c.flokoa.agent.v1alpha1.ProbeR\rlivenessProbe\x12E\n" +
-	"\x0freadiness_probe\x18\f \x01(\v2\x1c.flokoa.agent.v1alpha1.ProbeR\x0ereadinessProbe\x12A\n" +
-	"\rstartup_probe\x18\r \x01(\v2\x1c.flokoa.agent.v1alpha1.ProbeR\fstartupProbe\x12*\n" +
-	"\x11image_pull_policy\x18\x0e \x01(\tR\x0fimagePullPolicy\x12Q\n" +
-	"\x10security_context\x18\x0f \x01(\v2&.flokoa.agent.v1alpha1.SecurityContextR\x0fsecurityContext\"f\n" +
-	"\rContainerPort\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
-	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\x12\x1a\n" +
-	"\bprotocol\x18\x03 \x01(\tR\bprotocol\"v\n" +
+	"\x06skills\x18\a \x03(\v2!.flokoa.agent.v1alpha1.AgentSkillR\x06skills\"\x7f\n" +
+	"\x14CapabilityAttachment\x126\n" +
+	"\x03ref\x18\x01 \x01(\v2$.flokoa.agent.v1alpha1.NamespacedRefR\x03ref\x12/\n" +
+	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\"v\n" +
 	"\x06EnvVar\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12B\n" +
@@ -4678,18 +2431,7 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0esecret_key_ref\x18\x01 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\fsecretKeyRef\x12X\n" +
 	"\x12config_map_key_ref\x18\x02 \x01(\v2+.flokoa.agent.v1alpha1.ConfigMapKeySelectorR\x0fconfigMapKeyRef\x12G\n" +
 	"\tfield_ref\x18\x03 \x01(\v2*.flokoa.agent.v1alpha1.ObjectFieldSelectorR\bfieldRef\x12Z\n" +
-	"\x12resource_field_ref\x18\x04 \x01(\v2,.flokoa.agent.v1alpha1.ResourceFieldSelectorR\x10resourceFieldRef\"\xbf\x01\n" +
-	"\rEnvFromSource\x12\x16\n" +
-	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12O\n" +
-	"\x0econfig_map_ref\x18\x02 \x01(\v2).flokoa.agent.v1alpha1.ConfigMapEnvSourceR\fconfigMapRef\x12E\n" +
-	"\n" +
-	"secret_ref\x18\x03 \x01(\v2&.flokoa.agent.v1alpha1.SecretEnvSourceR\tsecretRef\"D\n" +
-	"\x12ConfigMapEnvSource\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
-	"\boptional\x18\x02 \x01(\bR\boptional\"A\n" +
-	"\x0fSecretEnvSource\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
-	"\boptional\x18\x02 \x01(\bR\boptional\"U\n" +
+	"\x12resource_field_ref\x18\x04 \x01(\v2,.flokoa.agent.v1alpha1.ResourceFieldSelectorR\x10resourceFieldRef\"U\n" +
 	"\x13ObjectFieldSelector\x12\x1f\n" +
 	"\vapi_version\x18\x01 \x01(\tR\n" +
 	"apiVersion\x12\x1d\n" +
@@ -4707,130 +2449,7 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a;\n" +
 	"\rRequestsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc9\x01\n" +
-	"\vVolumeMount\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\tread_only\x18\x02 \x01(\bR\breadOnly\x12\x1d\n" +
-	"\n" +
-	"mount_path\x18\x03 \x01(\tR\tmountPath\x12\x19\n" +
-	"\bsub_path\x18\x04 \x01(\tR\asubPath\x12\"\n" +
-	"\rsub_path_expr\x18\x05 \x01(\tR\vsubPathExpr\x12+\n" +
-	"\x11mount_propagation\x18\x06 \x01(\tR\x10mountPropagation\"f\n" +
-	"\x06Volume\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12H\n" +
-	"\rvolume_source\x18\x02 \x01(\v2#.flokoa.agent.v1alpha1.VolumeSourceR\fvolumeSource\"\xf0\x03\n" +
-	"\fVolumeSource\x12K\n" +
-	"\n" +
-	"config_map\x18\x01 \x01(\v2,.flokoa.agent.v1alpha1.ConfigMapVolumeSourceR\tconfigMap\x12A\n" +
-	"\x06secret\x18\x02 \x01(\v2).flokoa.agent.v1alpha1.SecretVolumeSourceR\x06secret\x12H\n" +
-	"\tempty_dir\x18\x03 \x01(\v2+.flokoa.agent.v1alpha1.EmptyDirVolumeSourceR\bemptyDir\x12p\n" +
-	"\x17persistent_volume_claim\x18\x04 \x01(\v28.flokoa.agent.v1alpha1.PersistentVolumeClaimVolumeSourceR\x15persistentVolumeClaim\x12H\n" +
-	"\thost_path\x18\x05 \x01(\v2+.flokoa.agent.v1alpha1.HostPathVolumeSourceR\bhostPath\x12J\n" +
-	"\tprojected\x18\x06 \x01(\v2,.flokoa.agent.v1alpha1.ProjectedVolumeSourceR\tprojected\"\xa2\x01\n" +
-	"\x15ConfigMapVolumeSource\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x126\n" +
-	"\x05items\x18\x02 \x03(\v2 .flokoa.agent.v1alpha1.KeyToPathR\x05items\x12!\n" +
-	"\fdefault_mode\x18\x03 \x01(\x05R\vdefaultMode\x12\x1a\n" +
-	"\boptional\x18\x04 \x01(\bR\boptional\"\xac\x01\n" +
-	"\x12SecretVolumeSource\x12\x1f\n" +
-	"\vsecret_name\x18\x01 \x01(\tR\n" +
-	"secretName\x126\n" +
-	"\x05items\x18\x02 \x03(\v2 .flokoa.agent.v1alpha1.KeyToPathR\x05items\x12!\n" +
-	"\fdefault_mode\x18\x03 \x01(\x05R\vdefaultMode\x12\x1a\n" +
-	"\boptional\x18\x04 \x01(\bR\boptional\"M\n" +
-	"\x14EmptyDirVolumeSource\x12\x16\n" +
-	"\x06medium\x18\x01 \x01(\tR\x06medium\x12\x1d\n" +
-	"\n" +
-	"size_limit\x18\x02 \x01(\tR\tsizeLimit\"_\n" +
-	"!PersistentVolumeClaimVolumeSource\x12\x1d\n" +
-	"\n" +
-	"claim_name\x18\x01 \x01(\tR\tclaimName\x12\x1b\n" +
-	"\tread_only\x18\x02 \x01(\bR\breadOnly\">\n" +
-	"\x14HostPathVolumeSource\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\"}\n" +
-	"\x15ProjectedVolumeSource\x12A\n" +
-	"\asources\x18\x01 \x03(\v2'.flokoa.agent.v1alpha1.VolumeProjectionR\asources\x12!\n" +
-	"\fdefault_mode\x18\x02 \x01(\x05R\vdefaultMode\"\xd9\x02\n" +
-	"\x10VolumeProjection\x12?\n" +
-	"\x06secret\x18\x01 \x01(\v2'.flokoa.agent.v1alpha1.SecretProjectionR\x06secret\x12I\n" +
-	"\n" +
-	"config_map\x18\x02 \x01(\v2*.flokoa.agent.v1alpha1.ConfigMapProjectionR\tconfigMap\x12O\n" +
-	"\fdownward_api\x18\x03 \x01(\v2,.flokoa.agent.v1alpha1.DownwardAPIProjectionR\vdownwardApi\x12h\n" +
-	"\x15service_account_token\x18\x04 \x01(\v24.flokoa.agent.v1alpha1.ServiceAccountTokenProjectionR\x13serviceAccountToken\"z\n" +
-	"\x10SecretProjection\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x126\n" +
-	"\x05items\x18\x02 \x03(\v2 .flokoa.agent.v1alpha1.KeyToPathR\x05items\x12\x1a\n" +
-	"\boptional\x18\x03 \x01(\bR\boptional\"}\n" +
-	"\x13ConfigMapProjection\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x126\n" +
-	"\x05items\x18\x02 \x03(\v2 .flokoa.agent.v1alpha1.KeyToPathR\x05items\x12\x1a\n" +
-	"\boptional\x18\x03 \x01(\bR\boptional\"[\n" +
-	"\x15DownwardAPIProjection\x12B\n" +
-	"\x05items\x18\x01 \x03(\v2,.flokoa.agent.v1alpha1.DownwardAPIVolumeFileR\x05items\"\xe4\x01\n" +
-	"\x15DownwardAPIVolumeFile\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12G\n" +
-	"\tfield_ref\x18\x02 \x01(\v2*.flokoa.agent.v1alpha1.ObjectFieldSelectorR\bfieldRef\x12Z\n" +
-	"\x12resource_field_ref\x18\x03 \x01(\v2,.flokoa.agent.v1alpha1.ResourceFieldSelectorR\x10resourceFieldRef\x12\x12\n" +
-	"\x04mode\x18\x04 \x01(\x05R\x04mode\"~\n" +
-	"\x1dServiceAccountTokenProjection\x12\x1a\n" +
-	"\baudience\x18\x01 \x01(\tR\baudience\x12-\n" +
-	"\x12expiration_seconds\x18\x02 \x01(\x03R\x11expirationSeconds\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\"E\n" +
-	"\tKeyToPath\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
-	"\x04mode\x18\x03 \x01(\x05R\x04mode\"\xed\x02\n" +
-	"\x05Probe\x12=\n" +
-	"\ahandler\x18\x01 \x01(\v2#.flokoa.agent.v1alpha1.ProbeHandlerR\ahandler\x122\n" +
-	"\x15initial_delay_seconds\x18\x02 \x01(\x05R\x13initialDelaySeconds\x12'\n" +
-	"\x0ftimeout_seconds\x18\x03 \x01(\x05R\x0etimeoutSeconds\x12%\n" +
-	"\x0eperiod_seconds\x18\x04 \x01(\x05R\rperiodSeconds\x12+\n" +
-	"\x11success_threshold\x18\x05 \x01(\x05R\x10successThreshold\x12+\n" +
-	"\x11failure_threshold\x18\x06 \x01(\x05R\x10failureThreshold\x12G\n" +
-	" termination_grace_period_seconds\x18\a \x01(\x05R\x1dterminationGracePeriodSeconds\"\x84\x02\n" +
-	"\fProbeHandler\x12?\n" +
-	"\bhttp_get\x18\x01 \x01(\v2$.flokoa.agent.v1alpha1.HTTPGetActionR\ahttpGet\x12E\n" +
-	"\n" +
-	"tcp_socket\x18\x02 \x01(\v2&.flokoa.agent.v1alpha1.TCPSocketActionR\ttcpSocket\x125\n" +
-	"\x04exec\x18\x03 \x01(\v2!.flokoa.agent.v1alpha1.ExecActionR\x04exec\x125\n" +
-	"\x04grpc\x18\x04 \x01(\v2!.flokoa.agent.v1alpha1.GRPCActionR\x04grpc\"\xa9\x01\n" +
-	"\rHTTPGetAction\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
-	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x12\n" +
-	"\x04host\x18\x03 \x01(\tR\x04host\x12\x16\n" +
-	"\x06scheme\x18\x04 \x01(\tR\x06scheme\x12D\n" +
-	"\fhttp_headers\x18\x05 \x03(\v2!.flokoa.agent.v1alpha1.HTTPHeaderR\vhttpHeaders\"6\n" +
-	"\n" +
-	"HTTPHeader\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"9\n" +
-	"\x0fTCPSocketAction\x12\x12\n" +
-	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x12\n" +
-	"\x04host\x18\x02 \x01(\tR\x04host\"&\n" +
-	"\n" +
-	"ExecAction\x12\x18\n" +
-	"\acommand\x18\x01 \x03(\tR\acommand\":\n" +
-	"\n" +
-	"GRPCAction\x12\x12\n" +
-	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x18\n" +
-	"\aservice\x18\x02 \x01(\tR\aservice\"\x9c\x04\n" +
-	"\x0fSecurityContext\x12G\n" +
-	"\fcapabilities\x18\x01 \x01(\v2#.flokoa.agent.v1alpha1.CapabilitiesR\fcapabilities\x12\x1e\n" +
-	"\n" +
-	"privileged\x18\x02 \x01(\bR\n" +
-	"privileged\x12O\n" +
-	"\x10se_linux_options\x18\x03 \x01(\v2%.flokoa.agent.v1alpha1.SELinuxOptionsR\x0eseLinuxOptions\x12\x1e\n" +
-	"\vrun_as_user\x18\x04 \x01(\x03R\trunAsUser\x12 \n" +
-	"\frun_as_group\x18\x05 \x01(\x03R\n" +
-	"runAsGroup\x12%\n" +
-	"\x0frun_as_non_root\x18\x06 \x01(\bR\frunAsNonRoot\x129\n" +
-	"\x19read_only_root_filesystem\x18\a \x01(\bR\x16readOnlyRootFilesystem\x12<\n" +
-	"\x1aallow_privilege_escalation\x18\b \x01(\bR\x18allowPrivilegeEscalation\x12\x1d\n" +
-	"\n" +
-	"proc_mount\x18\t \x01(\tR\tprocMount\x12N\n" +
-	"\x0fseccomp_profile\x18\n" +
-	" \x01(\v2%.flokoa.agent.v1alpha1.SeccompProfileR\x0eseccompProfile\"\x9f\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9f\x03\n" +
 	"\x12PodSecurityContext\x12O\n" +
 	"\x10se_linux_options\x18\x01 \x01(\v2%.flokoa.agent.v1alpha1.SELinuxOptionsR\x0eseLinuxOptions\x12\x1e\n" +
 	"\vrun_as_user\x18\x02 \x01(\x03R\trunAsUser\x12 \n" +
@@ -4840,10 +2459,7 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x13supplemental_groups\x18\x05 \x03(\x03R\x12supplementalGroups\x12\x19\n" +
 	"\bfs_group\x18\x06 \x01(\x03R\afsGroup\x123\n" +
 	"\x16fs_group_change_policy\x18\a \x01(\tR\x13fsGroupChangePolicy\x12N\n" +
-	"\x0fseccomp_profile\x18\b \x01(\v2%.flokoa.agent.v1alpha1.SeccompProfileR\x0eseccompProfile\"4\n" +
-	"\fCapabilities\x12\x10\n" +
-	"\x03add\x18\x01 \x03(\tR\x03add\x12\x12\n" +
-	"\x04drop\x18\x02 \x03(\tR\x04drop\"b\n" +
+	"\x0fseccomp_profile\x18\b \x01(\v2%.flokoa.agent.v1alpha1.SeccompProfileR\x0eseccompProfile\"b\n" +
 	"\x0eSELinuxOptions\x12\x12\n" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x12\n" +
@@ -4905,21 +2521,45 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x18LabelSelectorRequirement\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1a\n" +
 	"\boperator\x18\x02 \x01(\tR\boperator\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values\"\xb3\x02\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values\"\xa9\x06\n" +
+	"\fAgentRuntime\x12\x14\n" +
+	"\x05image\x18\x01 \x01(\tR\x05image\x12%\n" +
+	"\x0erunner_version\x18\x02 \x01(\tR\rrunnerVersion\x12B\n" +
+	"\tisolation\x18\x03 \x01(\x0e2$.flokoa.agent.v1alpha1.IsolationTierR\tisolation\x12/\n" +
+	"\x03env\x18\x04 \x03(\v2\x1d.flokoa.agent.v1alpha1.EnvVarR\x03env\x12I\n" +
+	"\tresources\x18\x05 \x01(\v2+.flokoa.agent.v1alpha1.ResourceRequirementsR\tresources\x12\x1a\n" +
+	"\breplicas\x18\x06 \x01(\x05R\breplicas\x12Y\n" +
+	"\x12image_pull_secrets\x18\a \x03(\v2+.flokoa.agent.v1alpha1.LocalObjectReferenceR\x10imagePullSecrets\x120\n" +
+	"\x14service_account_name\x18\b \x01(\tR\x12serviceAccountName\x12T\n" +
+	"\x10security_context\x18\t \x01(\v2).flokoa.agent.v1alpha1.PodSecurityContextR\x0fsecurityContext\x12Z\n" +
+	"\rnode_selector\x18\n" +
+	" \x03(\v25.flokoa.agent.v1alpha1.AgentRuntime.NodeSelectorEntryR\fnodeSelector\x12C\n" +
+	"\vtolerations\x18\v \x03(\v2!.flokoa.agent.v1alpha1.TolerationR\vtolerations\x12;\n" +
+	"\baffinity\x18\f \x01(\v2\x1f.flokoa.agent.v1alpha1.AffinityR\baffinity\x1a?\n" +
+	"\x11NodeSelectorEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8a\x05\n" +
 	"\tAgentSpec\x124\n" +
-	"\x04card\x18\x01 \x01(\v2 .flokoa.agent.v1alpha1.AgentCardR\x04card\x12<\n" +
-	"\aruntime\x18\x02 \x01(\v2\".flokoa.agent.v1alpha1.RuntimeSpecR\aruntime\x12:\n" +
-	"\x05model\x18\x03 \x01(\v2$.flokoa.agent.v1alpha1.AgentModelRefR\x05model\x12>\n" +
-	"\tframework\x18\x04 \x01(\x0e2 .flokoa.agent.v1alpha1.FrameworkR\tframework\x126\n" +
-	"\x05tools\x18\x05 \x03(\v2 .flokoa.agent.v1alpha1.ToolEntryR\x05tools\"\xc3\x03\n" +
+	"\x04card\x18\x01 \x01(\v2 .flokoa.agent.v1alpha1.AgentCardR\x04card\x12=\n" +
+	"\aruntime\x18\x02 \x01(\v2#.flokoa.agent.v1alpha1.AgentRuntimeR\aruntime\x12+\n" +
+	"\x04spec\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04spec\x12A\n" +
+	"\tmodel_ref\x18\x04 \x01(\v2$.flokoa.agent.v1alpha1.NamespacedRefR\bmodelRef\x12O\n" +
+	"\x10instruction_refs\x18\x05 \x03(\v2$.flokoa.agent.v1alpha1.NamespacedRefR\x0finstructionRefs\x12:\n" +
+	"\x05tools\x18\x06 \x03(\v2$.flokoa.agent.v1alpha1.NamespacedRefR\x05tools\x12O\n" +
+	"\fcapabilities\x18\a \x03(\v2+.flokoa.agent.v1alpha1.CapabilityAttachmentR\fcapabilities\x12Q\n" +
+	"\vsecret_refs\x18\b \x03(\v20.flokoa.agent.v1alpha1.AgentSpec.SecretRefsEntryR\n" +
+	"secretRefs\x1ag\n" +
+	"\x0fSecretRefsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12>\n" +
+	"\x05value\x18\x02 \x01(\v2(.flokoa.agent.v1alpha1.SecretKeySelectorR\x05value:\x028\x01\"\x8f\x03\n" +
 	"\vAgentStatus\x127\n" +
-	"\x05phase\x18\x01 \x01(\x0e2!.flokoa.agent.v1alpha1.AgentPhaseR\x05phase\x12\x18\n" +
-	"\abackend\x18\x02 \x01(\tR\abackend\x12\x10\n" +
-	"\x03url\x18\x03 \x01(\tR\x03url\x12\x1a\n" +
-	"\breplicas\x18\x04 \x01(\x05R\breplicas\x12-\n" +
-	"\x12available_replicas\x18\x05 \x01(\x05R\x11availableReplicas\x12@\n" +
-	"\x0elast_tool_sync\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\flastToolSync\x12O\n" +
-	"\x12detected_framework\x18\a \x01(\x0e2 .flokoa.agent.v1alpha1.FrameworkR\x11detectedFramework\x12@\n" +
+	"\x05phase\x18\x01 \x01(\x0e2!.flokoa.agent.v1alpha1.AgentPhaseR\x05phase\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1b\n" +
+	"\tspec_hash\x18\x03 \x01(\tR\bspecHash\x12%\n" +
+	"\x0erunner_version\x18\x04 \x01(\tR\rrunnerVersion\x123\n" +
+	"\x15injected_capabilities\x18\x05 \x03(\tR\x14injectedCapabilities\x12\x1a\n" +
+	"\breplicas\x18\x06 \x01(\x05R\breplicas\x12-\n" +
+	"\x12available_replicas\x18\a \x01(\x05R\x11availableReplicas\x12@\n" +
 	"\n" +
 	"conditions\x18\b \x03(\v2 .flokoa.agent.v1alpha1.ConditionR\n" +
 	"conditions\x12/\n" +
@@ -4930,23 +2570,17 @@ const file_flokoa_agent_v1alpha1_agent_proto_rawDesc = "" +
 	"\x06status\x18\x03 \x01(\v2\".flokoa.agent.v1alpha1.AgentStatusR\x06status\"|\n" +
 	"\tAgentList\x12;\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1f.flokoa.agent.v1alpha1.ListMetaR\bmetadata\x122\n" +
-	"\x05items\x18\x02 \x03(\v2\x1c.flokoa.agent.v1alpha1.AgentR\x05items*\x90\x01\n" +
-	"\tFramework\x12\x19\n" +
-	"\x15FRAMEWORK_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15FRAMEWORK_PYDANTIC_AI\x10\x01\x12\x17\n" +
-	"\x13FRAMEWORK_LANGCHAIN\x10\x02\x12\x15\n" +
-	"\x11FRAMEWORK_AUTOGEN\x10\x05\x12\x11\n" +
-	"\rFRAMEWORK_A2A\x10\x06\"\x04\b\x03\x10\x03\"\x04\b\x04\x10\x04*s\n" +
+	"\x05items\x18\x02 \x03(\v2\x1c.flokoa.agent.v1alpha1.AgentR\x05items*s\n" +
 	"\n" +
 	"AgentPhase\x12\x1b\n" +
 	"\x17AGENT_PHASE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13AGENT_PHASE_PENDING\x10\x01\x12\x17\n" +
 	"\x13AGENT_PHASE_RUNNING\x10\x02\x12\x16\n" +
-	"\x12AGENT_PHASE_FAILED\x10\x03*a\n" +
-	"\vRuntimeType\x12\x1c\n" +
-	"\x18RUNTIME_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15RUNTIME_TYPE_STANDARD\x10\x01\x12\x19\n" +
-	"\x15RUNTIME_TYPE_TEMPLATE\x10\x02*l\n" +
+	"\x12AGENT_PHASE_FAILED\x10\x03*f\n" +
+	"\rIsolationTier\x12\x1e\n" +
+	"\x1aISOLATION_TIER_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15ISOLATION_TIER_SHARED\x10\x01\x12\x1a\n" +
+	"\x16ISOLATION_TIER_SESSION\x10\x02*l\n" +
 	"\x0fInputOutputMode\x12!\n" +
 	"\x1dINPUT_OUTPUT_MODE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16INPUT_OUTPUT_MODE_TEXT\x10\x01\x12\x1a\n" +
@@ -4966,200 +2600,128 @@ func file_flokoa_agent_v1alpha1_agent_proto_rawDescGZIP() []byte {
 	return file_flokoa_agent_v1alpha1_agent_proto_rawDescData
 }
 
-var file_flokoa_agent_v1alpha1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_flokoa_agent_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
+var file_flokoa_agent_v1alpha1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_flokoa_agent_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_flokoa_agent_v1alpha1_agent_proto_goTypes = []any{
-	(Framework)(0),                            // 0: flokoa.agent.v1alpha1.Framework
-	(AgentPhase)(0),                           // 1: flokoa.agent.v1alpha1.AgentPhase
-	(RuntimeType)(0),                          // 2: flokoa.agent.v1alpha1.RuntimeType
-	(InputOutputMode)(0),                      // 3: flokoa.agent.v1alpha1.InputOutputMode
-	(*AgentSkill)(nil),                        // 4: flokoa.agent.v1alpha1.AgentSkill
-	(*SecurityRequirement)(nil),               // 5: flokoa.agent.v1alpha1.SecurityRequirement
-	(*SecurityScopes)(nil),                    // 6: flokoa.agent.v1alpha1.SecurityScopes
-	(*AgentExtension)(nil),                    // 7: flokoa.agent.v1alpha1.AgentExtension
-	(*AgentCapabilities)(nil),                 // 8: flokoa.agent.v1alpha1.AgentCapabilities
-	(*AgentCard)(nil),                         // 9: flokoa.agent.v1alpha1.AgentCard
-	(*AgentModelRef)(nil),                     // 10: flokoa.agent.v1alpha1.AgentModelRef
-	(*ToolRef)(nil),                           // 11: flokoa.agent.v1alpha1.ToolRef
-	(*ToolEntry)(nil),                         // 12: flokoa.agent.v1alpha1.ToolEntry
-	(*RuntimeSpec)(nil),                       // 13: flokoa.agent.v1alpha1.RuntimeSpec
-	(*StandardRuntimeSpec)(nil),               // 14: flokoa.agent.v1alpha1.StandardRuntimeSpec
-	(*Container)(nil),                         // 15: flokoa.agent.v1alpha1.Container
-	(*ContainerPort)(nil),                     // 16: flokoa.agent.v1alpha1.ContainerPort
-	(*EnvVar)(nil),                            // 17: flokoa.agent.v1alpha1.EnvVar
-	(*EnvVarSource)(nil),                      // 18: flokoa.agent.v1alpha1.EnvVarSource
-	(*EnvFromSource)(nil),                     // 19: flokoa.agent.v1alpha1.EnvFromSource
-	(*ConfigMapEnvSource)(nil),                // 20: flokoa.agent.v1alpha1.ConfigMapEnvSource
-	(*SecretEnvSource)(nil),                   // 21: flokoa.agent.v1alpha1.SecretEnvSource
-	(*ObjectFieldSelector)(nil),               // 22: flokoa.agent.v1alpha1.ObjectFieldSelector
-	(*ResourceFieldSelector)(nil),             // 23: flokoa.agent.v1alpha1.ResourceFieldSelector
-	(*ResourceRequirements)(nil),              // 24: flokoa.agent.v1alpha1.ResourceRequirements
-	(*VolumeMount)(nil),                       // 25: flokoa.agent.v1alpha1.VolumeMount
-	(*Volume)(nil),                            // 26: flokoa.agent.v1alpha1.Volume
-	(*VolumeSource)(nil),                      // 27: flokoa.agent.v1alpha1.VolumeSource
-	(*ConfigMapVolumeSource)(nil),             // 28: flokoa.agent.v1alpha1.ConfigMapVolumeSource
-	(*SecretVolumeSource)(nil),                // 29: flokoa.agent.v1alpha1.SecretVolumeSource
-	(*EmptyDirVolumeSource)(nil),              // 30: flokoa.agent.v1alpha1.EmptyDirVolumeSource
-	(*PersistentVolumeClaimVolumeSource)(nil), // 31: flokoa.agent.v1alpha1.PersistentVolumeClaimVolumeSource
-	(*HostPathVolumeSource)(nil),              // 32: flokoa.agent.v1alpha1.HostPathVolumeSource
-	(*ProjectedVolumeSource)(nil),             // 33: flokoa.agent.v1alpha1.ProjectedVolumeSource
-	(*VolumeProjection)(nil),                  // 34: flokoa.agent.v1alpha1.VolumeProjection
-	(*SecretProjection)(nil),                  // 35: flokoa.agent.v1alpha1.SecretProjection
-	(*ConfigMapProjection)(nil),               // 36: flokoa.agent.v1alpha1.ConfigMapProjection
-	(*DownwardAPIProjection)(nil),             // 37: flokoa.agent.v1alpha1.DownwardAPIProjection
-	(*DownwardAPIVolumeFile)(nil),             // 38: flokoa.agent.v1alpha1.DownwardAPIVolumeFile
-	(*ServiceAccountTokenProjection)(nil),     // 39: flokoa.agent.v1alpha1.ServiceAccountTokenProjection
-	(*KeyToPath)(nil),                         // 40: flokoa.agent.v1alpha1.KeyToPath
-	(*Probe)(nil),                             // 41: flokoa.agent.v1alpha1.Probe
-	(*ProbeHandler)(nil),                      // 42: flokoa.agent.v1alpha1.ProbeHandler
-	(*HTTPGetAction)(nil),                     // 43: flokoa.agent.v1alpha1.HTTPGetAction
-	(*HTTPHeader)(nil),                        // 44: flokoa.agent.v1alpha1.HTTPHeader
-	(*TCPSocketAction)(nil),                   // 45: flokoa.agent.v1alpha1.TCPSocketAction
-	(*ExecAction)(nil),                        // 46: flokoa.agent.v1alpha1.ExecAction
-	(*GRPCAction)(nil),                        // 47: flokoa.agent.v1alpha1.GRPCAction
-	(*SecurityContext)(nil),                   // 48: flokoa.agent.v1alpha1.SecurityContext
-	(*PodSecurityContext)(nil),                // 49: flokoa.agent.v1alpha1.PodSecurityContext
-	(*Capabilities)(nil),                      // 50: flokoa.agent.v1alpha1.Capabilities
-	(*SELinuxOptions)(nil),                    // 51: flokoa.agent.v1alpha1.SELinuxOptions
-	(*SeccompProfile)(nil),                    // 52: flokoa.agent.v1alpha1.SeccompProfile
-	(*Toleration)(nil),                        // 53: flokoa.agent.v1alpha1.Toleration
-	(*Affinity)(nil),                          // 54: flokoa.agent.v1alpha1.Affinity
-	(*NodeAffinity)(nil),                      // 55: flokoa.agent.v1alpha1.NodeAffinity
-	(*PodAffinity)(nil),                       // 56: flokoa.agent.v1alpha1.PodAffinity
-	(*PodAntiAffinity)(nil),                   // 57: flokoa.agent.v1alpha1.PodAntiAffinity
-	(*NodeSelector)(nil),                      // 58: flokoa.agent.v1alpha1.NodeSelector
-	(*NodeSelectorTerm)(nil),                  // 59: flokoa.agent.v1alpha1.NodeSelectorTerm
-	(*NodeSelectorRequirement)(nil),           // 60: flokoa.agent.v1alpha1.NodeSelectorRequirement
-	(*PreferredSchedulingTerm)(nil),           // 61: flokoa.agent.v1alpha1.PreferredSchedulingTerm
-	(*PodAffinityTerm)(nil),                   // 62: flokoa.agent.v1alpha1.PodAffinityTerm
-	(*WeightedPodAffinityTerm)(nil),           // 63: flokoa.agent.v1alpha1.WeightedPodAffinityTerm
-	(*LabelSelector)(nil),                     // 64: flokoa.agent.v1alpha1.LabelSelector
-	(*LabelSelectorRequirement)(nil),          // 65: flokoa.agent.v1alpha1.LabelSelectorRequirement
-	(*AgentSpec)(nil),                         // 66: flokoa.agent.v1alpha1.AgentSpec
-	(*AgentStatus)(nil),                       // 67: flokoa.agent.v1alpha1.AgentStatus
-	(*Agent)(nil),                             // 68: flokoa.agent.v1alpha1.Agent
-	(*AgentList)(nil),                         // 69: flokoa.agent.v1alpha1.AgentList
-	nil,                                       // 70: flokoa.agent.v1alpha1.SecurityRequirement.RequirementsEntry
-	nil,                                       // 71: flokoa.agent.v1alpha1.StandardRuntimeSpec.NodeSelectorEntry
-	nil,                                       // 72: flokoa.agent.v1alpha1.ResourceRequirements.LimitsEntry
-	nil,                                       // 73: flokoa.agent.v1alpha1.ResourceRequirements.RequestsEntry
-	nil,                                       // 74: flokoa.agent.v1alpha1.LabelSelector.MatchLabelsEntry
-	(*structpb.Struct)(nil),                   // 75: google.protobuf.Struct
-	(*AgentToolSpec)(nil),                     // 76: flokoa.agent.v1alpha1.AgentToolSpec
-	(*LocalObjectReference)(nil),              // 77: flokoa.agent.v1alpha1.LocalObjectReference
-	(*SecretKeySelector)(nil),                 // 78: flokoa.agent.v1alpha1.SecretKeySelector
-	(*ConfigMapKeySelector)(nil),              // 79: flokoa.agent.v1alpha1.ConfigMapKeySelector
-	(*timestamppb.Timestamp)(nil),             // 80: google.protobuf.Timestamp
-	(*Condition)(nil),                         // 81: flokoa.agent.v1alpha1.Condition
-	(*ObjectMeta)(nil),                        // 82: flokoa.agent.v1alpha1.ObjectMeta
-	(*ListMeta)(nil),                          // 83: flokoa.agent.v1alpha1.ListMeta
+	(AgentPhase)(0),                  // 0: flokoa.agent.v1alpha1.AgentPhase
+	(IsolationTier)(0),               // 1: flokoa.agent.v1alpha1.IsolationTier
+	(InputOutputMode)(0),             // 2: flokoa.agent.v1alpha1.InputOutputMode
+	(*AgentSkill)(nil),               // 3: flokoa.agent.v1alpha1.AgentSkill
+	(*SecurityRequirement)(nil),      // 4: flokoa.agent.v1alpha1.SecurityRequirement
+	(*SecurityScopes)(nil),           // 5: flokoa.agent.v1alpha1.SecurityScopes
+	(*AgentExtension)(nil),           // 6: flokoa.agent.v1alpha1.AgentExtension
+	(*AgentCapabilities)(nil),        // 7: flokoa.agent.v1alpha1.AgentCapabilities
+	(*AgentCard)(nil),                // 8: flokoa.agent.v1alpha1.AgentCard
+	(*CapabilityAttachment)(nil),     // 9: flokoa.agent.v1alpha1.CapabilityAttachment
+	(*EnvVar)(nil),                   // 10: flokoa.agent.v1alpha1.EnvVar
+	(*EnvVarSource)(nil),             // 11: flokoa.agent.v1alpha1.EnvVarSource
+	(*ObjectFieldSelector)(nil),      // 12: flokoa.agent.v1alpha1.ObjectFieldSelector
+	(*ResourceFieldSelector)(nil),    // 13: flokoa.agent.v1alpha1.ResourceFieldSelector
+	(*ResourceRequirements)(nil),     // 14: flokoa.agent.v1alpha1.ResourceRequirements
+	(*PodSecurityContext)(nil),       // 15: flokoa.agent.v1alpha1.PodSecurityContext
+	(*SELinuxOptions)(nil),           // 16: flokoa.agent.v1alpha1.SELinuxOptions
+	(*SeccompProfile)(nil),           // 17: flokoa.agent.v1alpha1.SeccompProfile
+	(*Toleration)(nil),               // 18: flokoa.agent.v1alpha1.Toleration
+	(*Affinity)(nil),                 // 19: flokoa.agent.v1alpha1.Affinity
+	(*NodeAffinity)(nil),             // 20: flokoa.agent.v1alpha1.NodeAffinity
+	(*PodAffinity)(nil),              // 21: flokoa.agent.v1alpha1.PodAffinity
+	(*PodAntiAffinity)(nil),          // 22: flokoa.agent.v1alpha1.PodAntiAffinity
+	(*NodeSelector)(nil),             // 23: flokoa.agent.v1alpha1.NodeSelector
+	(*NodeSelectorTerm)(nil),         // 24: flokoa.agent.v1alpha1.NodeSelectorTerm
+	(*NodeSelectorRequirement)(nil),  // 25: flokoa.agent.v1alpha1.NodeSelectorRequirement
+	(*PreferredSchedulingTerm)(nil),  // 26: flokoa.agent.v1alpha1.PreferredSchedulingTerm
+	(*PodAffinityTerm)(nil),          // 27: flokoa.agent.v1alpha1.PodAffinityTerm
+	(*WeightedPodAffinityTerm)(nil),  // 28: flokoa.agent.v1alpha1.WeightedPodAffinityTerm
+	(*LabelSelector)(nil),            // 29: flokoa.agent.v1alpha1.LabelSelector
+	(*LabelSelectorRequirement)(nil), // 30: flokoa.agent.v1alpha1.LabelSelectorRequirement
+	(*AgentRuntime)(nil),             // 31: flokoa.agent.v1alpha1.AgentRuntime
+	(*AgentSpec)(nil),                // 32: flokoa.agent.v1alpha1.AgentSpec
+	(*AgentStatus)(nil),              // 33: flokoa.agent.v1alpha1.AgentStatus
+	(*Agent)(nil),                    // 34: flokoa.agent.v1alpha1.Agent
+	(*AgentList)(nil),                // 35: flokoa.agent.v1alpha1.AgentList
+	nil,                              // 36: flokoa.agent.v1alpha1.SecurityRequirement.RequirementsEntry
+	nil,                              // 37: flokoa.agent.v1alpha1.ResourceRequirements.LimitsEntry
+	nil,                              // 38: flokoa.agent.v1alpha1.ResourceRequirements.RequestsEntry
+	nil,                              // 39: flokoa.agent.v1alpha1.LabelSelector.MatchLabelsEntry
+	nil,                              // 40: flokoa.agent.v1alpha1.AgentRuntime.NodeSelectorEntry
+	nil,                              // 41: flokoa.agent.v1alpha1.AgentSpec.SecretRefsEntry
+	(*structpb.Struct)(nil),          // 42: google.protobuf.Struct
+	(*NamespacedRef)(nil),            // 43: flokoa.agent.v1alpha1.NamespacedRef
+	(*SecretKeySelector)(nil),        // 44: flokoa.agent.v1alpha1.SecretKeySelector
+	(*ConfigMapKeySelector)(nil),     // 45: flokoa.agent.v1alpha1.ConfigMapKeySelector
+	(*LocalObjectReference)(nil),     // 46: flokoa.agent.v1alpha1.LocalObjectReference
+	(*Condition)(nil),                // 47: flokoa.agent.v1alpha1.Condition
+	(*ObjectMeta)(nil),               // 48: flokoa.agent.v1alpha1.ObjectMeta
+	(*ListMeta)(nil),                 // 49: flokoa.agent.v1alpha1.ListMeta
 }
 var file_flokoa_agent_v1alpha1_agent_proto_depIdxs = []int32{
-	5,   // 0: flokoa.agent.v1alpha1.AgentSkill.security:type_name -> flokoa.agent.v1alpha1.SecurityRequirement
-	70,  // 1: flokoa.agent.v1alpha1.SecurityRequirement.requirements:type_name -> flokoa.agent.v1alpha1.SecurityRequirement.RequirementsEntry
-	75,  // 2: flokoa.agent.v1alpha1.AgentExtension.params:type_name -> google.protobuf.Struct
-	7,   // 3: flokoa.agent.v1alpha1.AgentCapabilities.extensions:type_name -> flokoa.agent.v1alpha1.AgentExtension
-	3,   // 4: flokoa.agent.v1alpha1.AgentCard.default_input_modes:type_name -> flokoa.agent.v1alpha1.InputOutputMode
-	3,   // 5: flokoa.agent.v1alpha1.AgentCard.default_output_modes:type_name -> flokoa.agent.v1alpha1.InputOutputMode
-	8,   // 6: flokoa.agent.v1alpha1.AgentCard.capabilities:type_name -> flokoa.agent.v1alpha1.AgentCapabilities
-	4,   // 7: flokoa.agent.v1alpha1.AgentCard.skills:type_name -> flokoa.agent.v1alpha1.AgentSkill
-	76,  // 8: flokoa.agent.v1alpha1.ToolEntry.inline:type_name -> flokoa.agent.v1alpha1.AgentToolSpec
-	11,  // 9: flokoa.agent.v1alpha1.ToolEntry.tool_ref:type_name -> flokoa.agent.v1alpha1.ToolRef
-	2,   // 10: flokoa.agent.v1alpha1.RuntimeSpec.type:type_name -> flokoa.agent.v1alpha1.RuntimeType
-	14,  // 11: flokoa.agent.v1alpha1.RuntimeSpec.spec:type_name -> flokoa.agent.v1alpha1.StandardRuntimeSpec
-	15,  // 12: flokoa.agent.v1alpha1.StandardRuntimeSpec.container:type_name -> flokoa.agent.v1alpha1.Container
-	26,  // 13: flokoa.agent.v1alpha1.StandardRuntimeSpec.volumes:type_name -> flokoa.agent.v1alpha1.Volume
-	77,  // 14: flokoa.agent.v1alpha1.StandardRuntimeSpec.image_pull_secrets:type_name -> flokoa.agent.v1alpha1.LocalObjectReference
-	49,  // 15: flokoa.agent.v1alpha1.StandardRuntimeSpec.security_context:type_name -> flokoa.agent.v1alpha1.PodSecurityContext
-	71,  // 16: flokoa.agent.v1alpha1.StandardRuntimeSpec.node_selector:type_name -> flokoa.agent.v1alpha1.StandardRuntimeSpec.NodeSelectorEntry
-	53,  // 17: flokoa.agent.v1alpha1.StandardRuntimeSpec.tolerations:type_name -> flokoa.agent.v1alpha1.Toleration
-	54,  // 18: flokoa.agent.v1alpha1.StandardRuntimeSpec.affinity:type_name -> flokoa.agent.v1alpha1.Affinity
-	16,  // 19: flokoa.agent.v1alpha1.Container.ports:type_name -> flokoa.agent.v1alpha1.ContainerPort
-	17,  // 20: flokoa.agent.v1alpha1.Container.env:type_name -> flokoa.agent.v1alpha1.EnvVar
-	19,  // 21: flokoa.agent.v1alpha1.Container.env_from:type_name -> flokoa.agent.v1alpha1.EnvFromSource
-	24,  // 22: flokoa.agent.v1alpha1.Container.resources:type_name -> flokoa.agent.v1alpha1.ResourceRequirements
-	25,  // 23: flokoa.agent.v1alpha1.Container.volume_mounts:type_name -> flokoa.agent.v1alpha1.VolumeMount
-	41,  // 24: flokoa.agent.v1alpha1.Container.liveness_probe:type_name -> flokoa.agent.v1alpha1.Probe
-	41,  // 25: flokoa.agent.v1alpha1.Container.readiness_probe:type_name -> flokoa.agent.v1alpha1.Probe
-	41,  // 26: flokoa.agent.v1alpha1.Container.startup_probe:type_name -> flokoa.agent.v1alpha1.Probe
-	48,  // 27: flokoa.agent.v1alpha1.Container.security_context:type_name -> flokoa.agent.v1alpha1.SecurityContext
-	18,  // 28: flokoa.agent.v1alpha1.EnvVar.value_from:type_name -> flokoa.agent.v1alpha1.EnvVarSource
-	78,  // 29: flokoa.agent.v1alpha1.EnvVarSource.secret_key_ref:type_name -> flokoa.agent.v1alpha1.SecretKeySelector
-	79,  // 30: flokoa.agent.v1alpha1.EnvVarSource.config_map_key_ref:type_name -> flokoa.agent.v1alpha1.ConfigMapKeySelector
-	22,  // 31: flokoa.agent.v1alpha1.EnvVarSource.field_ref:type_name -> flokoa.agent.v1alpha1.ObjectFieldSelector
-	23,  // 32: flokoa.agent.v1alpha1.EnvVarSource.resource_field_ref:type_name -> flokoa.agent.v1alpha1.ResourceFieldSelector
-	20,  // 33: flokoa.agent.v1alpha1.EnvFromSource.config_map_ref:type_name -> flokoa.agent.v1alpha1.ConfigMapEnvSource
-	21,  // 34: flokoa.agent.v1alpha1.EnvFromSource.secret_ref:type_name -> flokoa.agent.v1alpha1.SecretEnvSource
-	72,  // 35: flokoa.agent.v1alpha1.ResourceRequirements.limits:type_name -> flokoa.agent.v1alpha1.ResourceRequirements.LimitsEntry
-	73,  // 36: flokoa.agent.v1alpha1.ResourceRequirements.requests:type_name -> flokoa.agent.v1alpha1.ResourceRequirements.RequestsEntry
-	27,  // 37: flokoa.agent.v1alpha1.Volume.volume_source:type_name -> flokoa.agent.v1alpha1.VolumeSource
-	28,  // 38: flokoa.agent.v1alpha1.VolumeSource.config_map:type_name -> flokoa.agent.v1alpha1.ConfigMapVolumeSource
-	29,  // 39: flokoa.agent.v1alpha1.VolumeSource.secret:type_name -> flokoa.agent.v1alpha1.SecretVolumeSource
-	30,  // 40: flokoa.agent.v1alpha1.VolumeSource.empty_dir:type_name -> flokoa.agent.v1alpha1.EmptyDirVolumeSource
-	31,  // 41: flokoa.agent.v1alpha1.VolumeSource.persistent_volume_claim:type_name -> flokoa.agent.v1alpha1.PersistentVolumeClaimVolumeSource
-	32,  // 42: flokoa.agent.v1alpha1.VolumeSource.host_path:type_name -> flokoa.agent.v1alpha1.HostPathVolumeSource
-	33,  // 43: flokoa.agent.v1alpha1.VolumeSource.projected:type_name -> flokoa.agent.v1alpha1.ProjectedVolumeSource
-	40,  // 44: flokoa.agent.v1alpha1.ConfigMapVolumeSource.items:type_name -> flokoa.agent.v1alpha1.KeyToPath
-	40,  // 45: flokoa.agent.v1alpha1.SecretVolumeSource.items:type_name -> flokoa.agent.v1alpha1.KeyToPath
-	34,  // 46: flokoa.agent.v1alpha1.ProjectedVolumeSource.sources:type_name -> flokoa.agent.v1alpha1.VolumeProjection
-	35,  // 47: flokoa.agent.v1alpha1.VolumeProjection.secret:type_name -> flokoa.agent.v1alpha1.SecretProjection
-	36,  // 48: flokoa.agent.v1alpha1.VolumeProjection.config_map:type_name -> flokoa.agent.v1alpha1.ConfigMapProjection
-	37,  // 49: flokoa.agent.v1alpha1.VolumeProjection.downward_api:type_name -> flokoa.agent.v1alpha1.DownwardAPIProjection
-	39,  // 50: flokoa.agent.v1alpha1.VolumeProjection.service_account_token:type_name -> flokoa.agent.v1alpha1.ServiceAccountTokenProjection
-	40,  // 51: flokoa.agent.v1alpha1.SecretProjection.items:type_name -> flokoa.agent.v1alpha1.KeyToPath
-	40,  // 52: flokoa.agent.v1alpha1.ConfigMapProjection.items:type_name -> flokoa.agent.v1alpha1.KeyToPath
-	38,  // 53: flokoa.agent.v1alpha1.DownwardAPIProjection.items:type_name -> flokoa.agent.v1alpha1.DownwardAPIVolumeFile
-	22,  // 54: flokoa.agent.v1alpha1.DownwardAPIVolumeFile.field_ref:type_name -> flokoa.agent.v1alpha1.ObjectFieldSelector
-	23,  // 55: flokoa.agent.v1alpha1.DownwardAPIVolumeFile.resource_field_ref:type_name -> flokoa.agent.v1alpha1.ResourceFieldSelector
-	42,  // 56: flokoa.agent.v1alpha1.Probe.handler:type_name -> flokoa.agent.v1alpha1.ProbeHandler
-	43,  // 57: flokoa.agent.v1alpha1.ProbeHandler.http_get:type_name -> flokoa.agent.v1alpha1.HTTPGetAction
-	45,  // 58: flokoa.agent.v1alpha1.ProbeHandler.tcp_socket:type_name -> flokoa.agent.v1alpha1.TCPSocketAction
-	46,  // 59: flokoa.agent.v1alpha1.ProbeHandler.exec:type_name -> flokoa.agent.v1alpha1.ExecAction
-	47,  // 60: flokoa.agent.v1alpha1.ProbeHandler.grpc:type_name -> flokoa.agent.v1alpha1.GRPCAction
-	44,  // 61: flokoa.agent.v1alpha1.HTTPGetAction.http_headers:type_name -> flokoa.agent.v1alpha1.HTTPHeader
-	50,  // 62: flokoa.agent.v1alpha1.SecurityContext.capabilities:type_name -> flokoa.agent.v1alpha1.Capabilities
-	51,  // 63: flokoa.agent.v1alpha1.SecurityContext.se_linux_options:type_name -> flokoa.agent.v1alpha1.SELinuxOptions
-	52,  // 64: flokoa.agent.v1alpha1.SecurityContext.seccomp_profile:type_name -> flokoa.agent.v1alpha1.SeccompProfile
-	51,  // 65: flokoa.agent.v1alpha1.PodSecurityContext.se_linux_options:type_name -> flokoa.agent.v1alpha1.SELinuxOptions
-	52,  // 66: flokoa.agent.v1alpha1.PodSecurityContext.seccomp_profile:type_name -> flokoa.agent.v1alpha1.SeccompProfile
-	55,  // 67: flokoa.agent.v1alpha1.Affinity.node_affinity:type_name -> flokoa.agent.v1alpha1.NodeAffinity
-	56,  // 68: flokoa.agent.v1alpha1.Affinity.pod_affinity:type_name -> flokoa.agent.v1alpha1.PodAffinity
-	57,  // 69: flokoa.agent.v1alpha1.Affinity.pod_anti_affinity:type_name -> flokoa.agent.v1alpha1.PodAntiAffinity
-	58,  // 70: flokoa.agent.v1alpha1.NodeAffinity.required_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.NodeSelector
-	61,  // 71: flokoa.agent.v1alpha1.NodeAffinity.preferred_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.PreferredSchedulingTerm
-	62,  // 72: flokoa.agent.v1alpha1.PodAffinity.required_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.PodAffinityTerm
-	63,  // 73: flokoa.agent.v1alpha1.PodAffinity.preferred_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.WeightedPodAffinityTerm
-	62,  // 74: flokoa.agent.v1alpha1.PodAntiAffinity.required_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.PodAffinityTerm
-	63,  // 75: flokoa.agent.v1alpha1.PodAntiAffinity.preferred_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.WeightedPodAffinityTerm
-	59,  // 76: flokoa.agent.v1alpha1.NodeSelector.node_selector_terms:type_name -> flokoa.agent.v1alpha1.NodeSelectorTerm
-	60,  // 77: flokoa.agent.v1alpha1.NodeSelectorTerm.match_expressions:type_name -> flokoa.agent.v1alpha1.NodeSelectorRequirement
-	60,  // 78: flokoa.agent.v1alpha1.NodeSelectorTerm.match_fields:type_name -> flokoa.agent.v1alpha1.NodeSelectorRequirement
-	59,  // 79: flokoa.agent.v1alpha1.PreferredSchedulingTerm.preference:type_name -> flokoa.agent.v1alpha1.NodeSelectorTerm
-	64,  // 80: flokoa.agent.v1alpha1.PodAffinityTerm.label_selector:type_name -> flokoa.agent.v1alpha1.LabelSelector
-	64,  // 81: flokoa.agent.v1alpha1.PodAffinityTerm.namespace_selector:type_name -> flokoa.agent.v1alpha1.LabelSelector
-	62,  // 82: flokoa.agent.v1alpha1.WeightedPodAffinityTerm.pod_affinity_term:type_name -> flokoa.agent.v1alpha1.PodAffinityTerm
-	74,  // 83: flokoa.agent.v1alpha1.LabelSelector.match_labels:type_name -> flokoa.agent.v1alpha1.LabelSelector.MatchLabelsEntry
-	65,  // 84: flokoa.agent.v1alpha1.LabelSelector.match_expressions:type_name -> flokoa.agent.v1alpha1.LabelSelectorRequirement
-	9,   // 85: flokoa.agent.v1alpha1.AgentSpec.card:type_name -> flokoa.agent.v1alpha1.AgentCard
-	13,  // 86: flokoa.agent.v1alpha1.AgentSpec.runtime:type_name -> flokoa.agent.v1alpha1.RuntimeSpec
-	10,  // 87: flokoa.agent.v1alpha1.AgentSpec.model:type_name -> flokoa.agent.v1alpha1.AgentModelRef
-	0,   // 88: flokoa.agent.v1alpha1.AgentSpec.framework:type_name -> flokoa.agent.v1alpha1.Framework
-	12,  // 89: flokoa.agent.v1alpha1.AgentSpec.tools:type_name -> flokoa.agent.v1alpha1.ToolEntry
-	1,   // 90: flokoa.agent.v1alpha1.AgentStatus.phase:type_name -> flokoa.agent.v1alpha1.AgentPhase
-	80,  // 91: flokoa.agent.v1alpha1.AgentStatus.last_tool_sync:type_name -> google.protobuf.Timestamp
-	0,   // 92: flokoa.agent.v1alpha1.AgentStatus.detected_framework:type_name -> flokoa.agent.v1alpha1.Framework
-	81,  // 93: flokoa.agent.v1alpha1.AgentStatus.conditions:type_name -> flokoa.agent.v1alpha1.Condition
-	82,  // 94: flokoa.agent.v1alpha1.Agent.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
-	66,  // 95: flokoa.agent.v1alpha1.Agent.spec:type_name -> flokoa.agent.v1alpha1.AgentSpec
-	67,  // 96: flokoa.agent.v1alpha1.Agent.status:type_name -> flokoa.agent.v1alpha1.AgentStatus
-	83,  // 97: flokoa.agent.v1alpha1.AgentList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
-	68,  // 98: flokoa.agent.v1alpha1.AgentList.items:type_name -> flokoa.agent.v1alpha1.Agent
-	6,   // 99: flokoa.agent.v1alpha1.SecurityRequirement.RequirementsEntry.value:type_name -> flokoa.agent.v1alpha1.SecurityScopes
-	100, // [100:100] is the sub-list for method output_type
-	100, // [100:100] is the sub-list for method input_type
-	100, // [100:100] is the sub-list for extension type_name
-	100, // [100:100] is the sub-list for extension extendee
-	0,   // [0:100] is the sub-list for field type_name
+	4,  // 0: flokoa.agent.v1alpha1.AgentSkill.security:type_name -> flokoa.agent.v1alpha1.SecurityRequirement
+	36, // 1: flokoa.agent.v1alpha1.SecurityRequirement.requirements:type_name -> flokoa.agent.v1alpha1.SecurityRequirement.RequirementsEntry
+	42, // 2: flokoa.agent.v1alpha1.AgentExtension.params:type_name -> google.protobuf.Struct
+	6,  // 3: flokoa.agent.v1alpha1.AgentCapabilities.extensions:type_name -> flokoa.agent.v1alpha1.AgentExtension
+	2,  // 4: flokoa.agent.v1alpha1.AgentCard.default_input_modes:type_name -> flokoa.agent.v1alpha1.InputOutputMode
+	2,  // 5: flokoa.agent.v1alpha1.AgentCard.default_output_modes:type_name -> flokoa.agent.v1alpha1.InputOutputMode
+	7,  // 6: flokoa.agent.v1alpha1.AgentCard.capabilities:type_name -> flokoa.agent.v1alpha1.AgentCapabilities
+	3,  // 7: flokoa.agent.v1alpha1.AgentCard.skills:type_name -> flokoa.agent.v1alpha1.AgentSkill
+	43, // 8: flokoa.agent.v1alpha1.CapabilityAttachment.ref:type_name -> flokoa.agent.v1alpha1.NamespacedRef
+	42, // 9: flokoa.agent.v1alpha1.CapabilityAttachment.config:type_name -> google.protobuf.Struct
+	11, // 10: flokoa.agent.v1alpha1.EnvVar.value_from:type_name -> flokoa.agent.v1alpha1.EnvVarSource
+	44, // 11: flokoa.agent.v1alpha1.EnvVarSource.secret_key_ref:type_name -> flokoa.agent.v1alpha1.SecretKeySelector
+	45, // 12: flokoa.agent.v1alpha1.EnvVarSource.config_map_key_ref:type_name -> flokoa.agent.v1alpha1.ConfigMapKeySelector
+	12, // 13: flokoa.agent.v1alpha1.EnvVarSource.field_ref:type_name -> flokoa.agent.v1alpha1.ObjectFieldSelector
+	13, // 14: flokoa.agent.v1alpha1.EnvVarSource.resource_field_ref:type_name -> flokoa.agent.v1alpha1.ResourceFieldSelector
+	37, // 15: flokoa.agent.v1alpha1.ResourceRequirements.limits:type_name -> flokoa.agent.v1alpha1.ResourceRequirements.LimitsEntry
+	38, // 16: flokoa.agent.v1alpha1.ResourceRequirements.requests:type_name -> flokoa.agent.v1alpha1.ResourceRequirements.RequestsEntry
+	16, // 17: flokoa.agent.v1alpha1.PodSecurityContext.se_linux_options:type_name -> flokoa.agent.v1alpha1.SELinuxOptions
+	17, // 18: flokoa.agent.v1alpha1.PodSecurityContext.seccomp_profile:type_name -> flokoa.agent.v1alpha1.SeccompProfile
+	20, // 19: flokoa.agent.v1alpha1.Affinity.node_affinity:type_name -> flokoa.agent.v1alpha1.NodeAffinity
+	21, // 20: flokoa.agent.v1alpha1.Affinity.pod_affinity:type_name -> flokoa.agent.v1alpha1.PodAffinity
+	22, // 21: flokoa.agent.v1alpha1.Affinity.pod_anti_affinity:type_name -> flokoa.agent.v1alpha1.PodAntiAffinity
+	23, // 22: flokoa.agent.v1alpha1.NodeAffinity.required_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.NodeSelector
+	26, // 23: flokoa.agent.v1alpha1.NodeAffinity.preferred_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.PreferredSchedulingTerm
+	27, // 24: flokoa.agent.v1alpha1.PodAffinity.required_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.PodAffinityTerm
+	28, // 25: flokoa.agent.v1alpha1.PodAffinity.preferred_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.WeightedPodAffinityTerm
+	27, // 26: flokoa.agent.v1alpha1.PodAntiAffinity.required_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.PodAffinityTerm
+	28, // 27: flokoa.agent.v1alpha1.PodAntiAffinity.preferred_during_scheduling_ignored_during_execution:type_name -> flokoa.agent.v1alpha1.WeightedPodAffinityTerm
+	24, // 28: flokoa.agent.v1alpha1.NodeSelector.node_selector_terms:type_name -> flokoa.agent.v1alpha1.NodeSelectorTerm
+	25, // 29: flokoa.agent.v1alpha1.NodeSelectorTerm.match_expressions:type_name -> flokoa.agent.v1alpha1.NodeSelectorRequirement
+	25, // 30: flokoa.agent.v1alpha1.NodeSelectorTerm.match_fields:type_name -> flokoa.agent.v1alpha1.NodeSelectorRequirement
+	24, // 31: flokoa.agent.v1alpha1.PreferredSchedulingTerm.preference:type_name -> flokoa.agent.v1alpha1.NodeSelectorTerm
+	29, // 32: flokoa.agent.v1alpha1.PodAffinityTerm.label_selector:type_name -> flokoa.agent.v1alpha1.LabelSelector
+	29, // 33: flokoa.agent.v1alpha1.PodAffinityTerm.namespace_selector:type_name -> flokoa.agent.v1alpha1.LabelSelector
+	27, // 34: flokoa.agent.v1alpha1.WeightedPodAffinityTerm.pod_affinity_term:type_name -> flokoa.agent.v1alpha1.PodAffinityTerm
+	39, // 35: flokoa.agent.v1alpha1.LabelSelector.match_labels:type_name -> flokoa.agent.v1alpha1.LabelSelector.MatchLabelsEntry
+	30, // 36: flokoa.agent.v1alpha1.LabelSelector.match_expressions:type_name -> flokoa.agent.v1alpha1.LabelSelectorRequirement
+	1,  // 37: flokoa.agent.v1alpha1.AgentRuntime.isolation:type_name -> flokoa.agent.v1alpha1.IsolationTier
+	10, // 38: flokoa.agent.v1alpha1.AgentRuntime.env:type_name -> flokoa.agent.v1alpha1.EnvVar
+	14, // 39: flokoa.agent.v1alpha1.AgentRuntime.resources:type_name -> flokoa.agent.v1alpha1.ResourceRequirements
+	46, // 40: flokoa.agent.v1alpha1.AgentRuntime.image_pull_secrets:type_name -> flokoa.agent.v1alpha1.LocalObjectReference
+	15, // 41: flokoa.agent.v1alpha1.AgentRuntime.security_context:type_name -> flokoa.agent.v1alpha1.PodSecurityContext
+	40, // 42: flokoa.agent.v1alpha1.AgentRuntime.node_selector:type_name -> flokoa.agent.v1alpha1.AgentRuntime.NodeSelectorEntry
+	18, // 43: flokoa.agent.v1alpha1.AgentRuntime.tolerations:type_name -> flokoa.agent.v1alpha1.Toleration
+	19, // 44: flokoa.agent.v1alpha1.AgentRuntime.affinity:type_name -> flokoa.agent.v1alpha1.Affinity
+	8,  // 45: flokoa.agent.v1alpha1.AgentSpec.card:type_name -> flokoa.agent.v1alpha1.AgentCard
+	31, // 46: flokoa.agent.v1alpha1.AgentSpec.runtime:type_name -> flokoa.agent.v1alpha1.AgentRuntime
+	42, // 47: flokoa.agent.v1alpha1.AgentSpec.spec:type_name -> google.protobuf.Struct
+	43, // 48: flokoa.agent.v1alpha1.AgentSpec.model_ref:type_name -> flokoa.agent.v1alpha1.NamespacedRef
+	43, // 49: flokoa.agent.v1alpha1.AgentSpec.instruction_refs:type_name -> flokoa.agent.v1alpha1.NamespacedRef
+	43, // 50: flokoa.agent.v1alpha1.AgentSpec.tools:type_name -> flokoa.agent.v1alpha1.NamespacedRef
+	9,  // 51: flokoa.agent.v1alpha1.AgentSpec.capabilities:type_name -> flokoa.agent.v1alpha1.CapabilityAttachment
+	41, // 52: flokoa.agent.v1alpha1.AgentSpec.secret_refs:type_name -> flokoa.agent.v1alpha1.AgentSpec.SecretRefsEntry
+	0,  // 53: flokoa.agent.v1alpha1.AgentStatus.phase:type_name -> flokoa.agent.v1alpha1.AgentPhase
+	47, // 54: flokoa.agent.v1alpha1.AgentStatus.conditions:type_name -> flokoa.agent.v1alpha1.Condition
+	48, // 55: flokoa.agent.v1alpha1.Agent.metadata:type_name -> flokoa.agent.v1alpha1.ObjectMeta
+	32, // 56: flokoa.agent.v1alpha1.Agent.spec:type_name -> flokoa.agent.v1alpha1.AgentSpec
+	33, // 57: flokoa.agent.v1alpha1.Agent.status:type_name -> flokoa.agent.v1alpha1.AgentStatus
+	49, // 58: flokoa.agent.v1alpha1.AgentList.metadata:type_name -> flokoa.agent.v1alpha1.ListMeta
+	34, // 59: flokoa.agent.v1alpha1.AgentList.items:type_name -> flokoa.agent.v1alpha1.Agent
+	5,  // 60: flokoa.agent.v1alpha1.SecurityRequirement.RequirementsEntry.value:type_name -> flokoa.agent.v1alpha1.SecurityScopes
+	44, // 61: flokoa.agent.v1alpha1.AgentSpec.SecretRefsEntry.value:type_name -> flokoa.agent.v1alpha1.SecretKeySelector
+	62, // [62:62] is the sub-list for method output_type
+	62, // [62:62] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_flokoa_agent_v1alpha1_agent_proto_init() }
@@ -5169,17 +2731,13 @@ func file_flokoa_agent_v1alpha1_agent_proto_init() {
 	}
 	file_flokoa_agent_v1alpha1_agenttool_proto_init()
 	file_flokoa_agent_v1alpha1_common_proto_init()
-	file_flokoa_agent_v1alpha1_agent_proto_msgTypes[8].OneofWrappers = []any{
-		(*ToolEntry_Inline)(nil),
-		(*ToolEntry_ToolRef)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_flokoa_agent_v1alpha1_agent_proto_rawDesc), len(file_flokoa_agent_v1alpha1_agent_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   71,
+			NumEnums:      3,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

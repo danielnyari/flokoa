@@ -4,7 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Agent } from '~/types'
-import { agentPhaseLabel, agentPhaseColor, frameworkLabel, runtimeTypeLabel, normaliseTimestamp } from '~/utils/enums'
+import { agentPhaseLabel, agentPhaseColor, normaliseTimestamp } from '~/utils/enums'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -129,22 +129,24 @@ const columns: TableColumn<Agent>[] = [
     }
   },
   {
-    id: 'framework',
-    accessorFn: row => frameworkLabel(row.spec.framework) ?? frameworkLabel(row.status?.detectedFramework),
-    header: 'Framework',
+    id: 'model',
+    accessorFn: row => row.spec.modelRef?.name ?? (row.spec.spec as { model?: string } | undefined)?.model,
+    header: 'Model',
     cell: ({ row }) => {
-      const fw = row.original.spec.framework ?? row.original.status?.detectedFramework
-      return h(FrameworkBadge, { value: fw })
+      const model = row.original.spec.modelRef?.name
+        ?? (row.original.spec.spec as { model?: string } | undefined)?.model
+      if (!model) return h('span', { class: 'text-muted' }, '—')
+      return h(UBadge, { variant: 'subtle', color: 'neutral' }, () => model)
     }
   },
   {
-    id: 'runtime',
-    accessorFn: row => runtimeTypeLabel(row.spec.runtime?.type),
-    header: 'Runtime',
+    id: 'specHash',
+    accessorFn: row => row.status?.specHash,
+    header: 'Spec Hash',
     cell: ({ row }) => {
-      const label = runtimeTypeLabel(row.original.spec.runtime?.type)
-      if (!label) return h('span', { class: 'text-muted' }, '—')
-      return h(UBadge, { variant: 'subtle', color: 'neutral' }, () => label)
+      const hash = row.original.status?.specHash
+      if (!hash) return h('span', { class: 'text-muted' }, '—')
+      return h('span', { class: 'font-mono text-xs' }, hash)
     }
   },
   {

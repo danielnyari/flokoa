@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
-	modeldomain "github.com/danielnyari/flokoa/internal/domain/model"
 )
 
 // Condition types for Model
@@ -49,7 +48,6 @@ const (
 	ModelReasonProviderNotFound       = "ProviderNotFound"
 	ModelReasonProviderNotReady       = "ProviderNotReady"
 	ModelReasonValidated              = "Validated"
-	ModelReasonProviderParamsMismatch = "ProviderParametersMismatch"
 	ModelReasonMultipleProviderParams = "MultipleProviderParameters"
 	modelRetryInterval                = 2 * time.Second
 )
@@ -118,17 +116,6 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: modelRetryInterval}, nil
-	}
-
-	// Validate that provider-specific parameters match the provider type
-	if err := modeldomain.ValidateProviderParams(model.Spec.Parameters, modelProvider.Status.Provider); err != nil {
-		r.setNotReady(&model, ModelReasonProviderParamsMismatch, err.Error())
-		if updateErr := updateStatusWithRetry(ctx, r.Client, &model, func() {
-			r.setNotReady(&model, ModelReasonProviderParamsMismatch, err.Error())
-		}); updateErr != nil {
-			return ctrl.Result{}, updateErr
-		}
-		return ctrl.Result{}, nil
 	}
 
 	// Update status with resolved provider info

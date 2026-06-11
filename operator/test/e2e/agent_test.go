@@ -44,7 +44,7 @@ var _ = Describe("Agent", Ordered, func() {
 	SetDefaultEventuallyTimeout(3 * time.Minute)
 	SetDefaultEventuallyPollingInterval(time.Second)
 
-	Context("Template Agent E2E Test", func() {
+	Context("Compiled Agent E2E Test", func() {
 		BeforeAll(func() {
 			By("ensuring OPENAI_API_KEY is available for real e2e run")
 			skipIfNoOpenAIKey()
@@ -52,7 +52,7 @@ var _ = Describe("Agent", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to configure openai-api-key secret")
 		})
 
-		It("should deploy CRs and create a petstore agent from Python SDK", func() {
+		It("should compile the composition into an agent-spec ConfigMap and run it on the generic runner", func() {
 			By("deploying the tool service")
 			err := applyManifestFile("test/e2e/testdata/tool-service.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy tool service")

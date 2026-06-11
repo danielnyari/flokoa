@@ -1,3 +1,5 @@
+# Local protoc plugins (go install'ed; see Makefile buf-plugins) so generation
+# works without Buf Schema Registry access. Versions track go.mod.
 version: v2
 managed:
   enabled: true
@@ -5,20 +7,23 @@ managed:
     - file_option: go_package_prefix
       value: github.com/danielnyari/flokoa/server/gen/go
       module: buf.build/flokoa/agent
+  disable:
+    - module: buf.build/flokoa/agent
+      path: google/api
 plugins:
-  - remote: buf.build/protocolbuffers/go
+  - local: protoc-gen-go
     out: gen/go
     opt:
       - paths=source_relative
-  - remote: buf.build/grpc/go
+  - local: protoc-gen-go-grpc
     out: gen/go
     opt:
       - paths=source_relative
-  - remote: buf.build/grpc-ecosystem/gateway
+  - local: protoc-gen-grpc-gateway
     out: gen/go
     opt:
       - paths=source_relative
-  - remote: buf.build/grpc-ecosystem/openapiv2
+  - local: protoc-gen-openapiv2
     out: gen/openapiv2
     opt:
       - allow_merge=true

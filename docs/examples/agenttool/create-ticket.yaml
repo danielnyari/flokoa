@@ -1,4 +1,6 @@
 # Tool for creating support tickets
+# The MCP server fronts the underlying API (the OpenAPI tool type is
+# retired; front REST APIs with an MCP adapter or a Capability).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
@@ -6,13 +8,9 @@ metadata:
   labels:
     category: support
 spec:
-  type: openapi
-  description: "Create a support ticket in the helpdesk system"
-
-  openApi:
-    url: "https://api.helpdesk.com/v1"
-    timeoutSeconds: 30
-    headers:
-      Content-Type: "application/json"
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  type: mcp
+  description: Create a support ticket in the helpdesk system
+  url: https://api.helpdesk.com/v1/mcp
+  headers:
+    Content-Type: application/json
+  timeoutSeconds: 30

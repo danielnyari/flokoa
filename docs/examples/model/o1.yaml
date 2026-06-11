@@ -13,13 +13,12 @@ spec:
   providerRef:
     name: openai-provider
   
-  parameters:
+  settings:
     maxTokens: 16000
-    
-    openai:
-      # High reasoning effort for complex problems
-      reasoningEffort: "high"
-      
-      # Include reasoning process in output
-      sendReasoningIDs: true
-      reasoningSummary: "detailed"
+
+    # Provider-specific knobs pass through `extra` into the compiled
+    # model_settings (pydantic-ai settings keys).
+    extra:
+      openai_reasoning_effort: high
+      openai_send_reasoning_ids: true
+      openai_reasoning_summary: detailed

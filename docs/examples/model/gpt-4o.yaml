@@ -12,7 +12,7 @@ spec:
   providerRef:
     name: openai-provider
   
-  parameters:
+  settings:
     temperature: "0.7"
     maxTokens: 8192
     topP: "0.9"

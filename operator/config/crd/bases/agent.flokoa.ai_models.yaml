@@ -32,7 +32,7 @@ spec:
       openAPIV3Schema:
         description: |-
           Model is the Schema for the models API.
-          It defines a specific LLM model with its parameters, referencing a ModelProvider for connection configuration.
+          It defines a specific LLM model with its settings, referencing a ModelProvider for connection configuration.
         properties:
           apiVersion:
             description: |-
@@ -53,409 +53,22 @@ spec:
             type: object
           spec:
             description: |-
-              ModelSpec defines the desired state of Model.
-              A Model represents a specific LLM model (e.g., gpt-4o, claude-sonnet-4-20250514) with its parameters.
+              ModelSpec defines the desired state of Model: a named, shareable model
+              configuration that compiles to AgentSpec `model` + `model_settings`.
+              Rotating one Model CR recompiles every Agent that references it.
             properties:
               model:
-                description: Model is the name/identifier of the model (e.g., "gpt-4o",
-                  "claude-sonnet-4-20250514")
+                description: |-
+                  Model is the model identifier (e.g., "gpt-5-mini",
+                  "claude-sonnet-4-5"). The pydantic-ai provider prefix is derived from
+                  the referenced ModelProvider unless the identifier already contains
+                  one (e.g. "openai:gpt-5-mini").
                 minLength: 1
                 type: string
-              parameters:
-                description: Parameters contains base model parameters and optional
-                  provider-specific parameters
-                properties:
-                  anthropic:
-                    description: Anthropic contains Anthropic-specific parameters
-                      (only set for Anthropic providers)
-                    properties:
-                      cacheInstructions:
-                        description: |-
-                          CacheInstructions adds cache_control to the last system prompt block
-                          When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
-                        type: string
-                      cacheMessages:
-                        description: |-
-                          CacheMessages adds a cache point to the last content block in the final user message
-                          When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
-                        type: string
-                      cacheToolDefinitions:
-                        description: |-
-                          CacheToolDefinitions adds cache_control to the last tool definition
-                          When true, uses TTL='5m'. Can also specify '5m' or '1h' directly.
-                        type: string
-                      container:
-                        description: Container configures container for multi-turn
-                          conversations
-                        properties:
-                          disabled:
-                            description: Disabled forces a fresh container (ignores
-                              any container_id from history)
-                            type: boolean
-                          id:
-                            description: ID is the container ID to use (e.g., "container_xxx")
-                            type: string
-                        type: object
-                      metadataUserID:
-                        description: MetadataUserID is an external identifier for
-                          the user associated with the request
-                        type: string
-                      thinking:
-                        description: |-
-                          Thinking determines whether the model should generate a thinking block
-                          See https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
-                        properties:
-                          budgetTokens:
-                            description: |-
-                              BudgetTokens is the maximum number of tokens for thinking (required when enabled)
-                              Must be >= 1024 and less than maxTokens
-                            format: int32
-                            minimum: 1024
-                            type: integer
-                          type:
-                            default: disabled
-                            description: Type enables or disables extended thinking
-                            enum:
-                            - enabled
-                            - disabled
-                            type: string
-                        required:
-                        - type
-                        type: object
-                    type: object
-                  bedrock:
-                    description: Bedrock contains AWS Bedrock-specific parameters
-                      (only set for Bedrock providers)
-                    properties:
-                      additionalModelRequestFields:
-                        description: AdditionalModelRequestFields are additional model-specific
-                          parameters to include in requests
-                        type: object
-                        x-kubernetes-preserve-unknown-fields: true
-                      additionalModelResponseFieldsPaths:
-                        description: AdditionalModelResponseFieldsPaths are JSON paths
-                          to extract additional fields from model responses
-                        items:
-                          type: string
-                        type: array
-                      cacheInstructions:
-                        description: CacheInstructions adds a cache point after the
-                          system prompt blocks
-                        type: boolean
-                      cacheMessages:
-                        description: CacheMessages adds a cache point to the last
-                          content block in the final user message
-                        type: boolean
-                      cacheToolDefinitions:
-                        description: CacheToolDefinitions adds a cache point after
-                          the last tool definition
-                        type: boolean
-                      guardrailConfig:
-                        description: GuardrailConfig defines content moderation and
-                          safety settings
-                        properties:
-                          guardrailIdentifier:
-                            description: GuardrailIdentifier is the unique identifier
-                              of the guardrail
-                            type: string
-                          guardrailVersion:
-                            description: GuardrailVersion is the version of the guardrail
-                            type: string
-                          trace:
-                            description: Trace controls guardrail tracing level
-                            enum:
-                            - disabled
-                            - enabled
-                            - enabled_full
-                            type: string
-                        type: object
-                      performanceConfiguration:
-                        description: PerformanceConfiguration defines performance
-                          optimization settings
-                        properties:
-                          latency:
-                            description: Latency controls performance/cost tradeoff
-                            enum:
-                            - optimized
-                            - standard
-                            type: string
-                        type: object
-                      promptVariables:
-                        additionalProperties:
-                          type: string
-                        description: PromptVariables are variables for substitution
-                          into prompt templates
-                        type: object
-                      requestMetadata:
-                        additionalProperties:
-                          type: string
-                        description: RequestMetadata is additional metadata to attach
-                          to Bedrock API requests
-                        type: object
-                      serviceTier:
-                        description: ServiceTier controls performance and cost optimization
-                        properties:
-                          type:
-                            description: Type specifies the service tier type
-                            enum:
-                            - default
-                            - flex
-                            - priority
-                            - reserved
-                            type: string
-                        type: object
-                    type: object
-                  extraBody:
-                    description: ExtraBody to include in all requests
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                  extraHeaders:
-                    additionalProperties:
-                      type: string
-                    description: ExtraHeaders to include in all requests
-                    type: object
-                  frequencyPenalty:
-                    description: |-
-                      FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0)
-                      Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^-?[0-2](\.\d+)?$
-                    type: string
-                  google:
-                    description: Google contains Google/Gemini-specific parameters
-                      (only set for Google providers)
-                    properties:
-                      cachedContent:
-                        description: CachedContent is the name of the cached content
-                          to use for the model
-                        type: string
-                      labels:
-                        additionalProperties:
-                          type: string
-                        description: Labels are user-defined metadata to break down
-                          billed charges (Vertex AI only)
-                        type: object
-                      safetySettings:
-                        description: SafetySettings configures content safety filters
-                        items:
-                          description: GoogleSafetySetting defines a safety setting
-                            for Google/Gemini models
-                          properties:
-                            category:
-                              description: Category is the harm category
-                              enum:
-                              - HARM_CATEGORY_HARASSMENT
-                              - HARM_CATEGORY_HATE_SPEECH
-                              - HARM_CATEGORY_SEXUALLY_EXPLICIT
-                              - HARM_CATEGORY_DANGEROUS_CONTENT
-                              - HARM_CATEGORY_CIVIC_INTEGRITY
-                              type: string
-                            method:
-                              description: Method specifies if the threshold is used
-                                for probability or severity score
-                              enum:
-                              - SEVERITY
-                              - PROBABILITY
-                              type: string
-                            threshold:
-                              description: Threshold is the blocking threshold
-                              enum:
-                              - BLOCK_NONE
-                              - BLOCK_LOW_AND_ABOVE
-                              - BLOCK_MEDIUM_AND_ABOVE
-                              - BLOCK_ONLY_HIGH
-                              - "OFF"
-                              type: string
-                          required:
-                          - category
-                          - threshold
-                          type: object
-                        type: array
-                      thinkingConfig:
-                        description: ThinkingConfig configures the thinking behavior
-                          for the model
-                        properties:
-                          includeThoughts:
-                            description: IncludeThoughts indicates whether to include
-                              thoughts in the response
-                            type: boolean
-                          thinkingBudget:
-                            description: ThinkingBudget is the thinking budget in
-                              tokens (0=DISABLED, -1=AUTOMATIC)
-                            format: int32
-                            type: integer
-                          thinkingLevel:
-                            description: ThinkingLevel controls the amount of thinking
-                              tokens the model should generate
-                            enum:
-                            - unspecified
-                            - minimal
-                            - low
-                            - medium
-                            - high
-                            type: string
-                        type: object
-                      videoResolution:
-                        description: VideoResolution specifies the video resolution
-                          to use for the model
-                        enum:
-                        - unspecified
-                        - low
-                        - medium
-                        - high
-                        type: string
-                    type: object
-                  logitBias:
-                    additionalProperties:
-                      format: int32
-                      type: integer
-                    description: LogitBias modifies the likelihood of specified tokens
-                      appearing
-                    type: object
-                  maxTokens:
-                    description: MaxTokens is the maximum number of tokens to generate
-                    format: int32
-                    minimum: 1
-                    type: integer
-                  openai:
-                    description: OpenAI contains OpenAI-specific parameters (only
-                      set for OpenAI providers)
-                    properties:
-                      includeCodeExecutionOutputs:
-                        description: IncludeCodeExecutionOutputs includes code execution
-                          results in the response
-                        type: boolean
-                      includeFileSearchResults:
-                        description: IncludeFileSearchResults includes file search
-                          results in the response
-                        type: boolean
-                      includeRawAnnotations:
-                        description: IncludeRawAnnotations includes raw annotations
-                          in the response
-                        type: boolean
-                      includeWebSearchSources:
-                        description: IncludeWebSearchSources includes web search results
-                          in the response
-                        type: boolean
-                      logProbs:
-                        description: LogProbs enables returning log probabilities
-                        type: boolean
-                      previousResponseID:
-                        description: |-
-                          PreviousResponseID is the ID of a previous response to continue from
-                          When set to "auto", automatically uses the most recent provider_response_id
-                        type: string
-                      promptCacheKey:
-                        description: PromptCacheKey is the key for prompt caching
-                        type: string
-                      promptRetention:
-                        description: PromptRetention controls prompt caching retention
-                        type: string
-                      reasoningEffort:
-                        description: ReasoningEffort controls the reasoning effort
-                          for reasoning models (o1, o3, etc.)
-                        enum:
-                        - none
-                        - minimal
-                        - low
-                        - medium
-                        - high
-                        - xhigh
-                        type: string
-                      reasoningGenerateSummary:
-                        description: ReasoningGenerateSummary controls reasoning summary
-                          generation
-                        enum:
-                        - detailed
-                        - concise
-                        type: string
-                      reasoningSummary:
-                        description: ReasoningSummary controls reasoning summary format
-                        enum:
-                        - detailed
-                        - concise
-                        - auto
-                        type: string
-                      sendReasoningIDs:
-                        description: SendReasoningIDs enables sending reasoning IDs
-                        type: boolean
-                      serviceTier:
-                        description: ServiceTier specifies the service tier for requests
-                        enum:
-                        - auto
-                        - default
-                        - flex
-                        - priority
-                        type: string
-                      textVerbosity:
-                        description: TextVerbosity controls text verbosity level
-                        enum:
-                        - low
-                        - medium
-                        - high
-                        type: string
-                      topLogProbs:
-                        description: TopLogProbs specifies the number of top log probabilities
-                          to return
-                        format: int32
-                        type: integer
-                      truncation:
-                        description: Truncation controls response truncation
-                        enum:
-                        - disabled
-                        - auto
-                        type: string
-                      user:
-                        description: User is the user identifier associated with the
-                          requests
-                        type: string
-                    type: object
-                  parallelToolCalls:
-                    description: ParallelToolCalls enables parallel tool calling where
-                      supported
-                    type: boolean
-                  presencePenalty:
-                    description: |-
-                      PresencePenalty penalizes tokens already present in the context (-2.0 to 2.0)
-                      Specified as a string to avoid floating point issues (e.g., "0.5", "-1.0")
-                    pattern: ^-?[0-2](\.\d+)?$
-                    type: string
-                  seed:
-                    description: Seed for deterministic generation (where supported)
-                    format: int64
-                    type: integer
-                  stopSequences:
-                    description: StopSequences are sequences where the model will
-                      stop generating
-                    items:
-                      type: string
-                    type: array
-                  temperature:
-                    description: |-
-                      Temperature controls randomness in the output (0.0 to 2.0)
-                      Specified as a string to avoid floating point issues (e.g., "0.7", "1.0")
-                    pattern: ^(0(\.\d+)?|1(\.0+)?|2(\.0+)?)$
-                    type: string
-                  timeOut:
-                    description: TimeOut in seconds for the model response
-                    format: int32
-                    minimum: 1
-                    type: integer
-                  topK:
-                    description: TopK limits the number of tokens to consider for
-                      each step
-                    format: int32
-                    minimum: 1
-                    type: integer
-                  topP:
-                    description: |-
-                      TopP controls nucleus sampling (0.0 to 1.0)
-                      Specified as a string to avoid floating point issues (e.g., "0.9", "0.95")
-                    pattern: ^(0(\.\d+)?|1(\.0+)?)$
-                    type: string
-                type: object
               providerRef:
-                description: ProviderRef references the ModelProvider resource that
-                  defines the provider configuration
+                description: |-
+                  ProviderRef references the ModelProvider resource that supplies
+                  connection configuration (API key secret, base URL).
                 properties:
                   name:
                     description: Name of the ModelProvider resource
@@ -467,6 +80,80 @@ spec:
                     type: string
                 required:
                 - name
+                type: object
+              settings:
+                description: Settings contains the model settings applied to every
+                  request.
+                properties:
+                  extra:
+                    description: |-
+                      Extra merges additional provider-specific settings into the compiled
+                      model_settings object (e.g. extra_body, thinking, service_tier).
+                      Typed fields win on key conflicts.
+                    x-kubernetes-preserve-unknown-fields: true
+                  extraHeaders:
+                    additionalProperties:
+                      type: string
+                    description: ExtraHeaders to include in all requests.
+                    type: object
+                  frequencyPenalty:
+                    description: FrequencyPenalty penalizes frequent tokens (-2.0
+                      to 2.0), e.g. "0.5".
+                    pattern: ^-?[0-2](\.\d+)?$
+                    type: string
+                  logitBias:
+                    additionalProperties:
+                      format: int32
+                      type: integer
+                    description: LogitBias modifies the likelihood of specified tokens
+                      appearing.
+                    type: object
+                  maxTokens:
+                    description: MaxTokens is the maximum number of tokens to generate.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  parallelToolCalls:
+                    description: ParallelToolCalls enables parallel tool calling where
+                      supported.
+                    type: boolean
+                  presencePenalty:
+                    description: |-
+                      PresencePenalty penalizes tokens already present in the context
+                      (-2.0 to 2.0), e.g. "0.5".
+                    pattern: ^-?[0-2](\.\d+)?$
+                    type: string
+                  seed:
+                    description: Seed for deterministic generation (where supported).
+                    format: int64
+                    type: integer
+                  stopSequences:
+                    description: StopSequences are sequences where the model will
+                      stop generating.
+                    items:
+                      type: string
+                    type: array
+                  temperature:
+                    description: Temperature controls randomness in the output (0.0
+                      to 2.0), e.g. "0.7".
+                    pattern: ^(0(\.\d+)?|1(\.\d+)?|2(\.0+)?)$
+                    type: string
+                  timeoutSeconds:
+                    description: TimeoutSeconds bounds each model request.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  topK:
+                    description: TopK limits the number of tokens to consider for
+                      each step.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  topP:
+                    description: TopP controls nucleus sampling (0.0 to 1.0), e.g.
+                      "0.95".
+                    pattern: ^(0(\.\d+)?|1(\.0+)?)$
+                    type: string
                 type: object
             required:
             - model

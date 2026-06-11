@@ -1,4 +1,6 @@
 # Knowledge base search tool
+# The MCP server fronts the underlying API (the OpenAPI tool type is
+# retired; front REST APIs with an MCP adapter or a Capability).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
@@ -6,14 +8,11 @@ metadata:
   labels:
     category: search
 spec:
-  type: openapi
-  description: "Search the internal knowledge base for documentation and FAQs"
-
-  openApi:
-    serviceRef:
-      name: search-service
-      namespace: knowledge
-      port: 8080
-    timeoutSeconds: 15
-    openApiSchema:
-      endpointPath: "/api/openapi.json"
+  type: mcp
+  description: Search the internal knowledge base for documentation and FAQs
+  serviceRef:
+    name: search-service
+    namespace: knowledge
+    port: 8080
+  path: /mcp
+  timeoutSeconds: 15

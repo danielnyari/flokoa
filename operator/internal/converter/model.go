@@ -1,6 +1,11 @@
 package converter
 
 import (
+	"encoding/json"
+
+	"google.golang.org/protobuf/types/known/structpb"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
 )
@@ -24,56 +29,49 @@ func ModelSpecToProto(spec *agentv1alpha1.ModelSpec) *pb.ModelSpec {
 		return nil
 	}
 
-	pbSpec := &pb.ModelSpec{
+	return &pb.ModelSpec{
 		Model: spec.Model,
 		ProviderRef: &pb.ProviderRef{
 			Name:      spec.ProviderRef.Name,
 			Namespace: spec.ProviderRef.Namespace,
 		},
+		Settings: ModelSettingsToProto(spec.Settings),
 	}
-
-	if spec.Parameters != nil {
-		pbSpec.Parameters = ModelParametersToProto(spec.Parameters)
-	}
-
-	return pbSpec
 }
 
-// ModelParametersToProto converts ModelParameters to proto.
-func ModelParametersToProto(params *agentv1alpha1.ModelParameters) *pb.ModelParameters {
-	if params == nil {
+// ModelSettingsToProto converts ModelSettings to proto.
+func ModelSettingsToProto(settings *agentv1alpha1.ModelSettings) *pb.ModelSettings {
+	if settings == nil {
 		return nil
 	}
 
-	pbParams := &pb.ModelParameters{
-		Temperature:      params.Temperature,
-		TopP:             params.TopP,
-		PresencePenalty:  params.PresencePenalty,
-		FrequencyPenalty: params.FrequencyPenalty,
-		StopSequences:    params.StopSequences,
-		ExtraHeaders:     params.ExtraHeaders,
+	pbSettings := &pb.ModelSettings{
+		Temperature:      settings.Temperature,
+		TopP:             settings.TopP,
+		PresencePenalty:  settings.PresencePenalty,
+		FrequencyPenalty: settings.FrequencyPenalty,
+		LogitBias:        settings.LogitBias,
+		StopSequences:    settings.StopSequences,
+		ExtraHeaders:     settings.ExtraHeaders,
 	}
+	if settings.MaxTokens != nil {
+		pbSettings.MaxTokens = *settings.MaxTokens
+	}
+	if settings.TopK != nil {
+		pbSettings.TopK = *settings.TopK
+	}
+	if settings.TimeoutSeconds != nil {
+		pbSettings.TimeoutSeconds = *settings.TimeoutSeconds
+	}
+	if settings.ParallelToolCalls != nil {
+		pbSettings.ParallelToolCalls = *settings.ParallelToolCalls
+	}
+	if settings.Seed != nil {
+		pbSettings.Seed = *settings.Seed
+	}
+	pbSettings.Extra = jsonToStruct(settings.Extra)
 
-	if params.MaxTokens != nil {
-		pbParams.MaxTokens = *params.MaxTokens
-	}
-	if params.TopK != nil {
-		pbParams.TopK = *params.TopK
-	}
-	if params.TimeOut != nil {
-		pbParams.Timeout = *params.TimeOut
-	}
-	if params.ParallelToolCalls != nil {
-		pbParams.ParallelToolCalls = *params.ParallelToolCalls
-	}
-	if params.Seed != nil {
-		pbParams.Seed = *params.Seed
-	}
-	if params.LogitBias != nil {
-		pbParams.LogitBias = params.LogitBias
-	}
-
-	return pbParams
+	return pbSettings
 }
 
 // ModelStatusToProto converts ModelStatus to proto.
@@ -87,7 +85,6 @@ func ModelStatusToProto(status *agentv1alpha1.ModelStatus) *pb.ModelStatus {
 		ObservedGeneration: status.ObservedGeneration,
 		Ready:              status.Ready,
 	}
-
 	if status.ResolvedProvider != nil {
 		pbStatus.ResolvedProvider = &pb.ResolvedProviderInfo{
 			Provider:  ProviderTypeToProto(status.ResolvedProvider.Provider),
@@ -116,7 +113,7 @@ func ModelListToProto(list *agentv1alpha1.ModelList) *pb.ModelList {
 	return pbList
 }
 
-// ModelFromProto converts proto Model to Kubernetes.
+// ModelFromProto converts a proto Model to the Kubernetes type.
 func ModelFromProto(proto *pb.Model) *agentv1alpha1.Model {
 	if proto == nil {
 		return nil
@@ -132,7 +129,7 @@ func ModelFromProto(proto *pb.Model) *agentv1alpha1.Model {
 	return model
 }
 
-// ModelSpecFromProto converts proto ModelSpec to Kubernetes.
+// ModelSpecFromProto converts a proto ModelSpec to the Kubernetes type.
 func ModelSpecFromProto(proto *pb.ModelSpec) *agentv1alpha1.ModelSpec {
 	if proto == nil {
 		return nil
@@ -141,57 +138,70 @@ func ModelSpecFromProto(proto *pb.ModelSpec) *agentv1alpha1.ModelSpec {
 	spec := &agentv1alpha1.ModelSpec{
 		Model: proto.Model,
 	}
-
 	if proto.ProviderRef != nil {
 		spec.ProviderRef = agentv1alpha1.ProviderRef{
 			Name:      proto.ProviderRef.Name,
 			Namespace: proto.ProviderRef.Namespace,
 		}
 	}
-
-	if proto.Parameters != nil {
-		spec.Parameters = ModelParametersFromProto(proto.Parameters)
+	if proto.Settings != nil {
+		spec.Settings = ModelSettingsFromProto(proto.Settings)
 	}
 
 	return spec
 }
 
-// ModelParametersFromProto converts proto ModelParameters to Kubernetes.
-func ModelParametersFromProto(proto *pb.ModelParameters) *agentv1alpha1.ModelParameters {
+// ModelSettingsFromProto converts proto ModelSettings to the Kubernetes type.
+func ModelSettingsFromProto(proto *pb.ModelSettings) *agentv1alpha1.ModelSettings {
 	if proto == nil {
 		return nil
 	}
 
-	params := &agentv1alpha1.ModelParameters{
+	settings := &agentv1alpha1.ModelSettings{
 		Temperature:      proto.Temperature,
 		TopP:             proto.TopP,
 		PresencePenalty:  proto.PresencePenalty,
 		FrequencyPenalty: proto.FrequencyPenalty,
+		LogitBias:        proto.LogitBias,
 		StopSequences:    proto.StopSequences,
 		ExtraHeaders:     proto.ExtraHeaders,
-		LogitBias:        proto.LogitBias,
 	}
-
-	if proto.MaxTokens > 0 {
-		params.MaxTokens = &proto.MaxTokens
+	if proto.MaxTokens != 0 {
+		settings.MaxTokens = &proto.MaxTokens
 	}
-	if proto.TopK > 0 {
-		params.TopK = &proto.TopK
+	if proto.TopK != 0 {
+		settings.TopK = &proto.TopK
 	}
-	if proto.Timeout > 0 {
-		params.TimeOut = &proto.Timeout
+	if proto.TimeoutSeconds != 0 {
+		settings.TimeoutSeconds = &proto.TimeoutSeconds
 	}
 	if proto.ParallelToolCalls {
-		params.ParallelToolCalls = &proto.ParallelToolCalls
+		parallel := true
+		settings.ParallelToolCalls = &parallel
 	}
 	if proto.Seed != 0 {
-		params.Seed = &proto.Seed
+		settings.Seed = &proto.Seed
+	}
+	if proto.Extra != nil {
+		settings.Extra = structToJSON(proto.Extra)
 	}
 
-	return params
+	return settings
 }
 
-// ProviderTypeToProto converts ProviderType enum to proto.
+// structToJSON converts a proto Struct to an apiextensions JSON object.
+func structToJSON(s *structpb.Struct) *apiextensionsv1.JSON {
+	if s == nil {
+		return nil
+	}
+	raw, err := json.Marshal(s.AsMap())
+	if err != nil {
+		return nil
+	}
+	return &apiextensionsv1.JSON{Raw: raw}
+}
+
+// ProviderTypeToProto converts the provider type enum to proto.
 func ProviderTypeToProto(pt agentv1alpha1.ProviderType) pb.ProviderType {
 	switch pt {
 	case agentv1alpha1.ProviderTypeOpenAI:
@@ -207,7 +217,7 @@ func ProviderTypeToProto(pt agentv1alpha1.ProviderType) pb.ProviderType {
 	}
 }
 
-// ProviderTypeFromProto converts proto ProviderType to Kubernetes.
+// ProviderTypeFromProto converts the proto provider type to the Kubernetes enum.
 func ProviderTypeFromProto(pt pb.ProviderType) agentv1alpha1.ProviderType {
 	switch pt {
 	case pb.ProviderType_PROVIDER_TYPE_OPENAI:

@@ -76,21 +76,26 @@ kind: Agent
 metadata:
   name: my-agent
 spec:
-  runtime:
-    type: standard
-    spec:
-      container:
-        name: agent
-        image: your-agent:v1.0.0
-        ports:
-        - containerPort: 8080
+  card:
+    name: my-agent
+    description: "Answers questions"
+    version: "1.0.0"
+    skills:
+      - id: assistant
+        name: Assistant
+        description: "General-purpose assistant"
+        tags: [assistant]
+  spec:
+    model: openai:gpt-5-mini
+    instructions:
+      - "You are a helpful assistant."
 ```
 
 ### Reference a Model
 
 ```yaml
 spec:
-  model:
+  modelRef:
     name: gpt-4o-model
     namespace: shared-models  # optional
 ```
@@ -100,16 +105,10 @@ spec:
 ```yaml
 spec:
   tools:
-    - toolRef:
-        name: weather-api
-    - name: inline-tool
-      template:
-        type: openapi
-        description: "Call the example API"
-        openApi:
-          url: "https://api.example.com"
-          openApiSchema:
-            endpointPath: "/openapi.json"
+    - name: weather-api      # AgentTool: a declarative MCP endpoint
+  spec:
+    capabilities:
+      - name: WebSearch      # native pydantic-ai capabilities inline
 ```
 
 ## Common Patterns
@@ -122,13 +121,11 @@ spec:
 # 3. Deploy agent with single replica
 spec:
   runtime:
-    spec:
-      replicas: 1
-      container:
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
+    replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
 ```
 
 ### Production Setup
@@ -139,15 +136,13 @@ spec:
 # 3. Deploy agent with high availability
 spec:
   runtime:
-    spec:
-      replicas: 3
-      container:
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "512Mi"
-          limits:
-            cpu: "2000m"
+    replicas: 3
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "2000m"
             memory: "2Gi"
         livenessProbe: {...}
         readinessProbe: {...}

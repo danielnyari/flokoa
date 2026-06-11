@@ -1,8 +1,8 @@
 # Complete example: Customer Service Agent
-# This example shows all CRDs working together
+# This example shows all CRDs composing into one compiled agent.
 
 ---
-# Step 1: Create ModelProvider
+# Step 1: Create ModelProvider (connection config + API key secret)
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: ModelProvider
 metadata:
@@ -16,7 +16,7 @@ spec:
     timeoutSeconds: 60
 
 ---
-# Step 2: Create Model
+# Step 2: Create Model (named, shareable model configuration)
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: Model
 metadata:
@@ -26,29 +26,39 @@ spec:
   model: "gpt-4o"
   providerRef:
     name: openai-provider
-  parameters:
+  settings:
     temperature: "0.7"
     maxTokens: 4096
     topP: "0.9"
 
 ---
-# Step 3: Create AgentTools
+# Step 3: Create Instructions (versioned, shareable prompt blocks)
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Instruction
+metadata:
+  name: support-policy
+  namespace: customer-service
+spec:
+  content: |
+    You are a friendly customer service agent. Be empathetic and concise.
+    Never promise refunds without checking the policy first.
+
+---
+# Step 4: Create AgentTools (declarative MCP endpoints)
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
   name: search-knowledge-base
   namespace: customer-service
 spec:
-  type: openapi
+  type: mcp
   description: "Search the knowledge base for answers to customer questions"
-  openApi:
-    serviceRef:
-      name: kb-service
-      namespace: backend
-      port: 8080
-    timeoutSeconds: 10
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  serviceRef:
+    name: kb-service
+    namespace: backend
+    port: 8080
+  path: /mcp
+  timeoutSeconds: 10
 
 ---
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -57,37 +67,25 @@ metadata:
   name: create-support-ticket
   namespace: customer-service
 spec:
-  type: openapi
+  type: mcp
   description: "Create a support ticket when the agent cannot resolve the issue"
-  openApi:
-    serviceRef:
-      name: ticket-service
-      namespace: backend
-      port: 8080
-    timeoutSeconds: 15
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  serviceRef:
+    name: ticket-service
+    namespace: backend
+    port: 8080
+  path: /mcp
+  toolPrefix: helpdesk
+  headerSecrets:
+    - name: Authorization
+      secretRef:
+        name: helpdesk-credentials
+        key: token
+  timeoutSeconds: 15
 
 ---
-apiVersion: agent.flokoa.ai/v1alpha1
-kind: AgentTool
-metadata:
-  name: check-order-status
-  namespace: customer-service
-spec:
-  type: openapi
-  description: "Check the status of a customer order"
-  openApi:
-    serviceRef:
-      name: order-service
-      namespace: backend
-      port: 8080
-    timeoutSeconds: 10
-    openApiSchema:
-      endpointPath: "/openapi.json"
-
----
-# Step 4: Create Agent with all components
+# Step 5: Create the Agent — the composition root. The operator compiles the
+# refs + inline fragment into one pydantic-ai AgentSpec, validates it against
+# the runner's pinned schema, and runs it on the generic runner.
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: Agent
 metadata:
@@ -97,148 +95,50 @@ metadata:
     app.kubernetes.io/name: customer-service-agent
     app.kubernetes.io/component: ai-agent
 spec:
-  # Agent metadata (A2A protocol)
   card:
-    name: "Customer Service Agent"
-    description: "AI agent that handles customer inquiries, searches knowledge base, and creates support tickets"
+    name: customer-service-agent
+    description: "Handles customer support questions, tickets, and order status"
     version: "1.0.0"
-    
     defaultInputModes:
-      - "application/json"
+      - application/json
     defaultOutputModes:
-      - "application/json"
-    
+      - application/json
     capabilities:
       streaming: false
-      pushNotifications: false
-    
     skills:
-      - id: "answer-questions"
-        name: "Answer Customer Questions"
-        description: "Provide answers to common customer questions using the knowledge base"
-        tags: ["support", "faq"]
-        examples:
-          - "What are your business hours?"
-          - "How do I reset my password?"
-      
-      - id: "order-status"
-        name: "Check Order Status"
-        description: "Look up and provide information about customer orders"
-        tags: ["orders", "tracking"]
-        examples:
-          - "Where is my order?"
-          - "When will my package arrive?"
-      
-      - id: "create-ticket"
-        name: "Create Support Ticket"
-        description: "Escalate complex issues to human support staff"
-        tags: ["support", "escalation"]
-  
-  # Framework declaration
-  framework: pydantic-ai
-  
-  # Model reference
-  model:
-    name: gpt-4o-support
-  
-  # Tools available to this agent
-  tools:
-    - toolRef:
-        name: search-knowledge-base
-    - toolRef:
-        name: create-support-ticket
-    - toolRef:
-        name: check-order-status
-  
-  # Runtime configuration
-  runtime:
-    type: standard
-    spec:
-      # High availability with 3 replicas
-      replicas: 3
-      
-      # Container configuration
-      container:
-        name: agent
-        image: ghcr.io/example/customer-service-agent:v1.0.0
-        
-        ports:
-        - containerPort: 8080
-          name: http
-          protocol: TCP
-        - containerPort: 9090
-          name: metrics
-          protocol: TCP
-        
-        # Environment configuration
-        env:
-        - name: ENVIRONMENT
-          value: "production"
-        - name: LOG_LEVEL
-          value: "info"
-        - name: AGENT_NAME
-          value: "customer-service"
-        
-        # Resource limits
-        resources:
-          requests:
-            cpu: "200m"
-            memory: "256Mi"
-          limits:
-            cpu: "1000m"
-            memory: "1Gi"
-        
-        # Health checks
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          successThreshold: 1
-          failureThreshold: 3
-        
-        # Security context
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 1000
-          capabilities:
-            drop:
-            - ALL
-      
-      # Pod-level security
-      securityContext:
-        fsGroup: 1000
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-      
-      # High availability: spread across zones
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app.kubernetes.io/name: customer-service-agent
-              topologyKey: topology.kubernetes.io/zone
+      - id: answer-questions
+        name: Answer Questions
+        description: "Answers product and policy questions from the knowledge base"
+        tags: [support, kb]
+      - id: manage-tickets
+        name: Manage Tickets
+        description: "Creates support tickets for unresolved issues"
+        tags: [support, tickets]
 
----
-# Step 5: Create required secret
-# Note: Apply this secret separately with your actual API key
-# kubectl create secret generic openai-credentials \
-#   --from-literal=api-key=sk-proj-YOUR-KEY-HERE \
-#   -n customer-service
+  modelRef:
+    name: gpt-4o-support
+  instructionRefs:
+    - name: support-policy
+  tools:
+    - name: search-knowledge-base
+    - name: create-support-ticket
+
+  spec:
+    instructions:
+      - "Today's priority: order-status questions."
+    outputSchema:
+      type: object
+      properties:
+        answer: {type: string}
+        ticketId: {type: string}
+      required: [answer]
+
+  runtime:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"

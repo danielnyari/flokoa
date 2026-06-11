@@ -22,8 +22,7 @@ export interface Condition {
 // ─── Agent CRD ──────────────────────────────────────────────────────
 
 export type AgentPhase = 'Pending' | 'Running' | 'Failed'
-export type Framework = 'pydantic-ai' | 'langchain' | 'google-adk' | 'marvin' | 'autogen' | 'a2a'
-export type RuntimeType = 'standard' | 'template'
+export type IsolationTier = 'shared' | 'session'
 
 export interface AgentSkill {
   id: string
@@ -44,46 +43,37 @@ export interface AgentCardOverride {
   skills?: AgentSkill[]
 }
 
+export interface NamespacedRef {
+  name: string
+  namespace?: string
+}
+
 export interface AgentSpec {
   card?: AgentCardOverride
   runtime?: {
-    type?: RuntimeType
-    // Proto field name is "spec" (maps from CRD "standard" or "template")
-    spec?: {
-      container?: Record<string, unknown>
-      config?: Record<string, unknown>
-      replicas?: number
-    }
+    image?: string
+    runnerVersion?: string
+    isolation?: IsolationTier
+    replicas?: number
+    env?: Array<{ name: string, value?: string }>
+    resources?: Record<string, unknown>
   }
-  model?: {
-    name: string
-    namespace?: string
-  }
-  instruction?: {
-    template?: string
-    instructionRef?: {
-      name: string
-      namespace?: string
-    }
-  }
-  framework?: Framework
-  tools?: Array<{
-    name?: string
-    template?: Record<string, unknown>
-    toolRef?: {
-      name: string
-      namespace?: string
-    }
-  }>
+  // Inline pydantic-ai AgentSpec fragment (JSON form).
+  spec?: Record<string, unknown>
+  modelRef?: NamespacedRef
+  instructionRefs?: NamespacedRef[]
+  tools?: NamespacedRef[]
+  secretRefs?: Record<string, { name: string, key: string }>
 }
 
 export interface AgentStatus {
   phase?: AgentPhase
-  backend?: string
   url?: string
+  specHash?: string
+  runnerVersion?: string
+  injectedCapabilities?: string[]
   replicas?: number
   availableReplicas?: number
-  detectedFramework?: Framework
   conditions?: Condition[]
   observedGeneration?: number
 }
@@ -108,21 +98,18 @@ export interface ModelSpec {
     name: string
     namespace?: string
   }
-  parameters?: {
+  settings?: {
     temperature?: string
     maxTokens?: number
     topP?: string
     topK?: number
     presencePenalty?: string
     frequencyPenalty?: string
-    timeOut?: number
+    timeoutSeconds?: number
     parallelToolCalls?: boolean
     stopSequences?: string[]
     seed?: number
-    openai?: Record<string, unknown>
-    anthropic?: Record<string, unknown>
-    google?: Record<string, unknown>
-    bedrock?: Record<string, unknown>
+    extra?: Record<string, unknown>
   }
 }
 
@@ -194,30 +181,26 @@ export interface ModelProviderList {
 
 // ─── AgentTool CRD ──────────────────────────────────────────────────
 
-export type AgentToolType = 'openapi'
+export type AgentToolType = 'mcp' | 'openapi'
+export type MCPTransport = 'streamableHTTP' | 'sse'
 
 export interface AgentToolSpec {
-  type: AgentToolType
-  description: string
-  openApi?: {
-    url?: string
-    serviceRef?: {
-      name: string
-      namespace?: string
-      port?: number
-      portName?: string
-    }
-    openApiSchema?: {
-      value?: Record<string, unknown>
-      valueFrom?: {
-        name: string
-        key: string
-      }
-      endpointPath?: string
-    }
-    timeoutSeconds?: number
-    headers?: Record<string, string>
+  type?: AgentToolType
+  description?: string
+  url?: string
+  serviceRef?: {
+    name: string
+    namespace?: string
+    port?: number
+    portName?: string
   }
+  path?: string
+  transport?: MCPTransport
+  headers?: Record<string, string>
+  headerSecrets?: Array<{ name: string, secretRef: { name: string, key: string } }>
+  toolPrefix?: string
+  allowedTools?: string[]
+  timeoutSeconds?: number
 }
 
 export interface AgentToolStatus {

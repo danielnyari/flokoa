@@ -5,29 +5,23 @@ This directory contains example Custom Resources (CRs) for the Flokoa Agent oper
 ## Examples
 
 ### [minimal-agent.yaml](minimal-agent.yaml)
-The absolute minimum configuration required to deploy an agent. This example shows:
-- Only required fields
-- Default replica count (1)
-- Single container with basic port configuration
+The absolute minimum: a card, an inline model, and instructions. No image,
+no build — the operator compiles the spec and runs it on the generic runner.
 
-**Use when:** You want to quickly test or deploy a simple agent without extra configuration.
+**Use when:** You want to quickly test or deploy a simple agent.
 
 ### [basic-agent.yaml](basic-agent.yaml)
-A practical production-ready configuration. This example includes:
-- Framework declaration (`pydantic-ai`)
-- Multiple replicas for high availability
-- Environment variables
-- Resource requests and limits
-- Health checks (liveness and readiness probes)
+The composition shape: shared Model and Instruction resources, an MCP tool,
+an inline fragment, and secret-backed placeholders. Rotate the Model CR and
+every referencing agent recompiles and rolls.
 
-**Use when:** You need a solid baseline for most production deployments.
+**Use when:** You need the fleet-managed baseline for production deployments.
 
 ### [advanced-agent.yaml](advanced-agent.yaml)
-A comprehensive configuration showcasing all available features:
-- Service account for RBAC
-- Multiple container ports (HTTP + metrics)
-- Secrets management
-- Volume mounts (ConfigMap, EmptyDir)
+The custom-image escape hatch plus scheduling overrides:
+- `runtime.image` replacing the generic runner
+- Structured output schema
+- Node selectors and tolerations
 - Security contexts (pod and container level)
 - Image pull secrets
 - Node scheduling (selectors, tolerations, affinity)
@@ -61,47 +55,25 @@ kubectl logs -l flokoa.ai/agent=basic-agent
 ## Field Reference
 
 ### Required Fields
-- `spec.runtime.type` - Runtime backend type (`standard` or `template`)
-- `spec.runtime.spec.container.name` - Container name
-- `spec.runtime.spec.container.image` - Container image
+- `spec.card` - The published A2A agent card (name, description, version, skills)
+- A model: either `spec.modelRef` (a Model resource) or `spec.spec.model`
+  (an inline pydantic-ai model identifier like `openai:gpt-5-mini`)
 
-### Common Optional Fields
-- `spec.framework` - Framework type (`pydantic-ai`)
-- `spec.runtime.spec.replicas` - Number of pod replicas (default: 1)
-- `spec.runtime.spec.container.ports` - Container ports
-- `spec.runtime.spec.container.env` - Environment variables
-- `spec.runtime.spec.container.resources` - CPU/memory limits
-- `spec.runtime.spec.container.volumeMounts` - Volume mount points
-- `spec.runtime.spec.volumes` - Pod volumes
-- `spec.runtime.spec.serviceAccountName` - Service account for RBAC
-- `spec.runtime.spec.securityContext` - Pod security context
-- `spec.runtime.spec.nodeSelector` - Node selection constraints
-- `spec.runtime.spec.tolerations` - Pod tolerations
-- `spec.runtime.spec.affinity` - Pod affinity rules
+### Composition Fields
+- `spec.modelRef` - References a Model resource (inline `spec.spec.model` wins conflicts)
+- `spec.instructionRefs` - Instruction resources, composed in order before inline instructions
+- `spec.tools` - AgentTool resources (declarative MCP endpoints)
+- `spec.spec` - Inline pydantic-ai AgentSpec fragment (instructions, modelSettings,
+  outputSchema, native capabilities, extra passthrough)
+- `spec.secretRefs` - Named secrets resolvable via `${secret:NAME}` placeholders
 
-## Runtime Types
+### Runtime Fields
+- `spec.runtime.image` - Custom image escape hatch (default: the generic runner)
+- `spec.runtime.runnerVersion` - Pins a runner release
+- `spec.runtime.isolation` - Session isolation tier (`shared` today; `session` ships with the session router)
+- `spec.runtime.replicas` - Number of pod replicas (default: 1)
+- `spec.runtime.env` / `resources` / `serviceAccountName` / `securityContext` /
+  `nodeSelector` / `tolerations` / `affinity` - Pod-level configuration
 
-The `spec.runtime.type` field determines the backend used to run the agent:
-
-- **`standard`** - Deploys agents using standard Kubernetes Deployments and Services. The user provides their own container image.
-- **`template`** - Uses a generic runtime image fully managed by the operator. The agent's behavior is defined entirely in the CR via instructions and output schema.
-
-## Status Fields
-
-The operator updates these status fields automatically:
-
-- `status.phase` - Current phase (Pending, Running, Failed)
-- `status.backend` - Backend implementation (standard, template)
-- `status.url` - Service endpoint URL
-- `status.replicas` - Current replica count
-- `status.availableReplicas` - Ready replicas
-- `status.conditions` - Standard Kubernetes conditions
-- `status.observedGeneration` - Last observed spec generation
-
-## Tips
-
-1. **Start Simple**: Begin with `minimal-agent.yaml` and add fields as needed
-2. **Set Resource Limits**: Always define CPU/memory limits to prevent resource contention
-3. **Use Health Checks**: Liveness and readiness probes ensure reliable deployments
-4. **Security First**: Use `securityContext` to run containers as non-root with read-only filesystems
-5. **High Availability**: Use `replicas > 1` with anti-affinity rules for production
+The compiled spec lands in the `<agent>-agent-spec` ConfigMap; `kubectl get
+agent <name> -o jsonpath='{.status.specHash}'` shows the resolved-spec hash.

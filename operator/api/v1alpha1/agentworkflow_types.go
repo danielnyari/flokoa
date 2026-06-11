@@ -22,6 +22,71 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Legacy shapes kept only for the frozen AgentWorkflow API (template-only,
+// per the v2.1 pivot). The Agent CRD no longer uses them.
+
+// InstructionEntry represents either an inline instruction or a reference to
+// an Instruction resource. Exactly one of Template or InstructionRef must be
+// specified.
+type InstructionEntry struct {
+	// Template defines the instruction content directly.
+	// +optional
+	Template string `json:"template,omitempty"`
+
+	// InstructionRef references an existing Instruction resource.
+	// +optional
+	InstructionRef *NamespacedRef `json:"instructionRef,omitempty"`
+}
+
+// AgentModelRef references a Model resource by name and optional namespace.
+type AgentModelRef struct {
+	// Name of the Model resource.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Namespace of the Model resource. Defaults to the referencing resource's namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// StructuredIOSchema describes a named JSON Schema for structured input/output.
+type StructuredIOSchema struct {
+	JSONSchema *apiextensionsv1.JSON `json:"jsonSchema"`
+
+	Name string `json:"name"`
+
+	Description string `json:"description"`
+}
+
+// ToolEntry represents either an inline tool definition or a reference to an
+// AgentTool resource. Exactly one of Template or ToolRef must be specified.
+type ToolEntry struct {
+	// Name of the tool. Required for inline tools, used as identifier.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Template defines the tool directly in the task spec.
+	// +optional
+	Template *AgentToolSpec `json:"template,omitempty"`
+
+	// ToolRef references an existing AgentTool resource.
+	// +optional
+	ToolRef *ToolRef `json:"toolRef,omitempty"`
+}
+
+// ToolRef references an existing AgentTool resource.
+type ToolRef struct {
+	// Name of the AgentTool resource.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Namespace of the AgentTool. Defaults to the referencing resource's namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // AgentWorkflowSpec defines the desired state of AgentWorkflow.
 type AgentWorkflowSpec struct {
 	// Description is a human-readable description of the workflow.

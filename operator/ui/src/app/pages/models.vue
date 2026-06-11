@@ -131,13 +131,13 @@ const columns: TableColumn<Model>[] = [
   {
     id: 'temperature',
     header: 'Temperature',
-    cell: ({ row }) => row.original.spec.parameters?.temperature ?? '—'
+    cell: ({ row }) => row.original.spec.settings?.temperature ?? '—'
   },
   {
     id: 'maxTokens',
     header: 'Max Tokens',
     cell: ({ row }) => {
-      const val = row.original.spec.parameters?.maxTokens
+      const val = row.original.spec.settings?.maxTokens
       return val ? val.toLocaleString() : '—'
     }
   },

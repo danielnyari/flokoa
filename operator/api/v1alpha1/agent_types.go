@@ -8,18 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Framework represents the AI framework used by the agent.
-// +kubebuilder:validation:Enum=pydantic-ai;langchain;crewai;autogen;a2a
-type Framework string
-
-const (
-	// FrameworkPydanticAI represents the Pydantic AI framework.
-	FrameworkPydanticAI Framework = "pydantic-ai"
-	FrameworkLangChain  Framework = "langchain"
-	FrameworkAutogen    Framework = "autogen"
-	FrameworkA2A        Framework = "a2a"
-)
-
 // AgentPhase represents the current phase of the agent lifecycle.
 // +kubebuilder:validation:Enum=Pending;Running;Failed
 type AgentPhase string
@@ -33,17 +21,16 @@ const (
 	AgentPhaseFailed AgentPhase = "Failed"
 )
 
-// RuntimeType represents the type of runtime backend for the agent.
-// +kubebuilder:validation:Enum=standard;template
-type RuntimeType string
+// IsolationTier selects how sessions map onto runner pods.
+// +kubebuilder:validation:Enum=shared;session
+type IsolationTier string
 
 const (
-	// RuntimeTypeStandard uses a Kubernetes Deployment for the agent runtime.
-	// The user provides their own container image.
-	RuntimeTypeStandard RuntimeType = "standard"
-	// RuntimeTypeTemplate uses a generic runtime image fully managed by the operator.
-	// The agent's behavior is defined entirely in the CR via instructions and output schema.
-	RuntimeTypeTemplate RuntimeType = "template"
+	// IsolationShared serves all sessions from a shared pool of runner pods.
+	IsolationShared IsolationTier = "shared"
+	// IsolationSession gives each A2A context its own sandbox pod (P1; the
+	// admission webhook rejects it until the session router and pools ship).
+	IsolationSession IsolationTier = "session"
 )
 
 // AgentSkill describes a specific capability or function the agent can perform.
@@ -120,87 +107,130 @@ type AgentCardOverride struct {
 	Skills []AgentSkill `json:"skills"`
 }
 
-// AgentSpec defines the desired state of an Agent
+// AgentSpec defines the desired state of an Agent.
+//
+// An Agent is the composition root of a pydantic-ai AgentSpec: the inline
+// fragment plus Model/Instruction/AgentTool/Capability references compile into
+// one resolved spec (merge precedence: referenced CRs compose in declared
+// order, inline scalars win conflicts, list fields append), validated against
+// the runner's pinned AgentSpec JSON Schema and delivered to the generic
+// runner as a single ConfigMap.
 type AgentSpec struct {
-	CardOverride AgentCardOverride `json:"card"`
-
-	// Runtime configuration - specifies the backend and configuration
-	Runtime RuntimeSpec `json:"runtime"`
-
-	// Model specifies the LLM model to use for this agent.
-	// Can reference a Model resource directly (uses defaults) or a ModelConfig resource (full parameters).
+	// Spec is an inline pydantic-ai AgentSpec fragment (typed where upstream
+	// is stable; see AgentSpecFragment).
 	// +optional
-	Model *AgentModelRef `json:"model,omitempty"`
+	Spec *AgentSpecFragment `json:"spec,omitempty"`
 
-	// Instruction defines the system prompt for this agent.
-	// Can be defined inline (creates an Instruction CR) or reference an existing Instruction resource.
-	// Supported by both standard and managed runtime types.
+	// ModelRef references a Model CR. The fragment's inline model wins over
+	// the reference if both are set.
 	// +optional
-	Instruction *InstructionEntry `json:"instruction,omitempty"`
+	ModelRef *NamespacedRef `json:"modelRef,omitempty"`
 
-	// Framework explicitly declares the AI framework used by the agent.
-	// Used for observability and tooling integration.
+	// InstructionRefs compose Instruction CRs, in order, before the
+	// fragment's instructions.
 	// +optional
-	Framework Framework `json:"framework,omitempty"`
+	InstructionRefs []NamespacedRef `json:"instructionRefs,omitempty"`
 
-	// Tools available to this agent. Can be inline definitions or references to AgentTool resources.
+	// Tools reference AgentTool CRs (declarative MCP endpoints), compiled to
+	// MCP capability entries after the fragment's capabilities.
 	// +optional
-	Tools []ToolEntry `json:"tools,omitempty"`
+	Tools []NamespacedRef `json:"tools,omitempty"`
+
+	// Capabilities reference Capability CRs with per-agent config, validated
+	// against the capability's published schema at admission.
+	// Capability CRs ship in a later release (roadmap 08); the webhook
+	// rejects entries until then.
+	// +optional
+	Capabilities []CapabilityAttachment `json:"capabilities,omitempty"`
+
+	// SecretRefs names the secrets resolvable via ${secret:NAME} placeholders
+	// in the compiled spec (runtime contract §3). Values are projected as
+	// FLOKOA_SECRET_* environment variables and resolved in the runner;
+	// they never appear in the compiled spec ConfigMap.
+	// +optional
+	SecretRefs map[string]corev1.SecretKeySelector `json:"secretRefs,omitempty"`
+
+	// Card configures the published A2A agent card.
+	Card AgentCardOverride `json:"card"`
+
+	// Runtime configures how the compiled spec runs.
+	// +optional
+	Runtime AgentRuntime `json:"runtime,omitempty"`
 }
 
-// InstructionEntry represents either an inline instruction or a reference to an Instruction resource.
-// Exactly one of Inline or InstructionRef must be specified.
-type InstructionEntry struct {
-	// Template defines the instruction content directly in the Agent spec.
-	// When set, the operator creates a child Instruction CR.
+// AgentSpecFragment mirrors the stable subset of pydantic-ai's AgentSpec with
+// typed fields. Anything additive upstream flows through Extra; the compiled
+// spec is always validated against the pinned AgentSpec JSON Schema (the
+// backstop that keeps this fragment honest across runner bumps).
+type AgentSpecFragment struct {
+	// Model is a pydantic-ai model identifier (e.g. "openai:gpt-5-mini").
+	// Wins over modelRef when both are set.
 	// +optional
-	Template string `json:"template,omitempty"`
+	Model string `json:"model,omitempty"`
 
-	// InstructionRef references an existing Instruction resource.
-	// +optional
-	InstructionRef *NamespacedRef `json:"instructionRef,omitempty"`
-}
-
-// ToolEntry represents either an inline tool definition or a reference to an AgentTool resource.
-// Exactly one of Inline or ToolRef must be specified.
-type ToolEntry struct {
-	// Name of the tool. Required for inline tools, used as identifier.
-	// +kubebuilder:validation:MinLength=1
+	// Name overrides the agent name in the compiled spec (defaults to the CR name).
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// Template defines the tool directly in the Agent spec.
-	// Uses the same spec as AgentTool for consistency.
+	// Description of the agent, used by sub-agent and handoff tooling.
 	// +optional
-	Template *AgentToolSpec `json:"template,omitempty"`
+	Description string `json:"description,omitempty"`
 
-	// ToolRef references an existing AgentTool resource.
+	// Instructions are appended after all instructionRefs content.
 	// +optional
-	ToolRef *ToolRef `json:"toolRef,omitempty"`
+	Instructions []string `json:"instructions,omitempty"`
+
+	// ModelSettings overrides settings from the referenced Model per-key
+	// (inline scalars win conflicts).
+	// +optional
+	ModelSettings *ModelSettings `json:"modelSettings,omitempty"`
+
+	// OutputSchema constrains the agent's output to a JSON Schema
+	// (compiles to AgentSpec output_schema).
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	OutputSchema *apiextensionsv1.JSON `json:"outputSchema,omitempty"`
+
+	// Capabilities are native pydantic-ai capability entries (WebSearch,
+	// WebFetch, MCP, Thinking, ToolSearch, …) by name plus config. Harness
+	// and third-party capability class paths are rejected here — they ship
+	// through Capability CRs only.
+	// +optional
+	Capabilities []NativeCapabilityEntry `json:"capabilities,omitempty"`
+
+	// Extra passes additional top-level AgentSpec fields through to the
+	// compiled spec (additive upstream fields such as retries or
+	// end_strategy). Keys here lose to typed fields on conflict.
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Extra *apiextensionsv1.JSON `json:"extra,omitempty"`
 }
 
-// ToolRef references an existing AgentTool resource.
-type ToolRef struct {
-	// Name of the AgentTool resource.
-	// +kubebuilder:validation:Required
+// NativeCapabilityEntry names a capability from the runner baseline with its
+// configuration. It compiles to the capability-spec form of the pinned
+// pydantic-ai version ("Name" or {"Name": config}).
+type NativeCapabilityEntry struct {
+	// Name of the native capability as serialized in AgentSpec (e.g.
+	// "WebSearch", "Thinking", "MCP").
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Namespace of the AgentTool. Defaults to the Agent's namespace if not specified.
+	// Config holds the capability's keyword arguments, validated against the
+	// embedded AgentSpec schema at compile time.
 	// +optional
-	Namespace string `json:"namespace,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Config *apiextensionsv1.JSON `json:"config,omitempty"`
 }
 
-// AgentModelRef specifies the model to use for the agent.
-// References a Model resource which defines the model name and parameters.
-type AgentModelRef struct {
-	// Name of the Model resource.
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
+// CapabilityAttachment references a Capability CR with per-agent config.
+type CapabilityAttachment struct {
+	Ref NamespacedRef `json:"ref"`
 
-	// Namespace of the Model resource. Defaults to the Agent's namespace if not specified.
+	// Config is validated against the Capability's published JSON Schema at
+	// admission.
 	// +optional
-	Namespace string `json:"namespace,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Config *apiextensionsv1.JSON `json:"config,omitempty"`
 }
 
 // NamespacedRef references a resource by name and optional namespace.
@@ -215,30 +245,37 @@ type NamespacedRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-// RuntimeSpec defines the runtime backend and its configuration.
-// When type is "standard", the Standard field must be provided.
-// When type is "managed", the Managed field must be provided.
-type RuntimeSpec struct {
-	// Type specifies the runtime backend to use.
-	// +kubebuilder:default=standard
-	// +kubebuilder:validation:Required
-	Type RuntimeType `json:"type"`
-
-	// Standard contains the standard runtime configuration (container-based).
-	// Required when type is "standard".
+// AgentRuntime configures how the compiled spec runs.
+type AgentRuntime struct {
+	// Image overrides the generic runner image (escape hatch; custom images
+	// own their bootstrap and must honor the runtime contract's interface).
 	// +optional
-	Standard *StandardRuntimeSpec `json:"standard,omitempty"`
+	Image string `json:"image,omitempty"`
 
-	// Template contains the managed runtime configuration.
-	// The operator generates a deployment using a generic runtime image with
-	// the agent behavior defined by instructions and output schema.
-	// Required when type is "managed".
+	// RunnerVersion pins a runner release. Defaults to the operator's
+	// current runner version; only versions with an embedded AgentSpec
+	// schema are accepted.
 	// +optional
-	Template *TemplatedRuntimeSpec `json:"template,omitempty"`
+	RunnerVersion string `json:"runnerVersion,omitempty"`
+
+	// Isolation selects the session isolation tier.
+	// +kubebuilder:default=shared
+	// +optional
+	Isolation IsolationTier `json:"isolation,omitempty"`
+
+	// Env injects additional environment variables into the runner container.
+	// User entries win over operator-injected ones on name conflicts.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources specifies compute resource requirements for the runner container.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	DeploymentOverrides `json:",inline"`
 }
 
-// DeploymentOverrides contains pod-level scheduling and infrastructure fields
-// shared across all runtime types.
+// DeploymentOverrides contains pod-level scheduling and infrastructure fields.
 type DeploymentOverrides struct {
 	// Replicas is the number of desired pod replicas.
 	// +kubebuilder:default=1
@@ -271,68 +308,32 @@ type DeploymentOverrides struct {
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 }
 
-// StandardRuntimeSpec defines the configuration for the standard (Deployment-based) runtime.
-// Uses corev1 types directly where possible for maximum compatibility.
-type StandardRuntimeSpec struct {
-	DeploymentOverrides `json:",inline"`
-
-	// Container defines the main container spec for the agent pod.
-	// +kubebuilder:validation:Required
-	Container corev1.Container `json:"container"`
-
-	// Volumes to mount into the pod.
-	// +optional
-	Volumes []corev1.Volume `json:"volumes,omitempty"`
-}
-
-type StructuredIOSchema struct {
-	JSONSchema *apiextensionsv1.JSON `json:"jsonSchema"`
-
-	Name string `json:"name"`
-
-	Description string `json:"description"`
-}
-
-// TemplatedAgentConfig contains agent-specific configuration for the templated runtime.
-// This configuration is serialized to JSON and mounted as a ConfigMap for the runtime to consume.
-type TemplatedAgentConfig struct {
-
-	// OutputSchema defines the JSON Schema for constraining agent response format.
-	OutputSchema *StructuredIOSchema `json:"outputSchema"`
-}
-
-// TemplatedRuntimeSpec defines the configuration for a managed agent where the operator
-// generates the deployment using a generic runtime image. The agent's behavior is
-// defined via spec.instruction and output schema.
-type TemplatedRuntimeSpec struct {
-	DeploymentOverrides `json:",inline"`
-
-	// Config contains agent-specific configuration (schemas, etc.) that is mounted
-	// as a ConfigMap for the templated runtime to consume.
-	Config *TemplatedAgentConfig `json:"config"`
-
-	// Env allows injecting additional environment variables into the generated container.
-	// +optional
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
-	// Resources specifies compute resource requirements for the generated container.
-	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
 // AgentStatus defines the observed state of Agent.
 type AgentStatus struct {
 	// Phase represents the current lifecycle phase of the agent.
 	// +optional
 	Phase AgentPhase `json:"phase,omitempty"`
 
-	// Backend indicates the runtime backend being used (e.g., standard).
-	// +optional
-	Backend string `json:"backend,omitempty"`
-
-	// URL is the endpoint for invoking the agent.
+	// URL is the published endpoint for invoking the agent. Callers must
+	// treat it as opaque: port, path, and backing topology may change behind
+	// it (virtual endpoint identity).
 	// +optional
 	URL string `json:"url,omitempty"`
+
+	// SpecHash is the hash of the last successfully compiled AgentSpec.
+	// Changes whenever any part of the composition graph changes.
+	// +optional
+	SpecHash string `json:"specHash,omitempty"`
+
+	// RunnerVersion is the runner release the compiled spec was validated
+	// against.
+	// +optional
+	RunnerVersion string `json:"runnerVersion,omitempty"`
+
+	// InjectedCapabilities lists the platform capability entries the
+	// operator appended to the compiled spec.
+	// +optional
+	InjectedCapabilities []string `json:"injectedCapabilities,omitempty"`
 
 	// Replicas is the current number of pod replicas.
 	// +optional
@@ -341,14 +342,6 @@ type AgentStatus struct {
 	// AvailableReplicas is the number of replicas that are ready and available.
 	// +optional
 	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
-
-	// LastToolSync is the last time tools were synchronized to the agent.
-	// +optional
-	LastToolSync *metav1.Time `json:"lastToolSync,omitempty"`
-
-	// DetectedFramework is the AI framework detected from the container image.
-	// +optional
-	DetectedFramework Framework `json:"detectedFramework,omitempty"`
 
 	// Conditions represent the latest available observations of the agent's state.
 	// +optional
@@ -362,9 +355,9 @@ type AgentStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
-// +kubebuilder:printcolumn:name="Backend",type="string",JSONPath=".status.backend"
 // +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.url"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.availableReplicas"
+// +kubebuilder:printcolumn:name="SpecHash",type="string",JSONPath=".status.specHash"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Agent is the Schema for the agents API

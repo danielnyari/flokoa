@@ -1,3 +1,6 @@
+# A composed agent: shared Model and Instruction resources, an MCP tool, and
+# a secret-backed header — the fleet-management shape (rotate the Model CR
+# and every referencing agent recompiles and rolls).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: Agent
 metadata:
@@ -5,55 +8,51 @@ metadata:
   labels:
     app.kubernetes.io/name: basic-agent
     app.kubernetes.io/component: ai-agent
-    app.kubernetes.io/managed-by: flokoa-operator
 spec:
-  # Framework declaration for observability and tooling
-  framework: pydantic-ai
+  card:
+    name: basic-agent
+    description: "Support agent answering from the knowledge base"
+    version: "1.0.0"
+    skills:
+      - id: support
+        name: Support
+        description: "Answers support questions"
+        tags: [support]
+
+  # Compose shared resources (refs resolve in declared order).
+  modelRef:
+    name: gpt-4o
+  instructionRefs:
+    - name: support-policy
+    - name: kb-grounding
+  tools:
+    - name: search-knowledge-base
+
+  # Inline fragment: appended after the refs (inline scalars win conflicts).
+  spec:
+    instructions:
+      - "Sign off as 'Basic Agent'."
+    modelSettings:
+      temperature: "0.2"
+    capabilities:
+      - name: WebSearch
+
+  # ${secret:NAME} placeholders in the fragment resolve in the runner from
+  # these projections; values never enter the compiled spec.
+  secretRefs:
+    kb-token:
+      name: kb-credentials
+      key: token
 
   runtime:
-    type: standard
-    spec:
-      # Number of agent replicas
-      replicas: 2
-
-      # Container configuration
-      container:
-        name: agent
-        image: ghcr.io/example/pydantic-ai-agent:v1.0.0
-
-        # Container ports
-        ports:
-        - containerPort: 8080
-          name: http
-          protocol: TCP
-
-        # Environment variables
-        env:
-        - name: AGENT_MODE
-          value: "production"
-        - name: LOG_LEVEL
-          value: "info"
-
-        # Resource limits
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-
-        # Health checks
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
+    replicas: 2
+    env:
+      - name: LOG_LEVEL
+        value: "info"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
