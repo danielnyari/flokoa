@@ -100,9 +100,10 @@ operator/
 │   ├── samples/                   # Example CRs (16 samples)
 │   └── schemas/                   # JSON schemas
 ├── test/
-│   ├── e2e/                       # End-to-end tests
-│   │   ├── testdata/              # Test fixtures (CRs + Argo workflows)
+│   ├── e2e/                       # End-to-end tests (Kind cluster; needs Docker)
+│   │   ├── testdata/              # Test fixtures (CRs + Argo workflows) — shared with test/integration
 │   │   └── kind-config.yaml       # Kind cluster configuration
+│   ├── integration/               # Docker-free e2e: envtest + manager + runner subprocess over A2A
 │   └── utils/                     # Test utilities
 ├── hack/                          # Build scripts (boilerplate template)
 ├── Makefile                       # Build targets
@@ -165,6 +166,9 @@ make docker-push-flokoa-cli   # Push CLI image
 ### Testing
 ```bash
 make test               # Run unit tests with envtest (runs manifests, generate, fmt, vet first)
+make test-integration   # Docker-free integration suite: envtest + real manager + real Python
+                        # runner subprocess answering A2A (requires sdk/python/.venv via
+                        # `uv sync --all-packages`; shares fixtures with the Kind e2e suite)
 make test-e2e           # Run e2e tests in Kind cluster
 make setup-test-e2e     # Create Kind cluster if not exists
 make cleanup-test-e2e   # Delete Kind cluster
@@ -224,7 +228,18 @@ var _ = Describe("Agent Controller", func() {
 })
 ```
 
-### E2E Tests
+### Integration Tests (Docker-free)
+- Located in `test/integration/`; run with `make test-integration`
+- A real API server (envtest) + the real controller manager (real watches) +
+  the shared `test/e2e/testdata` fixtures + the real `flokoa-runner` as a
+  subprocess (pydantic-ai `test` model) answering live A2A `message/send`
+- Covers compile→ConfigMap→Deployment/Services→status, fleet recompiles on
+  Instruction edits, secret-rotation rollouts, last-good-spec semantics, and
+  the operator↔runner skew/digest chain
+- Does NOT cover: image builds/pulls, kubelet/pod scheduling, in-cluster
+  webhooks, Argo Workflows — that's what the Kind suite is for
+
+### E2E Tests (Kind)
 - Located in `test/e2e/`
 - Use Kind cluster for isolation
 - Run with: `make test-e2e`
@@ -432,7 +447,7 @@ GitHub Actions workflows in `.github/workflows/`:
 
 | Workflow | Trigger | Actions |
 |----------|---------|---------|
-| `test.yml` | Push/PR | `go mod tidy`, `make test`, Docker build+push on main |
+| `test.yml` | Push/PR | `go mod tidy`, `make test`; `make test-integration` (uv-synced runner leg); Docker build+push on main |
 | `lint.yml` | Push/PR | golangci-lint checks |
 | `test-e2e.yml` | Push/PR | Kind cluster + e2e tests |
 

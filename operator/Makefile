@@ -149,6 +149,11 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CONFIG) ;; \
 	esac
 
+.PHONY: test-integration
+test-integration: manifests generate fmt vet setup-envtest ## Run the Docker-free integration suite (envtest + real manager + real Python runner subprocess). Strict: requires sdk/python/.venv (uv sync --all-packages).
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	FLOKOA_INTEGRATION_STRICT=1 go test ./test/integration/ -v -count=1
+
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
 	@KUBECONFIG_FILE=$$(mktemp); \
