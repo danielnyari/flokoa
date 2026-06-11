@@ -10,7 +10,6 @@ dependencies = [
 members = [
     "flokoa",
     "flokoa-types",
-    "flokoa-managed-agent",
     "flokoa-runner",
     "flokoa-codemode-mcp",
     "flokoa-common",

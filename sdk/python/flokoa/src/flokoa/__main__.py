@@ -2,17 +2,10 @@ import asyncio
 import importlib
 import os
 import sys
+from pathlib import Path
 
 import click
 import uvicorn
-from a2a.server.apps import A2AFastAPIApplication
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore
-from fastapi import FastAPI
-
-from flokoa.utils import load_agent_card
-from flokoa.utils.agent_card_builder import AgentCardBuilder
-from flokoa.utils.router import router as health_router
 
 
 @click.group()
@@ -25,13 +18,22 @@ def cli() -> None:
     "--module",
     "-m",
     type=str,
-    required=True,
+    default=None,
     help="Module path to the agent (e.g. my_module:my_agent).",
+)
+@click.option(
+    "--file",
+    "-f",
+    "spec_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Serve a pydantic-ai AgentSpec file (YAML or JSON) — the local mirror of the cluster runner path.",
 )
 @click.option("--host", default=None, help="Host to bind the server to.")
 @click.option("--port", default=None, type=int, help="Port to bind the server to.")
 def run(
-    module: str,
+    module: str | None,
+    spec_file: Path | None,
     host: str | None,
     port: int | None,
 ) -> None:
@@ -40,79 +42,65 @@ def run(
     \b
     Usage:
       flokoa run -m my_module:my_agent
+      flokoa run -f agentspec.yaml
     """
-    _start_integration(
-        module=module,
-        host=host or "localhost",
-        port=port or 10001,
-    )
+    if (module is None) == (spec_file is None):
+        raise click.UsageError("exactly one of --module/-m or --file/-f is required")
+
+    host = host or "localhost"
+    port = port or 10001
+
+    agent = _load_agent_from_module(module) if module is not None else _load_agent_from_spec(spec_file)  # type: ignore[arg-type]
+
+    _serve(agent, host=host, port=port)
 
 
-def _start_integration(module: str, host: str, port: int) -> None:
-    """Start a user-provided agent with an A2A server."""
-    # Initialize OpenTelemetry if the tracing extra is installed.
-    from flokoa.telemetry import init_telemetry, instrument_fastapi, instrument_pydantic_ai
-
-    init_telemetry("flokoa-agent", restore_context_from_env=False)
-    instrument_pydantic_ai()
-
+def _load_agent_from_module(module: str):
+    """Import a user-constructed pydantic-ai agent from module:attr."""
     cwd = os.getcwd()
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
+    module_name, _, attr = module.partition(":")
+    if not module_name or not attr:
+        raise click.UsageError("--module must be of the form module:attr")
+
     try:
-        from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
+        agent_module = importlib.import_module(module_name)
+    except ImportError as e:
+        raise ImportError(f"Could not import agent module '{module_name}': {e}") from e
+    try:
+        return getattr(agent_module, attr)
+    except AttributeError as e:
+        raise ImportError(f"Agent '{attr}' not found in module '{module_name}': {e}") from e
+
+
+def _load_agent_from_spec(spec_file: Path):
+    """Hydrate a pydantic-ai AgentSpec file — what the cluster runner does."""
+    try:
+        from pydantic_ai import Agent
+        from pydantic_ai.agent.spec import AgentSpec
     except ImportError as e:
         raise ImportError(
             "flokoa[pydantic-ai] is not installed. Install it with: pip install flokoa[pydantic-ai]"
         ) from e
 
-    executor_cls = PydanticAIAgentExecutor
-    agent_parts = module.split(":")
-    agent_module_name = agent_parts[0]
-    agent_cls_name = agent_parts[1]
-
-    try:
-        agent_module = importlib.import_module(agent_module_name)
-        try:
-            agent_obj = getattr(agent_module, agent_cls_name)
-            agent_executor = executor_cls(agent=agent_obj)
-        except AttributeError as e:
-            raise ImportError(f"Agent '{agent_cls_name}' not found in module '{agent_module_name}': {e}") from e
-    except ImportError as e:
-        raise ImportError(f"Could not import agent module '{module}': {e}") from e
-
-    agent_card = load_agent_card(url=f"http://{host}:{port}/")
-
-    if agent_card is None:
-        builder = AgentCardBuilder(agent=agent_obj, rpc_url=f"http://{host}:{port}/")
-        agent_card = asyncio.run(builder.build())
-
-    app = _get_app(agent_executor=agent_executor, agent_card=agent_card)
-    instrument_fastapi(app)
-    _run_server(app=app, host=host, port=port)
+    spec = AgentSpec.from_file(spec_file)
+    return Agent.from_spec(spec)
 
 
-def _get_app(agent_executor, agent_card) -> FastAPI:
-    """Create and run the A2A server."""
-    request_handler = DefaultRequestHandler(
-        agent_executor=agent_executor,
-        task_store=InMemoryTaskStore(),
-    )
+def _serve(agent, host: str, port: int) -> None:
+    """Serve a constructed agent over A2A."""
+    from flokoa.serving import build_app
+    from flokoa.telemetry import init_telemetry, instrument_pydantic_ai
+    from flokoa.utils.agent_card_builder import AgentCardBuilder
 
-    server = A2AFastAPIApplication(
-        agent_card=agent_card,
-        http_handler=request_handler,
-    )
+    init_telemetry("flokoa-agent", restore_context_from_env=False)
+    instrument_pydantic_ai()
 
-    app = server.build()
-
-    app.include_router(health_router)
-    return app
-
-
-def _run_server(app: FastAPI, host: str, port: int) -> None:
-    """Run the FastAPI app with Uvicorn."""
+    rpc_url = f"http://{host}:{port}/"
+    card = asyncio.run(AgentCardBuilder(agent=agent, rpc_url=rpc_url).build())
+    app = build_app(agent, card)
     uvicorn.run(app, host=host, port=port)
 
 

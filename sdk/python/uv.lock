@@ -11,7 +11,6 @@ members = [
     "flokoa",
     "flokoa-codemode-mcp",
     "flokoa-common",
-    "flokoa-managed-agent",
     "flokoa-runner",
     "flokoa-types",
     "flokoa-workspace",
@@ -789,7 +788,6 @@ dependencies = [
     { name = "a2a-sdk" },
     { name = "click" },
     { name = "fastapi" },
-    { name = "flokoa-common" },
     { name = "flokoa-types" },
     { name = "pydantic" },
 ]
@@ -822,13 +820,12 @@ requires-dist = [
     { name = "a2a-sdk", specifier = ">=0.3.22" },
     { name = "click", specifier = ">=8.3.1" },
     { name = "fastapi", specifier = ">=0.128.0" },
-    { name = "flokoa-common", editable = "flokoa-common" },
     { name = "flokoa-types", editable = "flokoa-types" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'tracing'", specifier = ">=1.20.0" },
     { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'tracing'", specifier = ">=0.41b0" },
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.20.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
-    { name = "pydantic-ai", marker = "extra == 'pydantic-ai'", specifier = ">=1.44.0" },
+    { name = "pydantic-ai", marker = "extra == 'pydantic-ai'", specifier = ">=1.107.0,<2" },
 ]
 provides-extras = ["pydantic-ai", "tracing"]
 
@@ -900,49 +897,6 @@ requires-dist = [
 ]
 
 [[package]]
-name = "flokoa-managed-agent"
-version = "0.1.0"
-source = { editable = "flokoa-managed-agent" }
-dependencies = [
-    { name = "flokoa", extra = ["pydantic-ai"] },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-instrumentation-fastapi" },
-    { name = "opentelemetry-sdk" },
-    { name = "pyyaml" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "a2a-sdk" },
-    { name = "anyio" },
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-timeout" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "flokoa", extras = ["pydantic-ai"], editable = "flokoa" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20.0" },
-    { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.41b0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "a2a-sdk", specifier = ">=0.3.22" },
-    { name = "anyio", specifier = ">=4.0" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "pytest-timeout", specifier = ">=2.3" },
-    { name = "ruff", specifier = ">=0.14.14" },
-]
-
-[[package]]
 name = "flokoa-runner"
 version = "0.2.0"
 source = { editable = "flokoa-runner" }
@@ -951,6 +905,7 @@ dependencies = [
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "opentelemetry-sdk" },
+    { name = "packaging" },
     { name = "pydantic-ai" },
     { name = "pyyaml" },
 ]
@@ -972,6 +927,7 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20.0" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.41b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "packaging", specifier = ">=24.0" },
     { name = "pydantic-ai", specifier = "==1.107.0" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]

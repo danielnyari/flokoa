@@ -11,6 +11,7 @@ dependencies = [
     # runner.lock, runner-manifest.json, and the embedded AgentSpec JSON schema
     # (make runner-contract), and is a PR-blocking review item.
     "pydantic-ai==1.107.0",
+    "packaging>=24.0",
     "pyyaml>=6.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",

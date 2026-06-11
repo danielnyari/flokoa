@@ -1,0 +1,6 @@
+# A compiled-AgentSpec sample for local runner runs (make docker-run-runner).
+# In-cluster, the operator compiles Agent CR compositions into this document.
+model: openai:gpt-5-mini
+name: sample-agent
+instructions:
+  - You are a helpful assistant. Be concise.
