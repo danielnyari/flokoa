@@ -1,0 +1,24 @@
+{{- /*
+When the chart's metrics NetworkPolicy selects the controller pods, all other
+ingress (including API-server webhook calls on 9443) is denied by default.
+This policy re-allows webhook traffic in that case.
+*/}}
+{{- if and .Values.webhooks.enabled .Values.controller.metrics.enabled .Values.controller.metrics.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}-allow-webhook-traffic
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "flokoa.controller.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 9443
+          protocol: TCP
+{{- end }}
