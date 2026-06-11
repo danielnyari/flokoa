@@ -329,13 +329,16 @@ spec:
                       - name
                       type: object
                     agentTask:
-                      description: AgentTask runs a Marvin-powered task in an ephemeral
-                        container.
+                      description: |-
+                        AgentTask is no longer supported. The AgentWorkflow API is frozen and
+                        the agentTask runtime was removed in the v2.1 pivot; the field is kept
+                        only for API compatibility with existing objects. The admission webhook
+                        rejects new usage and the compiler refuses to compile it.
+
+                        Deprecated: use an agent task calling a deployed Agent instead.
                       properties:
                         agent:
-                          description: |-
-                            Agent defines an inline Marvin agent for execution.
-                            Maps to the agent parameter in marvin.run(), marvin.classify(), etc.
+                          description: Agent defines an inline agent for execution.
                           properties:
                             instructions:
                               description: Instructions are behavioral instructions
@@ -368,13 +371,12 @@ spec:
                           additionalProperties:
                             type: string
                           description: |-
-                            Context is key-value data passed to the Marvin task.
+                            Context is key-value data passed to the task.
                             Values support expressions like {{tasks.prev.output}}.
                           type: object
                         count:
                           description: |-
                             Count is the number of items to generate.
-                            Maps to marvin.generate(n=...).
                             Only used when type=generate. Defaults to 1.
                           format: int32
                           minimum: 1
@@ -501,8 +503,7 @@ spec:
                             type: object
                           type: array
                         image:
-                          description: Image overrides the container image. Defaults
-                            to the flokoa managed-task runtime.
+                          description: Image overrides the container image.
                           type: string
                         input:
                           description: |-
@@ -545,7 +546,6 @@ spec:
                         labels:
                           description: |-
                             Labels for classify operations.
-                            Maps to marvin.classify(labels=[...]).
                             Required when type=classify.
                           items:
                             type: string
@@ -567,7 +567,6 @@ spec:
                         multiLabel:
                           description: |-
                             MultiLabel enables multi-label classification (returns list instead of single label).
-                            Maps to marvin.classify(multi_label=True).
                             Only used when type=classify.
                           type: boolean
                         resources:
@@ -801,8 +800,8 @@ spec:
                             type: object
                           type: array
                         type:
-                          description: 'Type is the Marvin operation: run, classify,
-                            extract, cast, or generate.'
+                          description: 'Type is the operation: run, classify, extract,
+                            cast, or generate.'
                           enum:
                           - run
                           - classify

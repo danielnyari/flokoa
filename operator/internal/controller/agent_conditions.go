@@ -61,8 +61,6 @@ type toolConfigMapInfo struct {
 
 // resolvedModelInfo is a compatibility type for existing tests.
 type resolvedModelInfo struct {
-	provider       agentv1alpha1.ProviderType
-	model          string
 	configMapName  string
 	envVars        []corev1.EnvVar
 	secretEnvVars  []corev1.EnvVar

@@ -67,7 +67,7 @@ func WorkflowTaskToProto(task *agentv1alpha1.WorkflowTask) *pb.WorkflowTask {
 	switch {
 	case task.Agent != nil:
 		pbTask.Type = "agent"
-	case task.AgentTask != nil:
+	case task.AgentTask != nil: //nolint:staticcheck // frozen field still reported for pre-existing objects
 		pbTask.Type = "agentTask"
 	case len(task.Switch) > 0:
 		pbTask.Type = "switch"

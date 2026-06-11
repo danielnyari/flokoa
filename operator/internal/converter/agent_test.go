@@ -618,8 +618,6 @@ func TestFrameworkToProto(t *testing.T) {
 	}{
 		{agentv1alpha1.FrameworkPydanticAI, pb.Framework_FRAMEWORK_PYDANTIC_AI},
 		{agentv1alpha1.FrameworkLangChain, pb.Framework_FRAMEWORK_LANGCHAIN},
-		{agentv1alpha1.FrameworkADK, pb.Framework_FRAMEWORK_GOOGLE_ADK},
-		{agentv1alpha1.FrameworkMarvin, pb.Framework_FRAMEWORK_MARVIN},
 		{agentv1alpha1.FrameworkAutogen, pb.Framework_FRAMEWORK_AUTOGEN},
 		{agentv1alpha1.FrameworkA2A, pb.Framework_FRAMEWORK_A2A},
 		{agentv1alpha1.Framework("unknown"), pb.Framework_FRAMEWORK_UNSPECIFIED},

@@ -9,15 +9,13 @@ import (
 )
 
 // Framework represents the AI framework used by the agent.
-// +kubebuilder:validation:Enum=pydantic-ai;langchain;crewai;marvin;autogen;a2a
+// +kubebuilder:validation:Enum=pydantic-ai;langchain;crewai;autogen;a2a
 type Framework string
 
 const (
 	// FrameworkPydanticAI represents the Pydantic AI framework.
 	FrameworkPydanticAI Framework = "pydantic-ai"
 	FrameworkLangChain  Framework = "langchain"
-	FrameworkADK        Framework = "google-adk"
-	FrameworkMarvin     Framework = "marvin"
 	FrameworkAutogen    Framework = "autogen"
 	FrameworkA2A        Framework = "a2a"
 )

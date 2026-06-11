@@ -58,13 +58,10 @@ func textMessage(text string) *agentv1alpha1.AgentMessage {
 	}
 }
 
-// jsonRaw creates an apiextensionsv1.JSON from a raw JSON string.
-func jsonRaw(s string) *apiextensionsv1.JSON {
-	return &apiextensionsv1.JSON{Raw: []byte(s)}
-}
-
 // wantWorkflowTemplate builds the expected compiled Argo WorkflowTemplate with standard metadata.
 // It always prepends the _flokoa_traceparent parameter to match compiler behavior.
+//
+//nolint:unparam // namespace is kept as a parameter for symmetry with the compiler API.
 func wantWorkflowTemplate(name, namespace string, templates []wfv1.Template, opts ...func(*wfv1.WorkflowTemplate)) *wfv1.WorkflowTemplate {
 	wft := &wfv1.WorkflowTemplate{
 		TypeMeta: metav1.TypeMeta{
@@ -119,16 +116,6 @@ func dagTmpl(tasks ...wfv1.DAGTask) wfv1.Template {
 	}
 }
 
-// containerOutputs returns the standard output parameters for agent task containers.
-func containerOutputs() wfv1.Outputs {
-	return wfv1.Outputs{
-		Parameters: []wfv1.Parameter{
-			{Name: "result", ValueFrom: &wfv1.ValueFrom{Path: "/tmp/result"}},
-			{Name: "artifact", ValueFrom: &wfv1.ValueFrom{Path: "/tmp/artifact"}},
-		},
-	}
-}
-
 // pluginOutputs returns the standard output parameters for A2A plugin templates.
 func pluginOutputs() wfv1.Outputs {
 	supplied := &wfv1.ValueFrom{Supplied: &wfv1.SuppliedValueFrom{}}
@@ -138,12 +125,6 @@ func pluginOutputs() wfv1.Outputs {
 			{Name: "artifact", ValueFrom: supplied},
 		},
 	}
-}
-
-// taskConfigEnv serialises an agentTaskConfig into the FLOKOA_TASK_CONFIG env var.
-func taskConfigEnv(cfg agentTaskConfig) corev1.EnvVar {
-	data, _ := json.Marshal(cfg)
-	return corev1.EnvVar{Name: taskConfigEnvVar, Value: string(data)}
 }
 
 // makePlugin builds a wfv1.Plugin from an A2A spec map.
@@ -222,7 +203,7 @@ func TestCompileToArgoWorkflow_SimpleSequential(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -268,7 +249,7 @@ func TestCompileToArgoWorkflow_AgentTemplate(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -319,7 +300,7 @@ func TestCompileToArgoWorkflow_AgentMessageExpressionTranslation(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -374,7 +355,7 @@ func TestCompileToArgoWorkflow_AgentTextShorthand(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -427,7 +408,7 @@ func TestCompileToArgoWorkflow_FieldAccessExpression(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -487,7 +468,7 @@ func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -528,570 +509,6 @@ func TestCompileToArgoWorkflow_AgentTemplateMultiPart(t *testing.T) {
 	assertDiff(t, want, got)
 }
 
-func TestCompileToArgoWorkflow_AgentTaskRun(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "run-test", Namespace: "ml"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "research",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type: agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Template: "Research {{params.topic}}",
-						},
-						Context: map[string]string{
-							"domain": "machine learning",
-							"prev":   "{{tasks.prep.output}}",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"research": {},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("run-test", "ml",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "research", Template: "research"}),
-			{
-				Name: "research",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "run",
-							Instructions: "Research {{workflow.parameters.topic}}",
-							Context: map[string]string{
-								"domain": "machine learning",
-								"prev":   "{{tasks.prep.outputs.parameters.result}}",
-							},
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskClassify(t *testing.T) {
-	multiLabel := true
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "classify-test", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "classify",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:       agentv1alpha1.MarvinTaskTypeClassify,
-						Input:      "This product exceeded all my expectations!",
-						Labels:     []string{"positive", "negative", "neutral"},
-						MultiLabel: &multiLabel,
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Template: "Classify sentiment",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"classify": {},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("classify-test", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "classify", Template: "classify"}),
-			{
-				Name: "classify",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "classify",
-							Instructions: "Classify sentiment",
-							Input:        "This product exceeded all my expectations!",
-							Labels:       []string{"positive", "negative", "neutral"},
-							MultiLabel:   &multiLabel,
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskExtract(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "extract-test", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "extract-names",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:  agentv1alpha1.MarvinTaskTypeExtract,
-						Input: "Alice and Bob went to the store.",
-						ResultType: &agentv1alpha1.StructuredIOSchema{
-							Name:        "PersonName",
-							Description: "A person's name",
-							JSONSchema:  jsonRaw(`{"type":"string"}`),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"extract-names": {},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("extract-test", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "extract-names", Template: "extract-names"}),
-			{
-				Name: "extract-names",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:  "extract",
-							Input: "Alice and Bob went to the store.",
-							ResultType: &agentTaskResultType{
-								Name:        "PersonName",
-								Description: "A person's name",
-								JSONSchema:  json.RawMessage(`{"type":"string"}`),
-							},
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskCast(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "cast-test", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "cast-data",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:  agentv1alpha1.MarvinTaskTypeCast,
-						Input: "{{tasks.source.output}}",
-						ResultType: &agentv1alpha1.StructuredIOSchema{
-							Name:        "Summary",
-							Description: "A structured summary",
-							JSONSchema:  jsonRaw(`{"type":"object","properties":{"title":{"type":"string"}}}`),
-						},
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Template: "Transform to summary format",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"cast-data": {},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("cast-test", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "cast-data", Template: "cast-data"}),
-			{
-				Name: "cast-data",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "cast",
-							Instructions: "Transform to summary format",
-							Input:        "{{tasks.source.outputs.parameters.result}}",
-							ResultType: &agentTaskResultType{
-								Name:        "Summary",
-								Description: "A structured summary",
-								JSONSchema:  json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"}}}`),
-							},
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskGenerate(t *testing.T) {
-	count := int32(10)
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "gen-test", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "generate-examples",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type: agentv1alpha1.MarvinTaskTypeGenerate,
-						ResultType: &agentv1alpha1.StructuredIOSchema{
-							Name:        "TestCase",
-							Description: "A test case",
-							JSONSchema:  jsonRaw(`{"type":"object","properties":{"input":{"type":"string"},"expected":{"type":"string"}}}`),
-						},
-						Count: &count,
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Template: "Generate diverse test cases",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"generate-examples": {},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("gen-test", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "generate-examples", Template: "generate-examples"}),
-			{
-				Name: "generate-examples",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "generate",
-							Instructions: "Generate diverse test cases",
-							Count:        &count,
-							ResultType: &agentTaskResultType{
-								Name:        "TestCase",
-								Description: "A test case",
-								JSONSchema:  json.RawMessage(`{"type":"object","properties":{"input":{"type":"string"},"expected":{"type":"string"}}}`),
-							},
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskWithInlineAgent(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "agent-test", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "agent-run",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type: agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Template: "Do analysis",
-						},
-						Agent: &agentv1alpha1.MarvinAgentSpec{
-							Name:         "analyst",
-							Instructions: "You are a data analyst",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"agent-run": {},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("agent-test", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "agent-run", Template: "agent-run"}),
-			{
-				Name: "agent-run",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "run",
-							Instructions: "Do analysis",
-							Agent: &agentTaskAgentConfig{
-								Name:         "analyst",
-								Instructions: "You are a data analyst",
-							},
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskCustomImage(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "custom-test", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "custom",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:  agentv1alpha1.MarvinTaskTypeRun,
-						Image: "my-registry/custom-task:v1",
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Template: "Run task",
-						},
-						Env: []corev1.EnvVar{
-							{Name: "CUSTOM_VAR", Value: "custom-value"},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"custom": {},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("custom-test", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "custom", Template: "custom"}),
-			{
-				Name: "custom",
-				Container: &corev1.Container{
-					Image:   "my-registry/custom-task:v1",
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "run",
-							Instructions: "Run task",
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-						{Name: "CUSTOM_VAR", Value: "custom-value"},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskWithResolvedVolumes(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "resolved-test", Namespace: "production"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "with-model",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type: agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{
-							Template: "Run with model",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"with-model": {
-			modelInfo: &resolvedModelInfo{
-				configMapName: "wf-task-model-cm",
-				envVars: []corev1.EnvVar{
-					{Name: "MODEL_PROVIDER", Value: "openai"},
-				},
-				secretEnvVars: []corev1.EnvVar{
-					{
-						Name: "OPENAI_API_KEY",
-						ValueFrom: &corev1.EnvVarSource{
-							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: "openai-secret"},
-								Key:                  "api-key",
-							},
-						},
-					},
-				},
-			},
-			toolConfigMaps: []toolConfigMapInfo{
-				{toolName: "web-search", configMapName: "tool-web-search-cm"},
-				{toolName: "calculator", configMapName: "tool-calculator-cm"},
-			},
-			instructionConfigMapName: "wf-task-instruction-cm",
-		},
-	}
-
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("resolved-test", "production",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "with-model", Template: "with-model"}),
-			{
-				Name: "with-model",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "run",
-							Instructions: "Run with model",
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-						{Name: "MODEL_PROVIDER", Value: "openai"},
-						{
-							Name: "OPENAI_API_KEY",
-							ValueFrom: &corev1.EnvVarSource{
-								SecretKeyRef: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{Name: "openai-secret"},
-									Key:                  "api-key",
-								},
-							},
-						},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: "model-config", MountPath: agentTaskModelMountPath, SubPath: "model.json", ReadOnly: true},
-						{Name: "tool-web-search", MountPath: agentTaskToolsMountPath + "/web-search.json", SubPath: "spec.json", ReadOnly: true},
-						{Name: "tool-calculator", MountPath: agentTaskToolsMountPath + "/calculator.json", SubPath: "spec.json", ReadOnly: true},
-						{Name: "instruction", MountPath: agentTaskInstructionMountPath, SubPath: "instruction.txt", ReadOnly: true},
-					},
-				},
-				Volumes: []corev1.Volume{
-					{Name: "model-config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "wf-task-model-cm"}}}},
-					{Name: "tool-web-search", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "tool-web-search-cm"}}}},
-					{Name: "tool-calculator", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "tool-calculator-cm"}}}},
-					{Name: "instruction", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "wf-task-instruction-cm"}}}},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-func TestCompileToArgoWorkflow_AgentTaskModelOnly(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "model-only", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "task",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:        agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"task": {
-			modelInfo: &resolvedModelInfo{configMapName: "model-cm"},
-		},
-	}
-
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("model-only", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "task", Template: "task"}),
-			{
-				Name: "task",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{
-							Type:         "run",
-							Instructions: "hello",
-						}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: "model-config", MountPath: agentTaskModelMountPath, SubPath: "model.json", ReadOnly: true},
-					},
-				},
-				Volumes: []corev1.Volume{
-					{Name: "model-config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "model-cm"}}}},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
 func TestCompileToArgoWorkflow_RetryStrategy(t *testing.T) {
 	factor := int32(2)
 	awf := &agentv1alpha1.AgentWorkflow{
@@ -1110,7 +527,7 @@ func TestCompileToArgoWorkflow_RetryStrategy(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1150,7 +567,7 @@ func TestCompileToArgoWorkflow_WorkflowTimeout(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1187,7 +604,7 @@ func TestCompileToArgoWorkflow_FanOutFanIn(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1226,7 +643,7 @@ func TestCompileToArgoWorkflow_Condition(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1357,7 +774,7 @@ func TestCompile_ContainerSimple(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1405,7 +822,7 @@ func TestCompile_ContainerWithExpressions(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1462,7 +879,7 @@ func TestCompile_ContainerWithResources(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1514,7 +931,7 @@ func TestCompile_HTTPGet(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1557,7 +974,7 @@ func TestCompile_HTTPPost(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1607,7 +1024,7 @@ func TestCompile_HTTPSecretHeader(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1666,7 +1083,7 @@ func TestCompile_HTTPConfigMapHeader(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1726,7 +1143,7 @@ func TestCompile_HTTPExpressions(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1784,7 +1201,7 @@ func TestCompile_HTTPInPipeline(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1832,7 +1249,7 @@ func TestCompile_ArtifactIO_Container(t *testing.T) {
 	}
 
 	opts := CompilerOptions{ArtifactIOEnabled: true, ArtifactGCStrategy: "OnWorkflowCompletion"}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, opts)
+	got, err := compileToArgoWorkflowTemplate(awf, opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1858,7 +1275,7 @@ func TestCompile_ArtifactIO_WorkflowGC(t *testing.T) {
 	}
 
 	opts := CompilerOptions{ArtifactIOEnabled: true, ArtifactGCStrategy: "OnWorkflowCompletion"}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, opts)
+	got, err := compileToArgoWorkflowTemplate(awf, opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1945,7 +1362,7 @@ func TestCompile_MixedTaskTypes(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2009,7 +1426,7 @@ func TestCompile_SwitchBasic(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2064,7 +1481,7 @@ func TestCompile_SwitchWithDefault(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2122,7 +1539,7 @@ func TestCompile_SwitchMultipleConditionsAndDefault(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2189,7 +1606,7 @@ func TestCompile_AgentMessageWithDataPart(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2248,7 +1665,7 @@ func TestCompile_AgentMessageFullMetadata(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2305,7 +1722,7 @@ func TestCompile_AgentConfigHistoryLength(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2358,7 +1775,7 @@ func TestCompile_AgentConfigPushNotification(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2417,7 +1834,7 @@ func TestCompile_AgentConfigFull(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2476,7 +1893,7 @@ func TestCompile_PerTaskRetryOverridesWorkflow(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2531,7 +1948,7 @@ func TestCompile_ContainerTimeout(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2569,7 +1986,7 @@ func TestCompile_HTTPTimeout(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2604,7 +2021,7 @@ func TestCompile_DiamondDAG(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2645,7 +2062,7 @@ func TestCompile_ConditionOnContainerTask(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2684,7 +2101,7 @@ func TestCompile_ConditionOnHTTPTask(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2716,7 +2133,7 @@ func TestCompile_ArtifactIO_AgentPlugin(t *testing.T) {
 	}
 
 	opts := CompilerOptions{ArtifactIOEnabled: true, ArtifactGCStrategy: "OnWorkflowCompletion"}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, opts)
+	got, err := compileToArgoWorkflowTemplate(awf, opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2742,7 +2159,7 @@ func TestCompile_ArtifactIO_HTTPTask(t *testing.T) {
 	}
 
 	opts := CompilerOptions{ArtifactIOEnabled: true, ArtifactGCStrategy: "OnWorkflowCompletion"}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, opts)
+	got, err := compileToArgoWorkflowTemplate(awf, opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2779,7 +2196,7 @@ func TestCompile_ContainerWithVolumeMounts(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2829,7 +2246,7 @@ func TestCompile_HTTPMixedHeaders(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2860,61 +2277,6 @@ func TestCompile_HTTPMixedHeaders(t *testing.T) {
 	assertDiff(t, want, got)
 }
 
-// --- AgentTask with resources test ---
-
-func TestCompile_AgentTaskWithResources(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "agenttask-resources", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "heavy-task",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:        agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{Template: "Process data"},
-						Resources: &corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("2Gi"), corev1.ResourceCPU: *parseQuantity("1")},
-							Limits:   corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("4Gi")},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{"heavy-task": {}}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := wantWorkflowTemplate("agenttask-resources", "default",
-		[]wfv1.Template{
-			dagTmpl(wfv1.DAGTask{Name: "heavy-task", Template: "heavy-task"}),
-			{
-				Name: "heavy-task",
-				Container: &corev1.Container{
-					Image:   defaultManagedTaskImage,
-					Command: []string{"python", "-m", "flokoa_managed_task"},
-					Env: []corev1.EnvVar{
-						taskConfigEnv(agentTaskConfig{Type: "run", Instructions: "Process data"}),
-						{Name: "FLOKOA_TRACEPARENT", Value: "{{workflow.parameters._flokoa_traceparent}}"},
-					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("2Gi"), corev1.ResourceCPU: *parseQuantity("1")},
-						Limits:   corev1.ResourceList{corev1.ResourceMemory: *parseQuantity("4Gi")},
-					},
-				},
-				Outputs: containerOutputs(),
-			},
-		},
-	)
-
-	assertDiff(t, want, got)
-}
-
-// --- Complete pipeline integration test ---
-
 func TestCompile_CompletePipelineWithSwitch(t *testing.T) {
 	timeout2m := metav1.Duration{Duration: 2 * time.Minute}
 	timeout5m := metav1.Duration{Duration: 5 * time.Minute}
@@ -2936,7 +2298,7 @@ func TestCompile_CompletePipelineWithSwitch(t *testing.T) {
 				},
 				{
 					Name:      "classify",
-					AgentTask: &agentv1alpha1.AgentTask{Type: agentv1alpha1.MarvinTaskTypeClassify, Input: "{{tasks.preprocess.output}}", Labels: []string{"actionable", "informational", "noise"}},
+					Container: &agentv1alpha1.ContainerTask{Image: "python:3.13-slim", Command: []string{"python", "classify.py"}, Env: []corev1.EnvVar{{Name: "INPUT", Value: "{{tasks.preprocess.output}}"}}},
 					DependsOn: []string{"preprocess"},
 				},
 				{
@@ -2951,8 +2313,7 @@ func TestCompile_CompletePipelineWithSwitch(t *testing.T) {
 		},
 	}
 
-	resolved := map[string]*resolvedAgentTaskInfo{"classify": {}}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3013,8 +2374,8 @@ func TestCompile_CompletePipelineWithSwitch(t *testing.T) {
 		t.Fatal("expected container template for classify")
 	}
 	for _, env := range classifyTmpl.Container.Env {
-		if env.Name == taskConfigEnvVar && !strings.Contains(env.Value, "tasks.preprocess.outputs.parameters.result") {
-			t.Errorf("classify task config should contain translated input expression, got %q", env.Value)
+		if env.Name == "INPUT" && !strings.Contains(env.Value, "tasks.preprocess.outputs.parameters.result") {
+			t.Errorf("classify input env should contain translated expression, got %q", env.Value)
 		}
 	}
 
@@ -3044,7 +2405,7 @@ func TestCompile_ErrorNoTaskType(t *testing.T) {
 		},
 	}
 
-	_, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	_, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err == nil {
 		t.Fatal("expected error for task with no recognized type, got nil")
 	}
@@ -3053,58 +2414,27 @@ func TestCompile_ErrorNoTaskType(t *testing.T) {
 	}
 }
 
-func TestCompile_ErrorMissingResolvedAgentTaskInfo(t *testing.T) {
+func TestCompile_ErrorAgentTaskFrozen(t *testing.T) {
 	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "missing-info", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "frozen", Namespace: "default"},
 		Spec: agentv1alpha1.AgentWorkflowSpec{
 			Tasks: []agentv1alpha1.WorkflowTask{
 				{
-					Name: "orphan-task",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:        agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
-					},
+					Name:      "task",
+					AgentTask: &agentv1alpha1.AgentTask{Type: agentv1alpha1.AgentTaskTypeRun}, //nolint:staticcheck // exercising the freeze guard
 				},
 			},
 		},
 	}
 
-	// Pass empty resolved map — the task should error because it expects resolved info.
-	_, err := compileToArgoWorkflowTemplate(awf, map[string]*resolvedAgentTaskInfo{}, CompilerOptions{})
+	_, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err == nil {
-		t.Fatal("expected error for missing resolved agent task info, got nil")
+		t.Fatal("expected error for agentTask task, got nil")
 	}
-	if !strings.Contains(err.Error(), "missing resolved agent task info") {
-		t.Errorf("error should mention 'missing resolved agent task info', got: %v", err)
+	if !strings.Contains(err.Error(), "agentTask is no longer supported") {
+		t.Errorf("error should mention the agentTask freeze, got: %v", err)
 	}
 }
-
-func TestCompile_ErrorNilResolvedMapForAgentTask(t *testing.T) {
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "nil-resolved", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "task",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:        agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
-					},
-				},
-			},
-		},
-	}
-
-	// Pass nil resolved map.
-	_, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
-	if err == nil {
-		t.Fatal("expected error when resolvedTasks is nil for agentTask, got nil")
-	}
-}
-
-// =============================================================================
-// Expression translation edge cases
-// =============================================================================
 
 func TestTranslateExpressions_EdgeCases(t *testing.T) {
 	tests := []struct {
@@ -3226,7 +2556,7 @@ func TestCompileStructural_AllDAGTasksReferenceExistingTemplates(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := compileToArgoWorkflowTemplate(tc.awf, nil, tc.opts)
+			got, err := compileToArgoWorkflowTemplate(tc.awf, tc.opts)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -3263,7 +2593,7 @@ func TestCompileStructural_EntrypointIsMain(t *testing.T) {
 			},
 		},
 	}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3292,7 +2622,7 @@ func TestCompileStructural_AllWorkflowParamsPresent(t *testing.T) {
 			},
 		},
 	}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3323,7 +2653,7 @@ func TestCompileStructural_TraceparentInjected(t *testing.T) {
 			},
 		},
 	}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3350,7 +2680,7 @@ func TestCompileStructural_LabelsAndMetadata(t *testing.T) {
 			},
 		},
 	}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3386,7 +2716,7 @@ func TestCompileStructural_EveryTaskProducesOutputs(t *testing.T) {
 			},
 		},
 	}
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3442,7 +2772,7 @@ func TestCompile_SwitchConditionsHaveCorrectContent(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3496,7 +2826,7 @@ func TestCompile_SwitchFieldAccessConditionTranslated(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3546,7 +2876,7 @@ func TestCompile_PipelineExpressionTranslationAccuracy(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3635,7 +2965,7 @@ func TestCompile_HTTPDefaultMethodIsGET(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3684,7 +3014,7 @@ func TestCompile_HTTPDuplicateConfigMapHeaderDeduplication(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3723,7 +3053,7 @@ func TestCompile_SwitchOnlyDefault(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3765,7 +3095,7 @@ func TestCompile_SwitchRouterTemplateIsNoOp(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3810,7 +3140,7 @@ func TestCompile_RetryStrategyWithoutBackoff(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3826,83 +3156,6 @@ func TestCompile_RetryStrategyWithoutBackoff(t *testing.T) {
 		t.Errorf("expected no backoff, got %v", tmpl.RetryStrategy.Backoff)
 	}
 }
-
-// =============================================================================
-// AgentTask resolved info edge cases
-// =============================================================================
-
-func TestCompile_AgentTaskWithNilModelInfo(t *testing.T) {
-	// resolvedAgentTaskInfo exists but modelInfo is nil — should compile without volumes.
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "nil-model", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "task",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:        agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
-					},
-				},
-			},
-		},
-	}
-
-	// Provide resolved info but with all nil fields.
-	resolved := map[string]*resolvedAgentTaskInfo{"task": {}}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	tmpl := got.Spec.Templates[1]
-	if tmpl.Container == nil {
-		t.Fatal("expected container template")
-	}
-	if len(tmpl.Volumes) != 0 {
-		t.Errorf("expected no volumes when modelInfo is nil, got %d", len(tmpl.Volumes))
-	}
-	if len(tmpl.Container.VolumeMounts) != 0 {
-		t.Errorf("expected no volume mounts when modelInfo is nil, got %d", len(tmpl.Container.VolumeMounts))
-	}
-}
-
-func TestCompile_AgentTaskWithEmptyConfigMapName(t *testing.T) {
-	// modelInfo exists but configMapName is empty — should not add volumes.
-	awf := &agentv1alpha1.AgentWorkflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "empty-cm", Namespace: "default"},
-		Spec: agentv1alpha1.AgentWorkflowSpec{
-			Tasks: []agentv1alpha1.WorkflowTask{
-				{
-					Name: "task",
-					AgentTask: &agentv1alpha1.AgentTask{
-						Type:        agentv1alpha1.MarvinTaskTypeRun,
-						Instruction: &agentv1alpha1.InstructionEntry{Template: "hello"},
-					},
-				},
-			},
-		},
-	}
-
-	resolved := map[string]*resolvedAgentTaskInfo{
-		"task": {
-			modelInfo: &resolvedModelInfo{configMapName: ""}, // empty
-		},
-	}
-	got, err := compileToArgoWorkflowTemplate(awf, resolved, CompilerOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	tmpl := got.Spec.Templates[1]
-	if len(tmpl.Volumes) != 0 {
-		t.Errorf("expected no volumes when configMapName is empty, got %d", len(tmpl.Volumes))
-	}
-}
-
-// =============================================================================
-// Timeout conversion accuracy
-// =============================================================================
 
 func TestCompile_TimeoutConversionAccuracy(t *testing.T) {
 	tests := []struct {
@@ -3933,7 +3186,7 @@ func TestCompile_TimeoutConversionAccuracy(t *testing.T) {
 				},
 			}
 
-			got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+			got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -3961,7 +3214,7 @@ func TestCompile_WorkflowTimeoutConversion(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3984,7 +3237,7 @@ func TestCompileToArgoWorkflow_ServiceAccountDefault(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -4009,7 +3262,7 @@ func TestCompileToArgoWorkflow_ServiceAccountOverride(t *testing.T) {
 		},
 	}
 
-	got, err := compileToArgoWorkflowTemplate(awf, nil, CompilerOptions{})
+	got, err := compileToArgoWorkflowTemplate(awf, CompilerOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -63,16 +63,28 @@ func (v *AgentWorkflowCustomValidator) ValidateCreate(_ context.Context, obj run
 		return nil, fmt.Errorf("expected a AgentWorkflow object but got %T", obj)
 	}
 	agentworkflowlog.Info("Validation for AgentWorkflow upon creation", "name", agentworkflow.GetName())
+
+	if errs := validateAgentTaskFreeze(agentworkflow, nil); len(errs) > 0 {
+		return nil, aggregateErrors(errs, agentworkflow.Name)
+	}
 	return nil, ValidateAgentWorkflow(agentworkflow)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type AgentWorkflow.
-func (v *AgentWorkflowCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (v *AgentWorkflowCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	agentworkflow, ok := newObj.(*agentv1alpha1.AgentWorkflow)
 	if !ok {
 		return nil, fmt.Errorf("expected a AgentWorkflow object for the newObj but got %T", newObj)
 	}
+	oldWorkflow, ok := oldObj.(*agentv1alpha1.AgentWorkflow)
+	if !ok {
+		return nil, fmt.Errorf("expected a AgentWorkflow object for the oldObj but got %T", oldObj)
+	}
 	agentworkflowlog.Info("Validation for AgentWorkflow upon update", "name", agentworkflow.GetName())
+
+	if errs := validateAgentTaskFreeze(agentworkflow, oldWorkflow); len(errs) > 0 {
+		return nil, aggregateErrors(errs, agentworkflow.Name)
+	}
 	return nil, ValidateAgentWorkflow(agentworkflow)
 }
 
@@ -83,6 +95,42 @@ func (v *AgentWorkflowCustomValidator) ValidateDelete(_ context.Context, _ runti
 
 // expressionPattern matches {{...}} template expressions.
 var expressionPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+
+// agentTaskFreezeMessage explains why agentTask usage is rejected.
+const agentTaskFreezeMessage = "agentTask is no longer supported: the AgentWorkflow API is frozen as a " +
+	"template-only resource and the agentTask runtime was removed in the v2.1 pivot; " +
+	"use an agent task calling a deployed Agent instead"
+
+// validateAgentTaskFreeze rejects new agentTask usage. The AgentWorkflow API is
+// frozen; the agentTask runtime no longer exists. On update, tasks that already
+// used agentTask in the old object (matched by task name) are tolerated so that
+// pre-existing objects can still be updated (e.g. to remove the frozen tasks).
+func validateAgentTaskFreeze(wf, old *agentv1alpha1.AgentWorkflow) field.ErrorList {
+	var allErrs field.ErrorList
+
+	oldAgentTasks := make(map[string]bool)
+	if old != nil {
+		for _, task := range old.Spec.Tasks {
+			if task.AgentTask != nil { //nolint:staticcheck // the freeze guard must inspect the deprecated field
+				oldAgentTasks[task.Name] = true
+			}
+		}
+	}
+
+	tasksPath := field.NewPath("spec").Child("tasks")
+	for i, task := range wf.Spec.Tasks {
+		if task.AgentTask == nil { //nolint:staticcheck // the freeze guard must inspect the deprecated field
+			continue
+		}
+		if oldAgentTasks[task.Name] {
+			continue
+		}
+		allErrs = append(allErrs, field.Forbidden(
+			tasksPath.Index(i).Child("agentTask"), agentTaskFreezeMessage))
+	}
+
+	return allErrs
+}
 
 // ValidateAgentWorkflow performs all validation on an AgentWorkflow resource.
 func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
@@ -121,7 +169,7 @@ func ValidateAgentWorkflow(wf *agentv1alpha1.AgentWorkflow) error {
 		if task.Agent != nil {
 			typeCount++
 		}
-		if task.AgentTask != nil {
+		if task.AgentTask != nil { //nolint:staticcheck // frozen field still counted for pre-existing objects
 			typeCount++
 		}
 		if task.Container != nil {
@@ -324,8 +372,8 @@ func validateExpressions(taskPath *field.Path, task agentv1alpha1.WorkflowTask, 
 			}
 		}
 	}
-	if task.AgentTask != nil {
-		fields = append(fields, exprField{taskPath.Child("agentTask", "input"), task.AgentTask.Input})
+	if task.AgentTask != nil { //nolint:staticcheck // frozen field still validated for pre-existing objects
+		fields = append(fields, exprField{taskPath.Child("agentTask", "input"), task.AgentTask.Input}) //nolint:staticcheck // see above
 	}
 	if task.Container != nil {
 		for i, env := range task.Container.Env {

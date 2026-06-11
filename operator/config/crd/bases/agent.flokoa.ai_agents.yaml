@@ -175,7 +175,6 @@ spec:
                 - pydantic-ai
                 - langchain
                 - crewai
-                - marvin
                 - autogen
                 - a2a
                 type: string
@@ -6388,7 +6387,6 @@ spec:
                 - pydantic-ai
                 - langchain
                 - crewai
-                - marvin
                 - autogen
                 - a2a
                 type: string

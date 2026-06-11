@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -105,7 +106,7 @@ func TestValidateAgentWorkflow_MultipleTaskTypes(t *testing.T) {
 				{
 					Name:      "multi",
 					Agent:     &agentv1alpha1.AgentCall{Name: "agent1", Message: textMessage("hello")},
-					AgentTask: &agentv1alpha1.AgentTask{Type: agentv1alpha1.MarvinTaskTypeRun},
+					AgentTask: &agentv1alpha1.AgentTask{Type: agentv1alpha1.AgentTaskTypeRun}, //nolint:staticcheck // exercising the freeze guard
 				},
 			},
 		},
@@ -811,5 +812,67 @@ func TestValidateAgentWorkflow_MixedTaskTypesValid(t *testing.T) {
 
 	if err := ValidateAgentWorkflow(wf); err != nil {
 		t.Errorf("expected valid mixed-type workflow, got error: %v", err)
+	}
+}
+
+// =============================================================================
+// agentTask freeze guard
+// =============================================================================
+
+// agentTaskWorkflow builds a minimal AgentWorkflow with a single agentTask task.
+func agentTaskWorkflow(taskName string) *agentv1alpha1.AgentWorkflow {
+	return &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "frozen-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{
+					Name:      taskName,
+					AgentTask: &agentv1alpha1.AgentTask{Type: agentv1alpha1.AgentTaskTypeRun}, //nolint:staticcheck // exercising the freeze guard
+				},
+			},
+		},
+	}
+}
+
+func TestAgentTaskFreeze_CreateRejected(t *testing.T) {
+	validator := &AgentWorkflowCustomValidator{}
+	_, err := validator.ValidateCreate(t.Context(), agentTaskWorkflow("task"))
+	if err == nil {
+		t.Fatal("expected create with agentTask to be rejected")
+	}
+	if !strings.Contains(err.Error(), "agentTask is no longer supported") {
+		t.Errorf("error should mention the agentTask freeze, got: %v", err)
+	}
+}
+
+func TestAgentTaskFreeze_UpdateAddingAgentTaskRejected(t *testing.T) {
+	validator := &AgentWorkflowCustomValidator{}
+	old := &agentv1alpha1.AgentWorkflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "frozen-wf"},
+		Spec: agentv1alpha1.AgentWorkflowSpec{
+			Tasks: []agentv1alpha1.WorkflowTask{
+				{Name: "task", Agent: &agentv1alpha1.AgentCall{Name: "a", Text: "hi"}},
+			},
+		},
+	}
+	_, err := validator.ValidateUpdate(t.Context(), old, agentTaskWorkflow("task"))
+	if err == nil {
+		t.Fatal("expected update introducing agentTask to be rejected")
+	}
+}
+
+func TestAgentTaskFreeze_UpdateExistingAgentTaskTolerated(t *testing.T) {
+	validator := &AgentWorkflowCustomValidator{}
+	_, err := validator.ValidateUpdate(t.Context(), agentTaskWorkflow("task"), agentTaskWorkflow("task"))
+	if err != nil {
+		t.Fatalf("expected update of pre-existing agentTask object to be tolerated, got: %v", err)
+	}
+}
+
+func TestAgentTaskFreeze_UpdateRenamedAgentTaskRejected(t *testing.T) {
+	validator := &AgentWorkflowCustomValidator{}
+	_, err := validator.ValidateUpdate(t.Context(), agentTaskWorkflow("old-task"), agentTaskWorkflow("new-task"))
+	if err == nil {
+		t.Fatal("expected update with a new agentTask task name to be rejected")
 	}
 }

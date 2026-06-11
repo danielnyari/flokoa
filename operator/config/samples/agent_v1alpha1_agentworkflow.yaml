@@ -6,10 +6,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: agentworkflow-sample
 spec:
-  description: "Sample workflow using a Marvin classify task"
+  description: "Sample workflow calling a deployed Agent via A2A"
   tasks:
-    - name: classify
-      agentTask:
-        type: classify
-        input: "The new feature works great but the documentation is lacking."
-        labels: ["positive", "negative", "mixed"]
+    - name: summarize
+      agent:
+        name: agent-sample
+        text: "Summarize the latest platform changes in three bullet points."

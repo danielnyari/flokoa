@@ -11,11 +11,12 @@ option go_package = "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1
 
 // Framework represents the AI framework used by the agent.
 enum Framework {
+  // 3 and 4 were FRAMEWORK_GOOGLE_ADK and FRAMEWORK_MARVIN, removed in the
+  // v2.1 pivot (flokoa targets pydantic-ai exclusively).
+  reserved 3, 4;
   FRAMEWORK_UNSPECIFIED = 0;
   FRAMEWORK_PYDANTIC_AI = 1;
   FRAMEWORK_LANGCHAIN = 2;
-  FRAMEWORK_GOOGLE_ADK = 3;
-  FRAMEWORK_MARVIN = 4;
   FRAMEWORK_AUTOGEN = 5;
   FRAMEWORK_A2A = 6;
 }

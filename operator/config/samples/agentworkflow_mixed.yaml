@@ -3,7 +3,7 @@ kind: AgentWorkflow
 metadata:
   name: mixed-pipeline
 spec:
-  description: "Pipeline combining HTTP, container, agentTask, and agent task types"
+  description: "Pipeline combining HTTP, container, and agent task types"
   params:
     - name: query
       value: "quarterly revenue trends"
@@ -37,23 +37,13 @@ spec:
             value: "{{tasks.fetch-data.output}}"
       dependsOn: [fetch-data]
 
-    # Step 3: Classify the data with a Marvin task
-    - name: classify
-      agentTask:
-        type: classify
-        input: "{{tasks.preprocess.output}}"
-        labels: ["financial", "operational", "strategic"]
-        instruction:
-          template: "Classify this business data by category"
-      dependsOn: [preprocess]
-
-    # Step 4: Generate analysis with an agent
+    # Step 3: Generate analysis with an agent
     - name: analyze
       agent:
         name: business-analyst
         text: >
-          Analyze this {{tasks.classify.output}} data:
+          Analyze this data:
           {{tasks.preprocess.output}}
 
           Original query: {{params.query}}
-      dependsOn: [classify]
+      dependsOn: [preprocess]
