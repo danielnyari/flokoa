@@ -1966,6 +1966,10 @@
         "capability": {
           "anyOf": [
             {
+              "const": "flokoa.platform/telemetry",
+              "type": "string"
+            },
+            {
               "const": "NativeTool",
               "type": "string"
             },
@@ -2633,6 +2637,10 @@
       "default": [],
       "items": {
         "anyOf": [
+          {
+            "const": "flokoa.platform/telemetry",
+            "type": "string"
+          },
           {
             "const": "NativeTool",
             "type": "string"

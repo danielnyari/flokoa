@@ -23,6 +23,30 @@ crds:
   install: true
 
 # =============================================================================
+# Runner & platform capabilities (runtime contract)
+# =============================================================================
+
+# -- Generic runner image configuration
+runner:
+  # -- Runner image repository (no tag — the runner version pinned by the
+  # operator release selects the tag). Empty uses the operator default.
+  imageRepository: ""
+
+# -- Telemetry configuration for agent runner pods
+telemetry:
+  # -- OTLP endpoint configured on every runner pod
+  # (OTEL_EXPORTER_OTLP_ENDPOINT). Empty disables export — the injected
+  # telemetry capability stays inert without an exporter.
+  otlpEndpoint: ""
+
+# -- Platform-injected capabilities (cluster policy; per-Agent opt-out does
+# not exist by design — see docs/reference/runtime-contract.md §6)
+platformCapabilities:
+  telemetry:
+    # -- Inject flokoa.platform/telemetry into every compiled spec
+    enabled: true
+
+# =============================================================================
 # Admission webhooks
 # =============================================================================
 webhooks:

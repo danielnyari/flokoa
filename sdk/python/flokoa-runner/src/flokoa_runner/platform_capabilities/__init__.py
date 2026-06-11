@@ -15,10 +15,14 @@ Reserved names (contract v1):
 
 from typing import TYPE_CHECKING, Any
 
+from flokoa_runner.platform_capabilities.telemetry import FlokoaTelemetry
+
 if TYPE_CHECKING:
     from pydantic_ai.capabilities.abstract import AbstractCapability
 
-PLATFORM_CAPABILITY_TYPES: dict[str, type["AbstractCapability[Any]"]] = {}
+PLATFORM_CAPABILITY_TYPES: dict[str, type["AbstractCapability[Any]"]] = {
+    "flokoa.platform/telemetry": FlokoaTelemetry,
+}
 """Registry of implemented platform capabilities, keyed by serialization name.
 
 Passed as ``custom_capability_types`` both to ``Agent.from_spec`` at bootstrap

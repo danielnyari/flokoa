@@ -41,6 +41,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	agentapp "github.com/danielnyari/flokoa/internal/app/agent"
+	"github.com/danielnyari/flokoa/internal/app/agent/compiler"
 	triggerapp "github.com/danielnyari/flokoa/internal/app/trigger"
 	"github.com/danielnyari/flokoa/internal/controller"
 	"github.com/danielnyari/flokoa/internal/infra/builder"
@@ -98,6 +99,15 @@ func main() {
 	var runnerImageRepository string
 	flag.StringVar(&runnerImageRepository, "runner-image-repository", builder.DefaultRunnerImageRepository,
 		"Generic runner image repository (no tag); the runner version selects the tag.")
+
+	var telemetryOTLPEndpoint string
+	flag.StringVar(&telemetryOTLPEndpoint, "telemetry-otlp-endpoint", "",
+		"OTLP endpoint configured on runner pods (OTEL_EXPORTER_OTLP_ENDPOINT); empty disables export.")
+
+	var injectTelemetry bool
+	flag.BoolVar(&injectTelemetry, "inject-telemetry", true,
+		"Inject the flokoa.platform/telemetry capability into every compiled spec. "+
+			"Cluster policy only — per-Agent opt-out does not exist by design.")
 
 	var artifactIOEnabled bool
 	var artifactGCStrategy string
@@ -257,6 +267,8 @@ func main() {
 	}, agentapp.Config{
 		DefaultRunnerVersion:  spec.DefaultRunnerVersion,
 		RunnerImageRepository: runnerImageRepository,
+		Injected:              injectedCapabilities(injectTelemetry),
+		OTLPEndpoint:          telemetryOTLPEndpoint,
 	})
 
 	if err := (&controller.AgentReconciler{
@@ -384,4 +396,16 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// injectedCapabilities assembles the platform capability entries appended to
+// every compiled spec (cluster policy; roadmap 07). The compiler appends them
+// after all user entries. session-persistence and budget-guardrail join here
+// in P1 (roadmap 13/14).
+func injectedCapabilities(telemetry bool) []compiler.InjectedCapability {
+	var injected []compiler.InjectedCapability
+	if telemetry {
+		injected = append(injected, compiler.InjectedCapability{Name: "flokoa.platform/telemetry"})
+	}
+	return injected
 }
