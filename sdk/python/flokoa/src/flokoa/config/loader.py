@@ -46,11 +46,7 @@ def load_agent_config(
     Raises:
         FileNotFoundError: If the config file does not exist.
     """
-    config_path = (
-        path
-        or os.environ.get("FLOKOA_AGENT_CONFIG_PATH")
-        or AGENT_CONFIG_PATH
-    )
+    config_path = path or os.environ.get("FLOKOA_AGENT_CONFIG_PATH") or AGENT_CONFIG_PATH
 
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Agent config file not found at {config_path}")
@@ -95,12 +91,8 @@ def load_legacy_llm_config(
     Returns:
         A validated :class:`AgentConfig` wrapping an :class:`LlmAgentConfig`.
     """
-    t_path = template_config_path or os.environ.get(
-        "FLOKOA_TEMPLATE_CONFIG_PATH", _LEGACY_TEMPLATE_CONFIG_PATH
-    )
-    i_path = instruction_path or os.environ.get(
-        "FLOKOA_INSTRUCTION_PATH", _LEGACY_INSTRUCTION_PATH
-    )
+    t_path = template_config_path or os.environ.get("FLOKOA_TEMPLATE_CONFIG_PATH", _LEGACY_TEMPLATE_CONFIG_PATH)
+    i_path = instruction_path or os.environ.get("FLOKOA_INSTRUCTION_PATH", _LEGACY_INSTRUCTION_PATH)
     m_path = model_config_path or _LEGACY_MODEL_CONFIG_PATH
 
     data: dict[str, Any] = {
@@ -130,76 +122,12 @@ def load_legacy_llm_config(
     return AgentConfig.model_validate(data)
 
 
-def load_legacy_task_config(
-    task_config_json: str | None = None,
-    instruction_path: str | None = None,
-    model_config_path: str | None = None,
-    name: str = "managed-task",
-) -> AgentConfig:
-    """Build an :class:`AgentConfig` from legacy task config env var and files.
-
-    Args:
-        task_config_json: Raw JSON string of the task config
-            (from ``FLOKOA_TASK_CONFIG`` env var).
-        instruction_path: Path to instruction.txt.
-        model_config_path: Path to model.json.
-        name: Agent name.
-
-    Returns:
-        A validated :class:`AgentConfig` wrapping a :class:`TaskAgentConfig`.
-    """
-    raw = task_config_json or os.environ.get("FLOKOA_TASK_CONFIG")
-    if not raw:
-        raise RuntimeError("FLOKOA_TASK_CONFIG environment variable is not set")
-
-    task_data = json.loads(raw)
-
-    i_path = instruction_path or os.environ.get(
-        "FLOKOA_INSTRUCTION_PATH", _LEGACY_INSTRUCTION_PATH
-    )
-    m_path = model_config_path or _LEGACY_MODEL_CONFIG_PATH
-
-    data: dict[str, Any] = {
-        "agentType": "task",
-        "name": name,
-    }
-
-    # Map legacy task config fields
-    if "type" in task_data:
-        data["taskType"] = task_data["type"]
-    if "instructions" in task_data:
-        data["instruction"] = task_data["instructions"]
-    if "input" in task_data:
-        data["input"] = task_data["input"]
-    if "resultType" in task_data:
-        data["resultType"] = task_data["resultType"]
-    if "labels" in task_data:
-        data["labels"] = task_data["labels"]
-    if "multiLabel" in task_data:
-        data["multiLabel"] = task_data["multiLabel"]
-    if "count" in task_data:
-        data["count"] = task_data["count"]
-    if "context" in task_data:
-        data["context"] = task_data["context"]
-
-    # Instruction from file (lower priority than inline instructions)
-    if "instruction" not in data and os.path.exists(i_path):
-        with open(i_path) as f:
-            data["instruction"] = f.read()
-
-    # Model config
-    if os.path.exists(m_path):
-        with open(m_path) as f:
-            data["model"] = json.load(f)
-
-    return AgentConfig.model_validate(data)
-
-
 def _parse_content(raw: str, path: str) -> dict[str, Any]:
     """Parse raw file content as YAML (if available) or JSON."""
     if path.endswith((".yaml", ".yml")):
         try:
             import yaml
+
             return yaml.safe_load(raw)
         except ImportError:
             logger.warning("PyYAML not installed; falling back to JSON parsing for %s", path)

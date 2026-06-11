@@ -26,10 +26,9 @@ from flokoa.utils import load_instruction, load_model_config, load_tools
 logger = logging.getLogger("flokoa." + __name__)
 
 if TYPE_CHECKING:
-    from google.adk.agents import BaseAgent
     from pydantic_ai import Agent
 
-    AgentType = Agent[Any, Any] | BaseAgent
+    AgentType = Agent[Any, Any]
 
 
 class FlokoaAgentExecutor(AgentExecutor):

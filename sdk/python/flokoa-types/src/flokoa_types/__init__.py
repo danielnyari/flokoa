@@ -17,32 +17,17 @@ from flokoa_types.modelconfig import (
     OpenAIProviderConfig,
     ProviderType,
 )
-from flokoa_types.taskconfig import TaskAgentConfig, TaskConfig, TaskResultType
-from flokoa_types.taskconfig import Type as MarvinTaskType
 from flokoa_types.templateconfig import TemplateConfig
 
 ProviderConfigType = Annotated[
-    AnthropicProviderConfig
-    | OpenAIProviderConfig
-    | GoogleProviderConfig
-    | BedrockProviderConfig,
+    AnthropicProviderConfig | OpenAIProviderConfig | GoogleProviderConfig | BedrockProviderConfig,
     Field(description="The provider-specific configuration for the model."),
 ]
 
 ProviderModelParametersType = Annotated[
-    AnthropicModelParameters
-    | OpenAIModelParameters
-    | GoogleModelParameters
-    | BedrockModelParameters,
+    AnthropicModelParameters | OpenAIModelParameters | GoogleModelParameters | BedrockModelParameters,
     Field(description="The provider-specific model parameters."),
 ]
-
-
-class IntegrationType(StrEnum):
-    """Supported framework integrations."""
-
-    PYDANTIC_AI = "pydantic-ai"
-    GOOGLE_ADK = "google-adk"
 
 
 class ToolType(StrEnum):
@@ -59,16 +44,10 @@ class ToolDefinition(BaseModel):
     with convenient property accessors for the spec fields.
     """
 
-    model_config = ConfigDict(
-        validate_by_alias=True, validate_by_name=True, frozen=True
-    )
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True, frozen=True)
     name: Annotated[str, Field(description="The unique name of the tool.")]
-    spec: Annotated[
-        AgentToolSpec, Field(description="The AgentTool specification from the CRD.")
-    ]
-    metadata: Annotated[
-        dict[str, Any] | None, Field(description="Additional metadata for the tool.")
-    ] = None
+    spec: Annotated[AgentToolSpec, Field(description="The AgentTool specification from the CRD.")]
+    metadata: Annotated[dict[str, Any] | None, Field(description="Additional metadata for the tool.")] = None
 
     @computed_field
     @property
@@ -86,16 +65,11 @@ class ToolDefinition(BaseModel):
 
 
 __all__ = [
-    "IntegrationType",
-    "MarvinTaskType",
     "ModelConfig",
     "ModelParameters",
     "ProviderConfigType",
     "ProviderModelParametersType",
     "ProviderType",
-    "TaskAgentConfig",
-    "TaskConfig",
-    "TaskResultType",
     "TemplateConfig",
     "ToolDefinition",
     "ToolType",

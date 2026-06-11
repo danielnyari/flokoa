@@ -5,12 +5,9 @@ from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message
 from flokoa_types import (
-    IntegrationType,
-    ToolType,
-)
-from flokoa_types import (
     ToolDefinition as FlokoaToolDefinition,
 )
+from flokoa_types import ToolType
 from flokoa_types.modelconfig import ProviderType
 from pydantic_ai import FunctionToolset
 
@@ -32,7 +29,7 @@ def _openapi_builder(tool_definition: FlokoaToolDefinition) -> list[Any]:
     return OpenAPIToolset.from_tool_definition(tool_definition).get_tools()
 
 
-default_factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, _openapi_builder)
+default_factory.register(ToolType.OPENAPI, _openapi_builder)
 
 if TYPE_CHECKING:
     from pydantic_ai import Agent
@@ -94,7 +91,7 @@ class PydanticAIAgentExecutor(FlokoaAgentExecutor):
             "_build_toolset(): %d tool definition(s) to build",
             len(self.tool_definitions),
         )
-        tools = self._toolset_factory.build(self.tool_definitions, IntegrationType.PYDANTIC_AI)
+        tools = self._toolset_factory.build(self.tool_definitions)
         toolset = FunctionToolset()
         for tool in tools:
             toolset.add_tool(tool)

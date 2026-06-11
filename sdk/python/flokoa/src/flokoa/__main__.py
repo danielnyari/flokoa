@@ -10,7 +10,6 @@ from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from fastapi import FastAPI
 
-from flokoa.integrations import IntegrationType, get_executor_cls
 from flokoa.utils import load_agent_card
 from flokoa.utils.agent_card_builder import AgentCardBuilder
 from flokoa.utils.router import router as health_router
@@ -31,28 +30,25 @@ def cli() -> None:
 )
 @click.option("--host", default=None, help="Host to bind the server to.")
 @click.option("--port", default=None, type=int, help="Port to bind the server to.")
-@click.option("--framework", type=click.Choice(IntegrationType, case_sensitive=False))
 def run(
     module: str,
     host: str | None,
     port: int | None,
-    framework: str,
 ) -> None:
     """Run a Flokoa agent server.
 
     \b
     Usage:
-      flokoa run -m my_module:my_agent --framework pydantic-ai
+      flokoa run -m my_module:my_agent
     """
     _start_integration(
         module=module,
         host=host or "localhost",
         port=port or 10001,
-        framework=framework,
     )
 
 
-def _start_integration(module: str, host: str, port: int, framework: IntegrationType) -> None:
+def _start_integration(module: str, host: str, port: int) -> None:
     """Start a user-provided agent with an A2A server."""
     # Initialize OpenTelemetry if the tracing extra is installed.
     from flokoa.telemetry import init_telemetry, instrument_fastapi, instrument_pydantic_ai
@@ -64,7 +60,14 @@ def _start_integration(module: str, host: str, port: int, framework: Integration
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    executor_cls = get_executor_cls(framework)
+    try:
+        from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
+    except ImportError as e:
+        raise ImportError(
+            "flokoa[pydantic-ai] is not installed. Install it with: pip install flokoa[pydantic-ai]"
+        ) from e
+
+    executor_cls = PydanticAIAgentExecutor
     agent_parts = module.split(":")
     agent_module_name = agent_parts[0]
     agent_cls_name = agent_parts[1]

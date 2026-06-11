@@ -44,7 +44,7 @@ def init_telemetry(
         When ``True`` the W3C ``traceparent`` value in the ``FLOKOA_TRACEPARENT``
         environment variable is extracted and attached to the current context so
         that all subsequent spans become children of the controller's span.
-        Use this for **one-shot container tasks** (e.g. ``flokoa-managed-task``).
+        Use this for **one-shot container tasks**.
         Do **not** use this for long-running servers that receive per-request
         trace context via HTTP headers.
     """

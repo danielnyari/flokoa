@@ -4,7 +4,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from flokoa_types import IntegrationType, ToolDefinition, ToolType
+from flokoa_types import ToolDefinition, ToolType
 from flokoa_types.agenttool import AgentToolSpec, OpenApi, OpenApiSchema, Type
 from pydantic_ai import Agent, models
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -148,7 +148,7 @@ def mock_toolset_factory():
             tools.append(Tool(send_email))
         return tools
 
-    factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, mock_builder)
+    factory.register(ToolType.OPENAPI, mock_builder)
     return factory
 
 

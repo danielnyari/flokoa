@@ -1,7 +1,6 @@
 """Tests for ToolsetFactory — builder registration, dispatch, and edge cases."""
 
-
-from flokoa_types import IntegrationType, ToolDefinition, ToolType
+from flokoa_types import ToolDefinition, ToolType
 
 from flokoa.tools.toolset_factory import ToolsetFactory
 
@@ -38,20 +37,15 @@ class TestToolsetFactoryRegister:
     def test_register_openapi_builder(self):
         factory = ToolsetFactory()
         builder = lambda td: [f"tool:{td.name}"]
-        factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, builder)
+        factory.register(ToolType.OPENAPI, builder)
 
-        tools = factory.build([_make_tool_definition()], IntegrationType.PYDANTIC_AI)
+        tools = factory.build([_make_tool_definition()])
         assert tools == ["tool:test_tool"]
 
-    def test_register_unsupported_tool_type_is_ignored(self):
-        """Non-OPENAPI tool types are logged and skipped."""
+    def test_build_with_no_builder_registered_skips(self):
+        """Definitions without a registered builder are logged and skipped."""
         factory = ToolsetFactory()
-        # Create a fake ToolType value — since it's a StrEnum we can't easily
-        # add members, so we just verify the register path is safe.
-        # The code checks `tool_type != ToolType.OPENAPI` and returns early.
-        # We can't create a new enum member, but we can test the build path
-        # for a definition whose type is openapi but has no builder registered.
-        tools = factory.build([_make_tool_definition()], IntegrationType.PYDANTIC_AI)
+        tools = factory.build([_make_tool_definition()])
         assert tools == []
 
 
@@ -64,32 +58,24 @@ class TestToolsetFactoryBuild:
             builder_calls.append(td.name)
             return [f"built:{td.name}"]
 
-        factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, tracking_builder)
+        factory.register(ToolType.OPENAPI, tracking_builder)
 
         td1 = _make_tool_definition("tool_a")
         td2 = _make_tool_definition("tool_b")
-        tools = factory.build([td1, td2], IntegrationType.PYDANTIC_AI)
+        tools = factory.build([td1, td2])
 
         assert builder_calls == ["tool_a", "tool_b"]
         assert tools == ["built:tool_a", "built:tool_b"]
 
-    def test_build_with_no_matching_builder_skips(self):
-        factory = ToolsetFactory()
-        factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, lambda td: ["x"])
-
-        # Build for a different integration — no builder registered
-        tools = factory.build([_make_tool_definition()], IntegrationType.GOOGLE_ADK)
-        assert tools == []
-
     def test_build_empty_list(self):
         factory = ToolsetFactory()
-        tools = factory.build([], IntegrationType.PYDANTIC_AI)
+        tools = factory.build([])
         assert tools == []
 
     def test_build_multiple_tools_per_definition(self):
         """A builder can return multiple tool objects per definition."""
         factory = ToolsetFactory()
-        factory.register(ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, lambda td: ["a", "b", "c"])
+        factory.register(ToolType.OPENAPI, lambda td: ["a", "b", "c"])
 
-        tools = factory.build([_make_tool_definition()], IntegrationType.PYDANTIC_AI)
+        tools = factory.build([_make_tool_definition()])
         assert tools == ["a", "b", "c"]

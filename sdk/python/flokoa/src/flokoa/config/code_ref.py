@@ -3,9 +3,8 @@
 Enables declarative agent configs to reference Python callables, classes, and
 instances by fully-qualified name (e.g., ``"my_package.tools.search"``).
 
-Inspired by Google ADK's ``CodeConfig`` pattern, adapted for Flokoa's
-Kubernetes-native context where referenced code is made available via
-volume mounts.
+Designed for Flokoa's Kubernetes-native context where referenced code is
+made available via volume mounts.
 """
 
 from __future__ import annotations

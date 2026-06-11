@@ -35,10 +35,6 @@ pydantic-ai = [
     "pydantic-ai>=1.44.0",
 ]
 
-google-adk = [
-    "google-adk>=1.14.1",
-]
-
 tracing = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
@@ -49,11 +45,7 @@ tracing = [
 pydantic-ai = [
     "flokoa[pydantic-ai]",
 ]
-google-adk = [
-    "flokoa[google-adk]",
-]
 dev = [
-    "flokoa[google-adk]",
     "flokoa[pydantic-ai]",
     "mypy-boto3-bedrock-runtime>=1.42.31",
     "pre-commit>=4.0.0",

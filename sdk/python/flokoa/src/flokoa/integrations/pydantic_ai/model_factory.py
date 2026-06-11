@@ -1,7 +1,7 @@
 """Shared factory functions for creating pydantic-ai models, providers, and settings.
 
 This module centralises the model/provider/settings construction logic
-that is shared between the flokoa SDK executor and the managed-task runtime.
+that is shared by the flokoa SDK executor and the managed agent runtime.
 """
 
 from __future__ import annotations

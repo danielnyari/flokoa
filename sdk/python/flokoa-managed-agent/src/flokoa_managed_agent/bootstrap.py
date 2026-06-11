@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from flokoa.config import AgentConfig, LlmAgentConfig, get_builder
+from flokoa.config import AgentConfig, get_builder
 from flokoa_types import TemplateConfig
 from pydantic_ai import Agent, StructuredDict
 
@@ -49,18 +49,14 @@ def build_agent_from_config(config: AgentConfig) -> Any:
     """Build an agent from a unified :class:`AgentConfig`.
 
     Uses the builder registry to dispatch to the appropriate builder
-    based on ``agent_type`` and ``framework``.
+    based on ``agent_type``.
 
     Args:
         config: A validated :class:`AgentConfig`.
 
     Returns:
-        A live agent instance (framework-specific type).
+        A live agent instance.
     """
     inner = config.root
-    agent_type = inner.agent_type
-
-    framework = inner.framework.value if isinstance(inner, LlmAgentConfig) else "marvin"
-
-    builder_cls = get_builder(agent_type, framework)
+    builder_cls = get_builder(inner.agent_type)
     return builder_cls.from_config(inner)

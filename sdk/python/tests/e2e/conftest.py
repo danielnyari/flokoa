@@ -1,4 +1,4 @@
-"""E2E test fixtures — Docker container lifecycle for managed-agent / managed-task."""
+"""E2E test fixtures — Docker container lifecycle for managed-agent."""
 
 import os
 import subprocess
@@ -8,7 +8,6 @@ import httpx
 import pytest
 
 AGENT_IMAGE = "flokoa-managed-agent:local"
-TASK_IMAGE = "flokoa-managed-task:local"
 AGENT_CONTAINER = "flokoa-e2e-agent"
 AGENT_PORT = 18080  # non-default to avoid clashes with manually-run containers
 
@@ -17,10 +16,6 @@ SAMPLES_DIR = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, "sam
 
 def _agent_config_path() -> str:
     return os.path.join(SAMPLES_DIR, "agent-config.json")
-
-
-def _task_config_path() -> str:
-    return os.path.join(SAMPLES_DIR, "task-config.json")
 
 
 def _require_openai_key() -> str:
@@ -83,45 +78,9 @@ def agent_url() -> str:
             pass
         time.sleep(1)
     else:
-        logs = subprocess.run(
-            ["docker", "logs", AGENT_CONTAINER], capture_output=True, text=True
-        )
-        pytest.fail(
-            f"managed-agent not healthy after 60s.\n{logs.stdout}\n{logs.stderr}"
-        )
+        logs = subprocess.run(["docker", "logs", AGENT_CONTAINER], capture_output=True, text=True)
+        pytest.fail(f"managed-agent not healthy after 60s.\n{logs.stdout}\n{logs.stderr}")
 
     yield url
 
     subprocess.run(["docker", "rm", "-f", AGENT_CONTAINER], capture_output=True)
-
-
-# ---------------------------------------------------------------------------
-# managed-task: one-shot container
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="session")
-def run_task() -> str:
-    """Run managed-task in Docker and return the container stdout."""
-    api_key = _require_openai_key()
-
-    result = subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-e",
-            f"OPENAI_API_KEY={api_key}",
-            "-v",
-            f"{os.path.abspath(_task_config_path())}:/etc/flokoa/agent-config.json:ro",
-            TASK_IMAGE,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-
-    if result.returncode != 0:
-        pytest.fail(f"managed-task exited {result.returncode}:\n{result.stderr}")
-
-    return result.stdout + result.stderr

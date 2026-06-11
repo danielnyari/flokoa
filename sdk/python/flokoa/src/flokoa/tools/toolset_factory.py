@@ -17,9 +17,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Generic, Protocol, TypedDict, TypeVar, cast
+from typing import Protocol, TypeVar
 
-from flokoa_types import IntegrationType, ToolDefinition, ToolType
+from flokoa_types import ToolDefinition, ToolType
 
 logger = logging.getLogger("flokoa." + __name__)
 
@@ -34,49 +34,33 @@ ToolsetBuilder = Callable[[ToolDefinition], list[ToolObjectT]]
 """A builder takes a ToolDefinition and returns framework-specific tool objects."""
 
 
-class IntegrationBuilders(TypedDict, Generic[ToolObjectT], total=False):
-    by_integration: dict[IntegrationType, ToolsetBuilder[ToolObjectT]]
-
-
-class BuilderRegistry(TypedDict, Generic[ToolObjectT], total=False):
-    openapi: IntegrationBuilders[ToolObjectT]
-
-
 @dataclass(slots=True)
 class ToolsetFactory[ToolObjectT: ToolObject]:
-    """Framework-agnostic factory for building tools from Flokoa tool definitions.
+    """Factory for building tools from Flokoa tool definitions.
 
-    Builders are registered per ``(ToolType, IntegrationType)`` pair so each
-    framework integration (PydanticAI, Google ADK, ...) can provide its
-    own builder for every tool type.
+    Builders are registered per :class:`ToolType`.
 
     Usage::
 
         from flokoa.tools import default_factory
-        from flokoa_types import IntegrationType, ToolType
+        from flokoa_types import ToolType
 
-        default_factory.register(
-            ToolType.OPENAPI, IntegrationType.PYDANTIC_AI, my_builder
-        )
+        default_factory.register(ToolType.OPENAPI, my_builder)
 
-        tools = default_factory.build(
-            tool_definitions, integration=IntegrationType.PYDANTIC_AI
-        )
+        tools = default_factory.build(tool_definitions)
     """
 
-    _builders: BuilderRegistry[ToolObjectT] = field(default_factory=lambda: cast(BuilderRegistry[ToolObjectT], {}))
+    _builders: dict[ToolType, ToolsetBuilder[ToolObjectT]] = field(default_factory=dict)
 
     def register(
         self,
         tool_type: ToolType,
-        integration: IntegrationType,
         builder: ToolsetBuilder[ToolObjectT],
     ) -> None:
-        """Register a builder for a ``(tool_type, integration)`` pair.
+        """Register a builder for a tool type.
 
         Args:
             tool_type: The tool type this builder handles.
-            integration: The framework integration this builder targets.
             builder: Callable that converts a ToolDefinition into
                 framework-specific tool objects.
         """
@@ -87,30 +71,26 @@ class ToolsetFactory[ToolObjectT: ToolObject]:
             )
             return
 
-        openapi_builders = self._builders.setdefault("openapi", {"by_integration": {}})
-        openapi_builders.setdefault("by_integration", {})[integration] = builder
+        self._builders[tool_type] = builder
 
     def build(
         self,
         tool_definitions: list[ToolDefinition],
-        integration: IntegrationType,
     ) -> list[ToolObjectT]:
-        """Build tools for *integration* from all tool definitions.
+        """Build tools from all tool definitions.
 
         Each definition is dispatched to its registered builder.
 
         Args:
             tool_definitions: List of Flokoa tool definitions.
-            integration: The framework integration to build tools for.
 
         Returns:
             A flat list of framework-specific tool objects.
         """
         logger.debug(
-            "ToolsetFactory.build(): %d definition(s), integration=%s, registered_builders=%s",
+            "ToolsetFactory.build(): %d definition(s), registered_builders=%s",
             len(tool_definitions),
-            integration.value,
-            {k: list(v.get("by_integration", {}).keys()) for k, v in self._builders.items()},
+            list(self._builders.keys()),
         )
         tools: list[ToolObjectT] = []
         for td in tool_definitions:
@@ -120,15 +100,11 @@ class ToolsetFactory[ToolObjectT: ToolObject]:
                 td.type,
                 td.spec.open_api is not None if td.spec else False,
             )
-            if td.type != ToolType.OPENAPI:
-                builder = None
-            else:
-                builder = self._builders.get("openapi", {}).get("by_integration", {}).get(integration)
+            builder = self._builders.get(td.type)
             if builder is None:
                 logger.warning(
-                    "No builder for (tool_type='%s', integration='%s'), skipping '%s'",
+                    "No builder for tool_type='%s', skipping '%s'",
                     td.type,
-                    integration.value,
                     td.name,
                 )
                 continue
@@ -139,10 +115,9 @@ class ToolsetFactory[ToolObjectT: ToolObject]:
                 continue
             tools.extend(built)
             logger.info(
-                "Built %d tool(s) from '%s' for integration '%s': %s",
+                "Built %d tool(s) from '%s': %s",
                 len(built),
                 td.name,
-                integration.value,
                 [getattr(t, "name", str(t)) for t in built],
             )
         logger.info("ToolsetFactory.build() complete: %d total tool(s)", len(tools))
