@@ -49,7 +49,7 @@ flokoa/
 │       │   ├── src/flokoa/        # Source: CLI, pydantic-ai integration, tools, utils
 │       │   └── tests/             # pytest tests
 │       ├── flokoa-types/          # Auto-generated Pydantic v2 models from CRD schemas
-│       ├── flokoa-managed-agent/  # Operator-deployed pydantic-ai agent runtime
+│       ├── flokoa-runner/         # Generic runner: compiled-spec hydration + A2A serving
 │       ├── flokoa-codemode-mcp/   # Code-mode MCP server package
 │       └── flokoa-common/         # Shared internal helpers
 ├── docs/                          # Documentation (Zensical/MkDocs site)
@@ -87,11 +87,11 @@ The operator manages seven CRDs under `agent.flokoa.ai/v1alpha1`:
 
 | CRD | Purpose | Key Fields |
 |-----|---------|------------|
-| **Agent** | AI agent deployment and lifecycle | `framework`, `runtime` (standard/template), `model`, `instruction`, `tools`, `card` (A2A metadata) |
-| **AgentTool** | Tool definitions for agents | `type` (openapi), `source` (URL/ServiceRef), `schema`, `headers`, `timeout` |
+| **Agent** | Composition root: compiles refs + inline AgentSpec fragment into one resolved pydantic-ai spec | `spec` (inline fragment), `modelRef`, `instructionRefs`, `tools`, `secretRefs`, `card` (A2A metadata), `runtime` (image/runnerVersion/isolation) |
+| **AgentTool** | Declarative MCP endpoint (openapi type retired) | `url`/`serviceRef`+`path`, `transport`, `headers`, `headerSecrets`, `toolPrefix`, `allowedTools`, `timeoutSeconds` |
 | **AgentWorkflow** | **Frozen** template-only A2A composition between deployed Agents (compiled to Argo WorkflowTemplates; no new features — see roadmap §7) | `tasks`, `params`, conditions, dependencies |
 | **AgentTrigger** | Event-driven agent invocation via Argo Events | `eventSource`, `filter`, `agent`, `task`, `pushNotification`, `limits` |
-| **Model** | LLM model configuration | Provider-specific parameters (temperature, maxTokens, reasoning, etc.) |
+| **Model** | Named, shareable model config compiling to AgentSpec `model`+`model_settings` | `model`, `providerRef`, `settings` (typed common fields + `extra` passthrough) |
 | **ModelProvider** | Provider connection config | OpenAI, Anthropic, Google, Bedrock, API key refs, base URLs, TLS |
 | **Instruction** | System prompt management | `content` (prompt text), creates ConfigMap |
 
@@ -118,7 +118,8 @@ The Agent-to-Agent (A2A) protocol is used across the platform:
 ### Framework
 
 flokoa targets **pydantic-ai** exclusively (`flokoa[pydantic-ai]`). The
-`flokoa-managed-agent` runtime (deployed by the operator) uses pydantic-ai.
+`flokoa-runner` generic runner (deployed by the operator) hydrates compiled
+AgentSpecs via `Agent.from_spec` — see `docs/reference/runtime-contract.md`.
 
 ## CI/CD Pipelines
 
@@ -179,7 +180,7 @@ uv lock                               # Update shared lockfile
 | Operator | `ghcr.io/danielnyari/flokoa-operator` | `make docker-build` |
 | gRPC Server | `ghcr.io/danielnyari/flokoa-server` | `make docker-build` |
 | A2A Plugin | `ghcr.io/danielnyari/flokoa-a2a-plugin` | `make docker-build-plugins` |
-| Flokoa CLI | `ghcr.io/danielnyari/flokoa-cli` | `make docker-build-flokoa-cli` |
+| Generic runner | `ghcr.io/danielnyari/flokoa-runner` | `make docker-build-runner` (sdk/python) |
 
 All images use multi-stage builds. The operator uses `gcr.io/distroless/static:nonroot` as runtime base. Python images use Alpine.
 
@@ -194,7 +195,7 @@ All images use multi-stage builds. The operator uses `gcr.io/distroless/static:n
 - Helm chart for deployment
 
 ### Python SDK
-- uv workspace (flokoa, flokoa-types, flokoa-managed-agent, flokoa-codemode-mcp, flokoa-common)
+- uv workspace (flokoa, flokoa-types, flokoa-runner, flokoa-codemode-mcp, flokoa-common)
 - FastAPI + a2a-sdk for HTTP/A2A protocol
 - pydantic-ai >= 1.44.0 (the only framework integration)
 - Ruff for linting, ty for type checking, pytest for tests
@@ -224,7 +225,9 @@ All images use multi-stage builds. The operator uses `gcr.io/distroless/static:n
 ## Project Status
 
 This project is in early development, executing the Pivot v2.1 roadmap
-(`docs/roadmap/`). Key architectural components are in place:
+(`docs/roadmap/`). Phase 0 and P0a (units 02–07: runtime contract, spec
+compiler, generic runner, virtual endpoint, injected telemetry) are done;
+P0b (Capability CRD, units 08–10) is next. Key architectural components:
 - Seven CRDs with controllers, admission webhooks, and gRPC services
 - Python SDK with CLI, pydantic-ai integration, and OpenAPI tooling
 - Argo Workflows integration with A2A executor plugin

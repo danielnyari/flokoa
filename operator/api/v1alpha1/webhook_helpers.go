@@ -45,20 +45,6 @@ func validateExactlyOneOf(fldPath *field.Path, names []string, set []bool) *fiel
 	return nil
 }
 
-// validateAtMostOneOf checks that at most one of the given values is set.
-func validateAtMostOneOf(fldPath *field.Path, names []string, set []bool) *field.Error {
-	count := 0
-	for _, s := range set {
-		if s {
-			count++
-		}
-	}
-	if count > 1 {
-		return field.Forbidden(fldPath, fmt.Sprintf("only one of %s can be specified", strings.Join(names, ", ")))
-	}
-	return nil
-}
-
 // validateHTTPURL checks that the given string is a valid HTTP or HTTPS URL.
 // Returns a field.Error if the URL is empty, uses a disallowed scheme, or is malformed.
 func validateHTTPURL(fldPath *field.Path, rawURL string) *field.Error {

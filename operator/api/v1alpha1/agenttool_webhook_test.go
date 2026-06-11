@@ -25,6 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const testMCPURL = "http://tools.example.com/mcp"
+
 func validTool() *AgentTool {
 	return &AgentTool{
 		ObjectMeta: metav1.ObjectMeta{Name: "kb", Namespace: "default"},
@@ -64,7 +66,7 @@ func TestAgentToolWebhookRequiresURLOrServiceRef(t *testing.T) {
 		t.Fatal("expected rejection when neither url nor serviceRef is set")
 	}
 
-	tool.Spec.URL = "http://tools.example.com/mcp"
+	tool.Spec.URL = testMCPURL
 	tool.Spec.ServiceRef = &ServiceRef{Name: "x"}
 	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
 		t.Fatal("expected rejection when both url and serviceRef are set")
@@ -93,7 +95,7 @@ func TestAgentToolWebhookPathRules(t *testing.T) {
 
 	tool = validTool()
 	tool.Spec.ServiceRef = nil
-	tool.Spec.URL = "http://tools.example.com/mcp"
+	tool.Spec.URL = testMCPURL
 	tool.Spec.Path = "/mcp"
 	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
 		t.Fatal("expected rejection of path with url")
@@ -130,7 +132,7 @@ func TestAgentToolWebhookHeaderCollisions(t *testing.T) {
 func TestAgentToolWebhookSSETransportWarning(t *testing.T) {
 	tool := validTool()
 	tool.Spec.ServiceRef = nil
-	tool.Spec.URL = "http://tools.example.com/mcp"
+	tool.Spec.URL = testMCPURL
 	tool.Spec.Transport = MCPTransportSSE
 
 	v := &AgentToolCustomValidator{}

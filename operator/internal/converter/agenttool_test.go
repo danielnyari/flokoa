@@ -11,6 +11,8 @@ import (
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
 )
 
+const testToolNS = "default"
+
 const testMCPURL = "https://mcp.example.com/mcp"
 
 func TestAgentToolToProto_Nil(t *testing.T) {
@@ -150,7 +152,7 @@ func TestAgentToolSpecToProto_ServiceRefVariant(t *testing.T) {
 		Type: agentv1alpha1.AgentToolTypeMCP,
 		ServiceRef: &agentv1alpha1.ServiceRef{
 			Name:      "weather-svc",
-			Namespace: "default",
+			Namespace: testToolNS,
 			Port:      &port,
 		},
 		Path:      "/mcp",
@@ -164,7 +166,7 @@ func TestAgentToolSpecToProto_ServiceRefVariant(t *testing.T) {
 	if result.ServiceRef == nil {
 		t.Fatal("expected service ref to be set")
 	}
-	if result.ServiceRef.Name != "weather-svc" || result.ServiceRef.Namespace != "default" {
+	if result.ServiceRef.Name != "weather-svc" || result.ServiceRef.Namespace != testToolNS {
 		t.Fatalf("expected default/weather-svc, got %v", result.ServiceRef)
 	}
 	if result.ServiceRef.Port != 8080 {
@@ -384,7 +386,7 @@ func TestAgentToolSpecFromProto_ServiceRef(t *testing.T) {
 		Type: pb.AgentToolType_AGENT_TOOL_TYPE_MCP,
 		ServiceRef: &pb.ServiceRef{
 			Name:      "weather-svc",
-			Namespace: "default",
+			Namespace: testToolNS,
 			Port:      8080,
 		},
 		Path:      "/sse",
@@ -395,7 +397,7 @@ func TestAgentToolSpecFromProto_ServiceRef(t *testing.T) {
 	if result.ServiceRef == nil {
 		t.Fatal("expected service ref to be set")
 	}
-	if result.ServiceRef.Name != "weather-svc" || result.ServiceRef.Namespace != "default" {
+	if result.ServiceRef.Name != "weather-svc" || result.ServiceRef.Namespace != testToolNS {
 		t.Fatalf("expected default/weather-svc, got %v", result.ServiceRef)
 	}
 	if result.ServiceRef.Port == nil || *result.ServiceRef.Port != 8080 {

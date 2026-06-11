@@ -402,9 +402,9 @@ func main() {
 // every compiled spec (cluster policy; roadmap 07). The compiler appends them
 // after all user entries. session-persistence and budget-guardrail join here
 // in P1 (roadmap 13/14).
-func injectedCapabilities(telemetry bool) []compiler.InjectedCapability {
+func injectedCapabilities(telemetryEnabled bool) []compiler.InjectedCapability {
 	var injected []compiler.InjectedCapability
-	if telemetry {
+	if telemetryEnabled {
 		injected = append(injected, compiler.InjectedCapability{Name: "flokoa.platform/telemetry"})
 	}
 	return injected

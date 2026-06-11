@@ -41,7 +41,7 @@ func (c *Compiler) compileTool(ctx context.Context, tool *agentv1alpha1.AgentToo
 		headers[name] = value
 	}
 
-	var secretEnv []corev1.EnvVar
+	secretEnv := make([]corev1.EnvVar, 0, len(tool.Spec.HeaderSecrets))
 	for _, hs := range tool.Spec.HeaderSecrets {
 		refName := toolSecretRefName(tool.Name, hs.Name)
 		headers[hs.Name] = spec.SecretPlaceholder(refName)

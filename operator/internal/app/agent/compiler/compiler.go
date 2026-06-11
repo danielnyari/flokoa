@@ -264,7 +264,7 @@ func (c *Compiler) applyModelRef(ctx context.Context, agent *agentv1alpha1.Agent
 }
 
 func (c *Compiler) applyInstructions(ctx context.Context, agent *agentv1alpha1.Agent, doc map[string]any) error {
-	var instructions []string
+	instructions := make([]string, 0, len(agent.Spec.InstructionRefs))
 	for _, ref := range agent.Spec.InstructionRefs {
 		key := types.NamespacedName{Name: ref.Name, Namespace: defaultNS(ref.Namespace, agent.Namespace)}
 		instr, err := c.deps.Instructions.GetInstruction(ctx, key)
