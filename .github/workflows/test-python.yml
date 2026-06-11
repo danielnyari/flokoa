@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'sdk/python/**'
+      - 'operator/internal/spec/schemas/**'
       - '.github/workflows/test-python.yml'
   pull_request:
     paths:
       - 'sdk/python/**'
+      - 'operator/internal/spec/schemas/**'
       - '.github/workflows/test-python.yml'
 
 permissions:
@@ -38,9 +40,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --all-extras
 
+      - name: Verify runner contract artifacts (lockfile ↔ manifest ↔ schema)
+        run: make verify-runner-contract
+
       - name: Run flokoa tests
         working-directory: sdk/python/flokoa
         run: uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml --cov-report=term
+
+      - name: Run flokoa-runner tests
+        run: uv run --package flokoa-runner python -m pytest flokoa-runner/tests
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

@@ -18,7 +18,10 @@ package v1alpha1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,9 +56,7 @@ func (v *AgentCustomValidator) ValidateCreate(ctx context.Context, obj runtime.O
 	if !ok {
 		return nil, fmt.Errorf("expected an Agent but got %T", obj)
 	}
-	warnings := collectAgentWarnings(agent)
-	warnings = append(warnings, v.validateReferences(ctx, agent)...)
-	return warnings, validateAgent(agent)
+	return v.validateReferences(ctx, agent), validateAgent(agent)
 }
 
 func (v *AgentCustomValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
@@ -63,97 +64,81 @@ func (v *AgentCustomValidator) ValidateUpdate(ctx context.Context, _, newObj run
 	if !ok {
 		return nil, fmt.Errorf("expected an Agent but got %T", newObj)
 	}
-	warnings := collectAgentWarnings(agent)
-	warnings = append(warnings, v.validateReferences(ctx, agent)...)
-	return warnings, validateAgent(agent)
+	return v.validateReferences(ctx, agent), validateAgent(agent)
 }
 
 func (v *AgentCustomValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-func collectAgentWarnings(agent *Agent) admission.Warnings {
-	var warnings admission.Warnings
+// secretPlaceholderRe matches the runtime contract's placeholder grammar (§3).
+var secretPlaceholderRe = regexp.MustCompile(`\$\{secret:([^}]*)\}`)
 
-	// A3: Warn if type=standard but template is also set
-	if agent.Spec.Runtime.Type == RuntimeTypeStandard && agent.Spec.Runtime.Template != nil {
-		warnings = append(warnings,
-			"spec.runtime.template is set but will be ignored because runtime type is \"standard\"")
-	}
-
-	// A4: Warn if type=template but standard is also set
-	if agent.Spec.Runtime.Type == RuntimeTypeTemplate && agent.Spec.Runtime.Standard != nil {
-		warnings = append(warnings,
-			"spec.runtime.standard is set but will be ignored because runtime type is \"template\"")
-	}
-
-	return warnings
-}
+// validSecretRefName matches the NAME grammar of ${secret:NAME}.
+var validSecretRefName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 func validateAgent(agent *Agent) error {
 	var allErrs field.ErrorList
 	specPath := field.NewPath("spec")
 
-	// A1: type=standard requires standard config
-	runtimePath := specPath.Child("runtime")
-	if agent.Spec.Runtime.Type == RuntimeTypeStandard && agent.Spec.Runtime.Standard == nil {
-		allErrs = append(allErrs, field.Required(
-			runtimePath.Child("standard"),
-			"standard configuration is required when runtime type is \"standard\"",
+	// Runtime: the session isolation tier ships with the session router (P1).
+	if agent.Spec.Runtime.Isolation == IsolationSession {
+		allErrs = append(allErrs, field.Forbidden(
+			specPath.Child("runtime", "isolation"),
+			"the session isolation tier is not available yet (roadmap P1: session router + pools); use \"shared\"",
 		))
 	}
 
-	// A2: type=template requires template config
-	if agent.Spec.Runtime.Type == RuntimeTypeTemplate && agent.Spec.Runtime.Template == nil {
-		allErrs = append(allErrs, field.Required(
-			runtimePath.Child("template"),
-			"template configuration is required when runtime type is \"template\"",
+	// Capability CR attachments ship with the Capability CRD (roadmap 08).
+	if len(agent.Spec.Capabilities) > 0 {
+		allErrs = append(allErrs, field.Forbidden(
+			specPath.Child("capabilities"),
+			"Capability references are not available yet (roadmap 08); native capabilities go in spec.spec.capabilities",
 		))
 	}
 
-	// A5: Instruction - exactly one of template or instructionRef (if set)
-	if agent.Spec.Instruction != nil {
-		instrPath := specPath.Child("instruction")
-		hasTemplate := agent.Spec.Instruction.Template != ""
-		hasRef := agent.Spec.Instruction.InstructionRef != nil
-		if !hasTemplate && !hasRef {
-			allErrs = append(allErrs, field.Required(instrPath,
-				"exactly one of template or instructionRef must be specified"))
+	// Fragment capability names: baseline-native names only. Harness and
+	// third-party capabilities ship exclusively through Capability CRs;
+	// class/module paths are their signature. flokoa.platform/* names are
+	// operator-injected and cannot be user-set.
+	if agent.Spec.Spec != nil {
+		fragPath := specPath.Child("spec")
+		for i, cap := range agent.Spec.Spec.Capabilities {
+			capPath := fragPath.Child("capabilities").Index(i).Child("name")
+			if strings.ContainsAny(cap.Name, "./:") {
+				allErrs = append(allErrs, field.Invalid(capPath, cap.Name,
+					"only baseline-native capability names are allowed inline (e.g. WebSearch, MCP, Thinking); "+
+						"harness and third-party capabilities ship as Capability resources",
+				))
+			}
 		}
-		if hasTemplate && hasRef {
-			allErrs = append(allErrs, field.Forbidden(instrPath,
-				"template and instructionRef are mutually exclusive"))
+
+		// ${secret:NAME} placeholders must have matching secretRefs keys.
+		for _, name := range fragmentSecretPlaceholders(agent.Spec.Spec) {
+			if !validSecretRefName.MatchString(name) {
+				allErrs = append(allErrs, field.Invalid(fragPath, fmt.Sprintf("${secret:%s}", name),
+					"secret placeholder names must match [A-Za-z0-9._-]+"))
+				continue
+			}
+			if _, ok := agent.Spec.SecretRefs[name]; !ok {
+				allErrs = append(allErrs, field.Invalid(fragPath, fmt.Sprintf("${secret:%s}", name),
+					fmt.Sprintf("placeholder has no matching spec.secretRefs[%q] entry", name)))
+			}
 		}
 	}
 
-	// A6/A7: Tools
-	for i, tool := range agent.Spec.Tools {
-		toolPath := specPath.Child("tools").Index(i)
-		hasTemplate := tool.Template != nil
-		hasRef := tool.ToolRef != nil
-
-		// A6: Exactly one of template or toolRef
-		if !hasTemplate && !hasRef {
-			allErrs = append(allErrs, field.Required(toolPath,
-				"exactly one of template or toolRef must be specified"))
-		}
-		if hasTemplate && hasRef {
-			allErrs = append(allErrs, field.Forbidden(toolPath,
-				"template and toolRef are mutually exclusive"))
-		}
-
-		// A7: Name required when template is set
-		if hasTemplate && tool.Name == "" {
-			allErrs = append(allErrs, field.Required(
-				toolPath.Child("name"),
-				"name is required when template is specified",
-			))
+	// secretRefs keys must satisfy the placeholder NAME grammar.
+	for name := range agent.Spec.SecretRefs {
+		if !validSecretRefName.MatchString(name) {
+			allErrs = append(allErrs, field.Invalid(
+				specPath.Child("secretRefs").Key(name), name,
+				"secret ref names must match [A-Za-z0-9._-]+"))
 		}
 	}
 
-	// A8: Unique skill IDs
+	// Unique skill IDs on the card.
 	seenSkills := make(map[string]bool)
-	for i, skill := range agent.Spec.CardOverride.Skills {
+	for i, skill := range agent.Spec.Card.Skills {
 		if seenSkills[skill.ID] {
 			allErrs = append(allErrs, field.Duplicate(
 				specPath.Child("card", "skills").Index(i).Child("id"), skill.ID))
@@ -162,6 +147,26 @@ func validateAgent(agent *Agent) error {
 	}
 
 	return aggregateErrors("Agent", agent.Name, allErrs)
+}
+
+// fragmentSecretPlaceholders scans every string value of the fragment for
+// ${secret:NAME} placeholders. Scanning the JSON form keeps this exhaustive
+// as the fragment grows fields.
+func fragmentSecretPlaceholders(frag *AgentSpecFragment) []string {
+	raw, err := json.Marshal(frag)
+	if err != nil {
+		return nil
+	}
+	matches := secretPlaceholderRe.FindAllStringSubmatch(string(raw), -1)
+	names := make([]string, 0, len(matches))
+	seen := map[string]bool{}
+	for _, m := range matches {
+		if !seen[m[1]] {
+			names = append(names, m[1])
+			seen[m[1]] = true
+		}
+	}
+	return names
 }
 
 // validateReferences checks that cross-resource references exist.
@@ -174,26 +179,24 @@ func (v *AgentCustomValidator) validateReferences(ctx context.Context, agent *Ag
 
 	var warnings admission.Warnings
 
-	// Check Model reference
-	if agent.Spec.Model != nil {
-		ns := agent.Spec.Model.Namespace
+	refNamespace := func(ns string) string {
 		if ns == "" {
-			ns = agent.Namespace
+			return agent.Namespace
 		}
+		return ns
+	}
+
+	if agent.Spec.ModelRef != nil {
+		ns := refNamespace(agent.Spec.ModelRef.Namespace)
 		model := &Model{}
-		if err := v.Reader.Get(ctx, types.NamespacedName{Name: agent.Spec.Model.Name, Namespace: ns}, model); err != nil {
+		if err := v.Reader.Get(ctx, types.NamespacedName{Name: agent.Spec.ModelRef.Name, Namespace: ns}, model); err != nil {
 			warnings = append(warnings,
-				fmt.Sprintf("referenced Model %s/%s not found — the agent will not reconcile until it exists", ns, agent.Spec.Model.Name))
+				fmt.Sprintf("referenced Model %s/%s not found — the agent will not reconcile until it exists", ns, agent.Spec.ModelRef.Name))
 		}
 	}
 
-	// Check Instruction reference
-	if agent.Spec.Instruction != nil && agent.Spec.Instruction.InstructionRef != nil {
-		ref := agent.Spec.Instruction.InstructionRef
-		ns := ref.Namespace
-		if ns == "" {
-			ns = agent.Namespace
-		}
+	for _, ref := range agent.Spec.InstructionRefs {
+		ns := refNamespace(ref.Namespace)
 		instr := &Instruction{}
 		if err := v.Reader.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ns}, instr); err != nil {
 			warnings = append(warnings,
@@ -201,18 +204,12 @@ func (v *AgentCustomValidator) validateReferences(ctx context.Context, agent *Ag
 		}
 	}
 
-	// Check Tool references
-	for _, tool := range agent.Spec.Tools {
-		if tool.ToolRef != nil {
-			ns := tool.ToolRef.Namespace
-			if ns == "" {
-				ns = agent.Namespace
-			}
-			at := &AgentTool{}
-			if err := v.Reader.Get(ctx, types.NamespacedName{Name: tool.ToolRef.Name, Namespace: ns}, at); err != nil {
-				warnings = append(warnings,
-					fmt.Sprintf("referenced AgentTool %s/%s not found — the agent will not reconcile until it exists", ns, tool.ToolRef.Name))
-			}
+	for _, ref := range agent.Spec.Tools {
+		ns := refNamespace(ref.Namespace)
+		at := &AgentTool{}
+		if err := v.Reader.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ns}, at); err != nil {
+			warnings = append(warnings,
+				fmt.Sprintf("referenced AgentTool %s/%s not found — the agent will not reconcile until it exists", ns, ref.Name))
 		}
 	}
 

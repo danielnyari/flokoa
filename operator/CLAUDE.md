@@ -58,11 +58,10 @@ operator/
 │   │   ├── provider_google.go
 │   │   ├── provider_bedrock.go
 │   │   └── *_test.go              # Tests
-│   ├── app/agent/                 # Domain logic
-│   │   ├── reconcile.go           # Main reconciliation orchestration
-│   │   ├── tool_reconciler.go     # Tool setup
-│   │   ├── instruction_reconciler.go  # Instruction/prompt management
-│   │   └── model_reconciler.go    # Model and provider configuration
+│   ├── app/agent/                 # Application layer
+│   │   ├── reconcile.go           # Orchestration: compile → spec ConfigMap → Deployment/Services
+│   │   └── compiler/              # The spec compiler (resolve → merge → inject → validate → emit)
+│   ├── spec/                      # Embedded AgentSpec JSON Schemas + validator + secret-env rule
 │   ├── infra/                     # Infrastructure layer
 │   │   ├── builder/               # Kubernetes resource construction (Deployment, Service)
 │   │   ├── repo/                  # Data access layer (interfaces, CRUD for K8s resources)
@@ -101,9 +100,10 @@ operator/
 │   ├── samples/                   # Example CRs (16 samples)
 │   └── schemas/                   # JSON schemas
 ├── test/
-│   ├── e2e/                       # End-to-end tests
-│   │   ├── testdata/              # Test fixtures (CRs + Argo workflows)
+│   ├── e2e/                       # End-to-end tests (Kind cluster; needs Docker)
+│   │   ├── testdata/              # Test fixtures (CRs + Argo workflows) — shared with test/integration
 │   │   └── kind-config.yaml       # Kind cluster configuration
+│   ├── integration/               # Docker-free e2e: envtest + manager + runner subprocess over A2A
 │   └── utils/                     # Test utilities
 ├── hack/                          # Build scripts (boilerplate template)
 ├── Makefile                       # Build targets
@@ -117,13 +117,13 @@ operator/
 The operator manages seven CRDs under `agent.flokoa.ai/v1alpha1`:
 
 ### Agent
-Manages AI agents. Key spec fields: `framework`, `runtime` (standard/template), `model`, `instruction`, `tools`, `card` (A2A protocol metadata with skills).
+The **composition root**: an inline pydantic-ai AgentSpec fragment plus `modelRef`, `instructionRefs`, `tools` (AgentTool refs), and `secretRefs` compile into one resolved AgentSpec (see `internal/app/agent/compiler`), validated against the runner's pinned AgentSpec JSON Schema (`internal/spec`) and delivered as the `<agent>-agent-spec` ConfigMap. `runtime` holds image/runnerVersion/isolation + pod-level overrides; `card` is the A2A metadata.
 
 ### AgentTool
-Tool definitions. Currently supports `openapi` type with URL or Kubernetes ServiceRef sources, inline or ConfigMap schemas, headers, and timeout.
+A declarative MCP endpoint: `url` or `serviceRef`+`path`, `transport`, static `headers` plus secret-backed `headerSecrets` (delivered as `${secret:…}` placeholders), `toolPrefix`, `allowedTools`, `timeoutSeconds`. Compiles to an MCP capability entry. The `openapi` type is retired (webhook rejects it with a migration pointer).
 
 ### Model
-LLM model configuration. Supports provider-specific parameters for OpenAI, Anthropic, Google, and Bedrock (temperature, maxTokens, reasoning effort, extended thinking, safety settings, guardrails, etc.).
+Named, shareable model configuration: `model` identifier + `providerRef` + typed `settings` (maxTokens, temperature, topP, … with an `extra` passthrough for provider-specific knobs). Compiles to AgentSpec `model` + `model_settings`; rotating a Model recompiles every referencing Agent.
 
 ### ModelProvider
 Provider connection config. Supports OpenAI, Anthropic, Google, Bedrock with API key secret references, custom base URLs, and TLS configuration.
@@ -166,6 +166,9 @@ make docker-push-flokoa-cli   # Push CLI image
 ### Testing
 ```bash
 make test               # Run unit tests with envtest (runs manifests, generate, fmt, vet first)
+make test-integration   # Docker-free integration suite: envtest + real manager + real Python
+                        # runner subprocess answering A2A (requires sdk/python/.venv via
+                        # `uv sync --all-packages`; shares fixtures with the Kind e2e suite)
 make test-e2e           # Run e2e tests in Kind cluster
 make setup-test-e2e     # Create Kind cluster if not exists
 make cleanup-test-e2e   # Delete Kind cluster
@@ -204,7 +207,7 @@ make undeploy-executor-plugins # Remove executor plugins
 | Operator | `docker-build` / `docker-push` | `ghcr.io/danielnyari/flokoa-operator` |
 | Server | `docker-build` / `docker-push` | `ghcr.io/danielnyari/flokoa-server` |
 | A2A Plugin | `docker-build-plugins` / `docker-push-plugins` | `ghcr.io/danielnyari/flokoa-a2a-plugin` |
-| Flokoa CLI | `docker-build-flokoa-cli` / `docker-push-flokoa-cli` | `ghcr.io/danielnyari/flokoa-cli` |
+| Generic runner | `make docker-build-runner` (in `sdk/python/`) | `ghcr.io/danielnyari/flokoa-runner` |
 
 Version is controlled by `VERSION` in the Makefile (currently `0.0.6`).
 
@@ -225,7 +228,18 @@ var _ = Describe("Agent Controller", func() {
 })
 ```
 
-### E2E Tests
+### Integration Tests (Docker-free)
+- Located in `test/integration/`; run with `make test-integration`
+- A real API server (envtest) + the real controller manager (real watches) +
+  the shared `test/e2e/testdata` fixtures + the real `flokoa-runner` as a
+  subprocess (pydantic-ai `test` model) answering live A2A `message/send`
+- Covers compile→ConfigMap→Deployment/Services→status, fleet recompiles on
+  Instruction edits, secret-rotation rollouts, last-good-spec semantics, and
+  the operator↔runner skew/digest chain
+- Does NOT cover: image builds/pulls, kubelet/pod scheduling, in-cluster
+  webhooks, Argo Workflows — that's what the Kind suite is for
+
+### E2E Tests (Kind)
 - Located in `test/e2e/`
 - Use Kind cluster for isolation
 - Run with: `make test-e2e`
@@ -395,10 +409,9 @@ make generate-python-models
 ```
 
 This extracts JSON schemas from generated CRDs and uses `datamodel-codegen` to produce:
-- `sdk/python/flokoa-types/src/flokoa_types/agenttool.py` - AgentToolSpec
+- `sdk/python/flokoa-types/src/flokoa_types/agenttool.py` - AgentToolSpec (MCP endpoint shape)
 - `sdk/python/flokoa-types/src/flokoa_types/agentcard.py` - AgentCard
-- `sdk/python/flokoa-types/src/flokoa_types/modelconfig.py` - ModelConfig (combined provider + model params)
-- `sdk/python/flokoa-types/src/flokoa_types/templateconfig.py` - TemplateConfig (managed runtime config)
+- `sdk/python/flokoa-types/src/flokoa_types/modelsettings.py` - ModelSettings
 - `sdk/python/flokoa-types/src/flokoa_types/agentworkflow.py` - AgentWorkflow
 
 **Prerequisite**: Requires `yq` installed on the system. The target automatically creates a Python venv with `datamodel-code-generator`.
@@ -434,7 +447,7 @@ GitHub Actions workflows in `.github/workflows/`:
 
 | Workflow | Trigger | Actions |
 |----------|---------|---------|
-| `test.yml` | Push/PR | `go mod tidy`, `make test`, Docker build+push on main |
+| `test.yml` | Push/PR | `go mod tidy`, `make test`; `make test-integration` (uv-synced runner leg); Docker build+push on main |
 | `lint.yml` | Push/PR | golangci-lint checks |
 | `test-e2e.yml` | Push/PR | Kind cluster + e2e tests |
 
@@ -549,4 +562,7 @@ The operator follows a layered architecture pattern:
 AgentWorkflow CRDs are compiled into Argo Workflow resources by `agentworkflow_compiler.go`. The compiler translates high-level task definitions into Argo DAG templates that call agents via the A2A executor plugin.
 
 ### Provider Implementations
-Each LLM provider (OpenAI, Anthropic, Google, Bedrock) has a dedicated file in `internal/controller/` that handles provider-specific model parameter validation and configuration.
+Each LLM provider (OpenAI, Anthropic, Google, Bedrock) has a handler in `internal/domain/model/` deriving the pydantic-ai model prefix and the env projection (API-key secret refs, base URLs) for runner pods.
+
+### The Runtime Contract
+`docs/reference/runtime-contract.md` is normative for everything operator↔runner: the compiled-spec ConfigMap, `${secret:NAME}` ↔ `FLOKOA_SECRET_*` projection, skew detection, capability wheelhouses, and platform-injected capabilities. Changes to it are PR-blocking review items; regenerate artifacts with `make runner-contract` in `sdk/python/`.

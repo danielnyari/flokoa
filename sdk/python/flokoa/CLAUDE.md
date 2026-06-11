@@ -22,30 +22,36 @@ sdk/python/                          # Workspace root
 │   ├── pyproject.toml
 │   ├── src/flokoa/
 │   │   ├── __init__.py
-│   │   ├── __main__.py             # CLI: flokoa run -m module:agent
-│   │   ├── agent_executor/         # Base executor interface
-│   │   ├── integrations/           # pydantic-ai integration (the only framework)
-│   │   ├── tools/                  # Tool implementations (OpenAPI, etc.)
-│   │   └── utils/                  # Config loaders, agent card builder
+│   │   ├── __main__.py             # CLI: flokoa run -m module:agent | run -f agentspec.yaml
+│   │   ├── serving.py              # A2A serving (SpecAgentExecutor + build_app), shared with the runner
+│   │   ├── context.py              # Agent/session accessors for capability authors
+│   │   ├── telemetry.py            # OTel init + pydantic-ai/FastAPI instrumentation
+│   │   └── utils/                  # Agent card builder, health router
 │   └── tests/
 ├── flokoa-types/                    # Auto-generated Pydantic models from CRD schemas (DO NOT EDIT generated files)
 │   ├── pyproject.toml
 │   └── src/flokoa_types/
-│       ├── __init__.py             # Re-exports + ToolType, ToolDefinition (hand-maintained)
+│       ├── __init__.py             # Re-exports
 │       ├── agentcard.py            # Generated: AgentCard
-│       ├── agenttool.py            # Generated: AgentToolSpec
+│       ├── agenttool.py            # Generated: AgentToolSpec (MCP endpoint shape)
 │       ├── agentworkflow.py        # Generated: AgentWorkflow
-│       ├── modelconfig.py          # Generated: ModelConfig, ProviderType, etc.
-│       └── templateconfig.py       # Generated: TemplateConfig
-├── flokoa-managed-agent/           # Operator-deployed pydantic-ai agent runtime
-│   ├── pyproject.toml              # Depends on flokoa[pydantic-ai]
-│   ├── Dockerfile
-│   ├── src/flokoa_managed_agent/
-│   │   ├── __main__.py             # python -m flokoa_managed_agent
-│   │   ├── config.py               # Reads mounted ConfigMap/Secret
-│   │   ├── bootstrap.py            # Instantiates pydantic-ai agent from config
-│   │   └── agent_executor.py       # TemplatedPydanticAIAgentExecutor
-│   └── tests/
+│       └── modelsettings.py        # Generated: ModelSettings
+├── flokoa-runner/                  # Generic runner: bootstrap pipeline + runtime-contract artifacts
+│   ├── pyproject.toml              # Owns the platform pin (pydantic-ai==X.Y.Z exactly)
+│   ├── Dockerfile                  # Bakes runner-manifest.json + version labels
+│   ├── runner.lock                 # Exported baseline lockfile ("the platform")
+│   ├── runner-manifest.json        # Machine-readable runner identity
+│   ├── hack/                       # AgentSpec schema + manifest generators
+│   ├── src/flokoa_runner/
+│   │   ├── __main__.py             # Pipeline: manifest → spec → secrets → capabilities → agent → serve
+│   │   ├── manifest.py             # Runner identity + operator↔image skew detection
+│   │   ├── specfile.py             # Loads /etc/flokoa/agent-spec.yaml
+│   │   ├── secrets.py              # ${secret:NAME} resolution from FLOKOA_SECRET_* env
+│   │   ├── capabilities.py         # Wheelhouse requires-check + install + entrypoint loading
+│   │   ├── agent.py                # Agent.from_spec hydration
+│   │   ├── serve.py                # Card loading + A2A serving
+│   │   └── platform_capabilities/  # flokoa.platform/* (telemetry, …)
+│   └── tests/                      # Incl. the 03/04/05 contract tests
 ├── flokoa-codemode-mcp/            # Code-mode MCP server package
 └── flokoa-common/                  # Shared internal helpers
 ```
@@ -54,7 +60,7 @@ sdk/python/                          # Workspace root
 
 - `flokoa` — the public SDK, installable via `pip install flokoa`. Core dependencies: a2a-sdk, click, fastapi, flokoa-types, pydantic. Optional extras: `pydantic-ai`, `tracing`.
 - `flokoa-types` — auto-generated Pydantic v2 models from Kubernetes CRD schemas. Shared dependency for all packages that need CRD types. Import as `flokoa_types`.
-- `flokoa-managed-agent` — internal package, never published to PyPI. Built into a container image by the operator. Depends on `flokoa[pydantic-ai]`.
+- `flokoa-runner` — internal package, never published to PyPI. Built into the generic runner image the operator deploys. Owns the runtime-contract pin: bumping pydantic-ai means `make runner-contract` (regenerates runner.lock, runner-manifest.json, and the AgentSpec schema embedded in the operator) — a PR-blocking review item.
 
 ## Tech Stack
 
@@ -132,16 +138,19 @@ The agent argument uses `module:object` syntax (similar to uvicorn).
 
 ## Framework Integration
 
-flokoa targets **pydantic-ai** exclusively. The executor lives in
-`flokoa.integrations.pydantic_ai` and requires the `pydantic-ai` extra:
+flokoa targets **pydantic-ai** exclusively. A2A serving lives in
+`flokoa.serving` and requires the `pydantic-ai` extra:
 
 ```bash
 pip install flokoa[pydantic-ai]
 ```
 
 ```python
-from flokoa.integrations.pydantic_ai.agent_executor import PydanticAIAgentExecutor
+from flokoa.serving import SpecAgentExecutor, build_app
 ```
+
+`flokoa.context` exposes the agent identity and the in-flight A2A
+`contextId`/`taskId` to capability authors.
 
 ## Code Conventions
 
@@ -226,31 +235,15 @@ tox           # Test all versions
 
 ## Common Patterns
 
-### Creating an Agent Executor
+### Serving an agent locally
 
-```python
-from flokoa.agent_executor import FlokoaAgentExecutor
-
-class MyFrameworkExecutor(FlokoaAgentExecutor):
-    def __init__(self, agent):
-        self.agent = agent
-
-    async def execute(self, request):
-        # Handle the request
-        pass
+```bash
+flokoa run -m my_module:my_agent     # a user-constructed pydantic-ai Agent
+flokoa run -f agentspec.yaml         # an AgentSpec file — the local mirror of the cluster runner
 ```
 
-## OpenAPI Tool System
-
-The SDK includes a comprehensive OpenAPI tool system in `src/flokoa/tools/openapi/`:
-
-- `openapi_toolset.py` - Creates tool instances from OpenAPI specs
-- `openapi_spec_parser.py` - Parses OpenAPI 3.x specifications
-- `operation_parser.py` - Converts API operations to tool definitions
-- `rest_api_tool.py` - Executes REST API calls as tools
-- `auth/` - Authentication subsystem with OAuth2, service account, and auto-auth credential exchangers
-
-This maps to the `AgentTool` CRD's `openapi` type, providing runtime tool execution for agents.
+Tools reach agents as **MCP endpoints** (AgentTool CRs compile to MCP
+capability entries); the former OpenAPI toolset machinery is retired.
 
 ## CI/CD
 

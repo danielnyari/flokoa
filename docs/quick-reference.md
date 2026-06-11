@@ -98,14 +98,15 @@ kind: Agent
 metadata:
   name: simple
 spec:
-  runtime:
-    type: standard
-    spec:
-      container:
-        name: agent
-        image: my-agent:latest
-        ports:
-        - containerPort: 8080
+  card:
+    name: simple
+    description: "Answers questions"
+    version: "0.1.0"
+    skills:
+      - {id: assistant, name: Assistant, description: "Assistant", tags: [assistant]}
+  spec:
+    model: openai:gpt-5-mini
+    instructions: ["You are a helpful assistant."]
 ```
 
 ### Agent with Model
@@ -116,16 +117,16 @@ kind: Agent
 metadata:
   name: ai-agent
 spec:
-  model:
+  card:
+    name: ai-agent
+    description: "Shared-model agent"
+    version: "0.1.0"
+    skills:
+      - {id: assistant, name: Assistant, description: "Assistant", tags: [assistant]}
+  modelRef:
     name: gpt-4o-model
-  runtime:
-    type: standard
-    spec:
-      container:
-        name: agent
-        image: my-agent:latest
-        ports:
-        - containerPort: 8080
+  instructionRefs:
+    - name: assistant-policy
 ```
 
 ### Agent with Tools
@@ -136,25 +137,19 @@ kind: Agent
 metadata:
   name: tool-agent
 spec:
+  card:
+    name: tool-agent
+    description: "Agent with MCP tools"
+    version: "0.1.0"
+    skills:
+      - {id: tools, name: Tools, description: "Uses tools", tags: [tools]}
+  modelRef:
+    name: gpt-4o-model
   tools:
-    - toolRef:
-        name: weather-api
-    - name: inline-tool
-      template:
-        type: openapi
-        description: "Call the example API"
-        openApi:
-          url: "https://api.example.com"
-          openApiSchema:
-            endpointPath: "/openapi.json"
-  runtime:
-    type: standard
-    spec:
-      container:
-        name: agent
-        image: my-agent:latest
-        ports:
-        - containerPort: 8080
+    - name: weather-api        # AgentTool: declarative MCP endpoint
+  spec:
+    capabilities:
+      - name: WebSearch        # native pydantic-ai capability
 ```
 
 ### Production Agent
@@ -165,47 +160,37 @@ kind: Agent
 metadata:
   name: prod-agent
 spec:
-  model:
+  card:
+    name: prod-agent
+    description: "Production agent"
+    version: "1.0.0"
+    skills:
+      - {id: assistant, name: Assistant, description: "Assistant", tags: [assistant]}
+  modelRef:
     name: gpt-4o-model
   tools:
-    - toolRef:
-        name: api-tool
+    - name: api-tool
   runtime:
-    type: standard
-    spec:
-      replicas: 3
-      container:
-        name: agent
-        image: my-agent:v1.0.0
-        ports:
-        - containerPort: 8080
-        env:
-        - name: ENVIRONMENT
-          value: production
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "512Mi"
-          limits:
-            cpu: "2000m"
-            memory: "2Gi"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  flokoa.ai/agent: prod-agent
-              topologyKey: topology.kubernetes.io/zone
+    replicas: 3
+    env:
+      - name: ENVIRONMENT
+        value: production
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "2000m"
+        memory: "2Gi"
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                flokoa.ai/agent: prod-agent
+            topologyKey: topology.kubernetes.io/zone
 ```
 
 ## Provider Configurations
@@ -290,7 +275,7 @@ spec:
   model: "gpt-4o"
   providerRef:
     name: openai
-  parameters:
+  settings:
     temperature: "0.7"
     maxTokens: 4096
 ```
@@ -298,7 +283,7 @@ spec:
 ### Deterministic (Code, Math)
 
 ```yaml
-parameters:
+settings:
   temperature: "0.2"
   maxTokens: 8192
   topP: "0.1"
@@ -307,7 +292,7 @@ parameters:
 ### Creative (Writing)
 
 ```yaml
-parameters:
+settings:
   temperature: "1.2"
   maxTokens: 8192
   presencePenalty: "0.6"
@@ -319,15 +304,15 @@ parameters:
 ```yaml
 spec:
   model: "gpt-4o-mini"  # Use cheaper model
-  parameters:
+  settings:
     maxTokens: 2048     # Limit output
-    openai:
-      promptCacheKey: "my-cache"  # Enable caching
+    extra:
+      openai_prompt_cache_key: "my-cache"  # Enable caching
 ```
 
 ## Tool Patterns
 
-### External API
+### External MCP Server
 
 ```yaml
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -335,12 +320,9 @@ kind: AgentTool
 metadata:
   name: external-api
 spec:
-  type: openapi
-  description: "Call external API"
-  openApi:
-    url: "https://api.external.com"
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  type: mcp
+  description: "Call the external MCP server"
+  url: "https://mcp.external.com/mcp"
 ```
 
 ### Internal Service
@@ -351,26 +333,28 @@ kind: AgentTool
 metadata:
   name: internal-service
 spec:
-  type: openapi
-  description: "Call internal service"
-  openApi:
-    serviceRef:
-      name: my-service
-      namespace: backend
-      port: 8080
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  type: mcp
+  description: "Call the internal MCP service"
+  serviceRef:
+    name: my-service
+    namespace: backend
+    port: 8080
+  path: /mcp
 ```
 
-### OpenAPI Spec from ConfigMap
+### Secret-Backed Auth Header
 
 ```yaml
-openApi:
-  url: "https://api.example.com"
-  openApiSchema:
-    valueFrom:
-      name: api-specs
-      key: openapi.json
+spec:
+  type: mcp
+  url: "https://mcp.external.com/mcp"
+  headerSecrets:
+    - name: Authorization
+      secretRef:
+        name: api-credentials
+        key: token
+  toolPrefix: ext
+  allowedTools: [search]
 ```
 
 ## Namespace Patterns

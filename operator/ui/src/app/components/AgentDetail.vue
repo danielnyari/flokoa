@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, Condition } from '~/types'
-import { agentPhaseLabel, agentPhaseColor, runtimeTypeLabel, normaliseTimestamp } from '~/utils/enums'
+import { agentPhaseLabel, agentPhaseColor, normaliseTimestamp } from '~/utils/enums'
 
 const props = defineProps<{
   agent: Agent
@@ -17,11 +17,7 @@ function conditionColor(c: Condition): 'success' | 'error' | 'warning' {
 }
 
 const toolRefs = computed(() => {
-  return (props.agent.spec.tools ?? []).map((t) => {
-    if (t.toolRef) return t.toolRef.name
-    if (t.name) return t.name
-    return 'inline'
-  })
+  return (props.agent.spec.tools ?? []).map(t => t.name)
 })
 
 const skills = computed(() => props.agent.spec.card?.skills ?? [])
@@ -61,18 +57,18 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
           <div class="grid grid-cols-2 gap-3">
             <div class="p-3 rounded-lg border border-default bg-elevated/50">
               <p class="text-xs text-muted">
-                Framework
+                Spec Hash
               </p>
-              <div class="font-medium text-highlighted">
-                <FrameworkBadge :value="agent.spec.framework ?? agent.status?.detectedFramework" />
-              </div>
+              <p class="text-sm font-mono font-medium text-highlighted truncate">
+                {{ agent.status?.specHash ?? '—' }}
+              </p>
             </div>
             <div class="p-3 rounded-lg border border-default bg-elevated/50">
               <p class="text-xs text-muted">
-                Runtime
+                Runner
               </p>
               <p class="text-sm font-medium text-highlighted">
-                {{ runtimeTypeLabel(agent.spec.runtime?.type) ?? '—' }}
+                {{ agent.spec.runtime?.image ?? (agent.status?.runnerVersion ? `flokoa-runner ${agent.status.runnerVersion}` : '—') }}
               </p>
             </div>
             <div class="p-3 rounded-lg border border-default bg-elevated/50">
@@ -80,7 +76,7 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
                 Replicas
               </p>
               <p class="text-sm font-medium text-highlighted">
-                {{ agent.status?.availableReplicas ?? 0 }}/{{ agent.status?.replicas ?? agent.spec.runtime?.spec?.replicas ?? 0 }}
+                {{ agent.status?.availableReplicas ?? 0 }}/{{ agent.status?.replicas ?? agent.spec.runtime?.replicas ?? 0 }}
               </p>
             </div>
             <div class="p-3 rounded-lg border border-default bg-elevated/50">
@@ -111,32 +107,34 @@ const skills = computed(() => props.agent.spec.card?.skills ?? [])
         </section>
 
         <!-- Model Reference -->
-        <section v-if="agent.spec.model">
+        <section v-if="agent.spec.modelRef">
           <h4 class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
             Model
           </h4>
           <div class="p-3 rounded-lg border border-default bg-elevated/50 flex items-center gap-2">
             <UIcon name="i-lucide-brain" class="size-4 text-primary shrink-0" />
-            <span class="text-sm font-medium text-highlighted">{{ agent.spec.model.name }}</span>
-            <span v-if="agent.spec.model.namespace" class="text-xs text-muted">
-              ({{ agent.spec.model.namespace }})
+            <span class="text-sm font-medium text-highlighted">{{ agent.spec.modelRef.name }}</span>
+            <span v-if="agent.spec.modelRef.namespace" class="text-xs text-muted">
+              ({{ agent.spec.modelRef.namespace }})
             </span>
           </div>
         </section>
 
-        <!-- Instruction -->
-        <section v-if="agent.spec.instruction">
+        <!-- Instructions -->
+        <section v-if="(agent.spec.instructionRefs ?? []).length > 0">
           <h4 class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
-            Instruction
+            Instructions ({{ (agent.spec.instructionRefs ?? []).length }})
           </h4>
-          <div class="p-3 rounded-lg border border-default bg-elevated/50">
-            <div v-if="agent.spec.instruction.instructionRef" class="flex items-center gap-2">
-              <UIcon name="i-lucide-file-text" class="size-4 text-muted shrink-0" />
-              <span class="text-sm font-medium">{{ agent.spec.instruction.instructionRef.name }}</span>
-            </div>
-            <p v-else-if="agent.spec.instruction.template" class="text-sm whitespace-pre-wrap break-words">
-              {{ agent.spec.instruction.template }}
-            </p>
+          <div class="flex flex-wrap gap-2">
+            <UBadge
+              v-for="(ref, i) in agent.spec.instructionRefs"
+              :key="i"
+              variant="outline"
+              color="neutral"
+            >
+              <UIcon name="i-lucide-file-text" class="size-3 mr-1" />
+              {{ ref.name }}
+            </UBadge>
           </div>
         </section>
 

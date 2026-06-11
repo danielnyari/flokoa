@@ -1,4 +1,6 @@
-# Tool using an external OpenAPI specification
+# Tool using an external MCP server
+# The MCP server fronts the underlying API (the OpenAPI tool type is
+# retired; front REST APIs with an MCP adapter or a Capability).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
@@ -7,13 +9,9 @@ metadata:
     category: integration
     provider: github
 spec:
-  type: openapi
-  description: "Search GitHub repositories and get repository information"
-
-  openApi:
-    url: "https://api.github.com"
-    timeoutSeconds: 30
-    headers:
-      Accept: "application/vnd.github.v3+json"
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  type: mcp
+  description: Search GitHub repositories and get repository information
+  url: https://api.github.com/mcp
+  headers:
+    Accept: application/vnd.github.v3+json
+  timeoutSeconds: 30

@@ -3,13 +3,31 @@ package converter
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	pb "github.com/danielnyari/flokoa/server/gen/go/flokoa/agent/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const testModelName = "gpt-4o"
+const testFragmentModel = "openai:gpt-5-mini"
+
+// minimalAgentSpec returns the smallest valid AgentSpec: a card plus an
+// inline fragment that names a model.
+func minimalAgentSpec() agentv1alpha1.AgentSpec {
+	return agentv1alpha1.AgentSpec{
+		Card: agentv1alpha1.AgentCardOverride{
+			Name:        "Test Agent",
+			Description: "A test agent",
+			Version:     "1.0.0",
+		},
+		Spec: &agentv1alpha1.AgentSpecFragment{
+			Model: testFragmentModel,
+		},
+	}
+}
 
 func TestAgentToProto_Nil(t *testing.T) {
 	result := AgentToProto(nil)
@@ -20,48 +38,50 @@ func TestAgentToProto_Nil(t *testing.T) {
 
 func TestAgentToProto_FullAgent(t *testing.T) {
 	replicas := int32(3)
+	optional := true
 	agent := &agentv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-agent",
 			Namespace: "production",
 		},
 		Spec: agentv1alpha1.AgentSpec{
-			Framework: agentv1alpha1.FrameworkPydanticAI,
-			CardOverride: agentv1alpha1.AgentCardOverride{
+			Card: agentv1alpha1.AgentCardOverride{
 				Name:        "Test Agent",
 				Description: "A test agent",
 				Version:     "1.0.0",
 			},
-			Runtime: agentv1alpha1.RuntimeSpec{
-				Type: agentv1alpha1.RuntimeTypeStandard,
-				Standard: &agentv1alpha1.StandardRuntimeSpec{
-					DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
-						Replicas: &replicas,
-					},
-					Container: corev1.Container{
-						Name:  "agent",
-						Image: "my-agent:latest",
-					},
-				},
+			Spec: &agentv1alpha1.AgentSpecFragment{
+				Model: testFragmentModel,
 			},
-			Model: &agentv1alpha1.AgentModelRef{
-				Name:      testModelName,
+			ModelRef: &agentv1alpha1.NamespacedRef{
+				Name:      "gpt-5-mini",
 				Namespace: "models",
 			},
-			Tools: []agentv1alpha1.ToolEntry{
-				{
-					Name: "weather",
-					ToolRef: &agentv1alpha1.ToolRef{
-						Name:      "weather-tool",
-						Namespace: "tools",
-					},
+			InstructionRefs: []agentv1alpha1.NamespacedRef{
+				{Name: "base-prompt"},
+			},
+			Tools: []agentv1alpha1.NamespacedRef{
+				{Name: "weather-tool", Namespace: "tools"},
+			},
+			SecretRefs: map[string]corev1.SecretKeySelector{
+				"OPENAI_API_KEY": {
+					LocalObjectReference: corev1.LocalObjectReference{Name: "openai-secret"},
+					Key:                  "api-key",
+					Optional:             &optional,
+				},
+			},
+			Runtime: agentv1alpha1.AgentRuntime{
+				Isolation: agentv1alpha1.IsolationShared,
+				DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
+					Replicas: &replicas,
 				},
 			},
 		},
 		Status: agentv1alpha1.AgentStatus{
 			Phase:             agentv1alpha1.AgentPhaseRunning,
-			Backend:           "standard",
 			URL:               "https://my-agent.example.com",
+			SpecHash:          "sha256:abc123",
+			RunnerVersion:     "0.4.0",
 			Replicas:          3,
 			AvailableReplicas: 2,
 		},
@@ -72,20 +92,20 @@ func TestAgentToProto_FullAgent(t *testing.T) {
 		t.Fatal("expected non-nil result")
 	}
 
-	// Check metadata
 	if result.Metadata == nil || result.Metadata.Name != "my-agent" {
 		t.Fatal("expected metadata with name my-agent")
 	}
 
-	// Check spec
 	if result.Spec == nil {
 		t.Fatal("expected non-nil spec")
 	}
-	if result.Spec.Framework != pb.Framework_FRAMEWORK_PYDANTIC_AI {
-		t.Fatalf("expected pydantic-ai framework, got %v", result.Spec.Framework)
+	if result.Spec.Card == nil || result.Spec.Card.Name != "Test Agent" {
+		t.Fatal("expected card with name Test Agent")
+	}
+	if result.Spec.ModelRef == nil || result.Spec.ModelRef.Name != "gpt-5-mini" {
+		t.Fatal("expected model ref gpt-5-mini")
 	}
 
-	// Check status
 	if result.Status == nil {
 		t.Fatal("expected non-nil status")
 	}
@@ -101,63 +121,220 @@ func TestAgentSpecToProto_Nil(t *testing.T) {
 	}
 }
 
-func TestAgentSpecToProto_WithModel(t *testing.T) {
-	spec := &agentv1alpha1.AgentSpec{
-		Framework: agentv1alpha1.FrameworkLangChain,
-		Model: &agentv1alpha1.AgentModelRef{
-			Name:      testModelName,
-			Namespace: "models",
-		},
-	}
+func TestAgentSpecToProto_Minimal(t *testing.T) {
+	spec := minimalAgentSpec()
 
-	result := AgentSpecToProto(spec)
+	result := AgentSpecToProto(&spec)
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Model == nil {
-		t.Fatal("expected model ref to be set")
+	if result.Card == nil {
+		t.Fatal("expected card to be set")
 	}
-	if result.Model.Name != testModelName {
-		t.Fatalf("expected model name gpt-4o, got %q", result.Model.Name)
+	if result.Card.Name != "Test Agent" {
+		t.Fatalf("expected card name Test Agent, got %q", result.Card.Name)
 	}
-	if result.Model.Namespace != "models" {
-		t.Fatalf("expected model namespace models, got %q", result.Model.Namespace)
+	if result.Spec == nil {
+		t.Fatal("expected fragment struct to be set")
+	}
+	if got := result.Spec.Fields["model"].GetStringValue(); got != testFragmentModel {
+		t.Fatalf("expected fragment model %q, got %q", testFragmentModel, got)
+	}
+	if result.ModelRef != nil {
+		t.Fatal("expected nil model ref")
+	}
+	if len(result.InstructionRefs) != 0 {
+		t.Fatalf("expected no instruction refs, got %d", len(result.InstructionRefs))
+	}
+	if len(result.Tools) != 0 {
+		t.Fatalf("expected no tools, got %d", len(result.Tools))
+	}
+	if len(result.Capabilities) != 0 {
+		t.Fatalf("expected no capabilities, got %d", len(result.Capabilities))
+	}
+	if len(result.SecretRefs) != 0 {
+		t.Fatalf("expected no secret refs, got %d", len(result.SecretRefs))
 	}
 }
 
-func TestAgentSpecToProto_WithoutModel(t *testing.T) {
+func TestAgentSpecToProto_NilFragment(t *testing.T) {
 	spec := &agentv1alpha1.AgentSpec{
-		Framework: agentv1alpha1.FrameworkPydanticAI,
+		Card: agentv1alpha1.AgentCardOverride{
+			Name:        "No Fragment",
+			Description: "Card only",
+			Version:     "0.1.0",
+		},
 	}
 
 	result := AgentSpecToProto(spec)
-	if result.Model != nil {
-		t.Fatal("expected nil model ref")
+	if result.Spec != nil {
+		t.Fatal("expected nil fragment struct for nil inline spec")
 	}
 }
 
-func TestAgentSpecToProto_WithTools(t *testing.T) {
+func TestAgentSpecToProto_FragmentContent(t *testing.T) {
 	spec := &agentv1alpha1.AgentSpec{
-		Tools: []agentv1alpha1.ToolEntry{
+		Card: agentv1alpha1.AgentCardOverride{Name: "A", Description: "B", Version: "1"},
+		Spec: &agentv1alpha1.AgentSpecFragment{
+			Model:        testFragmentModel,
+			Name:         "custom-name",
+			Instructions: []string{"Be helpful"},
+		},
+	}
+
+	result := AgentSpecToProto(spec)
+	if result.Spec == nil {
+		t.Fatal("expected fragment struct to be set")
+	}
+	if got := result.Spec.Fields["model"].GetStringValue(); got != testFragmentModel {
+		t.Fatalf("expected model %q, got %q", testFragmentModel, got)
+	}
+	if got := result.Spec.Fields["name"].GetStringValue(); got != "custom-name" {
+		t.Fatalf("expected name custom-name, got %q", got)
+	}
+	instructions := result.Spec.Fields["instructions"].GetListValue()
+	if instructions == nil || len(instructions.Values) != 1 {
+		t.Fatal("expected 1 instruction in fragment struct")
+	}
+	if got := instructions.Values[0].GetStringValue(); got != "Be helpful" {
+		t.Fatalf("expected instruction, got %q", got)
+	}
+	// Unset optional fields must not leak into the struct.
+	if _, ok := result.Spec.Fields["description"]; ok {
+		t.Fatal("expected description to be omitted from fragment struct")
+	}
+}
+
+func TestAgentSpecToProto_Refs(t *testing.T) {
+	spec := &agentv1alpha1.AgentSpec{
+		Card: agentv1alpha1.AgentCardOverride{Name: "A", Description: "B", Version: "1"},
+		ModelRef: &agentv1alpha1.NamespacedRef{
+			Name:      "gpt-5-mini",
+			Namespace: "models",
+		},
+		InstructionRefs: []agentv1alpha1.NamespacedRef{
+			{Name: "base-prompt", Namespace: "prompts"},
+			{Name: "tone"},
+		},
+		Tools: []agentv1alpha1.NamespacedRef{
+			{Name: "weather-tool", Namespace: "tools"},
+		},
+	}
+
+	result := AgentSpecToProto(spec)
+	if result.ModelRef == nil || result.ModelRef.Name != "gpt-5-mini" || result.ModelRef.Namespace != "models" {
+		t.Fatalf("expected model ref models/gpt-5-mini, got %v", result.ModelRef)
+	}
+	if len(result.InstructionRefs) != 2 {
+		t.Fatalf("expected 2 instruction refs, got %d", len(result.InstructionRefs))
+	}
+	if result.InstructionRefs[0].Name != "base-prompt" || result.InstructionRefs[0].Namespace != "prompts" {
+		t.Fatalf("expected first instruction ref prompts/base-prompt, got %v", result.InstructionRefs[0])
+	}
+	if result.InstructionRefs[1].Name != "tone" || result.InstructionRefs[1].Namespace != "" {
+		t.Fatalf("expected second instruction ref tone, got %v", result.InstructionRefs[1])
+	}
+	if len(result.Tools) != 1 {
+		t.Fatalf("expected 1 tool ref, got %d", len(result.Tools))
+	}
+	if result.Tools[0].Name != "weather-tool" || result.Tools[0].Namespace != "tools" {
+		t.Fatalf("expected tool ref tools/weather-tool, got %v", result.Tools[0])
+	}
+}
+
+func TestAgentSpecToProto_Capabilities(t *testing.T) {
+	spec := &agentv1alpha1.AgentSpec{
+		Card: agentv1alpha1.AgentCardOverride{Name: "A", Description: "B", Version: "1"},
+		Capabilities: []agentv1alpha1.CapabilityAttachment{
 			{
-				Name: "tool1",
-				ToolRef: &agentv1alpha1.ToolRef{
-					Name: "ref-tool",
-				},
+				Ref:    agentv1alpha1.NamespacedRef{Name: "web-search", Namespace: "caps"},
+				Config: &apiextensionsv1.JSON{Raw: []byte(`{"maxResults":5}`)},
 			},
 			{
-				Name: "tool2",
-				Template: &agentv1alpha1.AgentToolSpec{
-					Type:        agentv1alpha1.AgentToolTypeOpenAPI,
-					Description: "inline tool",
-				},
+				Ref: agentv1alpha1.NamespacedRef{Name: "no-config"},
 			},
 		},
 	}
 
 	result := AgentSpecToProto(spec)
-	if len(result.Tools) != 2 {
-		t.Fatalf("expected 2 tools, got %d", len(result.Tools))
+	if len(result.Capabilities) != 2 {
+		t.Fatalf("expected 2 capabilities, got %d", len(result.Capabilities))
+	}
+	first := result.Capabilities[0]
+	if first.Ref == nil || first.Ref.Name != "web-search" || first.Ref.Namespace != "caps" {
+		t.Fatalf("expected capability ref caps/web-search, got %v", first.Ref)
+	}
+	if first.Config == nil {
+		t.Fatal("expected capability config to be set")
+	}
+	if got := first.Config.Fields["maxResults"].GetNumberValue(); got != 5 {
+		t.Fatalf("expected maxResults 5, got %v", got)
+	}
+	second := result.Capabilities[1]
+	if second.Ref == nil || second.Ref.Name != "no-config" {
+		t.Fatalf("expected capability ref no-config, got %v", second.Ref)
+	}
+	if second.Config != nil {
+		t.Fatal("expected nil config for capability without config")
+	}
+}
+
+func TestAgentSpecToProto_SecretRefs(t *testing.T) {
+	optional := true
+	spec := &agentv1alpha1.AgentSpec{
+		Card: agentv1alpha1.AgentCardOverride{Name: "A", Description: "B", Version: "1"},
+		SecretRefs: map[string]corev1.SecretKeySelector{
+			"API_KEY": {
+				LocalObjectReference: corev1.LocalObjectReference{Name: "api-secret"},
+				Key:                  "key",
+				Optional:             &optional,
+			},
+			"OTHER": {
+				LocalObjectReference: corev1.LocalObjectReference{Name: "other-secret"},
+				Key:                  "token",
+			},
+		},
+	}
+
+	result := AgentSpecToProto(spec)
+	if len(result.SecretRefs) != 2 {
+		t.Fatalf("expected 2 secret refs, got %d", len(result.SecretRefs))
+	}
+	apiKey := result.SecretRefs["API_KEY"]
+	if apiKey == nil || apiKey.Name != "api-secret" || apiKey.Key != "key" {
+		t.Fatalf("expected API_KEY -> api-secret/key, got %v", apiKey)
+	}
+	if !apiKey.Optional {
+		t.Fatal("expected API_KEY optional true")
+	}
+	other := result.SecretRefs["OTHER"]
+	if other == nil || other.Name != "other-secret" || other.Key != "token" {
+		t.Fatalf("expected OTHER -> other-secret/token, got %v", other)
+	}
+	if other.Optional {
+		t.Fatal("expected OTHER optional false for nil pointer")
+	}
+}
+
+func TestNamespacedRefToProto_Nil(t *testing.T) {
+	result := NamespacedRefToProto(nil)
+	if result != nil {
+		t.Fatal("expected nil for nil input")
+	}
+}
+
+func TestNamespacedRefToProto(t *testing.T) {
+	ref := &agentv1alpha1.NamespacedRef{Name: "my-ref", Namespace: "ns"}
+
+	result := NamespacedRefToProto(ref)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Name != "my-ref" {
+		t.Fatalf("expected name my-ref, got %q", result.Name)
+	}
+	if result.Namespace != "ns" {
+		t.Fatalf("expected namespace ns, got %q", result.Namespace)
 	}
 }
 
@@ -312,200 +489,100 @@ func TestAgentSkillToProto(t *testing.T) {
 	}
 }
 
-func TestRuntimeSpecToProto_Nil(t *testing.T) {
-	result := RuntimeSpecToProto(nil)
+func TestAgentRuntimeToProto_Nil(t *testing.T) {
+	result := AgentRuntimeToProto(nil)
 	if result != nil {
 		t.Fatal("expected nil for nil input")
 	}
 }
 
-func TestRuntimeSpecToProto_Standard(t *testing.T) {
+func TestAgentRuntimeToProto(t *testing.T) {
 	replicas := int32(2)
-	runtime := &agentv1alpha1.RuntimeSpec{
-		Type: agentv1alpha1.RuntimeTypeStandard,
-		Standard: &agentv1alpha1.StandardRuntimeSpec{
-			DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
-				Replicas:           &replicas,
-				ServiceAccountName: "my-sa",
-				NodeSelector:       map[string]string{"gpu": "true"},
+	runtime := &agentv1alpha1.AgentRuntime{
+		Image:         "custom-runner:v1",
+		RunnerVersion: "0.4.0",
+		Isolation:     agentv1alpha1.IsolationSession,
+		Env: []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "debug"},
+			{Name: "EMPTY"},
+		},
+		Resources: &corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("500m"),
 			},
-			Container: corev1.Container{
-				Name:            "agent",
-				Image:           "agent:v1",
-				Command:         []string{"python", "-m", "agent"},
-				Args:            []string{"--port", "8080"},
-				WorkingDir:      "/app",
-				ImagePullPolicy: corev1.PullAlways,
+			Requests: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
 			},
 		},
-	}
-
-	result := RuntimeSpecToProto(runtime)
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if result.Type != pb.RuntimeType_RUNTIME_TYPE_STANDARD {
-		t.Fatalf("expected standard runtime type, got %v", result.Type)
-	}
-	if result.Spec == nil {
-		t.Fatal("expected spec to be set")
-	}
-}
-
-func TestRuntimeSpecToProto_NoStandard(t *testing.T) {
-	runtime := &agentv1alpha1.RuntimeSpec{
-		Type: agentv1alpha1.RuntimeTypeStandard,
-	}
-
-	result := RuntimeSpecToProto(runtime)
-	if result.Spec != nil {
-		t.Fatal("expected nil spec for nil standard")
-	}
-}
-
-func TestStandardRuntimeSpecToProto_Nil(t *testing.T) {
-	result := StandardRuntimeSpecToProto(nil)
-	if result != nil {
-		t.Fatal("expected nil for nil input")
-	}
-}
-
-func TestStandardRuntimeSpecToProto(t *testing.T) {
-	replicas := int32(5)
-	spec := &agentv1alpha1.StandardRuntimeSpec{
 		DeploymentOverrides: agentv1alpha1.DeploymentOverrides{
 			Replicas:           &replicas,
-			ServiceAccountName: "sa-name",
-			NodeSelector:       map[string]string{"zone": "us-east-1a"},
-		},
-		Container: corev1.Container{
-			Name:            "container",
-			Image:           "image:tag",
-			Command:         []string{"/bin/sh"},
-			Args:            []string{"-c", "echo hello"},
-			WorkingDir:      "/workspace",
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullSecrets:   []corev1.LocalObjectReference{{Name: "pull-secret"}},
+			ServiceAccountName: "runner-sa",
+			NodeSelector:       map[string]string{"gpu": "true"},
 		},
 	}
 
-	result := StandardRuntimeSpecToProto(spec)
+	result := AgentRuntimeToProto(runtime)
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Replicas != 5 {
-		t.Fatalf("expected 5 replicas, got %d", result.Replicas)
+	if result.Image != "custom-runner:v1" {
+		t.Fatalf("expected image custom-runner:v1, got %q", result.Image)
 	}
-	if result.ServiceAccountName != "sa-name" {
-		t.Fatalf("expected sa-name, got %q", result.ServiceAccountName)
+	if result.RunnerVersion != "0.4.0" {
+		t.Fatalf("expected runner version 0.4.0, got %q", result.RunnerVersion)
 	}
-	if result.NodeSelector["zone"] != "us-east-1a" {
-		t.Fatal("expected node selector zone=us-east-1a")
+	if result.Isolation != pb.IsolationTier_ISOLATION_TIER_SESSION {
+		t.Fatalf("expected session isolation, got %v", result.Isolation)
 	}
-	if result.Container == nil {
-		t.Fatal("expected container to be set")
+	if len(result.Env) != 2 {
+		t.Fatalf("expected 2 env vars, got %d", len(result.Env))
 	}
-	if result.Container.Name != "container" {
-		t.Fatalf("expected container name, got %q", result.Container.Name)
+	if result.Env[0].Name != "LOG_LEVEL" || result.Env[0].Value != "debug" {
+		t.Fatalf("expected LOG_LEVEL=debug, got %v", result.Env[0])
 	}
-	if result.Container.Image != "image:tag" {
-		t.Fatalf("expected image, got %q", result.Container.Image)
+	if result.Resources == nil {
+		t.Fatal("expected resources to be set")
 	}
-	if len(result.Container.Command) != 1 || result.Container.Command[0] != "/bin/sh" {
-		t.Fatal("expected command")
+	if result.Resources.Limits["cpu"] != "500m" {
+		t.Fatalf("expected cpu limit 500m, got %q", result.Resources.Limits["cpu"])
 	}
-	if len(result.Container.Args) != 2 {
-		t.Fatal("expected args")
+	if result.Resources.Requests["memory"] != "128Mi" {
+		t.Fatalf("expected memory request 128Mi, got %q", result.Resources.Requests["memory"])
 	}
-	if result.Container.WorkingDir != "/workspace" {
-		t.Fatalf("expected working dir, got %q", result.Container.WorkingDir)
+	if result.Replicas != 2 {
+		t.Fatalf("expected 2 replicas, got %d", result.Replicas)
 	}
-	if result.Container.ImagePullPolicy != "IfNotPresent" {
-		t.Fatalf("expected IfNotPresent, got %q", result.Container.ImagePullPolicy)
+	if len(result.ImagePullSecrets) != 1 || result.ImagePullSecrets[0].Name != "pull-secret" {
+		t.Fatal("expected image pull secret pull-secret")
+	}
+	if result.ServiceAccountName != "runner-sa" {
+		t.Fatalf("expected service account runner-sa, got %q", result.ServiceAccountName)
+	}
+	if result.NodeSelector["gpu"] != "true" {
+		t.Fatal("expected node selector gpu=true")
 	}
 }
 
-func TestStandardRuntimeSpecToProto_NilReplicas(t *testing.T) {
-	spec := &agentv1alpha1.StandardRuntimeSpec{
-		Container: corev1.Container{
-			Name:  "c",
-			Image: "img:v1",
-		},
+func TestAgentRuntimeToProto_Empty(t *testing.T) {
+	result := AgentRuntimeToProto(&agentv1alpha1.AgentRuntime{})
+	if result == nil {
+		t.Fatal("expected non-nil result")
 	}
-
-	result := StandardRuntimeSpecToProto(spec)
 	if result.Replicas != 0 {
-		t.Fatalf("expected 0 replicas for nil, got %d", result.Replicas)
+		t.Fatalf("expected 0 replicas for nil pointer, got %d", result.Replicas)
 	}
-}
-
-func TestToolEntryToProto_Nil(t *testing.T) {
-	result := ToolEntryToProto(nil)
-	if result != nil {
-		t.Fatal("expected nil for nil input")
+	if result.Isolation != pb.IsolationTier_ISOLATION_TIER_UNSPECIFIED {
+		t.Fatalf("expected unspecified isolation, got %v", result.Isolation)
 	}
-}
-
-func TestToolEntryToProto_WithToolRef(t *testing.T) {
-	entry := &agentv1alpha1.ToolEntry{
-		Name: "my-tool",
-		ToolRef: &agentv1alpha1.ToolRef{
-			Name:      "weather-tool",
-			Namespace: "tools",
-		},
+	if result.Resources != nil {
+		t.Fatal("expected nil resources")
 	}
-
-	result := ToolEntryToProto(entry)
-	if result == nil {
-		t.Fatal("expected non-nil result")
+	if len(result.Env) != 0 {
+		t.Fatalf("expected no env vars, got %d", len(result.Env))
 	}
-	if result.Name != "my-tool" {
-		t.Fatalf("expected name my-tool, got %q", result.Name)
-	}
-	toolRef, ok := result.Tool.(*pb.ToolEntry_ToolRef)
-	if !ok {
-		t.Fatal("expected ToolRef variant")
-	}
-	if toolRef.ToolRef.Name != "weather-tool" {
-		t.Fatalf("expected weather-tool, got %q", toolRef.ToolRef.Name)
-	}
-	if toolRef.ToolRef.Namespace != "tools" {
-		t.Fatalf("expected tools namespace, got %q", toolRef.ToolRef.Namespace)
-	}
-}
-
-func TestToolEntryToProto_WithInlineTemplate(t *testing.T) {
-	entry := &agentv1alpha1.ToolEntry{
-		Name: "inline-tool",
-		Template: &agentv1alpha1.AgentToolSpec{
-			Type:        agentv1alpha1.AgentToolTypeOpenAPI,
-			Description: "An inline tool",
-		},
-	}
-
-	result := ToolEntryToProto(entry)
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	inline, ok := result.Tool.(*pb.ToolEntry_Inline)
-	if !ok {
-		t.Fatal("expected Inline variant")
-	}
-	if inline.Inline.Type != pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI {
-		t.Fatalf("expected openapi type, got %v", inline.Inline.Type)
-	}
-	if inline.Inline.Description != "An inline tool" {
-		t.Fatalf("expected description, got %q", inline.Inline.Description)
-	}
-}
-
-func TestToolEntryToProto_NoRefNoTemplate(t *testing.T) {
-	entry := &agentv1alpha1.ToolEntry{
-		Name: "empty-tool",
-	}
-
-	result := ToolEntryToProto(entry)
-	if result.Tool != nil {
-		t.Fatal("expected nil tool variant when neither ref nor template set")
+	if len(result.ImagePullSecrets) != 0 {
+		t.Fatalf("expected no image pull secrets, got %d", len(result.ImagePullSecrets))
 	}
 }
 
@@ -518,13 +595,14 @@ func TestAgentStatusToProto_Nil(t *testing.T) {
 
 func TestAgentStatusToProto(t *testing.T) {
 	status := &agentv1alpha1.AgentStatus{
-		Phase:              agentv1alpha1.AgentPhaseRunning,
-		Backend:            "standard",
-		URL:                "https://agent.example.com",
-		Replicas:           3,
-		AvailableReplicas:  2,
-		DetectedFramework:  agentv1alpha1.FrameworkLangChain,
-		ObservedGeneration: 7,
+		Phase:                agentv1alpha1.AgentPhaseRunning,
+		URL:                  "https://agent.example.com",
+		SpecHash:             "sha256:abc",
+		RunnerVersion:        "0.4.0",
+		InjectedCapabilities: []string{"MCP", "Thinking"},
+		Replicas:             3,
+		AvailableReplicas:    2,
+		ObservedGeneration:   7,
 		Conditions: []metav1.Condition{
 			{Type: "Ready", Status: metav1.ConditionTrue, Reason: "OK"},
 		},
@@ -537,20 +615,23 @@ func TestAgentStatusToProto(t *testing.T) {
 	if result.Phase != pb.AgentPhase_AGENT_PHASE_RUNNING {
 		t.Fatalf("expected running phase, got %v", result.Phase)
 	}
-	if result.Backend != "standard" {
-		t.Fatalf("expected standard backend, got %q", result.Backend)
-	}
 	if result.Url != "https://agent.example.com" {
 		t.Fatalf("expected URL, got %q", result.Url)
+	}
+	if result.SpecHash != "sha256:abc" {
+		t.Fatalf("expected spec hash, got %q", result.SpecHash)
+	}
+	if result.RunnerVersion != "0.4.0" {
+		t.Fatalf("expected runner version 0.4.0, got %q", result.RunnerVersion)
+	}
+	if len(result.InjectedCapabilities) != 2 || result.InjectedCapabilities[0] != "MCP" {
+		t.Fatalf("expected injected capabilities, got %v", result.InjectedCapabilities)
 	}
 	if result.Replicas != 3 {
 		t.Fatalf("expected 3 replicas, got %d", result.Replicas)
 	}
 	if result.AvailableReplicas != 2 {
 		t.Fatalf("expected 2 available replicas, got %d", result.AvailableReplicas)
-	}
-	if result.DetectedFramework != pb.Framework_FRAMEWORK_LANGCHAIN {
-		t.Fatalf("expected langchain framework, got %v", result.DetectedFramework)
 	}
 	if result.ObservedGeneration != 7 {
 		t.Fatalf("expected observed gen 7, got %d", result.ObservedGeneration)
@@ -573,11 +654,11 @@ func TestAgentListToProto(t *testing.T) {
 		Items: []agentv1alpha1.Agent{
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: "agent-1", Namespace: "ns"},
-				Spec:       agentv1alpha1.AgentSpec{Framework: agentv1alpha1.FrameworkPydanticAI},
+				Spec:       minimalAgentSpec(),
 			},
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: "agent-2", Namespace: "ns"},
-				Spec:       agentv1alpha1.AgentSpec{Framework: agentv1alpha1.FrameworkA2A},
+				Spec:       minimalAgentSpec(),
 			},
 		},
 	}
@@ -611,29 +692,6 @@ func TestAgentListToProto_Empty(t *testing.T) {
 	}
 }
 
-func TestFrameworkToProto(t *testing.T) {
-	tests := []struct {
-		input    agentv1alpha1.Framework
-		expected pb.Framework
-	}{
-		{agentv1alpha1.FrameworkPydanticAI, pb.Framework_FRAMEWORK_PYDANTIC_AI},
-		{agentv1alpha1.FrameworkLangChain, pb.Framework_FRAMEWORK_LANGCHAIN},
-		{agentv1alpha1.FrameworkAutogen, pb.Framework_FRAMEWORK_AUTOGEN},
-		{agentv1alpha1.FrameworkA2A, pb.Framework_FRAMEWORK_A2A},
-		{agentv1alpha1.Framework("unknown"), pb.Framework_FRAMEWORK_UNSPECIFIED},
-		{agentv1alpha1.Framework(""), pb.Framework_FRAMEWORK_UNSPECIFIED},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.input), func(t *testing.T) {
-			result := FrameworkToProto(tt.input)
-			if result != tt.expected {
-				t.Fatalf("FrameworkToProto(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestAgentPhaseToProto(t *testing.T) {
 	tests := []struct {
 		input    agentv1alpha1.AgentPhase
@@ -656,21 +714,22 @@ func TestAgentPhaseToProto(t *testing.T) {
 	}
 }
 
-func TestRuntimeTypeToProto(t *testing.T) {
+func TestIsolationTierToProto(t *testing.T) {
 	tests := []struct {
-		input    agentv1alpha1.RuntimeType
-		expected pb.RuntimeType
+		input    agentv1alpha1.IsolationTier
+		expected pb.IsolationTier
 	}{
-		{agentv1alpha1.RuntimeTypeStandard, pb.RuntimeType_RUNTIME_TYPE_STANDARD},
-		{agentv1alpha1.RuntimeType("unknown"), pb.RuntimeType_RUNTIME_TYPE_UNSPECIFIED},
-		{agentv1alpha1.RuntimeType(""), pb.RuntimeType_RUNTIME_TYPE_UNSPECIFIED},
+		{agentv1alpha1.IsolationShared, pb.IsolationTier_ISOLATION_TIER_SHARED},
+		{agentv1alpha1.IsolationSession, pb.IsolationTier_ISOLATION_TIER_SESSION},
+		{agentv1alpha1.IsolationTier("unknown"), pb.IsolationTier_ISOLATION_TIER_UNSPECIFIED},
+		{agentv1alpha1.IsolationTier(""), pb.IsolationTier_ISOLATION_TIER_UNSPECIFIED},
 	}
 
 	for _, tt := range tests {
 		t.Run(string(tt.input), func(t *testing.T) {
-			result := RuntimeTypeToProto(tt.input)
+			result := IsolationTierToProto(tt.input)
 			if result != tt.expected {
-				t.Fatalf("RuntimeTypeToProto(%q) = %v, want %v", tt.input, result, tt.expected)
+				t.Fatalf("IsolationTierToProto(%q) = %v, want %v", tt.input, result, tt.expected)
 			}
 		})
 	}

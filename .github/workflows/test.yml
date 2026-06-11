@@ -28,6 +28,37 @@ jobs:
           go mod tidy
           make test
 
+  integration:
+    name: Run Integration Tests (operator + runner, Docker-free)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/go.mod
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sdk/python/uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: sdk/python/.python-version
+
+      - name: Sync the SDK workspace (runner subprocess leg)
+        working-directory: sdk/python
+        run: uv sync --all-packages
+
+      - name: Run the integration suite
+        working-directory: operator
+        run: make test-integration
+
   build-image:
     name: Build Docker Image
     runs-on: ubuntu-latest

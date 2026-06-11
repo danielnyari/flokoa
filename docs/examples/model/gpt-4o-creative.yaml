@@ -13,7 +13,7 @@ spec:
   providerRef:
     name: openai-provider
   
-  parameters:
+  settings:
     # Higher temperature for more creative output
     temperature: "1.2"
     

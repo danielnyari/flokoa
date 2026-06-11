@@ -16,11 +16,9 @@ const testNamespace = "default"
 // validAgentToolSpec creates a minimal valid AgentToolSpec for testing.
 func validAgentToolSpec() agentv1alpha1.AgentToolSpec {
 	return agentv1alpha1.AgentToolSpec{
-		Type:        agentv1alpha1.AgentToolTypeOpenAPI,
+		Type:        agentv1alpha1.AgentToolTypeMCP,
 		Description: "A test tool for integration testing",
-		OpenApi: &agentv1alpha1.OpenApiToolSpec{
-			URL: "https://api.example.com",
-		},
+		URL:         "https://mcp.example.com/mcp",
 	}
 }
 
@@ -74,7 +72,7 @@ var _ = Describe("AgentToolService", func() {
 			Expect(result).NotTo(BeNil())
 			Expect(result.Metadata.Name).To(Equal("test-tool-get"))
 			Expect(result.Spec.Description).To(Equal("A test tool for integration testing"))
-			Expect(result.Spec.Type).To(Equal(pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI))
+			Expect(result.Spec.Type).To(Equal(pb.AgentToolType_AGENT_TOOL_TYPE_MCP))
 		})
 	})
 
@@ -155,11 +153,9 @@ var _ = Describe("AgentToolService", func() {
 						Namespace: testNamespace,
 					},
 					Spec: &pb.AgentToolSpec{
-						Type:        pb.AgentToolType_AGENT_TOOL_TYPE_OPENAPI,
+						Type:        pb.AgentToolType_AGENT_TOOL_TYPE_MCP,
 						Description: "Created tool",
-						OpenApi: &pb.OpenApiToolSpec{
-							Url: "https://api.example.com",
-						},
+						Url:         "https://mcp.example.com/mcp",
 					},
 				},
 			})

@@ -3281,3 +3281,8 @@ func TestCompileToArgoWorkflow_ServiceAccountOverride(t *testing.T) {
 
 	assertDiff(t, want, got)
 }
+
+// boolPtr is a small test helper (previously provided by deleted compat shims).
+func boolPtr(b bool) *bool {
+	return &b
+}

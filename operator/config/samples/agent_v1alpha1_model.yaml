@@ -9,10 +9,12 @@ spec:
   model: gpt-4o
   providerRef:
     name: openai-provider
-  parameters:
+  settings:
     temperature: "0.9"
     maxTokens: 4096
     topP: "0.95"
-    openai:
-      frequencyPenalty: "0.5"
-      presencePenalty: "0.5"
+    presencePenalty: "0.5"
+    frequencyPenalty: "0.5"
+    # Provider-specific knobs pass through to model_settings as-is
+    extra:
+      service_tier: auto

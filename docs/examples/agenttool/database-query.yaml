@@ -1,4 +1,6 @@
 # Database query tool (via internal query service)
+# The MCP server fronts the underlying API (the OpenAPI tool type is
+# retired; front REST APIs with an MCP adapter or a Capability).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
@@ -6,14 +8,11 @@ metadata:
   labels:
     category: database
 spec:
-  type: openapi
-  description: "Execute read-only SQL queries against the database via the query service"
-
-  openApi:
-    serviceRef:
-      name: query-service
-      namespace: data-layer
-      port: 5000
-    timeoutSeconds: 60
-    openApiSchema:
-      endpointPath: "/openapi.json"
+  type: mcp
+  description: Execute read-only SQL queries against the database via the query service
+  serviceRef:
+    name: query-service
+    namespace: data-layer
+    port: 5000
+  path: /mcp
+  timeoutSeconds: 60

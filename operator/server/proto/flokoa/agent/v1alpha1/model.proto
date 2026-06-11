@@ -16,166 +16,29 @@ enum ProviderType {
   PROVIDER_TYPE_BEDROCK = 4;
 }
 
-// ReasoningEffort for OpenAI models.
-enum ReasoningEffort {
-  REASONING_EFFORT_UNSPECIFIED = 0;
-  REASONING_EFFORT_NONE = 1;
-  REASONING_EFFORT_MINIMAL = 2;
-  REASONING_EFFORT_LOW = 3;
-  REASONING_EFFORT_MEDIUM = 4;
-  REASONING_EFFORT_HIGH = 5;
-  REASONING_EFFORT_XHIGH = 6;
-}
-
-// ThinkingType for Anthropic models.
-enum ThinkingType {
-  THINKING_TYPE_UNSPECIFIED = 0;
-  THINKING_TYPE_ENABLED = 1;
-  THINKING_TYPE_DISABLED = 2;
-}
-
-// GoogleThinkingLevel for Google models.
-enum GoogleThinkingLevel {
-  GOOGLE_THINKING_LEVEL_UNSPECIFIED = 0;
-  GOOGLE_THINKING_LEVEL_MINIMAL = 1;
-  GOOGLE_THINKING_LEVEL_LOW = 2;
-  GOOGLE_THINKING_LEVEL_MEDIUM = 3;
-  GOOGLE_THINKING_LEVEL_HIGH = 4;
-}
-
-// GoogleMediaResolution for Google models.
-enum GoogleMediaResolution {
-  GOOGLE_MEDIA_RESOLUTION_UNSPECIFIED = 0;
-  GOOGLE_MEDIA_RESOLUTION_LOW = 1;
-  GOOGLE_MEDIA_RESOLUTION_MEDIUM = 2;
-  GOOGLE_MEDIA_RESOLUTION_HIGH = 3;
-}
-
 // ProviderRef references a ModelProvider resource.
 message ProviderRef {
   string name = 1;
   string namespace = 2;
 }
 
-// ModelParameters defines model parameters with provider-specific extensions.
-message ModelParameters {
-  // Base parameters (all optional)
-  string temperature = 1;
-  int32 max_tokens = 2;
+// ModelSettings mirrors pydantic-ai's common ModelSettings with typed fields;
+// provider-specific knobs flow through `extra`. Decimal fields are strings to
+// avoid floating-point drift (compiled to JSON numbers).
+message ModelSettings {
+  int32 max_tokens = 1;
+  string temperature = 2;
   string top_p = 3;
   int32 top_k = 4;
-  string presence_penalty = 5;
-  string frequency_penalty = 6;
-  int32 timeout = 7;
-  bool parallel_tool_calls = 8;
-  map<string, int32> logit_bias = 9;
-  repeated string stop_sequences = 10;
-  int64 seed = 11;
+  int32 timeout_seconds = 5;
+  bool parallel_tool_calls = 6;
+  int64 seed = 7;
+  string presence_penalty = 8;
+  string frequency_penalty = 9;
+  map<string, int32> logit_bias = 10;
+  repeated string stop_sequences = 11;
   map<string, string> extra_headers = 12;
-  google.protobuf.Struct extra_body = 13;
-
-  // Provider-specific parameters (only one should be set)
-  OpenAIParameters openai = 14;
-  AnthropicParameters anthropic = 15;
-  GoogleParameters google = 16;
-  BedrockParameters bedrock = 17;
-}
-
-// OpenAIParameters contains OpenAI-specific parameters.
-message OpenAIParameters {
-  ReasoningEffort reasoning_effort = 1;
-  bool log_probs = 2;
-  int32 top_log_probs = 3;
-  string user = 4;
-  string service_tier = 5;
-  string prompt_cache_key = 6;
-  string prompt_retention = 7;
-  string reasoning_generate_summary = 8;
-  string reasoning_summary = 9;
-  bool send_reasoning_ids = 10;
-  string truncation = 11;
-  string text_verbosity = 12;
-  string previous_response_id = 13;
-  bool include_code_execution_outputs = 14;
-  bool include_web_search_sources = 15;
-  bool include_file_search_results = 16;
-  bool include_raw_annotations = 17;
-}
-
-// AnthropicThinkingConfig defines thinking configuration.
-message AnthropicThinkingConfig {
-  ThinkingType type = 1;
-  int32 budget_tokens = 2;
-}
-
-// AnthropicContainerConfig defines container configuration for multi-turn.
-message AnthropicContainerConfig {
-  string id = 1;
-  bool disabled = 2;
-}
-
-// AnthropicParameters contains Anthropic-specific parameters.
-message AnthropicParameters {
-  string metadata_user_id = 1;
-  AnthropicThinkingConfig thinking = 2;
-  string cache_tool_definitions = 3;
-  string cache_instructions = 4;
-  string cache_messages = 5;
-  AnthropicContainerConfig container = 6;
-}
-
-// GoogleThinkingConfig defines thinking configuration for Google models.
-message GoogleThinkingConfig {
-  bool include_thoughts = 1;
-  int32 thinking_budget = 2;
-  GoogleThinkingLevel thinking_level = 3;
-}
-
-// GoogleSafetySetting defines safety settings.
-message GoogleSafetySetting {
-  string category = 1;
-  string threshold = 2;
-  string method = 3;
-}
-
-// GoogleParameters contains Google-specific parameters.
-message GoogleParameters {
-  repeated GoogleSafetySetting safety_settings = 1;
-  GoogleThinkingConfig thinking_config = 2;
-  map<string, string> labels = 3;
-  GoogleMediaResolution video_resolution = 4;
-  string cached_content = 5;
-}
-
-// BedrockGuardrailConfig defines guardrail settings.
-message BedrockGuardrailConfig {
-  string guardrail_identifier = 1;
-  string guardrail_version = 2;
-  string trace = 3;
-}
-
-// BedrockPerformanceConfig defines performance settings.
-message BedrockPerformanceConfig {
-  string latency = 1;
-}
-
-// BedrockServiceTier defines service tier.
-message BedrockServiceTier {
-  string type = 1;
-}
-
-// BedrockParameters contains Bedrock-specific parameters.
-message BedrockParameters {
-  BedrockGuardrailConfig guardrail_config = 1;
-  BedrockPerformanceConfig performance_configuration = 2;
-  map<string, string> request_metadata = 3;
-  repeated string additional_model_response_fields_paths = 4;
-  map<string, string> prompt_variables = 5;
-  google.protobuf.Struct additional_model_request_fields = 6;
-  bool cache_tool_definitions = 7;
-  bool cache_instructions = 8;
-  bool cache_messages = 9;
-  BedrockServiceTier service_tier = 10;
+  google.protobuf.Struct extra = 13;
 }
 
 // ResolvedProviderInfo contains resolved provider information.
@@ -189,7 +52,7 @@ message ResolvedProviderInfo {
 message ModelSpec {
   string model = 1;
   ProviderRef provider_ref = 2;
-  ModelParameters parameters = 3;
+  ModelSettings settings = 3;
 }
 
 // ModelStatus defines the observed state of Model.

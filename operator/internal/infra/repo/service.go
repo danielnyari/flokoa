@@ -15,6 +15,14 @@ type ServiceRepoImpl struct {
 	Client client.Client
 }
 
+func (r *ServiceRepoImpl) GetService(ctx context.Context, key types.NamespacedName) (*corev1.Service, error) {
+	svc := &corev1.Service{}
+	if err := r.Client.Get(ctx, key, svc); err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
+
 func (r *ServiceRepoImpl) EnsureService(ctx context.Context, desired *corev1.Service) (*corev1.Service, error) {
 	existing := &corev1.Service{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, existing)

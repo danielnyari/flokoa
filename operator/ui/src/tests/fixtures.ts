@@ -20,8 +20,8 @@ export const mockAgents = {
         creationTimestamp: new Date(Date.now() - 3600_000).toISOString()
       },
       spec: {
-        framework: 'pydantic-ai',
-        runtime: { type: 'standard', standard: { replicas: 2 } }
+        runtime: { replicas: 2 },
+        spec: { model: 'openai:gpt-5-mini' }
       },
       status: {
         phase: 'Running',
@@ -39,8 +39,8 @@ export const mockAgents = {
         creationTimestamp: new Date(Date.now() - 7200_000).toISOString()
       },
       spec: {
-        framework: 'langchain',
-        runtime: { type: 'standard', standard: { replicas: 1 } }
+        runtime: { replicas: 1 },
+        spec: { model: 'anthropic:claude-sonnet-4-5' }
       },
       status: {
         phase: 'Pending',
@@ -56,7 +56,8 @@ export const mockAgents = {
         creationTimestamp: new Date(Date.now() - 86400_000).toISOString()
       },
       spec: {
-        runtime: { type: 'standard', standard: { replicas: 1 } }
+        runtime: { replicas: 1 },
+        spec: { model: 'openai:gpt-5-mini' }
       },
       status: {
         phase: 'Failed',
@@ -79,7 +80,7 @@ export const mockModels = {
       spec: {
         model: 'gpt-4o',
         providerRef: { name: 'openai-provider' },
-        parameters: { temperature: '0.7', maxTokens: 4096 }
+        settings: { temperature: '0.7', maxTokens: 4096 }
       },
       status: {
         ready: true,
@@ -96,7 +97,7 @@ export const mockModels = {
       spec: {
         model: 'claude-sonnet-4-20250514',
         providerRef: { name: 'anthropic-provider' },
-        parameters: { temperature: '0.5', maxTokens: 8192 }
+        settings: { temperature: '0.5', maxTokens: 8192 }
       },
       status: {
         ready: true,
@@ -168,12 +169,10 @@ export const mockTools = {
         creationTimestamp: new Date(Date.now() - 3600_000).toISOString()
       },
       spec: {
-        type: 'openapi',
+        type: 'mcp',
         description: 'Provides real-time weather data for any location worldwide.',
-        openApi: {
-          url: 'https://api.weather.example.com/openapi.json',
-          timeoutSeconds: 30
-        }
+        url: 'https://api.weather.example.com/mcp',
+        timeoutSeconds: 30
       }
     },
     {
@@ -184,12 +183,11 @@ export const mockTools = {
         creationTimestamp: new Date(Date.now() - 7200_000).toISOString()
       },
       spec: {
-        type: 'openapi',
+        type: 'mcp',
         description: 'Search the web for relevant documents and information.',
-        openApi: {
-          serviceRef: { name: 'search-service', port: 8080 },
-          timeoutSeconds: 60
-        }
+        serviceRef: { name: 'search-service', port: 8080 },
+        path: '/mcp',
+        timeoutSeconds: 60
       }
     }
   ]

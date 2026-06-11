@@ -6,7 +6,7 @@ spec:
   model: "gpt-5-mini"
   providerRef:
     name: openai-provider
-  parameters:
+  settings:
     temperature: "0.2"
     maxTokens: 1000
     topP: "1.0"

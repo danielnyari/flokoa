@@ -17,194 +17,130 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"strings"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestValidateAgentTool(t *testing.T) {
-	tests := []struct {
-		name    string
-		obj     *AgentTool
-		wantErr bool
-	}{
-		{
-			name: "valid openapi tool with URL and inline schema",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						URL: "https://api.example.com",
-						OpenApiSchema: OpenApiSchema{
-							Value: &runtime.RawExtension{Raw: []byte(`{"openapi":"3.0.0"}`)},
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid openapi tool with serviceRef and endpointPath",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						ServiceRef: &ServiceRef{
-							Name: "my-service",
-							Port: ptr.To[int32](8080),
-						},
-						OpenApiSchema: OpenApiSchema{
-							EndpointPath: "/openapi.json",
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid openapi tool with serviceRef using portName",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						ServiceRef: &ServiceRef{
-							Name:     "my-service",
-							PortName: "http",
-						},
-						OpenApiSchema: OpenApiSchema{
-							EndpointPath: "/openapi.json",
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "openapi type without openApi config",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "both url and serviceRef set",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						URL: "https://api.example.com",
-						ServiceRef: &ServiceRef{
-							Name: "my-service",
-							Port: ptr.To[int32](8080),
-						},
-						OpenApiSchema: OpenApiSchema{
-							EndpointPath: "/openapi.json",
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "neither url nor serviceRef set",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						OpenApiSchema: OpenApiSchema{
-							EndpointPath: "/openapi.json",
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "no schema source set",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						URL:           "https://api.example.com",
-						OpenApiSchema: OpenApiSchema{},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "multiple schema sources set",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						URL: "https://api.example.com",
-						OpenApiSchema: OpenApiSchema{
-							Value:        &runtime.RawExtension{Raw: []byte(`{}`)},
-							EndpointPath: "/openapi.json",
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "serviceRef with both port and portName",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						ServiceRef: &ServiceRef{
-							Name:     "my-service",
-							Port:     ptr.To[int32](8080),
-							PortName: "http",
-						},
-						OpenApiSchema: OpenApiSchema{
-							EndpointPath: "/openapi.json",
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "serviceRef with neither port nor portName",
-			obj: &AgentTool{
-				Spec: AgentToolSpec{
-					Type:        AgentToolTypeOpenAPI,
-					Description: "A test tool",
-					OpenApi: &OpenApiToolSpec{
-						ServiceRef: &ServiceRef{
-							Name: "my-service",
-						},
-						OpenApiSchema: OpenApiSchema{
-							EndpointPath: "/openapi.json",
-						},
-					},
-				},
-			},
-			wantErr: true,
+const testMCPURL = "http://tools.example.com/mcp"
+
+func validTool() *AgentTool {
+	return &AgentTool{
+		ObjectMeta: metav1.ObjectMeta{Name: "kb", Namespace: "default"},
+		Spec: AgentToolSpec{
+			Type:       AgentToolTypeMCP,
+			ServiceRef: &ServiceRef{Name: "kb-tools", Port: int32Ptr(8080)},
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateAgentTool(tt.obj)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateAgentTool() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+func int32Ptr(v int32) *int32 { return &v }
+
+func TestAgentToolWebhookAcceptsValidMCPTool(t *testing.T) {
+	v := &AgentToolCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), validTool()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentToolWebhookRejectsOpenAPIWithMigrationPointer(t *testing.T) {
+	tool := validTool()
+	tool.Spec.Type = AgentToolTypeOpenAPI
+
+	v := &AgentToolCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), tool)
+	if err == nil || !strings.Contains(err.Error(), "MCP adapter") {
+		t.Fatalf("expected retirement message with migration pointer, got %v", err)
+	}
+}
+
+func TestAgentToolWebhookRequiresURLOrServiceRef(t *testing.T) {
+	tool := validTool()
+	tool.Spec.ServiceRef = nil
+
+	v := &AgentToolCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
+		t.Fatal("expected rejection when neither url nor serviceRef is set")
+	}
+
+	tool.Spec.URL = testMCPURL
+	tool.Spec.ServiceRef = &ServiceRef{Name: "x"}
+	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
+		t.Fatal("expected rejection when both url and serviceRef are set")
+	}
+}
+
+func TestAgentToolWebhookRejectsNonHTTPURL(t *testing.T) {
+	tool := validTool()
+	tool.Spec.ServiceRef = nil
+	tool.Spec.URL = "file:///etc/passwd"
+
+	v := &AgentToolCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
+		t.Fatal("expected non-HTTP URL rejection")
+	}
+}
+
+func TestAgentToolWebhookPathRules(t *testing.T) {
+	tool := validTool()
+	tool.Spec.Path = "mcp"
+
+	v := &AgentToolCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
+		t.Fatal("expected rejection of relative path")
+	}
+
+	tool = validTool()
+	tool.Spec.ServiceRef = nil
+	tool.Spec.URL = testMCPURL
+	tool.Spec.Path = "/mcp"
+	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
+		t.Fatal("expected rejection of path with url")
+	}
+}
+
+func TestAgentToolWebhookPortExclusivity(t *testing.T) {
+	tool := validTool()
+	tool.Spec.ServiceRef.PortName = "http"
+
+	v := &AgentToolCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
+		t.Fatal("expected rejection when both port and portName are set")
+	}
+}
+
+func TestAgentToolWebhookHeaderCollisions(t *testing.T) {
+	tool := validTool()
+	tool.Spec.Headers = map[string]string{"Authorization": "static"}
+	tool.Spec.HeaderSecrets = []SecretHeader{{
+		Name: "authorization",
+		SecretRef: corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "s"},
+			Key:                  "k",
+		},
+	}}
+
+	v := &AgentToolCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), tool); err == nil {
+		t.Fatal("expected case-insensitive header collision rejection")
+	}
+}
+
+func TestAgentToolWebhookSSETransportWarning(t *testing.T) {
+	tool := validTool()
+	tool.Spec.ServiceRef = nil
+	tool.Spec.URL = testMCPURL
+	tool.Spec.Transport = MCPTransportSSE
+
+	v := &AgentToolCustomValidator{}
+	warnings, err := v.ValidateCreate(context.Background(), tool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "/sse") {
+		t.Fatalf("expected sse/url mismatch warning, got %v", warnings)
 	}
 }

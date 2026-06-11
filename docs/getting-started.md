@@ -39,16 +39,24 @@ kind: Agent
 metadata:
   name: my-first-agent
 spec:
-  runtime:
-    type: standard
-    spec:
-      container:
-        name: agent
-        image: ghcr.io/example/simple-agent:latest
-        ports:
-        - containerPort: 8080
-          name: http
+  card:
+    name: my-first-agent
+    description: "Answers questions"
+    version: "0.1.0"
+    skills:
+      - id: assistant
+        name: Assistant
+        description: "General-purpose assistant"
+        tags: [assistant]
+  spec:
+    model: openai:gpt-5-mini
+    instructions:
+      - "You are a helpful assistant."
 ```
+
+No container image required: the operator compiles the spec and runs it on
+the generic runner (the OpenAI API key comes from a referenced Model +
+ModelProvider, or `runtime.env` for quick experiments).
 
 Apply the configuration:
 
@@ -105,7 +113,7 @@ Resources can reference other resources within the same namespace or across name
 
 ```yaml
 spec:
-  model:
+  modelRef:
     name: gpt-4o-model
     namespace: shared-models  # Optional, defaults to agent's namespace
 ```
@@ -125,29 +133,25 @@ For development:
 ```yaml
 spec:
   runtime:
-    spec:
-      replicas: 1
-      container:
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
+    replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
 ```
 
 For production:
 ```yaml
 spec:
   runtime:
-    spec:
-      replicas: 3
-      container:
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "512Mi"
-          limits:
-            cpu: "2000m"
-            memory: "2Gi"
+    replicas: 3
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "2000m"
+        memory: "2Gi"
         livenessProbe:
           httpGet:
             path: /health

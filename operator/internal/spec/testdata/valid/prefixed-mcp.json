@@ -1,0 +1,7 @@
+{
+  "model": "openai:gpt-5-mini",
+  "instructions": "Use the prefixed tools.",
+  "capabilities": [
+    {"PrefixTools": {"prefix": "petstore", "capability": {"MCP": {"url": "http://petstore.default.svc.cluster.local:8080/mcp", "native": false, "local": true}}}}
+  ]
+}

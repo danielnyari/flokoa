@@ -6,31 +6,24 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// BedrockProviderHandler handles AWS Bedrock model configuration.
+// BedrockProviderHandler handles AWS Bedrock provider configuration.
 type BedrockProviderHandler struct{}
 
-func (h *BedrockProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error) {
-	config := BuildBaseConfig(provider, model)
-
-	// Add Bedrock-specific environment variables for SDK compatibility
-	if provider.Spec.Bedrock != nil {
-		bedrockSpec := provider.Spec.Bedrock
-
-		if bedrockSpec.Region != "" {
-			config.EnvVars = append(config.EnvVars, corev1.EnvVar{
-				Name:  "AWS_REGION",
-				Value: bedrockSpec.Region,
-			})
-		}
+func (h *BedrockProviderHandler) Resolve(provider *agentv1alpha1.ModelProvider) (*ResolvedProvider, error) {
+	resolved := &ResolvedProvider{
+		Type:        agentv1alpha1.ProviderTypeBedrock,
+		ModelPrefix: "bedrock",
 	}
 
-	// Note: AWS credentials are typically handled via:
-	// 1. IAM roles for service accounts (IRSA) - recommended for EKS
-	// 2. Instance profiles - for EC2-based clusters
-	// 3. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) - less secure
-	//
-	// The SDK will automatically pick up credentials from the environment.
-	// Users should configure their cluster to provide credentials via IRSA or similar.
+	if provider.Spec.Bedrock != nil && provider.Spec.Bedrock.Region != "" {
+		resolved.EnvVars = append(resolved.EnvVars, corev1.EnvVar{
+			Name:  "AWS_REGION",
+			Value: provider.Spec.Bedrock.Region,
+		})
+	}
 
-	return config, nil
+	// AWS credentials are expected from the pod environment (IRSA, instance
+	// profiles, or explicitly injected AWS_* env) — never from flokoa config.
+
+	return resolved, nil
 }

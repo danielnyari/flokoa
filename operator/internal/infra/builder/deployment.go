@@ -1,8 +1,6 @@
 package builder
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -13,199 +11,132 @@ import (
 )
 
 const (
-	DefaultTemplateRuntimeImage = "ghcr.io/danielnyari/flokoa-cli:0.1.0"
+	// DefaultRunnerImageRepository is the generic runner image; the runner
+	// version selects the tag. Overridable via operator config (Helm).
+	DefaultRunnerImageRepository = "ghcr.io/danielnyari/flokoa-runner"
 
-	TemplateConfigVolumeName   = "template-config"
-	TemplateConfigConfigMapKey = "template-config.json"
-	TemplateConfigMountPath    = "/etc/flokoa/template-config.json"
-
-	InstructionVolumeName   = "instruction"
-	InstructionMountPath    = "/etc/flokoa/instruction.txt"
-	InstructionConfigMapKey = "instruction.txt"
-
-	ToolsMountPath        = "/etc/flokoa/tools"
-	ToolConfigMapKey      = "spec.json"
-	AgentCardVolumeName   = "agent-card"
+	// The runtime contract's file interface (§2): one ConfigMap, two keys,
+	// mounted as a directory under /etc/flokoa.
+	AgentSpecVolumeName   = "agent-spec"
+	AgentSpecConfigMapKey = "agent-spec.yaml"
+	AgentSpecMountPath    = "/etc/flokoa/agent-spec.yaml"
 	AgentCardConfigMapKey = "agent-card.json"
 	AgentCardMountPath    = "/etc/flokoa/agent-card.json"
-	ModelVolumeName       = "model-config"
-	ModelConfigMapKey     = "model.json"
-	ModelMountPath        = "/etc/flokoa/model.json"
 )
 
-// ToolMount holds information about a tool's ConfigMap for mounting.
-type ToolMount struct {
-	ToolName      string
-	ConfigMapName string
-	DataHash      string
+// SpecConfigMapName names the compiled-spec ConfigMap for an agent.
+func SpecConfigMapName(agentName string) string {
+	return agentName + "-agent-spec"
 }
 
-// ModelMount holds resolved model configuration for deployment.
-type ModelMount struct {
-	ConfigMapName  string
-	EnvVars        []corev1.EnvVar
-	SecretEnvVars  []corev1.EnvVar
-	SecretRefsHash string
+// PublishedURL is the normative form of an Agent's published endpoint
+// (virtual endpoint identity): callers treat it as opaque.
+func PublishedURL(agentName, namespace string) string {
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/", agentName, namespace, PublishedPort)
 }
 
 // DeploymentParams captures all inputs needed to build an agent Deployment.
 type DeploymentParams struct {
-	AgentName          string
-	AgentNamespace     string
-	Labels             map[string]string
-	Runtime            agentv1alpha1.RuntimeSpec
-	ToolMounts         []ToolMount
-	AgentCardCM        string
-	ModelInfo          *ModelMount
-	TemplateCMName     string
-	TemplateCMDataHash string
-	InstructionCMName  string
+	AgentName      string
+	AgentNamespace string
+	Labels         map[string]string
+	Runtime        agentv1alpha1.AgentRuntime
+
+	// RunnerImageRepository (no tag) + RunnerVersion resolve the image
+	// unless Runtime.Image overrides it entirely.
+	RunnerImageRepository string
+	RunnerVersion         string
+
+	// SchemaDigest of the AgentSpec schema the spec was validated against;
+	// the runner cross-checks it at bootstrap (skew detection).
+	SchemaDigest string
+
+	SpecConfigMapName string
+	SpecHash          string
+	SecretsHash       string
+
+	// SecretEnv are FLOKOA_SECRET_* projections (agent secretRefs + tool
+	// header secrets); ProviderEnv/ProviderSecretEnv come from the resolved
+	// ModelProvider.
+	SecretEnv         []corev1.EnvVar
+	ProviderEnv       []corev1.EnvVar
+	ProviderSecretEnv []corev1.EnvVar
+
+	// PublishedURL is delivered as FLOKOA_PUBLIC_URL.
+	PublishedURL string
+
+	// OTLPEndpoint configures telemetry export (empty: no exporter).
+	OTLPEndpoint string
 }
 
 // BuildDeployment constructs a Kubernetes Deployment for an agent.
 // This is a pure function — no I/O.
 func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
-	overrides := getDeploymentOverrides(params.Runtime)
+	overrides := params.Runtime.DeploymentOverrides
 	replicas := int32(1)
 	if overrides.Replicas != nil {
 		replicas = *overrides.Replicas
 	}
 
-	var container corev1.Container
-	var volumes []corev1.Volume //nolint:prealloc // size depends on runtime type and optional configs
-
-	switch params.Runtime.Type {
-	case agentv1alpha1.RuntimeTypeTemplate:
-		container, volumes = buildManagedContainerSpec(params.Runtime, params.TemplateCMName)
-	default:
-		container, volumes = buildStandardContainerSpec(params.Runtime)
+	image := params.Runtime.Image
+	if image == "" {
+		repo := params.RunnerImageRepository
+		if repo == "" {
+			repo = DefaultRunnerImageRepository
+		}
+		image = fmt.Sprintf("%s:%s", repo, params.RunnerVersion)
 	}
 
-	// Compute the agent URL for the FLOKOA_AGENT_URL env var
-	agentURL := fmt.Sprintf("http://%s.%s.svc.cluster.local", params.AgentName, params.AgentNamespace)
-
-	// Add FLOKOA_AGENT_URL environment variable
-	container.Env = append(container.Env, corev1.EnvVar{
-		Name:  "FLOKOA_AGENT_URL",
-		Value: agentURL,
-	})
-
-	// Defensive fallback: template runtime must always have a valid runtime image.
-	if params.Runtime.Type == agentv1alpha1.RuntimeTypeTemplate && container.Image == "" {
-		container.Image = DefaultTemplateRuntimeImage
+	container := corev1.Container{
+		Name:  "agent",
+		Image: image,
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "http",
+				ContainerPort: RuntimePort,
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
+		Env:             buildEnv(params),
+		SecurityContext: restrictedContainerSecurityContext(),
+	}
+	if params.Runtime.Resources != nil {
+		container.Resources = *params.Runtime.Resources
 	}
 
-	// Add agent card ConfigMap volume
-	volumes = append(volumes, corev1.Volume{
-		Name: AgentCardVolumeName,
+	// One mount carries the whole contract: the compiled spec + the card.
+	volumes := []corev1.Volume{{
+		Name: AgentSpecVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: params.AgentCardCM,
+					Name: params.SpecConfigMapName,
 				},
 			},
 		},
-	})
-	container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-		Name:      AgentCardVolumeName,
-		MountPath: AgentCardMountPath,
-		SubPath:   AgentCardConfigMapKey,
-		ReadOnly:  true,
-	})
-
-	// Add model configuration if specified
-	if params.ModelInfo != nil {
-		volumes = append(volumes, corev1.Volume{
-			Name: ModelVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: params.ModelInfo.ConfigMapName,
-					},
-				},
-			},
-		})
-		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      ModelVolumeName,
-			MountPath: ModelMountPath,
-			SubPath:   ModelConfigMapKey,
+	}}
+	container.VolumeMounts = []corev1.VolumeMount{
+		{
+			Name:      AgentSpecVolumeName,
+			MountPath: AgentSpecMountPath,
+			SubPath:   AgentSpecConfigMapKey,
 			ReadOnly:  true,
-		})
-		container.Env = append(container.Env, params.ModelInfo.EnvVars...)
-		container.Env = append(container.Env, params.ModelInfo.SecretEnvVars...)
-	}
-
-	// Add instruction ConfigMap volume mount
-	if params.InstructionCMName != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: InstructionVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: params.InstructionCMName,
-					},
-				},
-			},
-		})
-		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      InstructionVolumeName,
-			MountPath: InstructionMountPath,
-			SubPath:   InstructionConfigMapKey,
+		},
+		{
+			Name:      AgentSpecVolumeName,
+			MountPath: AgentCardMountPath,
+			SubPath:   AgentCardConfigMapKey,
 			ReadOnly:  true,
-		})
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  "FLOKOA_INSTRUCTION_PATH",
-			Value: InstructionMountPath,
-		})
+		},
 	}
 
-	// Add tool volume mounts and compute combined hash
-	var toolsHashBuilder string
-	for _, toolCM := range params.ToolMounts {
-		volumeName := fmt.Sprintf("tool-%s", toolCM.ToolName)
-		volumes = append(volumes, corev1.Volume{
-			Name: volumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: toolCM.ConfigMapName,
-					},
-				},
-			},
-		})
-		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      volumeName,
-			MountPath: fmt.Sprintf("%s/%s.json", ToolsMountPath, toolCM.ToolName),
-			SubPath:   ToolConfigMapKey,
-			ReadOnly:  true,
-		})
-		toolsHashBuilder += toolCM.ToolName + ":" + toolCM.DataHash + ";"
+	podAnnotations := map[string]string{
+		"flokoa.ai/spec-hash": params.SpecHash,
+	}
+	if params.SecretsHash != "" {
+		podAnnotations["flokoa.ai/secrets-hash"] = params.SecretsHash
 	}
 
-	// Compute combined tools hash for pod annotation
-	var podAnnotations map[string]string
-	if len(params.ToolMounts) > 0 {
-		h := sha256.Sum256([]byte(toolsHashBuilder))
-		podAnnotations = map[string]string{
-			"flokoa.ai/tools-hash": hex.EncodeToString(h[:])[:16],
-		}
-	}
-
-	if params.ModelInfo != nil && params.ModelInfo.SecretRefsHash != "" {
-		if podAnnotations == nil {
-			podAnnotations = map[string]string{}
-		}
-		podAnnotations["flokoa.ai/model-secrets-hash"] = params.ModelInfo.SecretRefsHash
-	}
-
-	if params.TemplateCMDataHash != "" {
-		if podAnnotations == nil {
-			podAnnotations = map[string]string{}
-		}
-		podAnnotations["flokoa.ai/template-config-hash"] = params.TemplateCMDataHash
-	}
-
-	// Default to restricted PSS-compliant pod security context if none provided
 	podSecurityContext := overrides.SecurityContext
 	if podSecurityContext == nil {
 		podSecurityContext = restrictedPodSecurityContext()
@@ -242,90 +173,41 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 	}
 }
 
-func getDeploymentOverrides(runtime agentv1alpha1.RuntimeSpec) agentv1alpha1.DeploymentOverrides {
-	switch runtime.Type {
-	case agentv1alpha1.RuntimeTypeTemplate:
-		if runtime.Template != nil {
-			return runtime.Template.DeploymentOverrides
-		}
-	case agentv1alpha1.RuntimeTypeStandard:
-		if runtime.Standard != nil {
-			return runtime.Standard.DeploymentOverrides
-		}
+// buildEnv assembles the runner environment per the runtime contract (§2):
+// serving + skew detection + telemetry identity, then secret/provider
+// projections. User env (runtime.env) wins name conflicts: operator entries
+// with a user-overridden name are dropped rather than duplicated.
+func buildEnv(params DeploymentParams) []corev1.EnvVar {
+	operatorEnv := []corev1.EnvVar{
+		{Name: "FLOKOA_PUBLIC_URL", Value: params.PublishedURL},
+		{Name: "FLOKOA_EXPECTED_RUNNER_VERSION", Value: params.RunnerVersion},
+		{Name: "FLOKOA_EXPECTED_SCHEMA_DIGEST", Value: params.SchemaDigest},
+		{Name: "OTEL_SERVICE_NAME", Value: params.AgentName},
+		{Name: "OTEL_RESOURCE_ATTRIBUTES", Value: fmt.Sprintf(
+			"k8s.namespace.name=%s,flokoa.agent.name=%s", params.AgentNamespace, params.AgentName)},
 	}
-	return agentv1alpha1.DeploymentOverrides{}
-}
-
-func buildStandardContainerSpec(runtime agentv1alpha1.RuntimeSpec) (corev1.Container, []corev1.Volume) {
-	spec := runtime.Standard
-	if spec == nil {
-		spec = &agentv1alpha1.StandardRuntimeSpec{}
-	}
-
-	container := spec.Container
-	if container.Name == "" {
-		container.Name = "agent"
-	}
-
-	volumes := append([]corev1.Volume{}, spec.Volumes...)
-	return container, volumes
-}
-
-func buildManagedContainerSpec(runtime agentv1alpha1.RuntimeSpec, templateConfigMapName string) (corev1.Container, []corev1.Volume) {
-	template := runtime.Template
-	if template == nil {
-		template = &agentv1alpha1.TemplatedRuntimeSpec{}
-	}
-
-	container := corev1.Container{
-		Name:  "agent",
-		Image: DefaultTemplateRuntimeImage,
-		Ports: []corev1.ContainerPort{
-			{
-				Name:          "http",
-				ContainerPort: 8080,
-				Protocol:      corev1.ProtocolTCP,
-			},
-		},
-		Env: append([]corev1.EnvVar{
-			{
-				Name:  "FLOKOA_RUNTIME_MODE",
-				Value: "template",
-			},
-			{
-				Name:  "FLOKOA_TEMPLATE_CONFIG_PATH",
-				Value: TemplateConfigMountPath,
-			},
-		}, template.Env...),
-		SecurityContext: restrictedContainerSecurityContext(),
-	}
-
-	if template.Resources != nil {
-		container.Resources = *template.Resources
-	}
-
-	var volumes []corev1.Volume
-
-	if templateConfigMapName != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: TemplateConfigVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: templateConfigMapName,
-					},
-				},
-			},
-		})
-		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      TemplateConfigVolumeName,
-			MountPath: TemplateConfigMountPath,
-			SubPath:   TemplateConfigConfigMapKey,
-			ReadOnly:  true,
+	if params.OTLPEndpoint != "" {
+		operatorEnv = append(operatorEnv, corev1.EnvVar{
+			Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: params.OTLPEndpoint,
 		})
 	}
+	operatorEnv = append(operatorEnv, params.SecretEnv...)
+	operatorEnv = append(operatorEnv, params.ProviderEnv...)
+	operatorEnv = append(operatorEnv, params.ProviderSecretEnv...)
 
-	return container, volumes
+	userNames := map[string]bool{}
+	for _, env := range params.Runtime.Env {
+		userNames[env.Name] = true
+	}
+
+	env := make([]corev1.EnvVar, 0, len(operatorEnv)+len(params.Runtime.Env))
+	for _, e := range operatorEnv {
+		if !userNames[e.Name] {
+			env = append(env, e)
+		}
+	}
+	env = append(env, params.Runtime.Env...)
+	return env
 }
 
 func restrictedContainerSecurityContext() *corev1.SecurityContext {

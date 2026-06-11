@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
@@ -17,7 +16,7 @@ import (
 // validAgentSpec creates a minimal valid AgentSpec for testing.
 func validAgentSpec() agentv1alpha1.AgentSpec {
 	return agentv1alpha1.AgentSpec{
-		CardOverride: agentv1alpha1.AgentCardOverride{
+		Card: agentv1alpha1.AgentCardOverride{
 			Name:        "Test Agent",
 			Description: "A test agent",
 			Version:     "1.0.0",
@@ -30,16 +29,9 @@ func validAgentSpec() agentv1alpha1.AgentSpec {
 				},
 			},
 		},
-		Runtime: agentv1alpha1.RuntimeSpec{
-			Type: agentv1alpha1.RuntimeTypeStandard,
-			Standard: &agentv1alpha1.StandardRuntimeSpec{
-				Container: corev1.Container{
-					Name:  "agent",
-					Image: "test-image:latest",
-				},
-			},
+		Spec: &agentv1alpha1.AgentSpecFragment{
+			Model: "openai:gpt-5-mini",
 		},
-		Framework: agentv1alpha1.FrameworkPydanticAI,
 	}
 }
 
@@ -108,7 +100,6 @@ var _ = Describe("AgentService", func() {
 
 		It("should list agents in a namespace", func() {
 			spec := validAgentSpec()
-			spec.Framework = agentv1alpha1.FrameworkLangChain
 			agent := &agentv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-agent-list",

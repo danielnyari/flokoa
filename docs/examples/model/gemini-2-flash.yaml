@@ -12,20 +12,19 @@ spec:
   providerRef:
     name: google-provider
   
-  parameters:
+  settings:
     temperature: "0.7"
     maxTokens: 8192
     topK: 40
-    
-    google:
-      # Configure thinking behavior
-      thinkingConfig:
-        includeThoughts: true
-        thinkingBudget: -1  # Automatic
-      
-      # Safety settings
-      safetySettings:
-        - category: "HARM_CATEGORY_HARASSMENT"
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        - category: "HARM_CATEGORY_HATE_SPEECH"
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+
+    # Provider-specific knobs pass through `extra` into the compiled
+    # model_settings (pydantic-ai settings keys).
+    extra:
+      google_thinking_config:
+        include_thoughts: true
+        thinking_budget: -1  # Automatic
+      google_safety_settings:
+        - category: HARM_CATEGORY_HARASSMENT
+          threshold: BLOCK_MEDIUM_AND_ABOVE
+        - category: HARM_CATEGORY_HATE_SPEECH
+          threshold: BLOCK_MEDIUM_AND_ABOVE

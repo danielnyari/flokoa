@@ -2,13 +2,15 @@ version: v2
 modules:
   - path: proto
     name: buf.build/flokoa/agent
-deps:
-  - buf.build/googleapis/googleapis
+# google/api/{annotations,http}.proto are vendored under proto/google/api so
+# generation works without Buf Schema Registry access (airgapped CI/dev).
 lint:
   use:
     - DEFAULT
   except:
     - PACKAGE_VERSION_SUFFIX
+  ignore:
+    - proto/google
 breaking:
   use:
     - FILE

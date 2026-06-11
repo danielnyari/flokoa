@@ -17,310 +17,152 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestValidateAgent(t *testing.T) {
-	validStandardAgent := func() *Agent {
-		return &Agent{
-			Spec: AgentSpec{
-				CardOverride: AgentCardOverride{
-					Name:        "test-agent",
-					Description: "A test agent",
-					Version:     "1.0.0",
-					Skills: []AgentSkill{
-						{ID: "skill-1", Name: "Skill 1", Description: "First skill", Tags: []string{"test"}},
-					},
-				},
-				Runtime: RuntimeSpec{
-					Type: RuntimeTypeStandard,
-					Standard: &StandardRuntimeSpec{
-						Container: corev1.Container{
-							Name:  "agent",
-							Image: "my-agent:latest",
-						},
-					},
-				},
-			},
-		}
-	}
-
-	tests := []struct {
-		name    string
-		obj     *Agent
-		wantErr bool
-	}{
-		{
-			name:    "valid standard agent",
-			obj:     validStandardAgent(),
-			wantErr: false,
+func validAgent() *Agent {
+	return &Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "support", Namespace: "default"},
+		Spec: AgentSpec{
+			Card: AgentCardOverride{Name: "support", Description: "d", Version: "1"},
+			Spec: &AgentSpecFragment{Model: "openai:gpt-5-mini"},
 		},
-		{
-			name: "valid template agent",
-			obj: &Agent{
-				Spec: AgentSpec{
-					CardOverride: AgentCardOverride{
-						Name:        "test-agent",
-						Description: "A test agent",
-						Version:     "1.0.0",
-					},
-					Runtime: RuntimeSpec{
-						Type: RuntimeTypeTemplate,
-						Template: &TemplatedRuntimeSpec{
-							Config: &TemplatedAgentConfig{},
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "standard type without standard config",
-			obj: &Agent{
-				Spec: AgentSpec{
-					CardOverride: AgentCardOverride{
-						Name: "test", Description: "test", Version: "1.0",
-					},
-					Runtime: RuntimeSpec{
-						Type: RuntimeTypeStandard,
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "template type without template config",
-			obj: &Agent{
-				Spec: AgentSpec{
-					CardOverride: AgentCardOverride{
-						Name: "test", Description: "test", Version: "1.0",
-					},
-					Runtime: RuntimeSpec{
-						Type: RuntimeTypeTemplate,
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "valid inline instruction",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Instruction = &InstructionEntry{
-					Template: "You are a helpful assistant.",
-				}
-				return a
-			}(),
-			wantErr: false,
-		},
-		{
-			name: "valid instruction ref",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Instruction = &InstructionEntry{
-					InstructionRef: &NamespacedRef{Name: "my-instruction"},
-				}
-				return a
-			}(),
-			wantErr: false,
-		},
-		{
-			name: "instruction with both template and ref",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Instruction = &InstructionEntry{
-					Template:       "inline prompt",
-					InstructionRef: &NamespacedRef{Name: "my-instruction"},
-				}
-				return a
-			}(),
-			wantErr: true,
-		},
-		{
-			name: "instruction with neither template nor ref",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Instruction = &InstructionEntry{}
-				return a
-			}(),
-			wantErr: true,
-		},
-		{
-			name: "valid tool with toolRef",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Tools = []ToolEntry{
-					{ToolRef: &ToolRef{Name: "my-tool"}},
-				}
-				return a
-			}(),
-			wantErr: false,
-		},
-		{
-			name: "valid tool with template and name",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Tools = []ToolEntry{
-					{
-						Name: "inline-tool",
-						Template: &AgentToolSpec{
-							Type:        AgentToolTypeOpenAPI,
-							Description: "A tool",
-						},
-					},
-				}
-				return a
-			}(),
-			wantErr: false,
-		},
-		{
-			name: "tool with both template and ref",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Tools = []ToolEntry{
-					{
-						Name:     "my-tool",
-						Template: &AgentToolSpec{Type: AgentToolTypeOpenAPI, Description: "A tool"},
-						ToolRef:  &ToolRef{Name: "other-tool"},
-					},
-				}
-				return a
-			}(),
-			wantErr: true,
-		},
-		{
-			name: "tool with neither template nor ref",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Tools = []ToolEntry{
-					{Name: "orphan-tool"},
-				}
-				return a
-			}(),
-			wantErr: true,
-		},
-		{
-			name: "tool template without name",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.Tools = []ToolEntry{
-					{
-						Template: &AgentToolSpec{
-							Type:        AgentToolTypeOpenAPI,
-							Description: "A tool",
-						},
-					},
-				}
-				return a
-			}(),
-			wantErr: true,
-		},
-		{
-			name: "duplicate skill IDs",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.CardOverride.Skills = []AgentSkill{
-					{ID: "skill-1", Name: "Skill 1", Description: "First", Tags: []string{"a"}},
-					{ID: "skill-1", Name: "Skill 2", Description: "Duplicate", Tags: []string{"b"}},
-				}
-				return a
-			}(),
-			wantErr: true,
-		},
-		{
-			name: "unique skill IDs",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.CardOverride.Skills = []AgentSkill{
-					{ID: "skill-1", Name: "Skill 1", Description: "First", Tags: []string{"a"}},
-					{ID: "skill-2", Name: "Skill 2", Description: "Second", Tags: []string{"b"}},
-				}
-				return a
-			}(),
-			wantErr: false,
-		},
-		{
-			name: "no skills is valid",
-			obj: func() *Agent {
-				a := validStandardAgent()
-				a.Spec.CardOverride.Skills = nil
-				return a
-			}(),
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateAgent(tt.obj)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateAgent() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
 	}
 }
 
-func TestCollectAgentWarnings(t *testing.T) {
-	tests := []struct {
-		name         string
-		obj          *Agent
-		wantWarnings int
-	}{
-		{
-			name: "no warnings for clean standard agent",
-			obj: &Agent{
-				Spec: AgentSpec{
-					Runtime: RuntimeSpec{
-						Type: RuntimeTypeStandard,
-						Standard: &StandardRuntimeSpec{
-							Container: corev1.Container{Name: "agent", Image: "img:latest"},
-						},
-					},
-				},
-			},
-			wantWarnings: 0,
-		},
-		{
-			name: "warn when standard type has template set",
-			obj: &Agent{
-				Spec: AgentSpec{
-					Runtime: RuntimeSpec{
-						Type: RuntimeTypeStandard,
-						Standard: &StandardRuntimeSpec{
-							Container: corev1.Container{Name: "agent", Image: "img:latest"},
-						},
-						Template: &TemplatedRuntimeSpec{Config: &TemplatedAgentConfig{}},
-					},
-				},
-			},
-			wantWarnings: 1,
-		},
-		{
-			name: "warn when template type has standard set",
-			obj: &Agent{
-				Spec: AgentSpec{
-					Runtime: RuntimeSpec{
-						Type:     RuntimeTypeTemplate,
-						Template: &TemplatedRuntimeSpec{Config: &TemplatedAgentConfig{}},
-						Standard: &StandardRuntimeSpec{
-							Container: corev1.Container{Name: "agent", Image: "img:latest"},
-						},
-					},
-				},
-			},
-			wantWarnings: 1,
-		},
+func jsonOf(t *testing.T, v any) *apiextensionsv1.JSON {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &apiextensionsv1.JSON{Raw: raw}
+}
+
+func TestAgentWebhookAcceptsValidAgent(t *testing.T) {
+	v := &AgentCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), validAgent()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentWebhookRejectsSessionIsolation(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Runtime.Isolation = IsolationSession
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "session") {
+		t.Fatalf("expected session-tier rejection, got %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsCapabilityAttachments(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Capabilities = []CapabilityAttachment{{Ref: NamespacedRef{Name: "shields"}}}
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "roadmap 08") {
+		t.Fatalf("expected Capability rejection, got %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsClassPathCapabilityNames(t *testing.T) {
+	cases := []string{
+		"pydantic_ai_harness.shields:Shields",
+		"some.module.Cap",
+		"flokoa.platform/telemetry",
+	}
+	for _, name := range cases {
+		agent := validAgent()
+		agent.Spec.Spec.Capabilities = []NativeCapabilityEntry{{Name: name}}
+
+		v := &AgentCustomValidator{}
+		_, err := v.ValidateCreate(context.Background(), agent)
+		if err == nil || !strings.Contains(err.Error(), "Capability resources") {
+			t.Fatalf("capability name %q must be rejected, got %v", name, err)
+		}
+	}
+}
+
+func TestAgentWebhookAllowsNativeCapabilityNames(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Spec.Capabilities = []NativeCapabilityEntry{
+		{Name: "WebSearch"},
+		{Name: "MCP", Config: jsonOf(t, map[string]any{"url": "http://tools.default.svc.cluster.local/mcp"})},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			warnings := collectAgentWarnings(tt.obj)
-			if len(warnings) != tt.wantWarnings {
-				t.Errorf("collectAgentWarnings() returned %d warnings, want %d: %v",
-					len(warnings), tt.wantWarnings, warnings)
-			}
-		})
+	v := &AgentCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentWebhookRequiresMatchingSecretRefs(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Spec.Capabilities = []NativeCapabilityEntry{
+		{Name: "MCP", Config: jsonOf(t, map[string]any{
+			"url":     "http://tools.default.svc.cluster.local/mcp",
+			"headers": map[string]string{"Authorization": "${secret:kb-token}"},
+		})},
+	}
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "kb-token") {
+		t.Fatalf("placeholder without secretRefs entry must be rejected, got %v", err)
+	}
+
+	agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
+		"kb-token": {LocalObjectReference: corev1.LocalObjectReference{Name: "kb"}, Key: "token"},
+	}
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatalf("matching secretRefs entry must pass, got %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsBadSecretRefNames(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
+		"bad name!": {LocalObjectReference: corev1.LocalObjectReference{Name: "s"}, Key: "k"},
+	}
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("expected invalid secret ref name to be rejected")
+	}
+}
+
+func TestAgentWebhookRejectsDuplicateSkillIDs(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Card.Skills = []AgentSkill{
+		{ID: "s1", Name: "one", Description: "d", Tags: []string{"t"}},
+		{ID: "s1", Name: "two", Description: "d", Tags: []string{"t"}},
+	}
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "s1") {
+		t.Fatalf("expected duplicate skill rejection, got %v", err)
+	}
+}
+
+func TestAgentWebhookUpdateValidates(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Runtime.Isolation = IsolationSession
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateUpdate(context.Background(), validAgent(), agent)
+	if err == nil {
+		t.Fatal("expected update validation to reject session isolation")
 	}
 }

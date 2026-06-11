@@ -149,6 +149,11 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CONFIG) ;; \
 	esac
 
+.PHONY: test-integration
+test-integration: manifests generate fmt vet setup-envtest ## Run the Docker-free integration suite (envtest + real manager + real Python runner subprocess). Strict: requires sdk/python/.venv (uv sync --all-packages).
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	FLOKOA_INTEGRATION_STRICT=1 go test ./test/integration/ -v -count=1
+
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
 	@KUBECONFIG_FILE=$$(mktemp); \
@@ -201,6 +206,11 @@ lint: golangci-lint ## Run golangci-lint linter
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
+
+.PHONY: verify-endpoint-refs
+verify-endpoint-refs: ## CI lint: docs/samples must use the published endpoint, never the -runtime workload Service.
+	@! grep -rn -- "-runtime\.\(.*\)\?svc\.cluster\.local" ../docs config/samples test/e2e/testdata 2>/dev/null 		|| (echo "❌ direct workload-Service (-runtime) references found — callers use status.url / the published Service" && exit 1)
+	@echo "✅ no direct workload-Service references"
 
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
@@ -256,96 +266,23 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 		--output $(PYTHON_MODELS_DIR)/agentcard.py
 	@rm /tmp/agentcard_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentcard.py"
-	@# Build ModelConfig schema (combines provider and model info from CRDs)
-	@echo "Building ModelConfig schema..."
-	@# Extract provider specs from ModelProvider CRD
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.openai' \
-		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/openai_provider.json
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.anthropic' \
-		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/anthropic_provider.json
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.google' \
-		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/google_provider.json
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.bedrock' \
-		config/crd/bases/agent.flokoa.ai_modelproviders.yaml > /tmp/bedrock_provider.json
-	@# Extract parameters from Model CRD
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.parameters' \
-		config/crd/bases/agent.flokoa.ai_models.yaml > /tmp/model_parameters.json
-	@# Build the combined ModelConfig schema using yq (work in YAML, convert at end)
-	@yq -n '{"type": "object", "title": "ModelConfig", "description": "ModelConfig contains the resolved model configuration from the ConfigMap", "properties": {"provider": {"type": "object", "title": "Provider", "description": "Provider contains provider type and connection configuration", "properties": {"type": {"type": "string", "title": "ProviderType", "enum": ["openai", "anthropic", "google", "bedrock"], "description": "The provider type"}, "defaultHeaders": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Default headers to include in all requests"}}, "required": ["type"]}, "model": {"type": "string", "description": "The model identifier (e.g., gpt-4o, claude-sonnet-4-20250514)"}}, "required": ["provider", "model"]}' > /tmp/modelconfig_schema.yaml
-	@# Inject provider specs into the schema with titles to avoid naming collisions
-	@yq eval -i '.properties.provider.properties.openai = load("/tmp/openai_provider.json")' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.provider.properties.openai.title = "OpenAIProviderConfig"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.provider.properties.anthropic = load("/tmp/anthropic_provider.json")' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.provider.properties.anthropic.title = "AnthropicProviderConfig"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.provider.properties.google = load("/tmp/google_provider.json")' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.provider.properties.google.title = "GoogleProviderConfig"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.provider.properties.bedrock = load("/tmp/bedrock_provider.json")' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.provider.properties.bedrock.title = "BedrockProviderConfig"' /tmp/modelconfig_schema.yaml
-	@# Inject model parameters with titles
-	@yq eval -i '.properties.parameters = load("/tmp/model_parameters.json")' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.title = "ModelParameters"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.openai.title = "OpenAIModelParameters"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.anthropic.title = "AnthropicModelParameters"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.title = "GoogleModelParameters"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.bedrock.title = "BedrockModelParameters"' /tmp/modelconfig_schema.yaml
-	@# Add titles to nested types that would otherwise collide (Type, Type1, Type2, etc.)
-	@yq eval -i '.properties.parameters.properties.anthropic.properties.thinking.title = "AnthropicThinking"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.anthropic.properties.thinking.properties.type.title = "AnthropicThinkingType"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.anthropic.properties.container.title = "AnthropicContainer"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.bedrock.properties.serviceTier.title = "BedrockServiceTier"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.bedrock.properties.serviceTier.properties.type.title = "BedrockServiceTierType"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.bedrock.properties.guardrailConfig.title = "BedrockGuardrailConfig"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.bedrock.properties.guardrailConfig.properties.trace.title = "BedrockGuardrailTrace"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.bedrock.properties.performanceConfiguration.title = "BedrockPerformanceConfig"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.bedrock.properties.performanceConfiguration.properties.latency.title = "BedrockLatency"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.properties.thinkingConfig.title = "GoogleThinkingConfig"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.properties.thinkingConfig.properties.thinkingLevel.title = "GoogleThinkingLevel"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.title = "GoogleSafetySetting"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.properties.category.title = "GoogleHarmCategory"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.properties.method.title = "GoogleSafetyMethod"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.properties.safetySettings.items.properties.threshold.title = "GoogleSafetyThreshold"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.google.properties.videoResolution.title = "GoogleVideoResolution"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.openai.properties.serviceTier.title = "OpenAIServiceTier"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.openai.properties.reasoningEffort.title = "OpenAIReasoningEffort"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.openai.properties.reasoningGenerateSummary.title = "OpenAIReasoningGenerateSummary"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.openai.properties.reasoningSummary.title = "OpenAIReasoningSummary"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.openai.properties.truncation.title = "OpenAITruncation"' /tmp/modelconfig_schema.yaml
-	@yq eval -i '.properties.parameters.properties.openai.properties.textVerbosity.title = "OpenAITextVerbosity"' /tmp/modelconfig_schema.yaml
-	@# Convert final schema to JSON
-	@yq eval -o json '.' /tmp/modelconfig_schema.yaml > /tmp/modelconfig_schema.json
-	@# Generate ModelConfig Pydantic v2 models with --use-title-as-name for proper class naming
+	@# Extract ModelSettings schema from the Model CRD
+	@echo "Building ModelSettings schema..."
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.settings' \
+		config/crd/bases/agent.flokoa.ai_models.yaml > /tmp/model_settings_schema.json
+	@yq eval -i -o json '.title = "ModelSettings"' /tmp/model_settings_schema.json
 	@$(DATAMODEL_CODEGEN) \
-		--input /tmp/modelconfig_schema.json \
+		--input /tmp/model_settings_schema.json \
 		--input-file-type jsonschema \
 		--output-model-type pydantic_v2.BaseModel \
 		--snake-case-field \
 		--use-annotated \
 		--allow-population-by-field-name \
 		--use-title-as-name \
-		--output $(PYTHON_MODELS_DIR)/modelconfig.py
-	@rm /tmp/openai_provider.json /tmp/anthropic_provider.json /tmp/google_provider.json \
-		/tmp/bedrock_provider.json /tmp/model_parameters.json /tmp/modelconfig_schema.yaml /tmp/modelconfig_schema.json
-	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/modelconfig.py"
-	@# Build TemplateConfig schema from Agent CRD templated runtime config
-	@echo "Building TemplateConfig schema..."
-	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runtime.properties.template.properties.config' \
-		config/crd/bases/agent.flokoa.ai_agents.yaml > /tmp/templateConfig_schema.json
-	@yq eval -i -o json '.title = "templateConfig"' /tmp/templateConfig_schema.json
-	@yq eval -i -o json '.description = "Configuration for a managed agent runtime, mounted from the operator ConfigMap"' /tmp/templateConfig_schema.json
-	@yq eval -i -o json '.properties.outputSchema.title = "OutputSchema"' /tmp/templateConfig_schema.json
-	@yq eval -i -o json '.properties.inputSchema.title = "InputSchema"' /tmp/templateConfig_schema.json
-	@$(DATAMODEL_CODEGEN) \
-		--input /tmp/templateConfig_schema.json \
-		--input-file-type jsonschema \
-		--output-model-type pydantic_v2.BaseModel \
-		--snake-case-field \
-		--use-annotated \
-		--allow-population-by-field-name \
-		--use-title-as-name \
-		--class-name templateConfig \
-		--output $(PYTHON_MODELS_DIR)/templateconfig.py
-	@rm /tmp/templateConfig_schema.json
-	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/templateconfig.py"
+		--class-name ModelSettings \
+		--output $(PYTHON_MODELS_DIR)/modelsettings.py
+	@rm /tmp/model_settings_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/modelsettings.py"
 	@# Extract AgentWorkflowSpec schema
 	@echo "Building AgentWorkflowSpec schema..."
 	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec' \
@@ -413,7 +350,7 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 ##@ gRPC Server
 
 .PHONY: buf-generate
-buf-generate: buf-dep-update ## Generate gRPC code from proto files.
+buf-generate: ## Generate gRPC code from proto files (local plugins; googleapis protos vendored).
 	cd server && buf generate
 
 .PHONY: buf-lint
@@ -429,7 +366,7 @@ buf-breaking: ## Check for breaking proto changes.
 	cd server && buf breaking --against '.git#branch=main,subdir=operator/server'
 
 .PHONY: buf-dep-update
-buf-dep-update: ## Update buf dependencies.
+buf-dep-update: ## Update buf dependencies (unused: google/api protos are vendored under server/proto).
 	cd server && buf dep update
 
 ##@ UI

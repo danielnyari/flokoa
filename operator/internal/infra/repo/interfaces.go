@@ -28,6 +28,12 @@ type ServiceRepo interface {
 	EnsureService(ctx context.Context, desired *corev1.Service) (*corev1.Service, error)
 }
 
+// ServiceReader reads Service resources (e.g. to resolve named ports of MCP
+// endpoints).
+type ServiceReader interface {
+	GetService(ctx context.Context, key types.NamespacedName) (*corev1.Service, error)
+}
+
 // AgentToolReader reads AgentTool resources.
 type AgentToolReader interface {
 	GetAgentTool(ctx context.Context, key types.NamespacedName) (*agentv1alpha1.AgentTool, error)

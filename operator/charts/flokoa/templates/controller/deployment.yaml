@@ -57,6 +57,13 @@ spec:
             - --enable-webhooks=true
             - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
             {{- end }}
+            {{- if .Values.runner.imageRepository }}
+            - --runner-image-repository={{ .Values.runner.imageRepository }}
+            {{- end }}
+            {{- if .Values.telemetry.otlpEndpoint }}
+            - --telemetry-otlp-endpoint={{ .Values.telemetry.otlpEndpoint }}
+            {{- end }}
+            - --inject-telemetry={{ .Values.platformCapabilities.telemetry.enabled }}
             {{- range .Values.controller.extraArgs }}
             - {{ . }}
             {{- end }}

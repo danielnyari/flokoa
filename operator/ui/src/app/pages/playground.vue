@@ -75,11 +75,6 @@ watch(selectedAgent, () => {
           class="w-64"
         />
 
-        <FrameworkBadge
-          v-if="currentAgent?.spec?.framework"
-          :framework="currentAgent.spec.framework"
-        />
-
         <UBadge
           v-if="currentAgent?.status?.url"
           variant="subtle"

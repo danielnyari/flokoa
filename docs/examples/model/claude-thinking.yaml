@@ -9,20 +9,19 @@ metadata:
     feature: extended-thinking
 spec:
   model: "claude-sonnet-4-20250514"
-  
+
   providerRef:
     name: anthropic-provider
-  
-  parameters:
+
+  settings:
     temperature: "0.7"
     maxTokens: 8192
-    
-    anthropic:
-      # Enable extended thinking
-      thinking:
-        type: "enabled"
-        budgetTokens: 4096
-      
-      # Enable caching for cost optimization
-      cacheInstructions: "5m"
-      cacheToolDefinitions: "5m"
+
+    # Provider-specific knobs pass through `extra` into the compiled
+    # model_settings (pydantic-ai settings keys).
+    extra:
+      anthropic_thinking:
+        type: enabled
+        budget_tokens: 4096
+      anthropic_cache_instructions: "5m"
+      anthropic_cache_tool_definitions: "5m"

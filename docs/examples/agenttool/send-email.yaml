@@ -1,36 +1,6 @@
-# Email sending tool with OpenAPI spec from ConfigMap
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: email-api-spec
-data:
-  openapi.yaml: |
-    openapi: "3.0.0"
-    info:
-      title: Email API
-      version: "1.0"
-    paths:
-      /mail/send:
-        post:
-          summary: Send email notification
-          requestBody:
-            content:
-              application/json:
-                schema:
-                  type: object
-                  properties:
-                    to:
-                      type: string
-                      format: email
-                    subject:
-                      type: string
-                    body:
-                      type: string
-                  required: [to, subject, body]
-          responses:
-            "200":
-              description: Email sent
----
+# Email sending tool with a secret-backed Authorization header.
+# The MCP server fronts the underlying email API (the OpenAPI tool type is
+# retired; front REST APIs with an MCP adapter or a Capability).
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
@@ -38,15 +8,13 @@ metadata:
   labels:
     category: notifications
 spec:
-  type: openapi
-  description: "Send email notifications to users"
-
-  openApi:
-    url: "https://api.sendgrid.com/v3"
-    timeoutSeconds: 30
-    headers:
-      Content-Type: "application/json"
-    openApiSchema:
-      valueFrom:
-        name: email-api-spec
-        key: openapi.yaml
+  type: mcp
+  description: Send email notifications to users
+  url: https://mcp.sendgrid.example.com/mcp
+  headerSecrets:
+    - name: Authorization
+      secretRef:
+        name: sendgrid-credentials
+        key: api-key
+  allowedTools: [send_email]
+  timeoutSeconds: 30

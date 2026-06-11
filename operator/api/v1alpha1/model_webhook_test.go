@@ -17,175 +17,65 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"strings"
 	"testing"
 
-	"k8s.io/utils/ptr"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestValidateModel(t *testing.T) {
-	tests := []struct {
-		name    string
-		obj     *Model
-		wantErr bool
-	}{
-		{
-			name: "valid model without parameters",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "gpt-4o",
-					ProviderRef: ProviderRef{Name: "openai"},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid model with openai parameters",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "gpt-4o",
-					ProviderRef: ProviderRef{Name: "openai"},
-					Parameters: &ModelParameters{
-						Temperature: "0.7",
-						OpenAI:      &OpenAIParameters{},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid model with anthropic thinking enabled",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "claude-sonnet-4-20250514",
-					ProviderRef: ProviderRef{Name: "anthropic"},
-					Parameters: &ModelParameters{
-						MaxTokens: ptr.To[int32](8000),
-						Anthropic: &AnthropicParameters{
-							Thinking: &AnthropicThinkingConfig{
-								Type:         ThinkingTypeEnabled,
-								BudgetTokens: ptr.To[int32](4000),
-							},
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid model with thinking disabled",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "claude-sonnet-4-20250514",
-					ProviderRef: ProviderRef{Name: "anthropic"},
-					Parameters: &ModelParameters{
-						Anthropic: &AnthropicParameters{
-							Thinking: &AnthropicThinkingConfig{
-								Type: ThinkingTypeDisabled,
-							},
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "multiple provider-specific parameter blocks",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "gpt-4o",
-					ProviderRef: ProviderRef{Name: "openai"},
-					Parameters: &ModelParameters{
-						OpenAI:    &OpenAIParameters{},
-						Anthropic: &AnthropicParameters{},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "thinking enabled without budgetTokens",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "claude-sonnet-4-20250514",
-					ProviderRef: ProviderRef{Name: "anthropic"},
-					Parameters: &ModelParameters{
-						Anthropic: &AnthropicParameters{
-							Thinking: &AnthropicThinkingConfig{
-								Type: ThinkingTypeEnabled,
-							},
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "budgetTokens >= maxTokens",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "claude-sonnet-4-20250514",
-					ProviderRef: ProviderRef{Name: "anthropic"},
-					Parameters: &ModelParameters{
-						MaxTokens: ptr.To[int32](4000),
-						Anthropic: &AnthropicParameters{
-							Thinking: &AnthropicThinkingConfig{
-								Type:         ThinkingTypeEnabled,
-								BudgetTokens: ptr.To[int32](4000),
-							},
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "budgetTokens > maxTokens",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "claude-sonnet-4-20250514",
-					ProviderRef: ProviderRef{Name: "anthropic"},
-					Parameters: &ModelParameters{
-						MaxTokens: ptr.To[int32](4000),
-						Anthropic: &AnthropicParameters{
-							Thinking: &AnthropicThinkingConfig{
-								Type:         ThinkingTypeEnabled,
-								BudgetTokens: ptr.To[int32](5000),
-							},
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "no parameters is valid",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "gpt-4o",
-					ProviderRef: ProviderRef{Name: "openai"},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "empty parameters is valid",
-			obj: &Model{
-				Spec: ModelSpec{
-					Model:       "gpt-4o",
-					ProviderRef: ProviderRef{Name: "openai"},
-					Parameters:  &ModelParameters{},
-				},
-			},
-			wantErr: false,
+func validModel() *Model {
+	return &Model{
+		ObjectMeta: metav1.ObjectMeta{Name: "gpt", Namespace: "default"},
+		Spec: ModelSpec{
+			Model:       "gpt-5-mini",
+			ProviderRef: ProviderRef{Name: "openai-provider"},
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateModel(tt.obj)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateModel() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+func TestModelWebhookAcceptsValidModel(t *testing.T) {
+	v := &ModelCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), validModel()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestModelWebhookAcceptsSettingsWithExtra(t *testing.T) {
+	model := validModel()
+	model.Spec.Settings = &ModelSettings{
+		Temperature: "0.7",
+		Extra:       &apiextensionsv1.JSON{Raw: []byte(`{"reasoning_effort": "low", "extra_body": {"x": 1}}`)},
+	}
+
+	v := &ModelCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), model); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestModelWebhookRejectsNonObjectExtra(t *testing.T) {
+	model := validModel()
+	model.Spec.Settings = &ModelSettings{
+		Extra: &apiextensionsv1.JSON{Raw: []byte(`"not an object"`)},
+	}
+
+	v := &ModelCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), model); err == nil {
+		t.Fatal("expected non-object extra rejection")
+	}
+}
+
+func TestModelWebhookRejectsExtraShadowingTypedFields(t *testing.T) {
+	model := validModel()
+	model.Spec.Settings = &ModelSettings{
+		Extra: &apiextensionsv1.JSON{Raw: []byte(`{"temperature": 0.9}`)},
+	}
+
+	v := &ModelCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), model)
+	if err == nil || !strings.Contains(err.Error(), "temperature") {
+		t.Fatalf("expected typed-field shadowing rejection, got %v", err)
 	}
 }

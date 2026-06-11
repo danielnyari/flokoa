@@ -1,12 +1,25 @@
 package plugin
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+)
 
-func TestConventionBasedURL(t *testing.T) {
-	r := &Resolver{}
-	got := r.conventionBasedURL("petstore-agent", "flokoa-system")
-	want := "http://petstore-agent.flokoa-system.svc.cluster.local/"
-	if got != want {
-		t.Fatalf("unexpected convention URL: got=%q want=%q", got, want)
+func TestResolveRequiresClient(t *testing.T) {
+	r := NewResolver(nil)
+	_, err := r.Resolve(context.Background(), "petstore-agent", "flokoa-system")
+	if err == nil || !strings.Contains(err.Error(), "no Kubernetes client") {
+		t.Fatalf("expected missing-client error (no DNS-convention fallback), got %v", err)
+	}
+}
+
+func TestResolveValidatesInputs(t *testing.T) {
+	r := NewResolver(nil)
+	if _, err := r.Resolve(context.Background(), "", "ns"); err == nil {
+		t.Fatal("expected error for empty agent name")
+	}
+	if _, err := r.Resolve(context.Background(), "agent", ""); err == nil {
+		t.Fatal("expected error for empty namespace")
 	}
 }

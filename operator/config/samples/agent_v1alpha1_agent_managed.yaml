@@ -24,68 +24,59 @@ spec:
         examples:
           - "Classify this ticket: User reports login page returns 500 error"
 
-  model:
+  # Referenced Model CR; the fragment's modelSettings override it per-key.
+  modelRef:
     name: claude-sonnet
 
-  # Instructions defined inline — the operator creates an Instruction CR automatically
-  instruction:
-    inline: |
-      You are a support triage agent. Your job is to classify incoming
-      support tickets by severity (P0-P3) and route them to the
-      appropriate team.
+  # Instruction CRs compose in order, before the fragment's instructions.
+  instructionRefs:
+    - name: shared-support-instructions
 
-      Severity guidelines:
-      - P0: Complete service outage or data loss affecting all users
-      - P1: Major feature broken, significant user impact
-      - P2: Minor feature broken, workaround available
-      - P3: Cosmetic issue or feature request
-
-      Always provide a brief summary of the issue and recommended next steps.
-
+  # AgentTool CRs (declarative MCP endpoints) compiled into the spec.
   tools:
-    - toolRef:
-        name: jira-create
+    - name: jira-create
+
+  # Inline pydantic-ai AgentSpec fragment, merged with the references above.
+  spec:
+    instructions:
+      - |
+        Classify incoming support tickets by severity (P0-P3) and route
+        them to the appropriate team.
+
+        Severity guidelines:
+        - P0: Complete service outage or data loss affecting all users
+        - P1: Major feature broken, significant user impact
+        - P2: Minor feature broken, workaround available
+        - P3: Cosmetic issue or feature request
+
+        Always provide a brief summary of the issue and recommended next steps.
+    modelSettings:
+      temperature: "0.2"
+    outputSchema:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [P0, P1, P2, P3]
+        team:
+          type: string
+        summary:
+          type: string
+        nextSteps:
+          type: array
+          items:
+            type: string
+      required: [severity, team, summary]
 
   runtime:
-    type: managed
-    template:
-      config:
-        outputSchema:
-          name: TriageResponse
-          description: Response format for support ticket triage
-          jsonSchema:
-            type: object
-            properties:
-              severity:
-                type: string
-                enum: [P0, P1, P2, P3]
-              team:
-                type: string
-              summary:
-                type: string
-              nextSteps:
-                type: array
-                items:
-                  type: string
-            required: [severity, team, summary]
-        inputSchema:
-          name: TriageRequest
-          description: Input format for support ticket triage
-          jsonSchema:
-            type: object
-            properties:
-              ticket:
-                type: string
-                description: The support ticket content to triage
-            required: [ticket]
-      replicas: 2
-      env:
-        - name: LOG_LEVEL
-          value: "info"
-      resources:
-        requests:
-          cpu: "100m"
-          memory: "128Mi"
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
+    replicas: 2
+    env:
+      - name: LOG_LEVEL
+        value: "info"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"

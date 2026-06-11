@@ -60,8 +60,11 @@ var (
 	// petstoreImage is the non-root petstore image built from test/e2e/testdata/petstore.Dockerfile
 	petstoreImage = "petstore:test"
 
-	// cliImage is the flokoa-cli image used by template runtime agents
-	cliImage = "ghcr.io/danielnyari/flokoa-cli:0.1.0"
+	// runnerImage is the generic runner image agents run on by default.
+	// It must match the operator's default runner image repository and
+	// pinned runner version (builder.DefaultRunnerImageRepository +
+	// spec.DefaultRunnerVersion).
+	runnerImage = "ghcr.io/danielnyari/flokoa-runner:0.2.0"
 
 	// k8sClient is the Kubernetes client for interacting with the cluster
 	k8sClient client.Client
@@ -137,15 +140,15 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(petstoreImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the petstore image into Kind")
 
-	By("building the flokoa-cli image for template runtime agents")
+	By("building the generic runner image for agents")
 	cmd = exec.Command("make", "docker-build-flokoa-cli",
-		fmt.Sprintf("FLOKOA_CLI_IMG=%s", cliImage))
+		fmt.Sprintf("FLOKOA_CLI_IMG=%s", runnerImage))
 	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the flokoa-cli image")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the runner image")
 
-	By("loading the flokoa-cli image on Kind")
-	err = utils.LoadImageToKindClusterWithName(cliImage)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the flokoa-cli image into Kind")
+	By("loading the runner image on Kind")
+	err = utils.LoadImageToKindClusterWithName(runnerImage)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the runner image into Kind")
 
 	if !skipCertManagerInstall {
 		By("checking if cert manager is installed already")

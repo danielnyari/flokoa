@@ -6,27 +6,23 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// OpenAIProviderHandler handles OpenAI model configuration.
+// OpenAIProviderHandler handles OpenAI provider configuration.
 type OpenAIProviderHandler struct{}
 
-func (h *OpenAIProviderHandler) BuildConfig(provider *agentv1alpha1.ModelProvider, model *agentv1alpha1.Model) (*ResolvedModelConfig, error) {
-	config := BuildBaseConfig(provider, model)
-
-	// Add API key as secret env var
-	AddAPIKeyEnvVar(config, provider.Spec.APIKeySecretRef, "OPENAI_API_KEY")
-
-	// Add OpenAI-specific environment variables for SDK compatibility
-	if provider.Spec.OpenAI != nil {
-		openaiSpec := provider.Spec.OpenAI
-
-		if openaiSpec.BaseURL != "" {
-			config.EnvVars = append(config.EnvVars, corev1.EnvVar{
-				Name:  "OPENAI_BASE_URL",
-				Value: openaiSpec.BaseURL,
-			})
-		}
-
+func (h *OpenAIProviderHandler) Resolve(provider *agentv1alpha1.ModelProvider) (*ResolvedProvider, error) {
+	resolved := &ResolvedProvider{
+		Type:        agentv1alpha1.ProviderTypeOpenAI,
+		ModelPrefix: "openai",
 	}
 
-	return config, nil
+	AddAPIKeyEnvVar(resolved, provider.Spec.APIKeySecretRef, "OPENAI_API_KEY")
+
+	if provider.Spec.OpenAI != nil && provider.Spec.OpenAI.BaseURL != "" {
+		resolved.EnvVars = append(resolved.EnvVars, corev1.EnvVar{
+			Name:  "OPENAI_BASE_URL",
+			Value: provider.Spec.OpenAI.BaseURL,
+		})
+	}
+
+	return resolved, nil
 }

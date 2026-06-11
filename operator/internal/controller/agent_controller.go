@@ -116,8 +116,7 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&agentv1alpha1.Agent{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
-		Owns(&agentv1alpha1.AgentTool{}).
-		Owns(&agentv1alpha1.Instruction{}).
+		Owns(&corev1.ConfigMap{}).
 		Watches(
 			&agentv1alpha1.AgentTool{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForAgentTool),
@@ -125,10 +124,6 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&agentv1alpha1.Instruction{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForInstruction),
-		).
-		Watches(
-			&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(r.findAgentsForConfigMap),
 		).
 		Watches(
 			&corev1.Secret{},

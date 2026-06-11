@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, Model, ModelProvider, AgentTool, AgentWorkflow } from '~/types'
-import { agentPhaseLabel, agentPhaseColor, isAgentPhase, frameworkLabel, normaliseTimestamp } from '~/utils/enums'
+import { agentPhaseLabel, agentPhaseColor, isAgentPhase, normaliseTimestamp } from '~/utils/enums'
 
 const { namespacedPath, watchUrl: buildWatchUrl } = useFlokoa()
 
@@ -302,8 +302,8 @@ const providerBreakdown = computed(() => {
                   </p>
                   <p class="text-xs text-muted">
                     {{ agent.metadata.namespace }}
-                    <template v-if="frameworkLabel(agent.spec.framework) || frameworkLabel(agent.status?.detectedFramework)">
-                      &middot; {{ frameworkLabel(agent.spec.framework) ?? frameworkLabel(agent.status?.detectedFramework) }}
+                    <template v-if="agent.status?.runnerVersion">
+                      &middot; runner {{ agent.status.runnerVersion }}
                     </template>
                   </p>
                 </div>

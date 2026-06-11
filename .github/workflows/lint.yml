@@ -25,3 +25,6 @@ jobs:
         with:
           version: v2.1.0
           working-directory: operator
+
+      - name: Verify endpoint references (virtual endpoint identity)
+        run: make -C operator verify-endpoint-refs

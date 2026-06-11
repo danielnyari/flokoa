@@ -9,27 +9,26 @@ import (
 
 // Condition type constants for Agent status.
 const (
-	ConditionTypeReady             = "Ready"
-	ConditionTypeToolsReady        = "ToolsReady"
-	ConditionTypeModelReady        = "ModelReady"
-	ConditionTypeModelSecretsReady = "ModelSecretsReady"
-	ConditionTypeInstructionReady  = "InstructionReady"
+	// ConditionTypeReady tracks deployment availability.
+	ConditionTypeReady = "Ready"
+	// ConditionTypeSpecValid tracks whether the composition compiled into a
+	// schema-valid AgentSpec. False means the last good spec keeps running.
+	ConditionTypeSpecValid = "SpecValid"
+	// ConditionTypeSecretsReady tracks whether all referenced secrets exist.
+	ConditionTypeSecretsReady = "SecretsReady"
 )
 
 // Condition reason constants for Agent status.
 const (
-	ReasonDeploymentReady       = "DeploymentReady"
-	ReasonDeploymentNotReady    = "DeploymentNotReady"
-	ReasonReconcileError        = "ReconcileError"
-	ReasonValidationFailed      = "ValidationFailed"
-	ReasonToolsSynced           = "ToolsSynced"
-	ReasonToolSyncFailed        = "ToolSyncFailed"
-	ReasonModelResolved         = "ModelResolved"
-	ReasonModelSecretsResolved  = "ModelSecretsResolved"
-	ReasonModelSecretsMissing   = "ModelSecretsMissing"
-	ReasonModelResolveFailed    = "ModelResolveFailed"
-	ReasonInstructionResolved   = "InstructionResolved"
-	ReasonInstructionSyncFailed = "InstructionSyncFailed"
+	ReasonDeploymentReady    = "DeploymentReady"
+	ReasonDeploymentNotReady = "DeploymentNotReady"
+	ReasonReconcileError     = "ReconcileError"
+	ReasonValidationFailed   = "ValidationFailed"
+	ReasonSpecCompiled       = "SpecCompiled"
+	ReasonSpecInvalid        = "SpecInvalid"
+	ReasonDependencyMissing  = "DependencyMissing"
+	ReasonSecretsResolved    = "SecretsResolved"
+	ReasonSecretsMissing     = "SecretsMissing"
 )
 
 // SetCondition updates or adds a condition to the Agent status.
