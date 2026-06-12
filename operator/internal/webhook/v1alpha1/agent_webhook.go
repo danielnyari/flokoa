@@ -322,10 +322,17 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 		}
 
 		// Config-schema validation (permissive skips with a loud warning).
-		if capCR.Spec.SchemaPolicy == agentv1alpha1.SchemaPolicyPermissive {
+		switch {
+		case capCR.Spec.SchemaPolicy == agentv1alpha1.SchemaPolicyPermissive:
 			warnings = append(warnings, fmt.Sprintf(
 				"Capability %s has schemaPolicy: permissive — its config is not validated at admission", key))
-		} else if capCR.Spec.ConfigSchema != nil {
+		case capCR.Spec.ConfigSchema == nil:
+			// Strict without a schema is a malformed Capability (its own
+			// webhook denies it, but the CR can predate that or webhooks may
+			// be disabled). Deny the attachment rather than silently skip.
+			allErrs = append(allErrs, field.Forbidden(attPath, fmt.Sprintf(
+				"Capability %s has schemaPolicy strict but no configSchema; publish a schema on the Capability or set schemaPolicy: permissive", key)))
+		default:
 			configRaw := []byte("{}")
 			if att.Config != nil {
 				configRaw = att.Config.Raw

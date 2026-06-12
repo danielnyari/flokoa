@@ -336,6 +336,23 @@ func TestAgentWebhookDeniesBaselineCollision(t *testing.T) {
 	}
 }
 
+func TestAgentWebhookDeniesStrictCapabilityWithoutSchema(t *testing.T) {
+	// A strict Capability without a configSchema is malformed (the Capability
+	// webhook denies it), but such a CR can exist if webhooks were disabled.
+	// The Agent webhook must deny the attachment rather than silently skip
+	// config validation.
+	broken := capabilityCR("kb", func(c *agentv1alpha1.Capability) {
+		c.Spec.ConfigSchema = nil // strict (default) + no schema
+	})
+	v := &AgentCustomValidator{Reader: readerWith(t, broken)}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "configSchema") {
+		t.Fatalf("strict capability without configSchema must deny the attachment, got %v", err)
+	}
+}
+
 func TestAgentWebhookWarnsOnPermissiveCapability(t *testing.T) {
 	permissive := capabilityCR("freeform", func(c *agentv1alpha1.Capability) {
 		c.Spec.SchemaPolicy = agentv1alpha1.SchemaPolicyPermissive

@@ -421,7 +421,14 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 			return nil, nil, flokoaerrors.NewPermanentf("%v", err)
 		}
 
-		if capCR.Spec.SchemaPolicy != agentv1alpha1.SchemaPolicyPermissive && capCR.Spec.ConfigSchema != nil {
+		if capCR.Spec.SchemaPolicy != agentv1alpha1.SchemaPolicyPermissive {
+			// Strict without a schema is a malformed Capability; failing here
+			// (not just in its webhook) keeps the invariant when webhooks are
+			// disabled or the CR predates the rule.
+			if capCR.Spec.ConfigSchema == nil {
+				return nil, nil, flokoaerrors.NewPermanentf(
+					"Capability %s has schemaPolicy strict but no configSchema; publish a schema on the Capability or set schemaPolicy: permissive", key)
+			}
 			configRaw := []byte("{}")
 			if att.Config != nil {
 				configRaw = att.Config.Raw

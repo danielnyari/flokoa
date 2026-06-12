@@ -284,6 +284,28 @@ func TestCompileCapabilityConfigViolationIsPermanent(t *testing.T) {
 	}
 }
 
+func TestCompileStrictCapabilityWithoutSchemaIsPermanent(t *testing.T) {
+	// Defense in depth: a strict Capability missing its configSchema (possible
+	// when webhooks were disabled) must fail compile, not silently skip
+	// validation.
+	f := newFixture(Options{})
+	f.addCapability("kb", func(c *agentv1alpha1.Capability) {
+		c.Spec.ConfigSchema = nil // strict (default) + no schema
+	})
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		attachKB(t, a, "kb")
+	})
+
+	_, err := f.compiler.Compile(context.Background(), agent)
+	if !flokoaerrors.IsPermanent(err) {
+		t.Fatalf("strict capability without configSchema must be permanent, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "configSchema") {
+		t.Errorf("error %q should name the missing configSchema", err)
+	}
+}
+
 func TestCompileTwoCompatibleCapabilities(t *testing.T) {
 	f := newFixture(Options{})
 	f.addCapability("kb")
