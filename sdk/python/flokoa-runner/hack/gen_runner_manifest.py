@@ -71,19 +71,40 @@ def build_manifest(lock_path: Path, schema_path: Path) -> dict:
     }
 
 
+def build_operator_baseline(lock_path: Path) -> dict:
+    """The full pinned closure, embedded in the operator for admission-time
+    dependency-conflict detection (roadmap 08): a Capability pin colliding
+    with any baseline package — not just the headline libraries — must be
+    caught before anything deploys.
+    """
+    versions = parse_lock_versions(lock_path.read_text(encoding="utf-8"))
+    return {
+        "contractVersion": CONTRACT_VERSION,
+        "runnerVersion": RUNNER_VERSION,
+        "python": PYTHON_MINOR,
+        "pydantic-ai": versions["pydantic-ai"],
+        "packages": versions,
+    }
+
+
 def main() -> None:
     pkg_root = Path(__file__).resolve().parents[1]
     lock_path = Path(sys.argv[1]) if len(sys.argv) > 1 else pkg_root / "runner.lock"
+    operator_spec_dir = pkg_root.parents[2] / "operator" / "internal" / "spec"
     schema_path = (
-        Path(sys.argv[2])
-        if len(sys.argv) > 2
-        else pkg_root.parents[2] / "operator" / "internal" / "spec" / "schemas" / f"agentspec-{RUNNER_VERSION}.json"
+        Path(sys.argv[2]) if len(sys.argv) > 2 else operator_spec_dir / "schemas" / f"agentspec-{RUNNER_VERSION}.json"
     )
     out_path = Path(sys.argv[3]) if len(sys.argv) > 3 else pkg_root / "runner-manifest.json"
 
     manifest = build_manifest(lock_path, schema_path)
     out_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {out_path}")
+
+    baseline = build_operator_baseline(lock_path)
+    baseline_path = operator_spec_dir / "baselines" / f"runner-baseline-{RUNNER_VERSION}.json"
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    baseline_path.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"wrote {baseline_path}")
 
 
 if __name__ == "__main__":

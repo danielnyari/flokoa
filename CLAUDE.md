@@ -88,11 +88,12 @@ the tag for all images, the Helm chart, and the PyPI packages (see
 
 ## Core CRDs
 
-The operator manages seven CRDs under `agent.flokoa.ai/v1alpha1`:
+The operator manages eight CRDs under `agent.flokoa.ai/v1alpha1`:
 
 | CRD | Purpose | Key Fields |
 |-----|---------|------------|
-| **Agent** | Composition root: compiles refs + inline AgentSpec fragment into one resolved pydantic-ai spec | `spec` (inline fragment), `modelRef`, `instructionRefs`, `tools`, `secretRefs`, `card` (A2A metadata), `runtime` (image/runnerVersion/isolation) |
+| **Agent** | Composition root: compiles refs + inline AgentSpec fragment into one resolved pydantic-ai spec | `spec` (inline fragment), `modelRef`, `instructionRefs`, `tools`, `capabilities`, `secretRefs`, `card` (A2A metadata), `runtime` (image/runnerVersion/isolation) |
+| **Capability** | Versioned, digest-pinned, schema-published unit of agent behavior; admission machine-checks config schema, `requires` tuple, and dependency conflicts | `artifact` (digest-pinned OCI ref), `version`, `entrypoint`, `configSchema`, `schemaPolicy`, `requires`, `dependencies` |
 | **AgentTool** | Declarative MCP endpoint (openapi type retired) | `url`/`serviceRef`+`path`, `transport`, `headers`, `headerSecrets`, `toolPrefix`, `allowedTools`, `timeoutSeconds` |
 | **AgentWorkflow** | **Frozen** template-only A2A composition between deployed Agents (compiled to Argo WorkflowTemplates; no new features — see roadmap §7) | `tasks`, `params`, conditions, dependencies |
 | **AgentTrigger** | Event-driven agent invocation via Argo Events | `eventSource`, `filter`, `agent`, `task`, `pushNotification`, `limits` |
@@ -219,10 +220,12 @@ All images use multi-stage builds. The operator uses `gcr.io/distroless/static:n
 ## Project Status
 
 This project is in early development, executing the Pivot v2.1 roadmap
-(`docs/roadmap/`). Phase 0 and P0a (units 02–07: runtime contract, spec
-compiler, generic runner, virtual endpoint, injected telemetry) are done;
-P0b (Capability CRD, units 08–10) is next. Key architectural components:
-- Seven CRDs with controllers, admission webhooks, and gRPC services
+(`docs/roadmap/`). Phase 0, P0a (units 02–07: runtime contract, spec
+compiler, generic runner, virtual endpoint, injected telemetry), and unit 08
+(Capability CRD + admission) are done; the rest of P0b — 09 (capability
+artifacts & delivery) and 10 (capability CLI & registry seeding) — is next.
+Key architectural components:
+- Eight CRDs with controllers, admission webhooks, and gRPC services
 - Python SDK with CLI, pydantic-ai integration, and OpenAPI tooling
 - Argo Workflows integration with A2A executor plugin
 - Helm chart for deployment

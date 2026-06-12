@@ -64,6 +64,11 @@ type InstructionWriter interface {
 	EnsureInstruction(ctx context.Context, desired *agentv1alpha1.Instruction) error
 }
 
+// CapabilityReader reads Capability resources.
+type CapabilityReader interface {
+	GetCapability(ctx context.Context, key types.NamespacedName) (*agentv1alpha1.Capability, error)
+}
+
 // SecretReader reads Secret resources.
 type SecretReader interface {
 	GetSecret(ctx context.Context, key types.NamespacedName) (*corev1.Secret, error)

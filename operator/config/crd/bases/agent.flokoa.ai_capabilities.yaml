@@ -1,0 +1,226 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: capabilities.agent.flokoa.ai
+spec:
+  group: agent.flokoa.ai
+  names:
+    kind: Capability
+    listKind: CapabilityList
+    plural: capabilities
+    shortNames:
+    - cap
+    singular: capability
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.version
+      name: Version
+      type: string
+    - jsonPath: .spec.requires.flokoaRunner
+      name: Runner
+      type: string
+    - jsonPath: .spec.schemaPolicy
+      name: Policy
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Capability is the Schema for the capabilities API: a versioned,
+          digest-pinned unit of agent behavior attachable to Agents via
+          spec.capabilities, with machine-checked compatibility at admission.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              CapabilitySpec defines the desired state of a Capability: a versioned,
+              digest-pinned, schema-published unit of agent behavior (product brief §4).
+              The spec mirrors the artifact manifest by value (schema, requires,
+              dependencies) so admission stays offline and air-gap-friendly; the
+              controller's job is verifying mirror ↔ artifact agreement, not fetching at
+              admission time. `flokoa capability push` (roadmap 10) generates this CR
+              from the manifest, so the mirror never drifts in practice.
+            properties:
+              artifact:
+                description: |-
+                  Artifact is the OCI reference of the wheelhouse artifact image
+                  (runtime contract §4). MUST be digest-pinned.
+                pattern: '@sha256:[a-f0-9]{64}$'
+                type: string
+              configSchema:
+                description: |-
+                  ConfigSchema is the JSON Schema for per-agent config, validated
+                  offline at admission. Required unless schemaPolicy is permissive.
+                x-kubernetes-preserve-unknown-fields: true
+              dependencies:
+                description: |-
+                  Dependencies mirrors the artifact's pinned dependency closure
+                  (name==version) for admission-time conflict detection without registry
+                  access.
+                items:
+                  pattern: ^[A-Za-z0-9][A-Za-z0-9._-]*==[A-Za-z0-9._+!-]+$
+                  type: string
+                type: array
+              entrypoint:
+                description: |-
+                  Entrypoint is the Python `module:attr` resolving to the capability
+                  class (a pydantic-ai AbstractCapability subclass).
+                pattern: ^[\w.]+:[\w.]+$
+                type: string
+              provenance:
+                description: |-
+                  Provenance carries signature/attestation metadata (cosign verification
+                  config lands with roadmap 09).
+                properties:
+                  signatureRef:
+                    description: |-
+                      SignatureRef optionally records where the artifact's cosign signature
+                      lives when it is not the default sidecar tag in the artifact repository.
+                    type: string
+                type: object
+              requires:
+                description: |-
+                  Requires is the compatibility tuple, mirrored from the artifact
+                  manifest.
+                properties:
+                  flokoaRunner:
+                    description: |-
+                      FlokoaRunner is a PEP 440 specifier set for the runner release,
+                      e.g. ">=0.2".
+                    type: string
+                  pydanticAI:
+                    description: |-
+                      PydanticAI is a PEP 440 specifier set for the runner's pydantic-ai
+                      core pin, e.g. ">=1.107,<2".
+                    type: string
+                  python:
+                    description: Python is the required Python minor (exact match),
+                      e.g. "3.13".
+                    pattern: ^\d+\.\d+$
+                    type: string
+                type: object
+              schemaPolicy:
+                default: strict
+                description: |-
+                  SchemaPolicy: strict (default) requires ConfigSchema; permissive is
+                  the loud opt-out.
+                enum:
+                - strict
+                - permissive
+                type: string
+              serializationName:
+                description: |-
+                  SerializationName is the capability's spec-entry name when the class
+                  overrides pydantic-ai's default (the class name). Compiled specs
+                  reference the capability by this name; defaults to the attr part of
+                  entrypoint.
+                type: string
+              version:
+                description: |-
+                  Version is the capability's own semantic version (matches the artifact
+                  manifest).
+                minLength: 1
+                type: string
+            required:
+            - artifact
+            - entrypoint
+            - requires
+            - version
+            type: object
+          status:
+            description: CapabilityStatus defines the observed state of a Capability.
+            properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  capability's state (Verified, Permissive).
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

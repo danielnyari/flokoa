@@ -8,4 +8,5 @@ resources:
 - agent_v1alpha1_model.yaml
 - agent_v1alpha1_agentworkflow.yaml
 - agent_v1alpha1_agenttrigger.yaml
+- agent_v1alpha1_capability.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

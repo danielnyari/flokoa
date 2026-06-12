@@ -61,6 +61,7 @@ rules:
   - agenttools/status
   - agenttriggers/status
   - agentworkflows/status
+  - capabilities/status
   - instructions/status
   - modelproviders/status
   - models/status
@@ -68,6 +69,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - agent.flokoa.ai
+  resources:
+  - capabilities
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - apps
   resources:

@@ -78,6 +78,7 @@ runner-contract: runner-lock gen-agentspec-schema runner-manifest ## Regenerate 
 verify-runner-contract: runner-contract ## CI gate: fail on drift between pin, lock, manifest, and embedded schema
 	@git diff --exit-code -- flokoa-runner/runner.lock flokoa-runner/runner-manifest.json \
 		../../operator/internal/spec/schemas \
+		../../operator/internal/spec/baselines \
 		|| (echo "❌ runner contract artifacts drifted — run 'make runner-contract' and commit" && exit 1)
 	@! grep -i "pydantic-ai-harness" flokoa-runner/runner.lock \
 		|| (echo "❌ pydantic-ai-harness must not be in the runner baseline (brief §4)" && exit 1)

@@ -11,8 +11,8 @@ at the bottom); the rest are conventions we hold by hand until they earn a check
 ## 1. Kubernetes-native
 
 Everything is a CRD or a standard Kubernetes resource. Desired state lives in etcd; there is no
-side-channel state store. The seven CRDs (`Agent`, `AgentTool`, `AgentWorkflow`, `AgentTrigger`,
-`Model`, `ModelProvider`, `Instruction`) **are** the platform's configuration surface.
+side-channel state store. The eight CRDs (`Agent`, `Capability`, `AgentTool`, `AgentWorkflow`,
+`AgentTrigger`, `Model`, `ModelProvider`, `Instruction`) **are** the platform's configuration surface.
 
 ## 2. Declarative reconciliation
 

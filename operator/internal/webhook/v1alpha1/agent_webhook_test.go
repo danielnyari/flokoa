@@ -1,0 +1,398 @@
+/*
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1alpha1
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	"github.com/danielnyari/flokoa/internal/spec"
+)
+
+func validAgent() *agentv1alpha1.Agent {
+	return &agentv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "support", Namespace: "default"},
+		Spec: agentv1alpha1.AgentSpec{
+			Card: agentv1alpha1.AgentCardOverride{Name: "support", Description: "d", Version: "1"},
+			Spec: &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"},
+		},
+	}
+}
+
+func jsonOf(t *testing.T, v any) *apiextensionsv1.JSON {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &apiextensionsv1.JSON{Raw: raw}
+}
+
+func TestAgentWebhookAcceptsValidAgent(t *testing.T) {
+	v := &AgentCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), validAgent()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentWebhookRejectsSessionIsolation(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Runtime.Isolation = agentv1alpha1.IsolationSession
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "session") {
+		t.Fatalf("expected session-tier rejection, got %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsClassPathCapabilityNames(t *testing.T) {
+	cases := []string{
+		"pydantic_ai_harness.shields:Shields",
+		"some.module.Cap",
+		"flokoa.platform/telemetry",
+	}
+	for _, name := range cases {
+		agent := validAgent()
+		agent.Spec.Spec.Capabilities = []agentv1alpha1.NativeCapabilityEntry{{Name: name}}
+
+		v := &AgentCustomValidator{}
+		_, err := v.ValidateCreate(context.Background(), agent)
+		if err == nil || !strings.Contains(err.Error(), "Capability resources") {
+			t.Fatalf("capability name %q must be rejected, got %v", name, err)
+		}
+	}
+}
+
+func TestAgentWebhookAllowsNativeCapabilityNames(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Spec.Capabilities = []agentv1alpha1.NativeCapabilityEntry{
+		{Name: "WebSearch"},
+		{Name: "MCP", Config: jsonOf(t, map[string]any{"url": "http://tools.default.svc.cluster.local/mcp"})},
+	}
+
+	v := &AgentCustomValidator{}
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentWebhookRequiresMatchingSecretRefs(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Spec.Capabilities = []agentv1alpha1.NativeCapabilityEntry{
+		{Name: "MCP", Config: jsonOf(t, map[string]any{
+			"url":     "http://tools.default.svc.cluster.local/mcp",
+			"headers": map[string]string{"Authorization": "${secret:kb-token}"},
+		})},
+	}
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "kb-token") {
+		t.Fatalf("placeholder without secretRefs entry must be rejected, got %v", err)
+	}
+
+	agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
+		"kb-token": {LocalObjectReference: corev1.LocalObjectReference{Name: "kb"}, Key: "token"},
+	}
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatalf("matching secretRefs entry must pass, got %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsBadSecretRefNames(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
+		"bad name!": {LocalObjectReference: corev1.LocalObjectReference{Name: "s"}, Key: "k"},
+	}
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("expected invalid secret ref name to be rejected")
+	}
+}
+
+func TestAgentWebhookRejectsDuplicateSkillIDs(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Card.Skills = []agentv1alpha1.AgentSkill{
+		{ID: "s1", Name: "one", Description: "d", Tags: []string{"t"}},
+		{ID: "s1", Name: "two", Description: "d", Tags: []string{"t"}},
+	}
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "s1") {
+		t.Fatalf("expected duplicate skill rejection, got %v", err)
+	}
+}
+
+func TestAgentWebhookUpdateValidates(t *testing.T) {
+	agent := validAgent()
+	agent.Spec.Runtime.Isolation = agentv1alpha1.IsolationSession
+
+	v := &AgentCustomValidator{}
+	_, err := v.ValidateUpdate(context.Background(), validAgent(), agent)
+	if err == nil {
+		t.Fatal("expected update validation to reject session isolation")
+	}
+}
+
+// --- Capability attachment admission (roadmap 08) ---
+
+const kbConfigSchema = `{
+	"type": "object",
+	"required": ["endpoint"],
+	"properties": {
+		"endpoint": {"type": "string", "pattern": "^https://"},
+		"maxResults": {"type": "integer"}
+	},
+	"additionalProperties": false
+}`
+
+func capabilityCR(name string, mutate ...func(*agentv1alpha1.Capability)) *agentv1alpha1.Capability {
+	c := &agentv1alpha1.Capability{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec: agentv1alpha1.CapabilitySpec{
+			Artifact:     "ghcr.io/danielnyari/capabilities/" + name + "@sha256:" + strings.Repeat("a", 64),
+			Version:      "0.1.0",
+			Entrypoint:   "flokoa_" + name + ".capability:KB",
+			SchemaPolicy: agentv1alpha1.SchemaPolicyStrict,
+			ConfigSchema: &apiextensionsv1.JSON{Raw: []byte(kbConfigSchema)},
+			Requires: agentv1alpha1.CapabilityRequires{
+				Python:       "3.13",
+				PydanticAI:   ">=1.100,<2",
+				FlokoaRunner: ">=0.2",
+			},
+		},
+	}
+	for _, m := range mutate {
+		m(c)
+	}
+	return c
+}
+
+func readerWith(t *testing.T, objs ...client.Object) client.Reader {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := agentv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+}
+
+func attachedAgent(t *testing.T, config map[string]any, capNames ...string) *agentv1alpha1.Agent {
+	t.Helper()
+	agent := validAgent()
+	for _, name := range capNames {
+		att := agentv1alpha1.CapabilityAttachment{Ref: agentv1alpha1.NamespacedRef{Name: name}}
+		if config != nil {
+			att.Config = jsonOf(t, config)
+		}
+		agent.Spec.Capabilities = append(agent.Spec.Capabilities, att)
+	}
+	return agent
+}
+
+func TestAgentWebhookAdmitsCompatibleCapability(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	warnings, err := v.ValidateCreate(context.Background(), agent)
+	if err != nil {
+		t.Fatalf("compatible capability must be admitted, got %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("expected no warnings, got %v", warnings)
+	}
+}
+
+func TestAgentWebhookDeniesConfigSchemaViolation(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com", "maxResults": "five"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("config violating the published schema must be denied")
+	}
+	for _, want := range []string{"kb", "/maxResults"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("denial %q should contain %q", err.Error(), want)
+		}
+	}
+}
+
+func TestAgentWebhookDeniesMissingRequiredConfig(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	// No config at all: the schema's required endpoint is missing.
+	agent := attachedAgent(t, nil, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "endpoint") {
+		t.Fatalf("missing required config must be denied naming the property, got %v", err)
+	}
+}
+
+func TestAgentWebhookAllowsPlaceholderConfigWithSecretRef(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	agent := attachedAgent(t, map[string]any{"endpoint": "${secret:kb-endpoint}"}, "kb")
+
+	// Placeholder without a matching secretRefs entry: rejected statically.
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "kb-endpoint") {
+		t.Fatalf("placeholder without secretRefs entry must be rejected, got %v", err)
+	}
+
+	// With the matching secretRefs entry the placeholder satisfies the
+	// schema's pattern constraint (shape validated, value resolves in the runner).
+	agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
+		"kb-endpoint": {LocalObjectReference: corev1.LocalObjectReference{Name: "kb"}, Key: "endpoint"},
+	}
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatalf("placeholder config with secretRefs must be admitted, got %v", err)
+	}
+}
+
+func TestAgentWebhookDeniesIncompatibleRunner(t *testing.T) {
+	incompatible := capabilityCR("kb", func(c *agentv1alpha1.Capability) {
+		c.Spec.Requires.PydanticAI = ">=2,<3"
+	})
+	v := &AgentCustomValidator{Reader: readerWith(t, incompatible)}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("incompatible requires tuple must be denied")
+	}
+
+	baseline, berr := spec.RunnerBaseline(spec.DefaultRunnerVersion)
+	if berr != nil {
+		t.Fatal(berr)
+	}
+	want := fmt.Sprintf(`capability "kb" requires pydantic-ai ">=2,<3" but runner %s provides pydantic-ai %q`,
+		baseline.RunnerVersion, baseline.PydanticAI)
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("denial %q should contain %q (both tuples named)", err.Error(), want)
+	}
+}
+
+func TestAgentWebhookDeniesDependencyConflict(t *testing.T) {
+	a := capabilityCR("shields", func(c *agentv1alpha1.Capability) {
+		c.Spec.Dependencies = []string{"pydantic-ai-harness==0.2.1"}
+	})
+	b := capabilityCR("planning", func(c *agentv1alpha1.Capability) {
+		c.Spec.Dependencies = []string{"pydantic-ai-harness==0.3.0"}
+	})
+	v := &AgentCustomValidator{Reader: readerWith(t, a, b)}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "shields", "planning")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("conflicting dependency pins must be denied")
+	}
+	want := `capabilities "shields" and "planning" pin conflicting versions of pydantic-ai-harness (0.2.1 vs 0.3.0)`
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("denial %q should contain %q", err.Error(), want)
+	}
+}
+
+func TestAgentWebhookDeniesBaselineCollision(t *testing.T) {
+	a := capabilityCR("kb", func(c *agentv1alpha1.Capability) {
+		c.Spec.Dependencies = []string{"httpx==0.20.0"}
+	})
+	v := &AgentCustomValidator{Reader: readerWith(t, a)}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "baseline pins httpx==") {
+		t.Fatalf("baseline pin collision must be denied naming both versions, got %v", err)
+	}
+}
+
+func TestAgentWebhookWarnsOnPermissiveCapability(t *testing.T) {
+	permissive := capabilityCR("freeform", func(c *agentv1alpha1.Capability) {
+		c.Spec.SchemaPolicy = agentv1alpha1.SchemaPolicyPermissive
+		c.Spec.ConfigSchema = nil
+	})
+	v := &AgentCustomValidator{Reader: readerWith(t, permissive)}
+	agent := attachedAgent(t, map[string]any{"anything": "goes"}, "freeform")
+
+	warnings, err := v.ValidateCreate(context.Background(), agent)
+	if err != nil {
+		t.Fatalf("permissive capability config must be admitted, got %v", err)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "permissive") && strings.Contains(w, "freeform") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a loud permissive warning naming the capability, got %v", warnings)
+	}
+}
+
+func TestAgentWebhookWarnsOnMissingCapability(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t)}
+	agent := attachedAgent(t, nil, "ghost")
+
+	warnings, err := v.ValidateCreate(context.Background(), agent)
+	if err != nil {
+		t.Fatalf("missing Capability follows the ordering-tolerant reference pattern (compile re-checks), got %v", err)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "ghost") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a missing-Capability warning, got %v", warnings)
+	}
+}
+
+func TestAgentWebhookDeniesDuplicateAttachments(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb", "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "Duplicate") {
+		t.Fatalf("duplicate capability attachments must be denied, got %v", err)
+	}
+}
+
+func TestAgentWebhookDeniesUnknownRunnerVersionWithCapabilities(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+	agent.Spec.Runtime.RunnerVersion = "9.9.9"
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "9.9.9") {
+		t.Fatalf("unknown runner version must be denied when capabilities are attached, got %v", err)
+	}
+}

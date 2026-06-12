@@ -13,12 +13,14 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	capabilitydomain "github.com/danielnyari/flokoa/internal/domain/capability"
 	modeldomain "github.com/danielnyari/flokoa/internal/domain/model"
 	flokoaerrors "github.com/danielnyari/flokoa/internal/errors"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
@@ -31,6 +33,7 @@ type Deps struct {
 	Providers          repo.ModelProviderReader
 	Instructions       repo.InstructionReader
 	AgentTools         repo.AgentToolReader
+	Capabilities       repo.CapabilityReader
 	Services           repo.ServiceReader
 	GetProviderHandler func(agentv1alpha1.ProviderType) (modeldomain.ProviderHandler, bool)
 }
@@ -50,6 +53,18 @@ type Options struct {
 
 	// Injected platform capabilities, appended in order.
 	Injected []InjectedCapability
+}
+
+// CapabilityArtifact is the delivery input one Capability attachment
+// contributes (roadmap 09 turns these into initContainer/ImageVolume mounts).
+type CapabilityArtifact struct {
+	// Name is the Capability CR name (the wheelhouse directory name under
+	// /opt/flokoa/capabilities/).
+	Name string
+	// Artifact is the digest-pinned OCI reference.
+	Artifact string
+	// EntryName is the capability's spec-entry name in the compiled document.
+	EntryName string
 }
 
 // Result is a successfully compiled and schema-validated spec.
@@ -80,6 +95,10 @@ type Result struct {
 	// ProviderEnv / ProviderSecretEnv come from the resolved ModelProvider.
 	ProviderEnv       []corev1.EnvVar
 	ProviderSecretEnv []corev1.EnvVar
+
+	// CapabilityArtifacts are the delivery inputs for the attached Capability
+	// CRs, in declaration order (consumed by roadmap 09's builder).
+	CapabilityArtifacts []CapabilityArtifact
 }
 
 // ValidationError marks a compiled document that failed schema validation:
@@ -152,6 +171,19 @@ func (c *Compiler) Compile(ctx context.Context, agent *agentv1alpha1.Agent) (*Re
 		return nil, err
 	}
 
+	// 5b. Capability CR attachments: resolved and checked now (requires tuple,
+	// config schema, dependency conflicts — the same domain checks admission
+	// ran; re-run here because Capability edits recompile dependent Agents
+	// without re-admission), but spliced into the doc only after schema
+	// validation: the embedded AgentSpec schema knows baseline-native and
+	// platform entries, while attachment config is governed by the
+	// capability's own published schema.
+	capEntries, capArtifacts, err := c.resolveCapabilities(ctx, agent, runnerVersion)
+	if err != nil {
+		return nil, err
+	}
+	res.CapabilityArtifacts = capArtifacts
+
 	// 6. Platform capabilities, last — user entries can't shadow or reorder them.
 	for _, inj := range c.opts.Injected {
 		doc["capabilities"] = append(capabilityList(doc), capabilityEntry(inj.Name, inj.Config))
@@ -174,7 +206,7 @@ func (c *Compiler) Compile(ctx context.Context, agent *agentv1alpha1.Agent) (*Re
 
 	// 8. Canonicalize to JSON-generic form: the validated document is exactly
 	// the document hashed and serialized — no typed-Go leftovers.
-	doc, err := canonicalize(doc)
+	doc, err = canonicalize(doc)
 	if err != nil {
 		return nil, fmt.Errorf("canonicalizing compiled spec: %w", err)
 	}
@@ -183,6 +215,21 @@ func (c *Compiler) Compile(ctx context.Context, agent *agentv1alpha1.Agent) (*Re
 	// happens on an invalid spec (the caller keeps the last good one running).
 	if err := spec.Validate(runnerVersion, doc); err != nil {
 		return nil, &ValidationError{RunnerVersion: runnerVersion, Err: err}
+	}
+
+	// 10. Splice the Capability attachment entries in after the fragment/tool
+	// entries and before the injected platform block (which stays last).
+	if len(capEntries) > 0 {
+		existing := capabilityList(doc)
+		insertAt := len(existing) - len(res.Injected)
+		merged := make([]any, 0, len(existing)+len(capEntries))
+		merged = append(merged, existing[:insertAt]...)
+		merged = append(merged, capEntries...)
+		merged = append(merged, existing[insertAt:]...)
+		doc["capabilities"] = merged
+		if doc, err = canonicalize(doc); err != nil {
+			return nil, fmt.Errorf("canonicalizing compiled spec: %w", err)
+		}
 	}
 
 	digest, err := spec.SchemaDigest(runnerVersion)
@@ -309,6 +356,73 @@ func (c *Compiler) applyTools(ctx context.Context, agent *agentv1alpha1.Agent, d
 		}
 	}
 	return nil
+}
+
+// resolveCapabilities fetches each attached Capability CR and re-runs the
+// admission-time domain checks (requires tuple, config schema, dependency
+// conflicts) against the resolved runner baseline. It returns the spec
+// entries (declaration order) and the artifact delivery inputs; the caller
+// splices the entries in after schema validation.
+func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1.Agent, runnerVersion string) ([]any, []CapabilityArtifact, error) {
+	if len(agent.Spec.Capabilities) == 0 {
+		return nil, nil, nil
+	}
+	if c.deps.Capabilities == nil {
+		return nil, nil, flokoaerrors.NewPermanentf("capability attachments are not supported by this operator build (no Capability reader wired)")
+	}
+
+	runner, err := spec.RunnerBaseline(runnerVersion)
+	if err != nil {
+		return nil, nil, &ValidationError{RunnerVersion: runnerVersion, Err: err}
+	}
+
+	entries := make([]any, 0, len(agent.Spec.Capabilities))
+	artifacts := make([]CapabilityArtifact, 0, len(agent.Spec.Capabilities))
+	deps := make([]capabilitydomain.Deps, 0, len(agent.Spec.Capabilities))
+	for _, att := range agent.Spec.Capabilities {
+		key := types.NamespacedName{Name: att.Ref.Name, Namespace: defaultNS(att.Ref.Namespace, agent.Namespace)}
+		capCR, err := c.deps.Capabilities.GetCapability(ctx, key)
+		if err != nil {
+			return nil, nil, flokoaerrors.NewDependencyf("referenced Capability %s not found: %v", key, err)
+		}
+
+		req := capabilitydomain.Requires{
+			Python:       capCR.Spec.Requires.Python,
+			PydanticAI:   capCR.Spec.Requires.PydanticAI,
+			FlokoaRunner: capCR.Spec.Requires.FlokoaRunner,
+		}
+		if err := capabilitydomain.CheckRequires(capCR.Name, req, runner); err != nil {
+			return nil, nil, flokoaerrors.NewPermanentf("%v", err)
+		}
+
+		if capCR.Spec.SchemaPolicy != agentv1alpha1.SchemaPolicyPermissive && capCR.Spec.ConfigSchema != nil {
+			configRaw := []byte("{}")
+			if att.Config != nil {
+				configRaw = att.Config.Raw
+			}
+			if err := capabilitydomain.ValidateConfig(capCR.Spec.ConfigSchema.Raw, configRaw); err != nil {
+				return nil, nil, flokoaerrors.NewPermanentf("Capability %s rejected the attachment config: %v", key, err)
+			}
+		}
+
+		var config map[string]any
+		if att.Config != nil {
+			if err := unmarshalJSONObject(att.Config.Raw, &config); err != nil {
+				return nil, nil, flokoaerrors.NewPermanentf("Capability %s attachment config must be a JSON object: %v", key, err)
+			}
+		}
+
+		entryName := capabilitydomain.EntryName(capCR.Spec.Entrypoint, capCR.Spec.SerializationName)
+		entries = append(entries, capabilityEntry(entryName, config))
+		artifacts = append(artifacts, CapabilityArtifact{Name: capCR.Name, Artifact: capCR.Spec.Artifact, EntryName: entryName})
+		deps = append(deps, capabilitydomain.Deps{Name: capCR.Name, Pins: capCR.Spec.Dependencies})
+	}
+
+	if msgs := capabilitydomain.DetectConflicts(deps, runner); len(msgs) > 0 {
+		return nil, nil, flokoaerrors.NewPermanentf("capability dependency conflicts: %s", strings.Join(msgs, "; "))
+	}
+
+	return entries, artifacts, nil
 }
 
 func defaultNS(ns, fallback string) string {

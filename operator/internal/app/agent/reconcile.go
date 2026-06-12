@@ -27,6 +27,7 @@ type Deps struct {
 	Models        repo.ModelReader
 	Providers     repo.ModelProviderReader
 	Instructions  repo.InstructionReader
+	Capabilities  repo.CapabilityReader
 	ConfigMaps    repo.ConfigMapRepo
 	Deployments   repo.DeploymentRepo
 	Services      repo.ServiceRepo
@@ -79,6 +80,7 @@ func NewService(deps Deps, config Config) *Service {
 			Providers:    deps.Providers,
 			Instructions: deps.Instructions,
 			AgentTools:   deps.AgentTools,
+			Capabilities: deps.Capabilities,
 			Services:     deps.ServiceReader,
 		}, compiler.Options{
 			DefaultRunnerVersion: config.DefaultRunnerVersion,

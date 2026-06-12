@@ -148,6 +148,11 @@ mount) to `/opt/flokoa/capabilities/<name>/` containing:
 }
 ```
 
+Optional manifest fields: `serializationName` — the capability class's
+spec-entry name when it overrides pydantic-ai's default (the class name).
+The Capability CR mirrors it so compiled spec entries resolve against the
+class the runner registers from the wheelhouse.
+
 The runner verifies the `requires` tuple against its own manifest (defense in
 depth — admission already checked it), then installs with
 `pip install --no-index --find-links <dir>` and registers the entrypoint class
@@ -159,7 +164,10 @@ packages) are out of scope for artifacts — that's what custom images are for.
 A capability's `requires` tuple is checked against the runner manifest:
 `python` (exact minor), `pydantic-ai` (PEP 440 specifier), `flokoa-runner`
 (PEP 440 specifier). The webhook refuses incompatible attachments at
-admission; the runner refuses them at install. The compatibility matrix is
+admission — the operator embeds each supported runner's full baseline pin set
+(`operator/internal/spec/baselines/`, generated from `runner.lock` by
+`make runner-contract`) so requires tuples and dependency conflicts are
+evaluated offline; the runner refuses them at install. The compatibility matrix is
 one-dimensional by construction: one runner version per release.
 
 ## 6. Platform-injected capabilities
@@ -199,7 +207,8 @@ one release train.
 - Any change to this document is a PR-blocking review item and requires
   regenerating the contract artifacts (`make runner-contract`) in the same PR.
 - Runner release procedure: bump the pin in `flokoa-runner/pyproject.toml` →
-  `make runner-contract` → commit lockfile + manifest + schema → CI gates on
+  `make runner-contract` → commit lockfile + manifest + schema + embedded
+  baseline → CI gates on
   drift (`make verify-runner-contract`) and on the no-harness rule.
 
 ## 9. The published endpoint (virtual endpoint identity)

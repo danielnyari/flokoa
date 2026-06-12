@@ -108,7 +108,7 @@ good generation keeps running.
 
 ### 2. Custom Resource Definitions (CRDs)
 
-Seven CRDs under `agent.flokoa.ai/v1alpha1` today (Capability arrives in P0b):
+Eight CRDs under `agent.flokoa.ai/v1alpha1` (capability artifact delivery and CLI arrive with roadmap 09/10):
 
 #### Agent
 The **composition root**: an inline AgentSpec fragment plus `modelRef`, `instructionRefs`, `tools`,
@@ -116,10 +116,18 @@ The **composition root**: an inline AgentSpec fragment plus `modelRef`, `instruc
 compiled into one resolved AgentSpec.
 
 **Key Interactions:**
-- **References** → Model, Instruction, AgentTool (composed by the compiler)
+- **References** → Model, Instruction, AgentTool, Capability (composed by the compiler)
 - **Creates** → `<agent>-agent-spec` ConfigMap (compiled AgentSpec + card)
 - **Creates** → Deployment (generic runner pods)
 - **Creates** → published `{agent}` Service (behind `status.url`) and internal `{agent}-runtime` Service
+
+#### Capability
+A **versioned, digest-pinned, schema-published unit of agent behavior**: the CR mirror of an OCI
+wheelhouse artifact (harness/third-party capability implementations). Admission machine-checks the
+compatibility matrix — attachment config against the published `configSchema`, the `requires` tuple
+against the Agent's runner baseline, and dependency conflicts across attachments plus the baseline
+lockfile — before anything deploys. Artifact delivery into runner pods ships with roadmap 09; the
+`flokoa capability` CLI and registry seeding with roadmap 10. See [capability.md](capability.md).
 
 #### Model & ModelProvider
 **Model** is a named, shareable model config (identifier + typed `settings` + `providerRef`) that

@@ -40,6 +40,7 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=instructions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=models,verbs=get;list;watch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=modelproviders,verbs=get;list;watch
+// +kubebuilder:rbac:groups=agent.flokoa.ai,resources=capabilities,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -136,6 +137,10 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&agentv1alpha1.ModelProvider{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForModelProvider),
+		).
+		Watches(
+			&agentv1alpha1.Capability{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForCapability),
 		).
 		Named("agent").
 		Complete(r)

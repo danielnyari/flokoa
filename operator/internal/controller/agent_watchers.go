@@ -246,6 +246,34 @@ func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Ob
 	return requests
 }
 
+// findAgentsForCapability returns the Agents that attach a given Capability.
+func (r *AgentReconciler) findAgentsForCapability(ctx context.Context, obj client.Object) []reconcile.Request {
+	capability, ok := obj.(*agentv1alpha1.Capability)
+	if !ok {
+		log.FromContext(ctx).Error(nil, "findAgentsForCapability received unexpected object type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
+	logger := log.FromContext(ctx)
+
+	agentList := &agentv1alpha1.AgentList{}
+	if err := r.List(ctx, agentList); err != nil {
+		logger.Error(err, "Failed to list Agents")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, agent := range agentList.Items {
+		for _, att := range agent.Spec.Capabilities {
+			if refMatches(att.Ref, agent.Namespace, capability.Name, capability.Namespace) {
+				requests = append(requests, requestFor(&agent))
+				break
+			}
+		}
+	}
+
+	return requests
+}
+
 // findAgentsForAgentTool returns the Agents that reference a given AgentTool.
 func (r *AgentReconciler) findAgentsForAgentTool(ctx context.Context, obj client.Object) []reconcile.Request {
 	agentTool, ok := obj.(*agentv1alpha1.AgentTool)

@@ -52,13 +52,15 @@ func TestValidateSpecRejectsSessionIsolation(t *testing.T) {
 	}
 }
 
-func TestValidateSpecRejectsCapabilityAttachments(t *testing.T) {
+func TestValidateSpecAllowsCapabilityAttachments(t *testing.T) {
+	// Capability attachments are admitted since roadmap 08: the webhook runs
+	// the compatibility/config checks and the compiler re-runs them with the
+	// referenced CRs resolved.
 	agent := baseAgent()
 	agent.Spec.Capabilities = []agentv1alpha1.CapabilityAttachment{
 		{Ref: agentv1alpha1.NamespacedRef{Name: "shields"}},
 	}
-	err := ValidateSpec(agent)
-	if err == nil || !strings.Contains(err.Error(), "08") {
-		t.Fatalf("expected capability rejection pointing to roadmap 08, got %v", err)
+	if err := ValidateSpec(agent); err != nil {
+		t.Fatalf("capability attachments must pass domain validation, got %v", err)
 	}
 }
