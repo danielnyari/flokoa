@@ -1,6 +1,6 @@
 # flokoa
 
-**flokoa is the open-source agent harness for Kubernetes — what AgentCore is for AWS.**
+**flokoa is the open-source agent harness for Kubernetes
 
 A Kubernetes-native runtime for single agents and swarms of [pydantic-ai](https://ai.pydantic.dev) agents: declarative definitions, packaged capabilities, isolated sessions, event triggers, and an A2A gateway, on your own cluster.
 
