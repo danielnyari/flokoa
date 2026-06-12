@@ -86,11 +86,24 @@ endpoints are not reachable from model providers' native MCP support.
 The `openapi` tool type is retired with the v2.1 pivot; the admission webhook
 rejects it. To front a REST API:
 
+- **Use the `flokoa.OpenAPI` capability** — the primary path. The
+  [`flokoa-openapi`](https://github.com/danielnyari/flokoa/tree/main/sdk/python/flokoa-openapi)
+  package turns an OpenAPI document into one **typed** tool per operation
+  (parameter *and* return schemas), defers large specs behind ToolSearch
+  discovery (a 500-operation spec costs the model one visible tool instead of
+  500 schemas), optionally stacks with harness CodeMode, and authenticates
+  with `${secret:NAME}` placeholders (API keys, OAuth2 refresh, Google
+  service accounts — resolved in the runner, never stored in ConfigMaps).
+  Usable today in SDK agents via
+  `Agent.from_spec(..., custom_capability_types=[OpenAPI])`; the Capability
+  CRD (P0b, in progress) is its CRD surface — AgentTool stays MCP-only.
+  See the package README for configuration detail.
 - **Run an MCP adapter** in front of the API — an MCP server that exposes the
-  API's operations as tools (several generators build MCP servers from
-  OpenAPI specs) — and point the AgentTool at it, or
-- **Use a Capability** that wraps the API client as agent tools (once the
-  Capability CRD ships — P0b, in progress).
+  API's operations as tools (`flokoa-codemode-mcp`, or one of several
+  generators that build MCP servers from OpenAPI specs) — and point the
+  AgentTool at it. Choose this when credentials must stay out of the agent
+  pod entirely (out-of-process isolation, e.g. multi-tenant clusters with
+  user-supplied agent images).
 
 ## Status
 

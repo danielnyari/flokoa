@@ -5,7 +5,7 @@ install: ## Install workspace dependencies and pre-commit hooks
 	@uv run pre-commit install
 
 .PHONY: test
-test: test-flokoa test-runner ## Run all tests
+test: test-flokoa test-runner test-codemode test-common test-openapi ## Run all tests
 
 .PHONY: test-flokoa
 test-flokoa: ## Run flokoa tests
@@ -16,6 +16,21 @@ test-flokoa: ## Run flokoa tests
 test-runner: ## Run flokoa-runner tests
 	@echo "🚀 Testing flokoa-runner"
 	@uv run --package flokoa-runner pytest flokoa-runner/tests
+
+.PHONY: test-codemode
+test-codemode: ## Run flokoa-codemode-mcp tests
+	@echo "🚀 Testing flokoa-codemode-mcp"
+	@uv run --package flokoa-codemode-mcp pytest flokoa-codemode-mcp/tests
+
+.PHONY: test-common
+test-common: ## Run flokoa-common tests
+	@echo "🚀 Testing flokoa-common"
+	@uv run --package flokoa-common pytest flokoa-common/tests
+
+.PHONY: test-openapi
+test-openapi: ## Run flokoa-openapi tests
+	@echo "🚀 Testing flokoa-openapi"
+	@uv run --package flokoa-openapi pytest flokoa-openapi/tests
 
 .PHONY: check
 check: ## Run code quality tools

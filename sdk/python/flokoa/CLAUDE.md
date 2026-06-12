@@ -183,7 +183,7 @@ pytest with coverage:
 make test
 ```
 
-Test files in `tests/` mirror `src/flokoa/` structure. Fixtures in `tests/flokoa_cli/fixtures/`.
+Test files in `tests/` mirror `src/flokoa/` structure.
 
 ## Dependencies
 

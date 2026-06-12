@@ -50,6 +50,15 @@ jobs:
       - name: Run flokoa-runner tests
         run: uv run --package flokoa-runner python -m pytest flokoa-runner/tests
 
+      - name: Run flokoa-codemode-mcp tests
+        run: uv run --package flokoa-codemode-mcp python -m pytest flokoa-codemode-mcp/tests
+
+      - name: Run flokoa-common tests
+        run: uv run --package flokoa-common python -m pytest flokoa-common/tests
+
+      - name: Run flokoa-openapi tests
+        run: uv run --package flokoa-openapi python -m pytest flokoa-openapi/tests
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

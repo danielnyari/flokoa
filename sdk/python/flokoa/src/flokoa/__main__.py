@@ -44,13 +44,15 @@ def run(
       flokoa run -m my_module:my_agent
       flokoa run -f agentspec.yaml
     """
-    if (module is None) == (spec_file is None):
-        raise click.UsageError("exactly one of --module/-m or --file/-f is required")
-
     host = host or "localhost"
     port = port or 10001
 
-    agent = _load_agent_from_module(module) if module is not None else _load_agent_from_spec(spec_file)  # type: ignore[arg-type]
+    if module is not None and spec_file is None:
+        agent = _load_agent_from_module(module)
+    elif spec_file is not None and module is None:
+        agent = _load_agent_from_spec(spec_file)
+    else:
+        raise click.UsageError("exactly one of --module/-m or --file/-f is required")
 
     _serve(agent, host=host, port=port)
 

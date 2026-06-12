@@ -8,10 +8,10 @@ metadata:
     model: gemini-2-flash
 spec:
   model: "gemini-2.0-flash-exp"
-  
+
   providerRef:
     name: google-provider
-  
+
   settings:
     temperature: "0.7"
     maxTokens: 8192

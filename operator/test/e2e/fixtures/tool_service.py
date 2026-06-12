@@ -1,6 +1,7 @@
 """
 Simple tool service for e2e testing.
 """
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 

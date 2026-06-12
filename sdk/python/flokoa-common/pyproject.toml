@@ -7,6 +7,14 @@ requires-python = ">=3.13"
 dependencies = [
     "pydantic>=2.12.5",
     "fastapi>=0.128.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+google = [
+    # Required only by ServiceAccountCredentialExchanger (Google SA / ADC
+    # token minting); imported lazily with a clear error message.
+    "google-auth>=2.23",
 ]
 
 [build-system]
@@ -18,3 +26,15 @@ packages = ["src/flokoa_common"]
 
 [tool.uv]
 package = true
+
+[dependency-groups]
+dev = [
+    "anyio>=4.0",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.14",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

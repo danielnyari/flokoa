@@ -9,10 +9,10 @@ metadata:
     type: reasoning
 spec:
   model: "o1"
-  
+
   providerRef:
     name: openai-provider
-  
+
   settings:
     maxTokens: 16000
 

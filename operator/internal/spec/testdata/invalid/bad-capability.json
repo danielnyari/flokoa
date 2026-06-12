@@ -1,6 +1,10 @@
 {
   "model": "openai:gpt-5-mini",
   "capabilities": [
-    {"MCP": {"endpoint": "http://tools.default.svc.cluster.local/mcp"}}
+    {
+      "MCP": {
+        "endpoint": "http://tools.default.svc.cluster.local/mcp"
+      }
+    }
   ]
 }

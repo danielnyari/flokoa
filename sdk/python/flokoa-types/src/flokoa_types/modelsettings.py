@@ -16,92 +16,90 @@ class ModelSettings(BaseModel):
     extra: Annotated[
         Any | None,
         Field(
-            description='Extra merges additional provider-specific settings into the compiled\nmodel_settings object (e.g. extra_body, thinking, service_tier).\nTyped fields win on key conflicts.'
+            description="Extra merges additional provider-specific settings into the compiled\nmodel_settings object (e.g. extra_body, thinking, service_tier).\nTyped fields win on key conflicts."
         ),
     ] = None
     extra_headers: Annotated[
         dict[str, str] | None,
-        Field(
-            alias='extraHeaders', description='ExtraHeaders to include in all requests.'
-        ),
+        Field(alias="extraHeaders", description="ExtraHeaders to include in all requests."),
     ] = None
     frequency_penalty: Annotated[
         str | None,
         Field(
-            alias='frequencyPenalty',
+            alias="frequencyPenalty",
             description='FrequencyPenalty penalizes frequent tokens (-2.0 to 2.0), e.g. "0.5".',
-            pattern='^-?[0-2](\\.\\d+)?$',
+            pattern="^-?[0-2](\\.\\d+)?$",
         ),
     ] = None
     logit_bias: Annotated[
         dict[str, int] | None,
         Field(
-            alias='logitBias',
-            description='LogitBias modifies the likelihood of specified tokens appearing.',
+            alias="logitBias",
+            description="LogitBias modifies the likelihood of specified tokens appearing.",
         ),
     ] = None
     max_tokens: Annotated[
         int | None,
         Field(
-            alias='maxTokens',
-            description='MaxTokens is the maximum number of tokens to generate.',
+            alias="maxTokens",
+            description="MaxTokens is the maximum number of tokens to generate.",
             ge=1,
         ),
     ] = None
     parallel_tool_calls: Annotated[
         bool | None,
         Field(
-            alias='parallelToolCalls',
-            description='ParallelToolCalls enables parallel tool calling where supported.',
+            alias="parallelToolCalls",
+            description="ParallelToolCalls enables parallel tool calling where supported.",
         ),
     ] = None
     presence_penalty: Annotated[
         str | None,
         Field(
-            alias='presencePenalty',
+            alias="presencePenalty",
             description='PresencePenalty penalizes tokens already present in the context\n(-2.0 to 2.0), e.g. "0.5".',
-            pattern='^-?[0-2](\\.\\d+)?$',
+            pattern="^-?[0-2](\\.\\d+)?$",
         ),
     ] = None
     seed: Annotated[
         int | None,
-        Field(description='Seed for deterministic generation (where supported).'),
+        Field(description="Seed for deterministic generation (where supported)."),
     ] = None
     stop_sequences: Annotated[
         list[str] | None,
         Field(
-            alias='stopSequences',
-            description='StopSequences are sequences where the model will stop generating.',
+            alias="stopSequences",
+            description="StopSequences are sequences where the model will stop generating.",
         ),
     ] = None
     temperature: Annotated[
         str | None,
         Field(
             description='Temperature controls randomness in the output (0.0 to 2.0), e.g. "0.7".',
-            pattern='^(0(\\.\\d+)?|1(\\.\\d+)?|2(\\.0+)?)$',
+            pattern="^(0(\\.\\d+)?|1(\\.\\d+)?|2(\\.0+)?)$",
         ),
     ] = None
     timeout_seconds: Annotated[
         int | None,
         Field(
-            alias='timeoutSeconds',
-            description='TimeoutSeconds bounds each model request.',
+            alias="timeoutSeconds",
+            description="TimeoutSeconds bounds each model request.",
             ge=1,
         ),
     ] = None
     top_k: Annotated[
         int | None,
         Field(
-            alias='topK',
-            description='TopK limits the number of tokens to consider for each step.',
+            alias="topK",
+            description="TopK limits the number of tokens to consider for each step.",
             ge=1,
         ),
     ] = None
     top_p: Annotated[
         str | None,
         Field(
-            alias='topP',
+            alias="topP",
             description='TopP controls nucleus sampling (0.0 to 1.0), e.g. "0.95".',
-            pattern='^(0(\\.\\d+)?|1(\\.0+)?)$',
+            pattern="^(0(\\.\\d+)?|1(\\.0+)?)$",
         ),
     ] = None

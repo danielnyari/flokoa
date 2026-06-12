@@ -2,8 +2,14 @@
   "name": "sample-agent",
   "description": "Local runner sample agent",
   "version": "0.1.0",
-  "capabilities": {"streaming": false},
-  "defaultInputModes": ["application/json"],
-  "defaultOutputModes": ["application/json"],
+  "capabilities": {
+    "streaming": false
+  },
+  "defaultInputModes": [
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "application/json"
+  ],
   "skills": []
 }

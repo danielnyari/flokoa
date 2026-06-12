@@ -28,14 +28,15 @@ WORKDIR /app
 # Layer 1 — dependency install (cached unless config files change)
 COPY pyproject.toml uv.lock ./
 COPY flokoa/pyproject.toml ./flokoa/pyproject.toml
+COPY flokoa-common/pyproject.toml ./flokoa-common/pyproject.toml
 COPY flokoa-types/pyproject.toml ./flokoa-types/pyproject.toml
 COPY flokoa-runner/pyproject.toml ./flokoa-runner/pyproject.toml
 
 # Stub packages so hatchling can discover them for workspace resolution
-RUN mkdir -p flokoa/src/flokoa flokoa-types/src/flokoa_types \
-             flokoa-runner/src/flokoa_runner && \
-    touch flokoa/src/flokoa/__init__.py flokoa-types/src/flokoa_types/__init__.py \
-          flokoa-runner/src/flokoa_runner/__init__.py
+RUN mkdir -p flokoa/src/flokoa flokoa-common/src/flokoa_common \
+             flokoa-types/src/flokoa_types flokoa-runner/src/flokoa_runner && \
+    touch flokoa/src/flokoa/__init__.py flokoa-common/src/flokoa_common/__init__.py \
+          flokoa-types/src/flokoa_types/__init__.py flokoa-runner/src/flokoa_runner/__init__.py
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --project flokoa-runner \
@@ -44,6 +45,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Layer 2 — install workspace source (only re-runs when src/ changes)
 COPY flokoa/README.md ./flokoa/README.md
 COPY flokoa/src ./flokoa/src
+COPY flokoa-common/README.md ./flokoa-common/README.md
+COPY flokoa-common/src ./flokoa-common/src
 COPY flokoa-types/README.md ./flokoa-types/README.md
 COPY flokoa-types/src ./flokoa-types/src
 COPY flokoa-runner/README.md ./flokoa-runner/README.md

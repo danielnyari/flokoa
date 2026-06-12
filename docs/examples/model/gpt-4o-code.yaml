@@ -9,20 +9,20 @@ metadata:
     use-case: code-generation
 spec:
   model: "gpt-4o"
-  
+
   providerRef:
     name: openai-provider
-  
+
   settings:
     # Lower temperature for more deterministic code
     temperature: "0.2"
-    
+
     # Higher token limit for longer code
     maxTokens: 16384
-    
+
     # More focused sampling
     topP: "0.1"
-    
+
     # Stop after code blocks
     stopSequences:
       - "```\n\n"

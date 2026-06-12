@@ -27,9 +27,7 @@ async def test_send_message_returns_completed(agent_url: str) -> None:
     message = create_text_message_object(content="What is 2+2? Answer in one word.")
 
     async for event in client.send_message(message):
-        assert isinstance(event, tuple), (
-            f"Expected ClientEvent tuple, got {type(event)}"
-        )
+        assert isinstance(event, tuple), f"Expected ClientEvent tuple, got {type(event)}"
         task, _update = event
         assert task.status.state == TaskState.completed
         assert task.artifacts, "Expected at least one artifact"

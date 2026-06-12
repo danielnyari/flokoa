@@ -15,11 +15,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from flokoa import context as flokoa_context
 from opentelemetry import metrics, trace
 from opentelemetry.trace import StatusCode
 from pydantic_ai.capabilities import Instrumentation, WrapperCapability
-
-from flokoa import context as flokoa_context
 
 if TYPE_CHECKING:
     from pydantic_ai._run_context import RunContext

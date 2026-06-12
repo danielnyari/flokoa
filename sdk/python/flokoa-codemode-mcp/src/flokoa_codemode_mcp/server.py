@@ -50,6 +50,7 @@ class CodemodeServer:
         openapi_spec_str_type: Literal["json", "yaml"] = "json",
         auth_scheme: AuthScheme | None = None,
         auth_credential: AuthCredential | None = None,
+        allow_internal: bool = False,
         external_functions: dict[str, Callable[..., Any]] | None = None,
         external_function_stubs: dict[str, str] | None = None,
         resource_limits: ResourceLimits | None = None,
@@ -62,7 +63,11 @@ class CodemodeServer:
             openapi_spec_str: OpenAPI spec as a JSON or YAML string.
             openapi_spec_str_type: Format of openapi_spec_str.
             auth_scheme: Auth scheme applied to all API operations.
-            auth_credential: Auth credential applied to all API operations.
+            auth_credential: Auth credential applied to all API operations
+                (exchanged per call via flokoa_common.auth.exchangers).
+            allow_internal: Skip SSRF protection for API request URLs,
+                permitting private/internal addresses (for trusted
+                in-cluster APIs).
             external_functions: Additional callables available in the sandbox.
             external_function_stubs: Explicit type stubs for external functions,
                 keyed by name. Overrides auto-generated stubs.
@@ -71,6 +76,7 @@ class CodemodeServer:
         self._external_functions = external_functions or {}
         self._auth_scheme = auth_scheme
         self._auth_credential = auth_credential
+        self._allow_internal = allow_internal
         self._resource_limits = resource_limits
 
         # Parse the OpenAPI spec
@@ -102,6 +108,7 @@ class CodemodeServer:
             stubs=self._stubs,
             auth_scheme=self._auth_scheme,
             auth_credential=self._auth_credential,
+            allow_internal=self._allow_internal,
             resource_limits=self._resource_limits,
         )
 

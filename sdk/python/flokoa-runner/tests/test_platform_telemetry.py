@@ -1,6 +1,7 @@
 """flokoa.platform/telemetry: traces + metrics with zero user configuration."""
 
 import pytest
+from flokoa import context as flokoa_context
 from flokoa_runner.agent import build_agent
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
@@ -8,8 +9,6 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-from flokoa import context as flokoa_context
 
 pytestmark = pytest.mark.anyio
 

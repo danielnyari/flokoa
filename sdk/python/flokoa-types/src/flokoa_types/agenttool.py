@@ -16,19 +16,17 @@ class SecretRef(BaseModel):
     )
     key: Annotated[
         str,
-        Field(
-            description='The key of the secret to select from.  Must be a valid secret key.'
-        ),
+        Field(description="The key of the secret to select from.  Must be a valid secret key."),
     ]
     name: Annotated[
         str | None,
         Field(
-            description='Name of the referent.\nThis field is effectively required, but due to backwards compatibility is\nallowed to be empty. Instances of this type with an empty value here are\nalmost certainly wrong.\nMore info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+            description="Name of the referent.\nThis field is effectively required, but due to backwards compatibility is\nallowed to be empty. Instances of this type with an empty value here are\nalmost certainly wrong.\nMore info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names"
         ),
-    ] = ''
+    ] = ""
     optional: Annotated[
         bool | None,
-        Field(description='Specify whether the Secret or its key must be defined'),
+        Field(description="Specify whether the Secret or its key must be defined"),
     ] = None
 
 
@@ -46,8 +44,8 @@ class HeaderSecret(BaseModel):
     secret_ref: Annotated[
         SecretRef,
         Field(
-            alias='secretRef',
-            description='SecretRef selects the Secret key holding the header value.',
+            alias="secretRef",
+            description="SecretRef selects the Secret key holding the header value.",
         ),
     ]
 
@@ -56,17 +54,15 @@ class ServiceRef(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
     )
-    name: Annotated[str, Field(description='Name is the service name.', min_length=1)]
+    name: Annotated[str, Field(description="Name is the service name.", min_length=1)]
     namespace: Annotated[
         str | None,
-        Field(
-            description="Namespace is the service namespace. Defaults to the AgentTool's namespace."
-        ),
+        Field(description="Namespace is the service namespace. Defaults to the AgentTool's namespace."),
     ] = None
     port: Annotated[
         int | None,
         Field(
-            description='Port is the service port number.\nMutually exclusive with PortName.',
+            description="Port is the service port number.\nMutually exclusive with PortName.",
             ge=1,
             le=65535,
         ),
@@ -74,20 +70,20 @@ class ServiceRef(BaseModel):
     port_name: Annotated[
         str | None,
         Field(
-            alias='portName',
-            description='PortName is the service port name.\nMutually exclusive with Port.',
+            alias="portName",
+            description="PortName is the service port name.\nMutually exclusive with Port.",
         ),
     ] = None
 
 
 class Transport(Enum):
-    streamable_http = 'streamableHTTP'
-    sse = 'sse'
+    streamable_http = "streamableHTTP"
+    sse = "sse"
 
 
 class Type(Enum):
-    mcp = 'mcp'
-    openapi = 'openapi'
+    mcp = "mcp"
+    openapi = "openapi"
 
 
 class AgentToolSpec(BaseModel):
@@ -97,28 +93,26 @@ class AgentToolSpec(BaseModel):
     allowed_tools: Annotated[
         list[str] | None,
         Field(
-            alias='allowedTools',
+            alias="allowedTools",
             description="AllowedTools filters the server's tools to this list.",
         ),
     ] = None
     description: Annotated[
         str | None,
         Field(
-            description='Description is a human-readable description of the MCP server,\nsurfaced to the model where supported.'
+            description="Description is a human-readable description of the MCP server,\nsurfaced to the model where supported."
         ),
     ] = None
     header_secrets: Annotated[
         list[HeaderSecret] | None,
         Field(
-            alias='headerSecrets',
-            description='HeaderSecrets populate headers from Secrets. Values are delivered as\n${secret:…} placeholders resolved in the runner — never written into\nthe compiled spec.',
+            alias="headerSecrets",
+            description="HeaderSecrets populate headers from Secrets. Values are delivered as\n${secret:…} placeholders resolved in the runner — never written into\nthe compiled spec.",
         ),
     ] = None
     headers: Annotated[
         dict[str, str] | None,
-        Field(
-            description='Headers are additional HTTP headers to send to the MCP server.'
-        ),
+        Field(description="Headers are additional HTTP headers to send to the MCP server."),
     ] = None
     path: Annotated[
         str | None,
@@ -129,15 +123,15 @@ class AgentToolSpec(BaseModel):
     service_ref: Annotated[
         ServiceRef | None,
         Field(
-            alias='serviceRef',
-            description='ServiceRef references an in-cluster Service serving MCP.\nMutually exclusive with URL.',
+            alias="serviceRef",
+            description="ServiceRef references an in-cluster Service serving MCP.\nMutually exclusive with URL.",
         ),
     ] = None
     timeout_seconds: Annotated[
         int | None,
         Field(
-            alias='timeoutSeconds',
-            description='TimeoutSeconds is the request timeout in seconds for MCP calls.',
+            alias="timeoutSeconds",
+            description="TimeoutSeconds is the request timeout in seconds for MCP calls.",
             ge=1,
             le=300,
         ),
@@ -145,20 +139,16 @@ class AgentToolSpec(BaseModel):
     tool_prefix: Annotated[
         str | None,
         Field(
-            alias='toolPrefix',
+            alias="toolPrefix",
             description='ToolPrefix prefixes every tool name from this server (e.g. "petstore"\nturns "search" into "petstore_search"), avoiding collisions between\nservers.',
         ),
     ] = None
     transport: Annotated[
         Transport | None,
-        Field(description='Transport selects the MCP transport protocol.'),
-    ] = 'streamableHTTP'
-    type: Annotated[
-        Type | None, Field(description='Type specifies the kind of tool.')
-    ] = 'mcp'
+        Field(description="Transport selects the MCP transport protocol."),
+    ] = "streamableHTTP"
+    type: Annotated[Type | None, Field(description="Type specifies the kind of tool.")] = "mcp"
     url: Annotated[
         str | None,
-        Field(
-            description='URL is the full URL of the MCP server. Mutually exclusive with ServiceRef.'
-        ),
+        Field(description="URL is the full URL of the MCP server. Mutually exclusive with ServiceRef."),
     ] = None
