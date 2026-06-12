@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from fastapi.openapi.models import Operation
 
@@ -45,9 +46,15 @@ def _route_kwargs_to_locations(
         if location == "path":
             path_params[original_k] = v
         elif location == "query":
-            if v:
+            # Keep falsy-but-meaningful values (0, False, ""); drop only None.
+            if v is not None:
                 query_params[original_k] = v
         elif location == "header":
+            # Strip CR/LF so model-provided values cannot smuggle extra
+            # headers (header injection); httpx/h11 would reject them at the
+            # wire level, but the raw value would still echo into error logs.
+            if isinstance(v, str):
+                v = v.replace("\r", "").replace("\n", "")
             header_params[original_k] = v
         elif location == "cookie":
             cookie_params[original_k] = v
@@ -146,10 +153,12 @@ def prepare_request_params(
     if auth_additional_headers:
         header_params.update(auth_additional_headers)
 
-    # Construct URL
+    # Construct URL. Path param values are percent-encoded (no characters
+    # left "safe") so model-provided values like `../admin` or embedded `/`
+    # cannot traverse outside the templated path segment.
     base_url = endpoint.base_url or ""
     base_url = base_url[:-1] if base_url.endswith("/") else base_url
-    url = f"{base_url}{endpoint.path.format(**path_params)}"
+    url = f"{base_url}{endpoint.path.format(**{k: quote(str(v), safe='') for k, v in path_params.items()})}"
 
     # Construct body
     body_kwargs = _build_request_body(operation, parameters, kwargs, header_params)

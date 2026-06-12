@@ -8,10 +8,10 @@ metadata:
     model: gpt-4o
 spec:
   model: "gpt-4o"
-  
+
   providerRef:
     name: openai-provider
-  
+
   settings:
     temperature: "0.7"
     maxTokens: 8192

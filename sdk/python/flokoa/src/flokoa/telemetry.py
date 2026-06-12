@@ -55,7 +55,7 @@ def init_telemetry(
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.trace.propagation import TraceContextTextMapPropagator
+        from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
     except ImportError:
         logger.debug("OpenTelemetry packages not installed — tracing disabled")
         return

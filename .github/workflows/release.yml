@@ -12,8 +12,9 @@ name: Release
 #   3. Packages the Helm chart and pushes it to the GHCR OCI registry.
 #   4. Generates a single-file `install.yaml` kustomize bundle.
 #   5. Creates a GitHub Release with the CHANGELOG notes + install.yaml asset.
-#   6. (Opt-in) Publishes `flokoa` + `flokoa-types` to PyPI when the
-#      repository variable PUBLISH_PYPI == 'true' and PYPI_TOKEN is set.
+#   6. (Opt-in) Publishes `flokoa`, `flokoa-types`, `flokoa-common`, and
+#      `flokoa-openapi` to PyPI when the repository variable
+#      PUBLISH_PYPI == 'true' and PYPI_TOKEN is set.
 
 on:
   push:
@@ -220,7 +221,10 @@ jobs:
           files: dist/install.yaml
 
   # ---------------------------------------------------------------------------
-  # (Opt-in) Publish flokoa + flokoa-types to PyPI.
+  # (Opt-in) Publish the public Python packages to PyPI: flokoa plus its
+  # runtime workspace deps (flokoa-types, flokoa-common) and the standalone
+  # flokoa-openapi capability package. flokoa-runner and flokoa-codemode-mcp
+  # ship as container images, not PyPI packages.
   # Enable by setting repository variable PUBLISH_PYPI == 'true' and providing
   # the PYPI_TOKEN secret.
   # ---------------------------------------------------------------------------
@@ -250,7 +254,9 @@ jobs:
       - name: Build wheels
         run: |
           uv build --package flokoa-types --out-dir dist
+          uv build --package flokoa-common --out-dir dist
           uv build --package flokoa --out-dir dist
+          uv build --package flokoa-openapi --out-dir dist
 
       - name: Publish to PyPI
         env:

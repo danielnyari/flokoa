@@ -8,10 +8,10 @@ metadata:
     model: claude-sonnet-4
 spec:
   model: "claude-sonnet-4-20250514"
-  
+
   providerRef:
     name: anthropic-provider
-  
+
   settings:
     temperature: "0.7"
     maxTokens: 8192

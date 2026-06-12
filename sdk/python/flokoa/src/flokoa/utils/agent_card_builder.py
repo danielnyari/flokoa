@@ -8,11 +8,12 @@ from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency
-    from pydantic_ai import Agent as PydanticAIAgent
+    from pydantic_ai import Agent as _PydanticAgent
 
+    PydanticAIAgent: type[Any] | None = _PydanticAgent
     _PYDANTIC_AI_AVAILABLE = True
 except ImportError:  # pragma: no cover - optional dependency
-    PydanticAIAgent = None  # type: ignore[assignment]
+    PydanticAIAgent = None
     _PYDANTIC_AI_AVAILABLE = False
 
 

@@ -19,8 +19,8 @@ class HttpCredentials(BaseModelWithConfig):
     """Represents the secret token value for HTTP authentication, like user name, password, oauth token, etc."""
 
     username: str | None = None
-    password: str | None = None
-    token: str | None = None
+    password: str | None = Field(default=None, repr=False)
+    token: str | None = Field(default=None, repr=False)
 
     @classmethod
     def model_validate(cls, data: dict[str, Any]) -> HttpCredentials:
@@ -47,17 +47,20 @@ class OAuth2Auth(BaseModelWithConfig):
     """Represents credential value and its metadata for a OAuth2 credential."""
 
     client_id: str | None = None
-    client_secret: str | None = None
+    client_secret: str | None = Field(default=None, repr=False)
     # tool or adk can generate the auth_uri with the state info thus client
     # can verify the state
     auth_uri: str | None = None
     state: str | None = None
     # tool or adk can decide the redirect_uri if they don't want client to decide
     redirect_uri: str | None = None
-    auth_response_uri: str | None = None
-    auth_code: str | None = None
-    access_token: str | None = None
-    refresh_token: str | None = None
+    # The auth response URI carries the authorization code in its query
+    # string, and the code itself is exchangeable for tokens — both are
+    # secret-bearing, like the tokens below, and excluded from repr().
+    auth_response_uri: str | None = Field(default=None, repr=False)
+    auth_code: str | None = Field(default=None, repr=False)
+    access_token: str | None = Field(default=None, repr=False)
+    refresh_token: str | None = Field(default=None, repr=False)
     expires_at: int | None = None
     expires_in: int | None = None
     audience: str | None = None
@@ -107,7 +110,7 @@ class ServiceAccountCredential(BaseModelWithConfig):
     type_: str = Field("", alias="type")
     project_id: str
     private_key_id: str
-    private_key: str
+    private_key: str = Field(repr=False)
     client_email: str
     client_id: str
     auth_uri: str

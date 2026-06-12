@@ -2,6 +2,7 @@
 Simple mock LLM stub service for e2e testing.
 Returns deterministic responses for OpenAI-compatible API calls.
 """
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 

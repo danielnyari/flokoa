@@ -22,7 +22,9 @@ repos:
     hooks:
       - id: ruff-check
         args: [ --fix, --config=sdk/python/pyproject.toml ]
-        exclude: ^sdk/python/flokoa/tests/
+        # flokoa-types models are owned by datamodel-codegen; verify-codegen
+        # enforces their exact (un-ruffed) format, so keep ruff off them.
+        exclude: ^sdk/python/(flokoa/tests/|flokoa-types/src/flokoa_types/)
       - id: ruff-format
         args: [ --config=sdk/python/pyproject.toml ]
-        exclude: ^sdk/python/flokoa/tests/
+        exclude: ^sdk/python/(flokoa/tests/|flokoa-types/src/flokoa_types/)

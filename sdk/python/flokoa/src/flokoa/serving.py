@@ -51,6 +51,8 @@ class SpecAgentExecutor(AgentExecutor):
         request = context.get_user_input()
         task = context.current_task
         if not task:
+            if context.message is None:
+                raise ValueError("A2A request has neither a current task nor a message")
             task = new_task(context.message)
             await event_queue.enqueue_event(task)
 

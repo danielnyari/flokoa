@@ -2,6 +2,7 @@
 Simple test agent for e2e testing.
 This agent demonstrates template-based instruction handling.
 """
+
 from pydantic_ai import Agent
 
 # Create a simple agent that will use templated instructions.
