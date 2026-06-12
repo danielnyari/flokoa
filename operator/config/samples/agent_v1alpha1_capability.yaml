@@ -1,0 +1,34 @@
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Capability
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: kb-search
+spec:
+  # Digest-pinned wheelhouse artifact (runtime contract §4). `flokoa
+  # capability push` (roadmap 10) generates this CR from the artifact
+  # manifest, so the mirrored fields below never drift in practice.
+  artifact: ghcr.io/danielnyari/capabilities/kb-search@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  version: 0.1.0
+  entrypoint: flokoa_kb_search.capability:KBSearch
+  schemaPolicy: strict
+  configSchema:
+    type: object
+    required: [endpoint]
+    properties:
+      endpoint:
+        type: string
+        pattern: "^https://"
+      apiKey:
+        type: string
+      maxResults:
+        type: integer
+        default: 5
+    additionalProperties: false
+  requires:
+    python: "3.13"
+    pydanticAI: ">=1.107,<2"
+    flokoaRunner: ">=0.2"
+  dependencies:
+    - kb-search-client==1.4.2

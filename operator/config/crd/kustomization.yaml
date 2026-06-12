@@ -8,6 +8,7 @@ resources:
 - bases/agent.flokoa.ai_modelproviders.yaml
 - bases/agent.flokoa.ai_instructions.yaml
 - bases/agent.flokoa.ai_agentworkflows.yaml
+- bases/agent.flokoa.ai_capabilities.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

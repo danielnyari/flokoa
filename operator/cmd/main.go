@@ -258,6 +258,7 @@ func main() {
 		Models:        &repo.ModelRepoImpl{Client: k8sClient},
 		Providers:     &repo.ModelProviderRepoImpl{Client: k8sClient},
 		Instructions:  instructionRepo,
+		Capabilities:  &repo.CapabilityRepoImpl{Client: k8sClient},
 		ConfigMaps:    &repo.ConfigMapRepoImpl{Client: k8sClient},
 		Deployments:   &repo.DeploymentRepoImpl{Client: k8sClient},
 		Services:      serviceRepo,
@@ -307,9 +308,20 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Instruction")
 		os.Exit(1)
 	}
+	if err := (&controller.CapabilityReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Capability")
+		os.Exit(1)
+	}
 	if enableWebhooks {
-		if err := agentv1alpha1.SetupAgentWebhookWithManager(mgr); err != nil {
+		if err := webhookagentv1alpha1.SetupAgentWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Agent")
+			os.Exit(1)
+		}
+		if err := webhookagentv1alpha1.SetupCapabilityWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Capability")
 			os.Exit(1)
 		}
 		if err := agentv1alpha1.SetupAgentToolWebhookWithManager(mgr); err != nil {

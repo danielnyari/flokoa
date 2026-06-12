@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Capability CRD + admission** (roadmap 08): `Capability` is a versioned,
+  digest-pinned, schema-published unit of agent behavior. Agent admission now
+  machine-checks the compatibility matrix before anything deploys —
+  attachment config against the capability's published JSON Schema
+  (`${secret:NAME}` placeholders validate as shapes), the `requires` tuple
+  against the Agent's runner baseline, and dependency-conflict detection
+  across attachments plus the runner lockfile. The compiler re-runs the same
+  checks on every recompile and emits attachment entries + artifact delivery
+  inputs; `schemaPolicy: permissive` is loudly surfaced in status, warnings,
+  and printcolumns. Artifact delivery (09) and the capability CLI (10) are
+  next.
+
 ## [0.2.0] - 2026-06-11
 
 First post-pivot release, executing Phase 0 of the

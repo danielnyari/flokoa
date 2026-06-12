@@ -10,26 +10,6 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-agent-flokoa-ai-v1alpha1-agent
-  failurePolicy: Fail
-  name: vagent-v1alpha1.kb.io
-  rules:
-  - apiGroups:
-    - agent.flokoa.ai
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - agents
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
       path: /validate-agent-flokoa-ai-v1alpha1-agenttool
   failurePolicy: Fail
   name: vagenttool-v1alpha1.kb.io
@@ -130,6 +110,26 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-agent
+  failurePolicy: Fail
+  name: vagent-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - agents
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-agent-flokoa-ai-v1alpha1-agentworkflow
   failurePolicy: Fail
   name: vagentworkflow-v1alpha1.kb.io
@@ -143,4 +143,24 @@ webhooks:
     - UPDATE
     resources:
     - agentworkflows
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-agent-flokoa-ai-v1alpha1-capability
+  failurePolicy: Fail
+  name: vcapability-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - agent.flokoa.ai
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - capabilities
   sideEffects: None

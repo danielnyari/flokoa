@@ -95,6 +95,26 @@ func (f *FakeServiceRepo) GetService(_ context.Context, key types.NamespacedName
 	return svc.DeepCopy(), nil
 }
 
+// FakeCapabilityRepo implements repo.CapabilityReader.
+type FakeCapabilityRepo struct {
+	mu           sync.RWMutex
+	Capabilities map[types.NamespacedName]*agentv1alpha1.Capability
+}
+
+func NewFakeCapabilityRepo() *FakeCapabilityRepo {
+	return &FakeCapabilityRepo{Capabilities: make(map[types.NamespacedName]*agentv1alpha1.Capability)}
+}
+
+func (f *FakeCapabilityRepo) GetCapability(_ context.Context, key types.NamespacedName) (*agentv1alpha1.Capability, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	capability, ok := f.Capabilities[key]
+	if !ok {
+		return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "capabilities"}, key.Name)
+	}
+	return capability.DeepCopy(), nil
+}
+
 // FakeAgentToolRepo implements repo.AgentToolReader and repo.AgentToolWriter.
 type FakeAgentToolRepo struct {
 	mu         sync.RWMutex

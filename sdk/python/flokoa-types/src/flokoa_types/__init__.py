@@ -6,6 +6,7 @@ generated modules by hand.
 
 from flokoa_types.agentcard import AgentCard
 from flokoa_types.agenttool import AgentToolSpec
+from flokoa_types.capability import CapabilitySpec
 from flokoa_types.modelsettings import ModelSettings
 
-__all__ = ["AgentCard", "AgentToolSpec", "ModelSettings"]
+__all__ = ["AgentCard", "AgentToolSpec", "CapabilitySpec", "ModelSettings"]

@@ -19,6 +19,9 @@ import (
 
 const testNS = "default"
 
+// platformTelemetry is the injected platform entry used across compiler tests.
+const platformTelemetry = "flokoa.platform/telemetry"
+
 func nsKey(name string) types.NamespacedName {
 	return types.NamespacedName{Name: name, Namespace: testNS}
 }
@@ -28,6 +31,7 @@ type fixture struct {
 	providers    *fakes.FakeModelProviderRepo
 	instructions *fakes.FakeInstructionRepo
 	tools        *fakes.FakeAgentToolRepo
+	capabilities *fakes.FakeCapabilityRepo
 	services     *fakes.FakeServiceRepo
 	compiler     *Compiler
 }
@@ -41,6 +45,7 @@ func newFixture(opts Options) *fixture {
 		providers:    fakes.NewFakeModelProviderRepo(),
 		instructions: fakes.NewFakeInstructionRepo(),
 		tools:        fakes.NewFakeAgentToolRepo(),
+		capabilities: fakes.NewFakeCapabilityRepo(),
 		services:     fakes.NewFakeServiceRepo(),
 	}
 	f.compiler = New(Deps{
@@ -48,6 +53,7 @@ func newFixture(opts Options) *fixture {
 		Providers:    f.providers,
 		Instructions: f.instructions,
 		AgentTools:   f.tools,
+		Capabilities: f.capabilities,
 		Services:     f.services,
 	}, opts)
 	return f
@@ -306,7 +312,7 @@ func TestCompileUnknownRunnerVersion(t *testing.T) {
 
 func TestCompileInjectedCapabilitiesAppendLast(t *testing.T) {
 	f := newFixture(Options{
-		Injected: []InjectedCapability{{Name: "flokoa.platform/telemetry"}},
+		Injected: []InjectedCapability{{Name: platformTelemetry}},
 	})
 	agent := agentWith(func(a *agentv1alpha1.Agent) {
 		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{
@@ -328,10 +334,10 @@ func TestCompileInjectedCapabilitiesAppendLast(t *testing.T) {
 	}
 
 	caps := res.Doc["capabilities"].([]any)
-	if caps[len(caps)-1] != "flokoa.platform/telemetry" {
+	if caps[len(caps)-1] != platformTelemetry {
 		t.Errorf("injected entries must be last: %v", caps)
 	}
-	if len(res.Injected) != 1 || res.Injected[0] != "flokoa.platform/telemetry" {
+	if len(res.Injected) != 1 || res.Injected[0] != platformTelemetry {
 		t.Errorf("Injected = %v", res.Injected)
 	}
 }

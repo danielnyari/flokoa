@@ -58,3 +58,46 @@ def test_reserved_platform_capability_names():
         "flokoa.platform/budget-guardrail",
     ):
         assert name in caps
+
+
+def test_parse_lock_versions_filters_platform_markers_and_normalizes():
+    """The embedded operator baseline must reflect what the linux runner installs.
+
+    Platform-gated packages (win32) are dropped so they cannot seed
+    false-positive capability dependency conflicts; names are PEP 503
+    normalized to match the Go conflict detector.
+    """
+    import sys
+
+    sys.path.insert(0, str(PKG_ROOT / "hack"))
+    from gen_runner_manifest import normalize_name, parse_lock_versions
+
+    lock = "\n".join(
+        [
+            "Flokoa_Common==1.0.0",
+            "httpx==0.28.1",
+            "pywin32==311 ; sys_platform == 'win32'",
+            "colorama==0.4.6 ; sys_platform == 'win32'",
+            "jeepney==0.9.0 ; sys_platform == 'linux'",
+            "hf-xet==1.3.0 ; platform_machine == 'x86_64' or platform_machine == 'aarch64'",
+        ]
+    )
+    versions = parse_lock_versions(lock)
+
+    assert versions["flokoa-common"] == "1.0.0"  # normalized (_ -> -, lowercased)
+    assert versions["httpx"] == "0.28.1"
+    assert versions["jeepney"] == "0.9.0"  # linux marker holds
+    assert versions["hf-xet"] == "1.3.0"  # holds for a supported arch
+    assert "pywin32" not in versions  # win32-only, never installed on the runner
+    assert "colorama" not in versions
+
+    assert normalize_name("A__b--c..d") == "a-b-c-d"
+
+
+def test_embedded_baseline_excludes_win32_packages():
+    baseline_path = (
+        REPO_ROOT / "operator" / "internal" / "spec" / "baselines" / f"runner-baseline-{RUNNER_VERSION}.json"
+    )
+    packages = json.loads(baseline_path.read_text())["packages"]
+    assert "pywin32" not in packages
+    assert packages["pydantic-ai"] == MANIFEST["pydantic-ai"]

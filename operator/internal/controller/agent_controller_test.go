@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -61,6 +62,7 @@ func newAgentReconciler() *AgentReconciler {
 		Models:        &repo.ModelRepoImpl{Client: k8sClient},
 		Providers:     &repo.ModelProviderRepoImpl{Client: k8sClient},
 		Instructions:  &repo.InstructionRepoImpl{Client: k8sClient},
+		Capabilities:  &repo.CapabilityRepoImpl{Client: k8sClient},
 		ConfigMaps:    &repo.ConfigMapRepoImpl{Client: k8sClient},
 		Deployments:   &repo.DeploymentRepoImpl{Client: k8sClient},
 		Services:      serviceRepo,
@@ -746,6 +748,33 @@ var _ = Describe("Agent Controller", func() {
 
 				r := newAgentReconciler()
 				requests := r.findAgentsForAgentTool(ctx, tool)
+				Expect(requests).To(ContainElement(reconcile.Request{NamespacedName: typeNamespacedName}))
+			})
+
+			It("findAgentsForCapability should return agents attaching the capability", func() {
+				capName := fmt.Sprintf("watch-cap-%d", time.Now().UnixNano())
+
+				agent := minimalAgent(typeNamespacedName)
+				agent.Spec.Capabilities = []agentv1alpha1.CapabilityAttachment{
+					{Ref: agentv1alpha1.NamespacedRef{Name: capName}},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				capability := &agentv1alpha1.Capability{
+					ObjectMeta: metav1.ObjectMeta{Name: capName, Namespace: agentNamespace},
+					Spec: agentv1alpha1.CapabilitySpec{
+						Artifact:     "ghcr.io/danielnyari/capabilities/kb@sha256:" + strings.Repeat("a", 64),
+						Version:      "0.1.0",
+						Entrypoint:   "flokoa_kb.capability:KB",
+						SchemaPolicy: agentv1alpha1.SchemaPolicyPermissive,
+						Requires:     agentv1alpha1.CapabilityRequires{FlokoaRunner: ">=0.2"},
+					},
+				}
+				Expect(k8sClient.Create(ctx, capability)).To(Succeed())
+				defer func() { _ = k8sClient.Delete(ctx, capability) }()
+
+				r := newAgentReconciler()
+				requests := r.findAgentsForCapability(ctx, capability)
 				Expect(requests).To(ContainElement(reconcile.Request{NamespacedName: typeNamespacedName}))
 			})
 

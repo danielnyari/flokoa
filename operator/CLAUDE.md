@@ -54,9 +54,10 @@ The layering and its **enforced** dependency directions are in
 
 ## Core CRDs
 
-Seven CRDs under `agent.flokoa.ai/v1alpha1` (full schemas in [`../docs/`](../docs/)):
+Eight CRDs under `agent.flokoa.ai/v1alpha1` (full schemas in [`../docs/`](../docs/)):
 
 - **Agent** — composition root; compiles an inline AgentSpec fragment + `modelRef`/`instructionRefs`/`tools`/`secretRefs` into one resolved, schema-validated AgentSpec (`internal/app/agent/compiler`), delivered as the `<agent>-agent-spec` ConfigMap.
+- **Capability** — versioned, digest-pinned unit of agent behavior (OCI wheelhouse artifact mirror); admission machine-checks config schema, `requires` tuple, and dependency conflicts before anything deploys. See [`../docs/capability.md`](../docs/capability.md).
 - **AgentTool** — declarative MCP endpoint (`url`/`serviceRef`, transport, header secrets, `allowedTools`). The `openapi` type is retired.
 - **Model** / **ModelProvider** — shareable model config + provider connection (OpenAI, Anthropic, Google, Bedrock).
 - **Instruction** — system prompt → ConfigMap.

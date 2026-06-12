@@ -136,10 +136,11 @@ type AgentSpec struct {
 	// +optional
 	Tools []NamespacedRef `json:"tools,omitempty"`
 
-	// Capabilities reference Capability CRs with per-agent config, validated
-	// against the capability's published schema at admission.
-	// Capability CRs ship in a later release (roadmap 08); the webhook
-	// rejects entries until then.
+	// Capabilities reference Capability CRs with per-agent config. At
+	// admission the config is validated against the capability's published
+	// JSON Schema, the capability's requires tuple is checked against the
+	// agent's runner version, and dependency conflicts across attachments are
+	// rejected.
 	// +optional
 	Capabilities []CapabilityAttachment `json:"capabilities,omitempty"`
 

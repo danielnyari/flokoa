@@ -17,7 +17,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 webhooks:
-  {{- range $resource := list "agent" "agenttool" "agenttrigger" "instruction" "model" "modelprovider" "agentworkflow" }}
+  {{- range $resource := list "agent" "agenttool" "agenttrigger" "capability" "instruction" "model" "modelprovider" "agentworkflow" }}
   - name: v{{ $resource }}-v1alpha1.kb.io
     admissionReviewVersions:
       - v1
@@ -39,7 +39,11 @@ webhooks:
           - CREATE
           - UPDATE
         resources:
+          {{- if eq $resource "capability" }}
+          - capabilities
+          {{- else }}
           - {{ $resource }}s
+          {{- end }}
     sideEffects: None
   {{- end }}
 {{- end }}

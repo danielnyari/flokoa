@@ -356,6 +356,26 @@ generate-python-models: manifests python-venv ## Generate Python Pydantic v2 mod
 	@perl -pi -e 's/populate_by_name=True,$$/populate_by_name=True,\n        populate_by_alias=True,/' $(PYTHON_MODELS_DIR)/agentworkflow.py
 	@rm /tmp/agentworkflow_schema.json
 	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/agentworkflow.py"
+	@# Extract CapabilitySpec schema
+	@yq eval -o json '.spec.versions[0].schema.openAPIV3Schema.properties.spec' \
+		config/crd/bases/agent.flokoa.ai_capabilities.yaml > /tmp/capability_schema.json
+	@yq eval -i -o json '.title = "CapabilitySpec"' /tmp/capability_schema.json
+	@yq eval -i -o json '.properties.requires.title = "CapabilityRequires"' /tmp/capability_schema.json
+	@yq eval -i -o json '.properties.provenance.title = "CapabilityProvenance"' /tmp/capability_schema.json
+	@yq eval -i -o json '.properties.schemaPolicy.title = "SchemaPolicy"' /tmp/capability_schema.json
+	@# Generate CapabilitySpec Pydantic v2 models
+	@$(DATAMODEL_CODEGEN) \
+		--input /tmp/capability_schema.json \
+		--input-file-type jsonschema \
+		--output-model-type pydantic_v2.BaseModel \
+		--snake-case-field \
+		--use-annotated \
+		--allow-population-by-field-name \
+		--use-title-as-name \
+		--class-name CapabilitySpec \
+		--output $(PYTHON_MODELS_DIR)/capability.py
+	@rm /tmp/capability_schema.json
+	@echo "Generated Python models at $(PYTHON_MODELS_DIR)/capability.py"
 
 ##@ gRPC Server
 

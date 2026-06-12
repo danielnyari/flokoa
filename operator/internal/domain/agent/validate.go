@@ -15,10 +15,6 @@ func ValidateSpec(agent *agentv1alpha1.Agent) error {
 		return fmt.Errorf("runtime.isolation %q is not available yet (roadmap P1)", agentv1alpha1.IsolationSession)
 	}
 
-	if len(agent.Spec.Capabilities) > 0 {
-		return fmt.Errorf("spec.capabilities (Capability references) are not available yet (roadmap 08)")
-	}
-
 	// An agent needs a model from somewhere: the fragment or a Model ref.
 	hasInlineModel := agent.Spec.Spec != nil && agent.Spec.Spec.Model != ""
 	if !hasInlineModel && agent.Spec.ModelRef == nil {
