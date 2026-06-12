@@ -5,10 +5,28 @@ The `ModelProvider` resource configures connection settings for Large Language M
 ## Overview
 
 A ModelProvider:
-- Stores API credentials and connection configuration
+- **References** an API-key / service-account Secret and connection config — it never stores or resolves the credential value itself
+- Is the projection mechanism **behind [Model](model.md)**: during compilation the operator turns the referenced provider into provider-native env vars and a pydantic-ai model prefix injected into the generic runner (see [Role in compilation](#role-in-compilation))
 - Can be shared across multiple Model resources
-- Supports multiple LLM providers
-- Handles authentication and endpoint configuration
+- Supports OpenAI, Anthropic, Google, and AWS Bedrock
+
+## Role in compilation
+
+A ModelProvider never appears in the compiled AgentSpec directly. An Agent references a
+[Model](model.md), which references a ModelProvider via `providerRef`. During compilation the
+controller resolves the provider into:
+
+- the **pydantic-ai model prefix** (`openai:`, `anthropic:`, `google-gla`/`google-vertex`,
+  `bedrock:`) joined with the Model's identifier, and
+- **provider-native environment variables** projected into the generic runner pod
+  (`OPENAI_API_KEY` via a Secret ref, `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `AWS_REGION`,
+  `GOOGLE_CLOUD_PROJECT`/`GOOGLE_CLOUD_LOCATION`, `GOOGLE_APPLICATION_CREDENTIALS_JSON`, …).
+
+Secret values are **never resolved operator-side** and never written into any ConfigMap — the
+API-key Secret is projected as an env var and read by the SDK inside the runner. For Google, the
+controller selects `google-vertex` when `project`/`location` or a service-account key is set,
+otherwise `google-gla` (the API-key Generative Language API). Rotating a provider or its Secret
+recompiles every Agent that (via its Model) references it.
 
 ## Supported Providers
 
@@ -28,7 +46,7 @@ spec:
   apiKeySecretRef:
     name: api-credentials
     key: api-key
-  
+
   # Exactly one provider configuration:
   openai: {}
   # OR anthropic: {}
@@ -49,17 +67,13 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  
+
   openai:
     # Optional: override default endpoint
     baseURL: "https://api.openai.com/v1"
-    
-    # Optional: organization ID
-    organizationID: "org-xxx"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60
 ```
+
+> Per-request timeouts live on the [Model](model.md) (`spec.settings.timeoutSeconds`), not on the provider.
 
 **Create the secret:**
 ```bash
@@ -78,13 +92,10 @@ spec:
   apiKeySecretRef:
     name: anthropic-credentials
     key: api-key
-  
+
   anthropic:
     # Optional: override default endpoint
     baseURL: "https://api.anthropic.com"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60
 ```
 
 **Create the secret:**
@@ -106,9 +117,9 @@ spec:
   apiKeySecretRef:
     name: google-credentials
     key: api-key
-  
-  google:
-    timeoutSeconds: 60
+
+  # Empty block selects API-key mode (google-gla)
+  google: {}
 ```
 
 For Vertex AI (requires service account):
@@ -122,12 +133,10 @@ spec:
   google:
     project: "my-gcp-project"
     location: "us-central1"
-    
+
     serviceAccountKeySecretRef:
       name: gcp-sa-credentials
       key: service-account.json
-    
-    timeoutSeconds: 60
 ```
 
 **Create the service account secret:**
@@ -146,9 +155,6 @@ metadata:
 spec:
   bedrock:
     region: "us-east-1"
-    
-    # Optional: inference profile ARN
-    inferenceProfileARN: "arn:aws:bedrock:us-east-1:123456789012:inference-profile/xxx"
 ```
 
 For Bedrock, AWS credentials are typically provided via:
@@ -171,11 +177,10 @@ spec:
   apiKeySecretRef:
     name: custom-api-credentials
     key: api-key
-  
+
   openai:
     baseURL: "https://my-custom-llm.example.com/v1"
-    timeoutSeconds: 120
-  
+
   # Custom headers for authentication or routing
   defaultHeaders:
     X-Custom-Header: "value"
@@ -195,19 +200,19 @@ spec:
   apiKeySecretRef:
     name: api-credentials
     key: api-key
-  
+
   openai:
     baseURL: "https://internal-llm.company.local/v1"
-  
+
   tls:
     # Option 1: Skip verification (not recommended for production)
     insecureSkipVerify: false
-    
+
     # Option 2: Provide custom CA certificate
     caSecretRef:
       name: custom-ca-cert
       key: ca.crt
-    
+
     # Include system CAs in addition to custom CA
     useSystemCAs: true
 ```
@@ -233,8 +238,7 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  openai:
-    organizationID: "org-xxx"
+  openai: {}
 ---
 # Multiple models using the same provider
 apiVersion: agent.flokoa.ai/v1alpha1
@@ -308,11 +312,10 @@ spec:
   apiKeySecretRef:
     name: azure-credentials
     key: api-key
-  
+
   openai:
     baseURL: "https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-    timeoutSeconds: 60
-  
+
   defaultHeaders:
     api-version: "2024-02-01"
 ```
@@ -330,9 +333,8 @@ spec:
   apiKeySecretRef:
     name: dev-credentials
     key: api-key
-  
-  openai:
-    timeoutSeconds: 30
+
+  openai: {}
 ```
 
 Production (with monitoring and failover):
@@ -349,11 +351,9 @@ spec:
   apiKeySecretRef:
     name: prod-credentials
     key: api-key
-  
-  openai:
-    organizationID: "org-prod"
-    timeoutSeconds: 120
-  
+
+  openai: {}
+
   defaultHeaders:
     X-Environment: "production"
     X-Request-Source: "flokoa"
@@ -367,17 +367,21 @@ The operator maintains status information:
 status:
   provider: openai  # Resolved provider type
   ready: true
-  
+
   conditions:
-    - type: Ready
+    - type: Validated
       status: "True"
       lastTransitionTime: "2026-01-15T10:30:00Z"
-      reason: SecretFound
-      message: "Provider is configured and ready"
-  
+      reason: Validated
+      message: "Provider configuration is valid"
+
   observedGeneration: 1
-  secretHash: "abc123..."  # For detecting secret changes
 ```
+
+The controller validates only that **exactly one** provider block is set — condition reasons are
+`Validated`, `NoProviderSet`, or `MultipleProvidersSet`. It does **not** read the referenced
+Secret, so it cannot report a "secret found" state. A changed API-key Secret is picked up by the
+**Agent** watcher (which recompiles every referencing Agent), not by the ModelProvider.
 
 ## Operations
 
@@ -402,7 +406,8 @@ kubectl create secret generic openai-credentials \
   --from-literal=api-key=sk-proj-new-key \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# The operator will detect the change automatically
+# A changed Secret is picked up by the Agent watcher, which recompiles every Agent that
+# (via its Model -> ModelProvider) references it, re-projecting the credential into the runner.
 ```
 
 ### Using Providers Across Namespaces
@@ -487,7 +492,7 @@ kubectl get modelprovider openai-provider -o yaml
 
 ### Connection Timeouts
 
-- Increase `timeoutSeconds` if requests are timing out
+- Increase the request timeout on the **Model** (`spec.settings.timeoutSeconds`) — it is not a ModelProvider field
 - Check network policies allowing egress to provider APIs
 - Verify DNS resolution works for provider endpoints
 - Check firewall rules and proxy configurations

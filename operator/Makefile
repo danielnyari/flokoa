@@ -60,10 +60,6 @@ SERVER_IMG ?= $(SERVER_IMAGE_TAG_BASE):$(VERSION)
 A2A_PLUGIN_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-a2a-plugin
 A2A_PLUGIN_IMG ?= $(A2A_PLUGIN_IMAGE_TAG_BASE):$(VERSION)
 
-# Flokoa CLI image settings (Python SDK)
-FLOKOA_CLI_IMAGE_TAG_BASE ?= ghcr.io/danielnyari/flokoa-cli
-FLOKOA_CLI_IMG ?= $(FLOKOA_CLI_IMAGE_TAG_BASE):$(VERSION)
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -212,6 +208,17 @@ verify-endpoint-refs: ## CI lint: docs/samples must use the published endpoint, 
 	@! grep -rn -- "-runtime\.\(.*\)\?svc\.cluster\.local" ../docs config/samples test/e2e/testdata 2>/dev/null 		|| (echo "❌ direct workload-Service (-runtime) references found — callers use status.url / the published Service" && exit 1)
 	@echo "✅ no direct workload-Service references"
 
+.PHONY: verify-codegen
+verify-codegen: manifests generate generate-python-models ## CI: fail if generated artifacts (CRDs, DeepCopy, Python models) are stale.
+	@# -I ignores the non-deterministic `#   timestamp:` header datamodel-codegen
+	@# stamps into the Python models; everything else must match what's committed.
+	@git diff --exit-code -I '^#   timestamp:' -- \
+		config/crd/bases \
+		api/v1alpha1/zz_generated.deepcopy.go \
+		$(PYTHON_MODELS_DIR) \
+		|| (echo "❌ Generated artifacts are stale. Run 'make manifests generate generate-python-models' in operator/ and commit the result." && exit 1)
+	@echo "✅ generated artifacts are up to date"
+
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
@@ -222,6 +229,9 @@ PYTHON_SDK_DIR ?= ../sdk/python
 PYTHON_MODELS_DIR ?= $(PYTHON_SDK_DIR)/flokoa-types/src/flokoa_types
 PYTHON_VENV ?= $(LOCALBIN)/venv
 DATAMODEL_CODEGEN ?= $(PYTHON_VENV)/bin/datamodel-codegen
+# Pinned so `generate-python-models` / `verify-codegen` are reproducible: an
+# unpinned upgrade can change generated formatting and break the codegen gate.
+DATAMODEL_CODEGEN_VERSION ?= 0.62.0
 
 .PHONY: python-venv
 python-venv: $(PYTHON_VENV) ## Create Python virtual environment with datamodel-code-generator.
@@ -229,7 +239,7 @@ $(PYTHON_VENV):
 	@echo "Creating Python virtual environment..."
 	@python3 -m venv $(PYTHON_VENV)
 	@$(PYTHON_VENV)/bin/pip install --upgrade pip
-	@$(PYTHON_VENV)/bin/pip install datamodel-code-generator
+	@$(PYTHON_VENV)/bin/pip install datamodel-code-generator==$(DATAMODEL_CODEGEN_VERSION)
 	@echo "Python virtual environment created at $(PYTHON_VENV)"
 
 .PHONY: generate-python-models
@@ -412,22 +422,19 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker images for manager, server, A2A plugin, and CLI.
+docker-build: ## Build docker images for manager, server, and A2A plugin.
 	$(CONTAINER_TOOL) build -t ${IMG} -t $(IMAGE_TAG_BASE):latest .
 	$(CONTAINER_TOOL) build -f server/Dockerfile -t ${SERVER_IMG} -t $(SERVER_IMAGE_TAG_BASE):latest .
 	$(CONTAINER_TOOL) build -f plugins/a2a/Dockerfile -t ${A2A_PLUGIN_IMG} -t $(A2A_PLUGIN_IMAGE_TAG_BASE):latest .
-	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} -t $(FLOKOA_CLI_IMAGE_TAG_BASE):latest ../sdk/python
 
 .PHONY: docker-push
-docker-push: ## Push docker images for manager, server, A2A plugin, and CLI.
+docker-push: ## Push docker images for manager, server, and A2A plugin.
 	$(CONTAINER_TOOL) push ${IMG}
 	$(CONTAINER_TOOL) push $(IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${SERVER_IMG}
 	$(CONTAINER_TOOL) push $(SERVER_IMAGE_TAG_BASE):latest
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
 	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
-	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
-	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 
 .PHONY: docker-build-plugins
 docker-build-plugins: ## Build docker images for all plugins.
@@ -437,15 +444,6 @@ docker-build-plugins: ## Build docker images for all plugins.
 docker-push-plugins: ## Push docker images for all plugins.
 	$(CONTAINER_TOOL) push ${A2A_PLUGIN_IMG}
 	$(CONTAINER_TOOL) push $(A2A_PLUGIN_IMAGE_TAG_BASE):latest
-
-.PHONY: docker-build-flokoa-cli
-docker-build-flokoa-cli: ## Build docker image for the Flokoa CLI (Python SDK).
-	$(CONTAINER_TOOL) build -f ../sdk/python/flokoa-managed-agent/Dockerfile -t ${FLOKOA_CLI_IMG} -t $(FLOKOA_CLI_IMAGE_TAG_BASE):latest ../sdk/python
-
-.PHONY: docker-push-flokoa-cli
-docker-push-flokoa-cli: ## Push docker image for the Flokoa CLI.
-	$(CONTAINER_TOOL) push ${FLOKOA_CLI_IMG}
-	$(CONTAINER_TOOL) push $(FLOKOA_CLI_IMAGE_TAG_BASE):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -582,6 +580,22 @@ deploy-full: deploy deploy-argo-workflows deploy-executor-plugins ## Deploy ever
 .PHONY: undeploy-full
 undeploy-full: undeploy-executor-plugins undeploy-argo-workflows undeploy ## Undeploy everything from local test environment.
 	@echo "Local test environment undeployed"
+
+##@ Local Dev (minikube, one-shot)
+
+.PHONY: local-up
+local-up: ## Boot the whole stack on minikube: start cluster, build images in-cluster, deploy operator+Argo+plugins+sample agent, port-forward all UIs. Reads OPENAI_API_KEY from repo-root .env.
+	@hack/local-up.sh
+
+.PHONY: local-down
+local-down: ## Tear down local-up: stop port-forwards and undeploy. Pass ARGS=--forwards-only or ARGS=--stop-minikube.
+	@hack/local-down.sh $(ARGS)
+
+.PHONY: local-urls
+local-urls: ## Print the local UI URLs (does not start anything).
+	@echo "Flokoa UI  http://localhost:$${FLOKOA_UI_PORT:-8080}"
+	@echo "Argo UI    https://localhost:$${ARGO_UI_PORT:-2746}"
+	@echo "yakd       http://localhost:$${YAKD_UI_PORT:-8081}"
 
 ##@ Dependencies
 

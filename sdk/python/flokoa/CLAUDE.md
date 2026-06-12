@@ -10,6 +10,10 @@ The Flokoa Python SDK provides a CLI and library for building and running pydant
 - **Python**: >= 3.13
 - **Package Manager**: uv
 
+Operating principles for the codebase live in
+[`core-beliefs.md`](../../../docs/design-docs/core-beliefs.md); the runtime contract the runner
+implements is [`runtime-contract.md`](../../../docs/reference/runtime-contract.md).
+
 ## Workspace Structure
 
 The SDK is organized as a **uv workspace**:
@@ -156,25 +160,10 @@ from flokoa.serving import SpecAgentExecutor, build_app
 
 ### Linting (Ruff)
 
-Configuration in `pyproject.toml`. Key rules enabled:
-- `I` - isort (import sorting)
-- `E`, `W` - pycodestyle
-- `F` - pyflakes
-- `S` - flake8-bandit (security) — disabled in tests for assertions/passwords
-- `B` - flake8-bugbear
-- `C4` - flake8-comprehensions
-- `C90` - mccabe complexity
-- `UP` - pyupgrade
-- `SIM` - flake8-simplify
-- `A` - flake8-builtins
-- `YTT` - flake8-2020
-- `T10` - flake8-debugger
-- `PGH` - pygrep-hooks
-- `RUF` - ruff-specific rules
-- `TRY` - tryceratops (exception handling)
-
-Line length: 120 characters. Target version: py39.
-Ignored: `E501` (line too long), `E731` (lambda assignment), `TRY003` (long exception messages).
+Config in `pyproject.toml` (with per-package overrides). The enabled rule sets cover imports
+(`I`), pycodestyle/pyflakes (`E`/`W`/`F`), security (`S`, relaxed in tests), bugbear (`B`),
+comprehensions (`C4`), complexity (`C90`), pyupgrade (`UP`), simplify (`SIM`), builtins (`A`),
+and exception handling (`TRY`). Line length 120; `E501`/`E731`/`TRY003` ignored. Run `make check`.
 
 ### Type Checking
 

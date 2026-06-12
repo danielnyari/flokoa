@@ -6,12 +6,15 @@ A quick reference guide for common tasks and patterns in Flokoa.
 
 | Resource | Purpose | Required? | Example Use |
 |----------|---------|-----------|-------------|
-| **Agent** | Deploy AI agent | Yes | Customer service bot, code assistant |
-| **ModelProvider** | Connect to LLM | Optional* | OpenAI, Anthropic, Google credentials |
-| **Model** | Configure LLM | Optional* | GPT-4o with specific parameters |
-| **AgentTool** | External APIs | Optional | Weather API, database queries |
+| **Agent** | Composition root → compiled agent | Yes | Customer service bot, code assistant |
+| **Model** | Named model config (→ AgentSpec `model`/`model_settings`) | Optional* | GPT-4o with specific parameters |
+| **ModelProvider** | Provider connection behind Model | Optional* | OpenAI, Anthropic, Google credentials |
+| **AgentTool** | Declarative MCP endpoint | Optional | External or in-cluster MCP server |
+| **Instruction** | Shareable system-prompt block | Optional | Shared support policy |
+| **AgentTrigger** | Event-driven invocation (Argo Events) | Optional | Run an agent on a webhook/event |
+| **AgentWorkflow** | Frozen, template-only A2A composition | Optional | Chain deployed agents |
 
-\* Not required if your agent doesn't use LLMs
+\* Not required if your agent doesn't use LLMs. (Capability — packaged wheelhouses — arrives in P0b.)
 
 ## Common Commands
 
@@ -42,8 +45,11 @@ kubectl delete agent my-agent
 ### Debugging
 
 ```bash
-# Check agent status
+# Check agent status (phase + the post-pivot signals)
 kubectl get agent my-agent -o jsonpath='{.status.phase}'
+kubectl get agent my-agent -o jsonpath='{.status.url}'       # published endpoint — call this, never {agent}-runtime
+kubectl get agent my-agent -o jsonpath='{.status.specHash}'  # resolved-spec hash (drift detection)
+kubectl get agent my-agent -o jsonpath='{.status.conditions[?(@.type=="SpecValid")].status}'  # compile-time validation
 
 # View logs
 kubectl logs -l flokoa.ai/agent=my-agent
@@ -58,8 +64,8 @@ kubectl exec -it <pod-name> -- /bin/sh
 # Check events
 kubectl get events --field-selector involvedObject.name=my-agent
 
-# Port forward for testing
-kubectl port-forward svc/my-agent 8080:8080
+# Port forward for testing (published Service listens on 80; never use the {agent}-runtime Service)
+kubectl port-forward svc/my-agent 8080:80
 ```
 
 ### Scaling
@@ -67,22 +73,23 @@ kubectl port-forward svc/my-agent 8080:8080
 ```bash
 # Scale replicas
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/replicas", "value": 5}]'
+  -p='[{"op": "replace", "path": "/spec/runtime/replicas", "value": 5}]'
 
 # Scale to zero
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/replicas", "value": 0}]'
+  -p='[{"op": "replace", "path": "/spec/runtime/replicas", "value": 0}]'
 ```
 
 ### Updates
 
 ```bash
-# Update image
-kubectl set image agent/my-agent agent=new-image:v2.0.0
+# Override the runner image (escape hatch — most agents run the platform's generic runner)
+kubectl patch agent my-agent --type='merge' \
+  -p '{"spec":{"runtime":{"image":"new-image:v2.0.0"}}}'
 
-# Patch configuration
+# Patch an env var (spec.runtime.env)
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/container/env/0/value", "value": "new-value"}]'
+  -p='[{"op": "replace", "path": "/spec/runtime/env/0/value", "value": "new-value"}]'
 
 # Edit directly
 kubectl edit agent my-agent
@@ -384,7 +391,7 @@ metadata:
   name: my-agent
   namespace: default
 spec:
-  model:
+  modelRef:
     name: gpt-4o  # Same namespace
 ```
 
@@ -415,7 +422,7 @@ metadata:
   name: my-agent
   namespace: my-app
 spec:
-  model:
+  modelRef:
     name: gpt-4o  # Same namespace
 ```
 
@@ -427,7 +434,7 @@ spec:
 | Pods crashing | `kubectl logs <pod>` | Check env vars, health probes |
 | Model not found | `kubectl get model <name>` | Verify model exists, check namespace |
 | Provider not ready | `kubectl describe modelprovider <name>` | Check secret exists, valid API key |
-| Tool not working | `kubectl logs -l flokoa.ai/agent=<name>` | Test endpoint, check schema |
+| Tool not working | `kubectl logs -l flokoa.ai/agent=<name>` | Verify MCP server reachable; check transport, allowedTools, header secrets |
 | Connection timeout | Network policies, DNS | Increase timeout, check connectivity |
 | High costs | Token usage | Lower maxTokens, use cheaper model |
 | Slow responses | `kubectl top pods` | Scale up, optimize prompts |

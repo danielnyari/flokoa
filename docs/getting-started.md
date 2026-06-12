@@ -6,10 +6,13 @@ Flokoa is a Kubernetes-native platform for deploying and managing AI agents. It 
 
 Flokoa consists of several key components:
 
-- **Agent**: The main resource representing an AI agent deployment
-- **ModelProvider**: Configuration for connecting to LLM providers (OpenAI, Anthropic, Google, AWS Bedrock)
-- **Model**: Definition of a specific LLM model with its parameters
-- **AgentTool**: External tools that agents can use to interact with APIs and services
+- **Agent**: the composition root — references Model/Instruction/AgentTool CRs plus an optional inline AgentSpec fragment, which the controller compiles into one resolved pydantic-ai AgentSpec
+- **Model**: a named, shareable model configuration (identifier + typed settings) → AgentSpec `model`/`model_settings`
+- **ModelProvider**: the provider connection behind a Model (OpenAI, Anthropic, Google, AWS Bedrock)
+- **AgentTool**: a declarative MCP endpoint (`url` or `serviceRef`+`path`) that compiles to an MCP capability
+- **Instruction**: versioned, shareable system-prompt blocks
+- **AgentTrigger**: event-driven agent invocation via Argo Events
+- **AgentWorkflow**: frozen, template-only A2A composition between deployed agents
 
 ## Quick Start
 
@@ -76,22 +79,24 @@ kubectl describe agent my-first-agent
 2. **Running**: Agent pods are running and the service is available
 3. **Failed**: Agent deployment failed (check status conditions for details)
 
-### Runtime Backends
+`status.url` is the agent's published (flokoa-owned) endpoint — always invoke via this URL, never
+the internal `<agent>-runtime` Service. Watch the `SpecValid` condition (compile-time schema
+validation) and `status.specHash` (drift detection) alongside the phase; a failed compile shows
+`SpecValid=False` and the last good generation keeps running.
 
-Flokoa supports two runtime backends:
+### The generic runner
 
-- **standard** - Creates a Kubernetes Deployment using your own container image, along with a Service to expose it. Manages pod lifecycle, scaling, and health checks.
-- **template** - Uses a generic runtime image managed by the operator. The agent's behavior is defined entirely in the CR via instructions and output schema.
+Most agents need no container image. The controller compiles the Agent's referenced CRs and inline
+fragment into one resolved pydantic-ai AgentSpec, validates it against the runner's pinned AgentSpec
+JSON Schema, and delivers it as the `<agent>-agent-spec` ConfigMap. The **generic runner** image
+hydrates that spec at startup (installing any referenced capabilities), builds the agent via
+`Agent.from_spec()`, and serves it over A2A. Building a custom image via `spec.runtime.image` is the
+escape hatch — see the [runtime contract](reference/runtime-contract.md).
 
 ### Framework
 
-flokoa targets **pydantic-ai** exclusively. Declare it in your Agent spec
-for observability:
-
-```yaml
-spec:
-  framework: pydantic-ai
-```
+flokoa targets **pydantic-ai** exclusively — it is the only framework and is not configurable.
+Agents compile to a pydantic-ai AgentSpec; there is no framework selector.
 
 ## Resource Organization
 
@@ -152,15 +157,11 @@ spec:
       limits:
         cpu: "2000m"
         memory: "2Gi"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
 ```
+
+> Health probes for the generic runner are operator-managed — there is no per-Agent probe override.
+> Pod-level scheduling (node selectors, tolerations, affinity) is set via `spec.runtime`'s inlined
+> deployment overrides.
 
 ### Secrets Management
 
@@ -172,15 +173,18 @@ kubectl create secret generic agent-secrets \
   --from-literal=api-key=your-api-key-here
 ```
 
-Reference in your agent:
+Reference it from the agent via `secretRefs` and a `${secret:NAME}` placeholder:
 ```yaml
-env:
-- name: API_KEY
-  valueFrom:
-    secretKeyRef:
+spec:
+  secretRefs:
+    api-key:
       name: agent-secrets
       key: api-key
+  # ...then use the value elsewhere in the spec as ${secret:api-key}
 ```
+
+The placeholder is resolved **in the runner at hydration time** (projected as `FLOKOA_SECRET_*`);
+the secret value is never written into the compiled-spec ConfigMap.
 
 ## Troubleshooting
 
@@ -201,9 +205,9 @@ kubectl logs -l flokoa.ai/agent=<agent-name>
 ### Common Issues
 
 **Agent stuck in Pending**
-- Check if the container image is accessible
+- Check `kubectl describe agent <name>` for a `SpecValid=False` condition (e.g. an unknown `runnerVersion` with no embedded schema, or a fragment that fails the pinned AgentSpec schema) — when compilation fails, no Deployment update happens
 - Verify resource requests can be satisfied by the cluster
-- Check for image pull secrets if using private registries
+- For custom-image agents (`spec.runtime.image`): check the image is accessible and add image pull secrets for private registries
 
 **Agent pods crashing**
 - Check pod logs: `kubectl logs <pod-name>`
@@ -212,5 +216,5 @@ kubectl logs -l flokoa.ai/agent=<agent-name>
 
 **Service not accessible**
 - Verify the agent is in Running phase
-- Check service configuration: `kubectl get svc -l flokoa.ai/agent=<agent-name>`
+- Read the published endpoint from `kubectl get agent <name> -o jsonpath='{.status.url}'` and call that; the `<agent>-runtime` workload Service is internal and not part of the public contract
 - Check network policies and ingress configuration

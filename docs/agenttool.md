@@ -89,8 +89,8 @@ rejects it. To front a REST API:
 - **Run an MCP adapter** in front of the API — an MCP server that exposes the
   API's operations as tools (several generators build MCP servers from
   OpenAPI specs) — and point the AgentTool at it, or
-- **Use a Capability** that wraps the API client as agent tools (ships with
-  the Capability CRD).
+- **Use a Capability** that wraps the API client as agent tools (once the
+  Capability CRD ships — P0b, in progress).
 
 ## Status
 

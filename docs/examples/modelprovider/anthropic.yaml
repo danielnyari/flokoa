@@ -9,10 +9,8 @@ spec:
   apiKeySecretRef:
     name: anthropic-credentials
     key: api-key
-  
-  anthropic:
-    # Optional: override default endpoint
-    # baseURL: "https://api.anthropic.com"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60
+
+  # The provider type is inferred from this block being present.
+  # To override the default endpoint, set baseURL here.
+  anthropic: {}
+  # Per-request timeouts are configured on the Model (settings.timeoutSeconds), not here.

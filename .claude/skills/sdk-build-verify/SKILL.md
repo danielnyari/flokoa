@@ -68,7 +68,7 @@ Run tests for individual packages:
 
 ```bash
 make test-flokoa          # flokoa SDK tests with coverage
-make test-managed-agent   # flokoa-managed-agent tests
+make test-runner          # flokoa-runner tests
 ```
 
 Under the hood, `test-flokoa` runs:
@@ -92,15 +92,16 @@ Clean build artifacts:
 make clean
 ```
 
-### 6. Docker Image Build (CLI)
+### 6. Docker Image Build (generic runner)
 
-Build the Flokoa CLI Docker image (from `operator/` directory):
+Build the generic agent runtime image (from `sdk/python/`):
 
 ```bash
-make docker-build-flokoa-cli
+make docker-build-runner
 ```
 
-This builds `ghcr.io/danielnyari/flokoa-cli:VERSION` from `sdk/python/flokoa-managed-agent/Dockerfile`.
+This builds `flokoa-runner:local` from `sdk/python/flokoa-runner/Dockerfile`. The operator
+deploys agents on `ghcr.io/danielnyari/flokoa-runner:<DefaultRunnerVersion>`.
 
 ## Full Build Verification Sequence
 
@@ -146,7 +147,7 @@ The SDK is a uv workspace with multiple packages:
 |---------|------|-------------|
 | `flokoa` | `sdk/python/flokoa/` | Public SDK package and CLI |
 | `flokoa-types` | `sdk/python/flokoa-types/` | Auto-generated Pydantic models from CRDs |
-| `flokoa-managed-agent` | `sdk/python/flokoa-managed-agent/` | Operator-deployed pydantic-ai agent runtime |
+| `flokoa-runner` | `sdk/python/flokoa-runner/` | Operator-deployed generic pydantic-ai agent runtime |
 
 ## Troubleshooting
 

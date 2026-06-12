@@ -9,13 +9,12 @@ spec:
   apiKeySecretRef:
     name: azure-credentials
     key: api-key
-  
+
   openai:
     # Azure OpenAI endpoint format:
     # https://{your-resource-name}.openai.azure.com/openai/deployments/{deployment-name}
     baseURL: "https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-    timeoutSeconds: 60
-  
+
   # Required for Azure OpenAI
   defaultHeaders:
     api-version: "2024-02-01"

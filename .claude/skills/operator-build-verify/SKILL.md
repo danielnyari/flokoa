@@ -127,12 +127,6 @@ Build with a custom version:
 make docker-build VERSION=dev
 ```
 
-Build the CLI image (Python SDK):
-
-```bash
-make docker-build-flokoa-cli
-```
-
 ## Full Build Verification Sequence
 
 To verify everything compiles and passes checks:

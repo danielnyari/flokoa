@@ -4,20 +4,20 @@ This directory contains example Custom Resources (CRs) for the Flokoa Agent oper
 
 ## Examples
 
-### [minimal-agent.yaml](minimal-agent.yaml)
+### [agent/minimal-agent.yaml](agent/minimal-agent.yaml)
 The absolute minimum: a card, an inline model, and instructions. No image,
 no build — the operator compiles the spec and runs it on the generic runner.
 
 **Use when:** You want to quickly test or deploy a simple agent.
 
-### [basic-agent.yaml](basic-agent.yaml)
+### [agent/basic-agent.yaml](agent/basic-agent.yaml)
 The composition shape: shared Model and Instruction resources, an MCP tool,
 an inline fragment, and secret-backed placeholders. Rotate the Model CR and
 every referencing agent recompiles and rolls.
 
 **Use when:** You need the fleet-managed baseline for production deployments.
 
-### [advanced-agent.yaml](advanced-agent.yaml)
+### [agent/advanced-agent.yaml](agent/advanced-agent.yaml)
 The custom-image escape hatch plus scheduling overrides:
 - `runtime.image` replacing the generic runner
 - Structured output schema
@@ -33,7 +33,7 @@ The custom-image escape hatch plus scheduling overrides:
 
 ```bash
 # Apply directly
-kubectl apply -f docs/examples/basic-agent.yaml
+kubectl apply -f docs/examples/agent/basic-agent.yaml
 
 # Or from the operator directory's samples
 kubectl apply -f operator/config/samples/agent_v1alpha1_agent.yaml
@@ -70,7 +70,7 @@ kubectl logs -l flokoa.ai/agent=basic-agent
 ### Runtime Fields
 - `spec.runtime.image` - Custom image escape hatch (default: the generic runner)
 - `spec.runtime.runnerVersion` - Pins a runner release
-- `spec.runtime.isolation` - Session isolation tier (`shared` today; `session` ships with the session router)
+- `spec.runtime.isolation` - Session isolation tier (`shared` today; `session` is P1, not yet shipped)
 - `spec.runtime.replicas` - Number of pod replicas (default: 1)
 - `spec.runtime.env` / `resources` / `serviceAccountName` / `securityContext` /
   `nodeSelector` / `tolerations` / `affinity` - Pod-level configuration

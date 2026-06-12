@@ -68,6 +68,11 @@ Each module has its own CLAUDE.md with detailed instructions:
 
 **Always read the relevant module-level CLAUDE.md before working on that module.**
 
+The structured knowledge base under [`docs/`](docs/) is the system of record; the operating
+principles for the codebase are in [`docs/design-docs/core-beliefs.md`](docs/design-docs/core-beliefs.md).
+`AGENTS.md` (at the root and in each module) is a symlink to the adjacent `CLAUDE.md`, so
+non-Claude agents (Codex, Cursor, …) read the same maps.
+
 ## Version Information
 
 Component versions are aligned and driven by the release process: pushing a
@@ -134,44 +139,33 @@ AgentSpecs via `Agent.from_spec` — see `docs/reference/runtime-contract.md`.
 
 ## Quick Reference: Common Commands
 
-### Operator (run from `operator/`)
+### Local dev — boot the whole stack on minikube (run from repo root)
 
 ```bash
-# Build and test
-make build                      # Build operator + server binaries
-make test                       # Unit tests with envtest
-make test-e2e                   # E2E tests with Kind cluster
-make lint                       # golangci-lint
-
-# Code generation (run after type changes)
-make manifests generate         # CRDs + DeepCopy from Go types
-make generate-python-models     # Pydantic models from CRD schemas
-make buf-generate               # gRPC code from proto files
-
-# Docker
-make docker-build               # Build all images (operator, server, A2A plugin)
-make docker-push                # Push to ghcr.io
-
-# Deploy
-make install                    # Install CRDs to cluster
-make deploy                     # Deploy operator
-make deploy-full                # Deploy everything (operator + Argo + plugins)
+echo "OPENAI_API_KEY=sk-..." > .env   # read automatically
+make up                               # start minikube, build images in-cluster,
+                                      # deploy operator+server+Argo+plugins+sample agent,
+                                      # port-forward Flokoa/Argo/yakd UIs
+make down                             # stop forwards + undeploy (ARGS=--stop-minikube to stop the VM)
+make urls                             # print the UI URLs
 ```
 
-### Python SDK (run from `sdk/python/flokoa/`)
+`make up` delegates to `operator/` `make local-up` (script: `operator/hack/local-up.sh`).
+It builds images **directly into minikube's docker daemon** (scoped `eval $(minikube
+docker-env)` in a subshell) so locally-built images are used without a registry push or
+`image load`. Non-`latest` tags (operator/server `:0.1.0`, runner `:0.2.0`) get the default
+`IfNotPresent` policy; the A2A plugin's `:latest` image is pinned to `IfNotPresent` in
+`operator/plugins/a2a/config/plugin.yaml`. The runner tag must match
+`spec.DefaultRunnerVersion` in `operator/internal/spec/spec.go`. Knobs:
+`WITH_TESTDATA=false`, `CONTAINER_TOOL=podman`, `FLOKOA_UI_PORT`/`ARGO_UI_PORT`/`YAKD_UI_PORT`.
 
-```bash
-make install                    # Sync deps + pre-commit hooks
-make test                       # pytest with coverage
-make check                      # Lint (ruff) + type check (ty)
-```
+### Per-module commands
 
-### Workspace-level (run from `sdk/python/`)
+Full command surfaces live in the module maps (run `make help` in each module):
 
-```bash
-uv sync --all-packages --all-extras   # Sync all workspace members
-uv lock                               # Update shared lockfile
-```
+- **Operator** (`operator/`) — build, test, codegen, lint, deploy, `verify-codegen`. See [`operator/CLAUDE.md`](operator/CLAUDE.md).
+- **Python SDK** (`sdk/python/flokoa/`) — `make install` / `test` / `check`. See [`sdk/python/flokoa/CLAUDE.md`](sdk/python/flokoa/CLAUDE.md).
+- **Workspace** (`sdk/python/`) — `uv sync --all-packages --all-extras`, `uv lock`.
 
 ## Docker Images
 

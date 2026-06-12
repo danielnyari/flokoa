@@ -4,7 +4,7 @@ icon: lucide/rocket
 
 # Flokoa Documentation
 
-Welcome to the Flokoa documentation. Flokoa is a Kubernetes-native platform for deploying and managing AI agents.
+Welcome to the Flokoa documentation. **Flokoa is the open-source agent harness for Kubernetes** — a Kubernetes-native runtime for [pydantic-ai](https://ai.pydantic.dev) agents. The Agent CRD is a *composition root*: the controller compiles your referenced Model/Instruction/AgentTool CRs plus an optional inline AgentSpec fragment into one resolved pydantic-ai AgentSpec, validates it against the runner's pinned JSON Schema (the [runtime contract](reference/runtime-contract.md)), and runs it on a generic runner image — most agents need no container build.
 
 ## Getting Started
 
@@ -17,10 +17,22 @@ New to Flokoa? Start here:
 
 Learn about each Custom Resource Definition (CRD):
 
-- **[Agent](agent.md)** - Deploy and configure AI agents
-- **[ModelProvider](modelprovider.md)** - Connect to LLM providers (OpenAI, Anthropic, Google, Bedrock)
-- **[Model](model.md)** - Configure LLM models with parameters
-- **[AgentTool](agenttool.md)** - Give agents access to external APIs and services
+- **[Agent](agent.md)** - The composition root: refs + inline AgentSpec fragment compiled into one resolved agent
+- **[Model](model.md)** - Named, shareable model config (identifier + typed settings) → AgentSpec `model`/`model_settings`
+- **[ModelProvider](modelprovider.md)** - Provider connection behind Model (OpenAI, Anthropic, Google, Bedrock)
+- **[AgentTool](agenttool.md)** - A declarative MCP endpoint (compiles to an MCP capability)
+- **[AgentTrigger](agenttrigger.md)** - Event-driven invocation via Argo Events
+- **[Instruction](instruction.md)** - Versioned system-prompt blocks (compiled, in order, into the agent's instructions)
+- **AgentWorkflow** - Frozen, template-only A2A composition between deployed agents
+- _Capability_ - Packaged capability wheelhouses (coming in P0b)
+
+## Architecture & Design
+
+- **[Design Docs](design-docs/index.md)** - System of record for design decisions
+- **[Core Beliefs](design-docs/core-beliefs.md)** - Operating principles + the enforced-invariants registry
+- **[Operator Conventions & Architecture](reference/operator-conventions.md)** - Layering, conventions, testing tiers
+- **[Runtime Contract](reference/runtime-contract.md)** - Normative operator↔runner interface
+- **[Argo Executor Plugins](argo/executor-plugins.md)** - Calling Flokoa agents from Argo Workflows
 
 ## Examples
 
@@ -50,21 +62,17 @@ Browse example configurations in the [`examples/`](examples/) directory:
 - [`model/gpt-4o-creative.yaml`](examples/model/gpt-4o-creative.yaml) - Optimized for creative writing
 
 ### AgentTool Examples
-- [`agenttool/weather-api.yaml`](examples/agenttool/weather-api.yaml) - Simple GET request
-- [`agenttool/create-ticket.yaml`](examples/agenttool/create-ticket.yaml) - POST request to create resources
-- [`agenttool/inventory-check.yaml`](examples/agenttool/inventory-check.yaml) - Internal Kubernetes service
-- [`agenttool/database-query.yaml`](examples/agenttool/database-query.yaml) - Database queries via service
-- [`agenttool/github-api.yaml`](examples/agenttool/github-api.yaml) - Using OpenAPI specification
-- [`agenttool/send-email.yaml`](examples/agenttool/send-email.yaml) - Send email notifications
-- [`agenttool/create-order.yaml`](examples/agenttool/create-order.yaml) - Complex nested schemas
-- [`agenttool/search-kb.yaml`](examples/agenttool/search-kb.yaml) - Search knowledge base
+- [`agenttool/weather-api.yaml`](examples/agenttool/weather-api.yaml) - External MCP server (url)
+- [`agenttool/create-ticket.yaml`](examples/agenttool/create-ticket.yaml) - MCP server for ticket creation
+- [`agenttool/inventory-check.yaml`](examples/agenttool/inventory-check.yaml) - Internal MCP service (serviceRef)
+- [`agenttool/database-query.yaml`](examples/agenttool/database-query.yaml) - Internal MCP service for database queries
+- [`agenttool/github-api.yaml`](examples/agenttool/github-api.yaml) - External MCP server fronting an API
+- [`agenttool/send-email.yaml`](examples/agenttool/send-email.yaml) - MCP server for email notifications
+- [`agenttool/create-order.yaml`](examples/agenttool/create-order.yaml) - Internal MCP service (serviceRef + path)
+- [`agenttool/search-kb.yaml`](examples/agenttool/search-kb.yaml) - MCP server for knowledge-base search
 
 ### Complete Examples
 - [`complete-example.yaml`](examples/complete-example.yaml) - End-to-end customer service agent with all resources
-
-## Testing
-
-- **[End-to-End Test Plan](e2e-test-plan.md)** - Operator + Python SDK integration testing strategy
 
 ## Quick Reference
 
@@ -143,12 +151,12 @@ spec:
         memory: "512Mi"
       limits:
         cpu: "2000m"
-            memory: "2Gi"
-        livenessProbe: {...}
-        readinessProbe: {...}
-      affinity:
-        podAntiAffinity: {...}
+        memory: "2Gi"
 ```
+
+> Health probes for the generic runner are operator-managed. Pod-level scheduling
+> (node selectors, tolerations, affinity) is set through `spec.runtime`'s inlined
+> deployment overrides; see [agent.md](agent.md) for the full runtime surface.
 
 ### Shared Resources
 
@@ -199,7 +207,7 @@ kubectl edit agent my-agent
 
 # Patch specific fields
 kubectl patch agent my-agent --type='json' \
-  -p='[{"op": "replace", "path": "/spec/runtime/spec/replicas", "value": 5}]'
+  -p='[{"op": "replace", "path": "/spec/runtime/replicas", "value": 5}]'
 
 # Apply updated manifest
 kubectl apply -f agent.yaml

@@ -9,6 +9,9 @@ spec:
     container:
       name: a2a-executor-plugin
       image: ghcr.io/danielnyari/flokoa-a2a-plugin:latest
+      # IfNotPresent so a locally-built image (e.g. `make local-up` into minikube's
+      # docker daemon) is used instead of always re-pulling :latest from GHCR.
+      imagePullPolicy: IfNotPresent
       command:
         - /a2a-plugin
       env:

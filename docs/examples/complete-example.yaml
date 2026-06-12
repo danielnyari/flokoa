@@ -12,8 +12,7 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  openai:
-    timeoutSeconds: 60
+  openai: {}
 
 ---
 # Step 2: Create Model (named, shareable model configuration)

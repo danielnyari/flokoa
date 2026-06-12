@@ -141,8 +141,10 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the petstore image into Kind")
 
 	By("building the generic runner image for agents")
-	cmd = exec.Command("make", "docker-build-flokoa-cli",
-		fmt.Sprintf("FLOKOA_CLI_IMG=%s", runnerImage))
+	cmd = exec.Command("docker", "build",
+		"-f", "../sdk/python/flokoa-runner/Dockerfile",
+		"-t", runnerImage,
+		"../sdk/python")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the runner image")
 

@@ -16,7 +16,8 @@ All images are pushed to `ghcr.io/danielnyari/`:
 | Operator | `ghcr.io/danielnyari/flokoa-operator` | `VERSION` (default: 0.0.6) |
 | Server | `ghcr.io/danielnyari/flokoa-server` | `VERSION` |
 | A2A Plugin | `ghcr.io/danielnyari/flokoa-a2a-plugin` | `VERSION` + `latest` |
-| Flokoa CLI | `ghcr.io/danielnyari/flokoa-cli` | `VERSION` + `latest` |
+
+The agent runtime image (`ghcr.io/danielnyari/flokoa-runner`) is built and pushed from `sdk/python/` (`make docker-build-runner`), not from the operator Makefile.
 
 ## Before Building
 
@@ -42,14 +43,12 @@ make docker-build
 ```bash
 make docker-build                  # Operator + server + A2A plugin
 make docker-build-plugins          # A2A plugin only
-make docker-build-flokoa-cli       # Python SDK CLI image only
 ```
 
 ### Push Commands
 ```bash
 make docker-push                   # Push operator + server + A2A plugin
 make docker-push-plugins           # Push A2A plugin (tagged as VERSION + latest)
-make docker-push-flokoa-cli        # Push CLI image (tagged as VERSION + latest)
 ```
 
 ## Custom Version or Image Tag

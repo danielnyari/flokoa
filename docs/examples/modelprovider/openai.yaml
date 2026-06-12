@@ -9,13 +9,8 @@ spec:
   apiKeySecretRef:
     name: openai-credentials
     key: api-key
-  
-  openai:
-    # Optional: override default endpoint
-    # baseURL: "https://api.openai.com/v1"
-    
-    # Optional: organization ID
-    # organizationID: "org-xxx"
-    
-    # Optional: request timeout
-    timeoutSeconds: 60
+
+  # The provider type is inferred from this block being present.
+  # To override the default endpoint, set baseURL here.
+  openai: {}
+  # Per-request timeouts are configured on the Model (settings.timeoutSeconds), not here.

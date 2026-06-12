@@ -11,6 +11,7 @@ data:
         fieldRef:
           fieldPath: metadata.namespace
     image: ghcr.io/danielnyari/flokoa-a2a-plugin:latest
+    imagePullPolicy: IfNotPresent
     name: a2a-executor-plugin
     ports:
     - containerPort: 4355

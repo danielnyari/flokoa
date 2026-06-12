@@ -59,6 +59,30 @@ jobs:
         working-directory: operator
         run: make test-integration
 
+  verify-generated:
+    name: Verify Generated Artifacts (CRDs, DeepCopy, Python models)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/go.mod
+
+      - name: Install yq (mikefarah v4)
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.50.1/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Verify generated artifacts are up to date
+        run: make verify-codegen
+
   build-image:
     name: Build Docker Image
     runs-on: ubuntu-latest

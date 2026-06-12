@@ -5,6 +5,7 @@ linters:
   default: none
   enable:
     - copyloopvar
+    - depguard
     - dupl
     - errcheck
     - ginkgolinter
@@ -26,6 +27,45 @@ linters:
       rules:
         - name: comment-spacings
         - name: import-shadowing
+    # Enforce the operator's layered architecture mechanically. The deny `desc`
+    # strings double as remediation instructions injected into agent context.
+    # Dependency direction: api/v1alpha1 -> nothing internal; internal/domain is
+    # a leaf; internal/infra sits below app/controller/server. See
+    # docs/design-docs/core-beliefs.md for the full layering contract.
+    depguard:
+      rules:
+        api-layer:
+          files:
+            - "**/api/v1alpha1/**"
+          deny:
+            - pkg: github.com/danielnyari/flokoa/internal
+              desc: "API types must not import internal packages (layering inversion). Keep api/v1alpha1 importable standalone; put shared helpers in api/ or a neutral package."
+        domain-layer:
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: github.com/danielnyari/flokoa/internal/controller
+              desc: "domain is a leaf layer; it must not import controller. Invert the dependency (pass data in)."
+            - pkg: github.com/danielnyari/flokoa/internal/server
+              desc: "domain must not import server; servers depend on domain, not the reverse."
+            - pkg: github.com/danielnyari/flokoa/internal/app
+              desc: "domain must not import app; app orchestrates domain, not the reverse."
+            - pkg: github.com/danielnyari/flokoa/internal/infra
+              desc: "domain must not import infra; infra depends on domain."
+            - pkg: github.com/danielnyari/flokoa/internal/webhook
+              desc: "domain must not import webhook."
+        infra-layer:
+          files:
+            - "**/internal/infra/**"
+          deny:
+            - pkg: github.com/danielnyari/flokoa/internal/controller
+              desc: "infra must not import controller; controllers depend on infra, not the reverse."
+            - pkg: github.com/danielnyari/flokoa/internal/server
+              desc: "infra must not import server; servers depend on infra, not the reverse."
+            - pkg: github.com/danielnyari/flokoa/internal/app
+              desc: "infra must not import app; app depends on infra."
+            - pkg: github.com/danielnyari/flokoa/internal/webhook
+              desc: "infra must not import webhook."
   exclusions:
     generated: lax
     rules:
