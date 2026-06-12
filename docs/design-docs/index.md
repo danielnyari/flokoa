@@ -8,6 +8,8 @@ follow the links.
 - **[ADR-001: Salvage of the 2192bdbd deletions](adr-001-salvage-2192bdbd.md)** — what the v2.1
   pivot deletion retired for good, and what was salvaged into `flokoa-common` and
   `flokoa-openapi`.
+- **[Decision: A2A serving stack](../decisions/a2a-stack.md)** — a2a-sdk vs FastA2A/`to_a2a()`
+  for the generic runner (tracked by roadmap unit 05; open).
 - **[Architecture Overview](../architecture.md)** — how the components fit together (CRDs,
   lifecycle, networking, security).
 - **[Runtime Contract](../reference/runtime-contract.md)** — the normative operator↔runner

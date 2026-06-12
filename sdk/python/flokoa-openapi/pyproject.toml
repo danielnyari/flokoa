@@ -38,3 +38,8 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# importlib mode (matching the workspace-root config): tests/ has no
+# __init__.py — claiming the real package name `tests` collides with
+# flokoa/tests in workspace-root runs — and the `from .conftest import ...`
+# helpers need a package context, which importlib mode synthesizes.
+addopts = "--import-mode=importlib"

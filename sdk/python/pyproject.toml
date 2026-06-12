@@ -20,6 +20,21 @@ members = [
 flokoa = { workspace = true }
 
 
+# Workspace-root pytest run (`uv run pytest` from sdk/python/). importlib import
+# mode avoids cross-package basename collisions (test_gaps.py, tests/conftest.py
+# exist in several member packages). Per-package runs (make test, CI) resolve
+# each member's own pyproject as rootdir config and are unaffected.
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+testpaths = [
+    "flokoa/tests",
+    "flokoa-runner/tests",
+    "flokoa-codemode-mcp/tests",
+    "flokoa-common/tests",
+    "flokoa-openapi/tests",
+]
+
+
 [tool.ruff]
 target-version = "py313"
 line-length = 120

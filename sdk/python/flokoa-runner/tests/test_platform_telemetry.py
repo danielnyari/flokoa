@@ -22,9 +22,13 @@ def anyio_backend():
 def telemetry_capture():
     """Module-scoped OTel providers (the global providers are set-once)."""
     span_exporter = InMemorySpanExporter()
-    tracer_provider = TracerProvider()
+    trace.set_tracer_provider(TracerProvider())  # no-op if another suite already installed one
+    # In a combined workspace-root run, flokoa's init_telemetry tests may have
+    # installed the global provider first (set-once); attach the capture
+    # processor to whichever SDK provider is actually effective.
+    tracer_provider = trace.get_tracer_provider()
+    assert isinstance(tracer_provider, TracerProvider), f"expected SDK TracerProvider, got {type(tracer_provider)}"
     tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    trace.set_tracer_provider(tracer_provider)
 
     metric_reader = InMemoryMetricReader()
     metrics.set_meter_provider(MeterProvider(metric_readers=[metric_reader]))

@@ -1,4 +1,4 @@
-"""Quick smoke test: send a message to a running managed-agent via A2A."""
+"""Quick smoke test: send a message to a locally running agent (generic runner) via A2A."""
 
 import asyncio
 
