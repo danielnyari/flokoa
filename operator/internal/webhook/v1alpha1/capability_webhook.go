@@ -74,7 +74,7 @@ func (v *CapabilityCustomValidator) ValidateDelete(_ context.Context, _ runtime.
 
 var (
 	digestPinnedRe = regexp.MustCompile(`@sha256:[a-f0-9]{64}$`)
-	entrypointRe   = regexp.MustCompile(`^[\w.]+:[\w.]+$`)
+	entrypointRe   = regexp.MustCompile(`^[\w.]+:[A-Za-z_]\w*$`)
 )
 
 func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, error) {
@@ -89,7 +89,18 @@ func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, er
 
 	if !entrypointRe.MatchString(capCR.Spec.Entrypoint) {
 		allErrs = append(allErrs, field.Invalid(specPath.Child("entrypoint"), capCR.Spec.Entrypoint,
-			"entrypoint must be module:attr (a Python import path resolving to the capability class)"))
+			"entrypoint must be module:attr where attr is the capability class itself (a single identifier, no factories or aliases)"))
+	}
+
+	// The compiled-spec entry name (serializationName, else the entrypoint
+	// class) may not claim a reserved platform name or carry path punctuation.
+	entryName := capabilitydomain.EntryName(capCR.Spec.Entrypoint, capCR.Spec.SerializationName)
+	if err := capabilitydomain.ValidateEntryName(entryName); err != nil {
+		fld := specPath.Child("entrypoint")
+		if capCR.Spec.SerializationName != "" {
+			fld = specPath.Child("serializationName")
+		}
+		allErrs = append(allErrs, field.Invalid(fld, entryName, err.Error()))
 	}
 
 	// Schema-policy coherence: strict requires a published schema; permissive

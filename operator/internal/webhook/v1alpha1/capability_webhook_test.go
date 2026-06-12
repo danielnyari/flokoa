@@ -24,6 +24,10 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
+// tagOnlyArtifact is a non-digest-pinned artifact reference, rejected by both
+// the CRD pattern and the Capability webhook.
+const tagOnlyArtifact = "ghcr.io/danielnyari/capabilities/kb:v0.1.0"
+
 func TestCapabilityWebhookAcceptsValidCapability(t *testing.T) {
 	v := &CapabilityCustomValidator{}
 	warnings, err := v.ValidateCreate(context.Background(), capabilityCR("kb"))
@@ -37,7 +41,7 @@ func TestCapabilityWebhookAcceptsValidCapability(t *testing.T) {
 
 func TestCapabilityWebhookRequiresDigestPinnedArtifact(t *testing.T) {
 	c := capabilityCR("kb")
-	c.Spec.Artifact = "ghcr.io/danielnyari/capabilities/kb:v0.1.0"
+	c.Spec.Artifact = tagOnlyArtifact
 
 	v := &CapabilityCustomValidator{}
 	_, err := v.ValidateCreate(context.Background(), c)
@@ -129,7 +133,7 @@ func TestCapabilityWebhookRejectsInvalidDependencyPin(t *testing.T) {
 
 func TestCapabilityWebhookUpdateValidates(t *testing.T) {
 	c := capabilityCR("kb")
-	c.Spec.Artifact = "ghcr.io/danielnyari/capabilities/kb:v0.1.0"
+	c.Spec.Artifact = tagOnlyArtifact
 
 	v := &CapabilityCustomValidator{}
 	_, err := v.ValidateUpdate(context.Background(), capabilityCR("kb"), c)

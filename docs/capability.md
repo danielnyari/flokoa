@@ -57,8 +57,8 @@ spec:
 |---|---|
 | `artifact` | OCI reference of the wheelhouse artifact image. **Must be digest-pinned** (`…@sha256:<64 hex>`); admission rejects tags. |
 | `version` | The capability's own semantic version (matches the artifact manifest). |
-| `entrypoint` | Python `module:attr` resolving to the capability class (a pydantic-ai `AbstractCapability` subclass). |
-| `serializationName` | The capability's spec-entry name when the class overrides pydantic-ai's default (the class name). Defaults to the `attr` part of `entrypoint`. |
+| `entrypoint` | Python `module:attr` resolving to the capability class (a pydantic-ai `AbstractCapability` subclass). `attr` must be the class itself (a single identifier), bound under its own `__name__` — no factories or re-export aliases. |
+| `serializationName` | The capability's spec-entry name when the class overrides pydantic-ai's default. Defaults to the entrypoint class name (`attr`), which is pydantic-ai's own default serialization name. Must be a bare identifier; the `flokoa.platform/` prefix is reserved. |
 | `configSchema` | JSON Schema for per-agent config. Required under `schemaPolicy: strict`. |
 | `schemaPolicy` | `strict` (default) or `permissive` — the **loud opt-out**: config skips validation, and the CR is flagged in status, admission warnings, and printcolumns. |
 | `requires` | Compatibility tuple mirrored from the artifact manifest: `python` (exact minor), `pydanticAI` and `flokoaRunner` (PEP 440 specifier sets). |
@@ -100,8 +100,12 @@ regardless of creation order — a bad composition surfaces as
 ## How it compiles
 
 Each attachment becomes a capability entry in the compiled spec, named by
-`serializationName` (default: the entrypoint's class name), placed after the
-fragment's and AgentTools' entries and before the platform-injected block:
+`serializationName` (default: the entrypoint class name `attr`), placed after
+the fragment's and AgentTools' entries and before the platform-injected block.
+Two attachments that resolve to the same entry name — or one that collides with
+a native or injected entry — are rejected at admission (set `serializationName`
+to disambiguate). Capability references must be in the agent's own namespace
+(cross-namespace allow-listing is later policy work).
 
 ```yaml
 capabilities:

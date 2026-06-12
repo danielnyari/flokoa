@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -11,6 +12,10 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	flokoaerrors "github.com/danielnyari/flokoa/internal/errors"
 )
+
+func errorsAs(err error, target **ValidationError) bool {
+	return errors.As(err, target)
+}
 
 const kbConfigSchema = `{
 	"type": "object",
@@ -121,7 +126,7 @@ func TestCompileCapabilityWithoutConfigUsesBareName(t *testing.T) {
 func TestCompileCapabilitySerializationNameOverride(t *testing.T) {
 	f := newFixture(Options{})
 	f.addCapability("kb", func(c *agentv1alpha1.Capability) {
-		c.Spec.SerializationName = "flokoa.KB"
+		c.Spec.SerializationName = "FlokoaKB"
 	})
 	agent := agentWith(func(a *agentv1alpha1.Agent) {
 		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
@@ -134,8 +139,66 @@ func TestCompileCapabilitySerializationNameOverride(t *testing.T) {
 	}
 	entries, _ := res.Doc["capabilities"].([]any)
 	entry, ok := entries[0].(map[string]any)
-	if !ok || entry["flokoa.KB"] == nil {
+	if !ok || entry["FlokoaKB"] == nil {
 		t.Fatalf("capabilities = %v, want the serializationName override as the entry key", entries)
+	}
+}
+
+func TestCompileEntryNameCollisionIsPermanent(t *testing.T) {
+	f := newFixture(Options{})
+	// Both default to entry name "KB" (fixture entrypoint flokoa_<name>:KB).
+	f.addCapability("kb-a")
+	f.addCapability("kb-b")
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		attachKB(t, a, "kb-a")
+		attachKB(t, a, "kb-b")
+	})
+
+	_, err := f.compiler.Compile(context.Background(), agent)
+	if !flokoaerrors.IsPermanent(err) {
+		t.Fatalf("colliding entry names must be permanent, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "spec entry \"KB\"") {
+		t.Errorf("error %q should name the colliding entry", err)
+	}
+}
+
+func TestCompileCapabilityUnknownRunnerVersion(t *testing.T) {
+	f := newFixture(Options{})
+	f.addCapability("kb")
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		a.Spec.Runtime.RunnerVersion = "9.9.9"
+		attachKB(t, a, "kb")
+	})
+
+	_, err := f.compiler.Compile(context.Background(), agent)
+	var verr *ValidationError
+	if !errorsAs(err, &verr) {
+		t.Fatalf("expected *ValidationError for an unknown runner version, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "9.9.9") {
+		t.Errorf("error %q should name the unknown runner version", err)
+	}
+}
+
+func TestCompileCrossNamespaceCapabilityRejected(t *testing.T) {
+	f := newFixture(Options{})
+	f.addCapability("kb")
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		a.Spec.Capabilities = []agentv1alpha1.CapabilityAttachment{{
+			Ref: agentv1alpha1.NamespacedRef{Name: "kb", Namespace: "other"},
+		}}
+	})
+
+	_, err := f.compiler.Compile(context.Background(), agent)
+	if !flokoaerrors.IsPermanent(err) {
+		t.Fatalf("cross-namespace capability ref must be permanent, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "cross-namespace") {
+		t.Errorf("error %q should explain the cross-namespace restriction", err)
 	}
 }
 
@@ -179,9 +242,11 @@ func TestCompileIncompatibleCapabilityIsPermanent(t *testing.T) {
 func TestCompileConflictingCapabilitiesArePermanent(t *testing.T) {
 	f := newFixture(Options{})
 	f.addCapability("shields", func(c *agentv1alpha1.Capability) {
+		c.Spec.SerializationName = "Shields"
 		c.Spec.Dependencies = []string{"pydantic-ai-harness==0.2.1"}
 	})
 	f.addCapability("planning", func(c *agentv1alpha1.Capability) {
+		c.Spec.SerializationName = "Planning"
 		c.Spec.Dependencies = []string{"pydantic-ai-harness==0.3.0"}
 	})
 	agent := agentWith(func(a *agentv1alpha1.Agent) {

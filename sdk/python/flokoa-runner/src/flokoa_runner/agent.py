@@ -19,9 +19,12 @@ def build_agent(
     """Construct the agent from the resolved spec document.
 
     Custom capability types are the platform capabilities (runner baseline)
-    plus entrypoints from installed capability wheelhouses — the same set the
-    AgentSpec schema was generated with, so a spec the operator validated
-    hydrates here by construction.
+    plus the entrypoint classes installed from capability wheelhouses. Native
+    and platform entries hydrate by construction (the AgentSpec schema was
+    generated with them); Capability-CR entries hydrate only if their
+    wheelhouse delivered a class registered under the compiled entry name —
+    the operator's admission checks (digest pin, requires tuple, entry-name
+    uniqueness) keep that contract, but the class itself is resolved here.
     """
     from pydantic_ai import Agent
     from pydantic_ai.agent.spec import AgentSpec

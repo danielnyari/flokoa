@@ -79,14 +79,21 @@ type CapabilitySpec struct {
 	Version string `json:"version"`
 
 	// Entrypoint is the Python `module:attr` resolving to the capability
-	// class (a pydantic-ai AbstractCapability subclass).
-	// +kubebuilder:validation:Pattern=`^[\w.]+:[\w.]+$`
+	// class (a pydantic-ai AbstractCapability subclass). The attr must be the
+	// class itself, bound in the module under its own __name__ — no factories
+	// or re-export aliases — so the compiled spec entry name (the class name,
+	// pydantic-ai's default) resolves at hydration. If the class overrides
+	// get_serialization_name(), set serializationName to match.
+	// +kubebuilder:validation:Pattern=`^[\w.]+:[A-Za-z_]\w*$`
 	Entrypoint string `json:"entrypoint"`
 
 	// SerializationName is the capability's spec-entry name when the class
 	// overrides pydantic-ai's default (the class name). Compiled specs
 	// reference the capability by this name; defaults to the attr part of
-	// entrypoint.
+	// entrypoint. It is the bare capability class name — no module/class path
+	// punctuation, and the operator-injected flokoa.platform/ prefix is
+	// reserved.
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_]\w*$`
 	// +optional
 	SerializationName string `json:"serializationName,omitempty"`
 

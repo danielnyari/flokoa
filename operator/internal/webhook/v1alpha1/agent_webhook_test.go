@@ -303,9 +303,11 @@ func TestAgentWebhookDeniesIncompatibleRunner(t *testing.T) {
 
 func TestAgentWebhookDeniesDependencyConflict(t *testing.T) {
 	a := capabilityCR("shields", func(c *agentv1alpha1.Capability) {
+		c.Spec.SerializationName = "Shields"
 		c.Spec.Dependencies = []string{"pydantic-ai-harness==0.2.1"}
 	})
 	b := capabilityCR("planning", func(c *agentv1alpha1.Capability) {
+		c.Spec.SerializationName = "Planning"
 		c.Spec.Dependencies = []string{"pydantic-ai-harness==0.3.0"}
 	})
 	v := &AgentCustomValidator{Reader: readerWith(t, a, b)}
@@ -315,7 +317,7 @@ func TestAgentWebhookDeniesDependencyConflict(t *testing.T) {
 	if err == nil {
 		t.Fatal("conflicting dependency pins must be denied")
 	}
-	want := `capabilities "shields" and "planning" pin conflicting versions of pydantic-ai-harness (0.2.1 vs 0.3.0)`
+	want := `capabilities "default/shields" and "default/planning" pin conflicting versions of pydantic-ai-harness (0.2.1 vs 0.3.0)`
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("denial %q should contain %q", err.Error(), want)
 	}
@@ -383,6 +385,64 @@ func TestAgentWebhookDeniesDuplicateAttachments(t *testing.T) {
 	_, err := v.ValidateCreate(context.Background(), agent)
 	if err == nil || !strings.Contains(err.Error(), "Duplicate") {
 		t.Fatalf("duplicate capability attachments must be denied, got %v", err)
+	}
+}
+
+func TestAgentWebhookUpdateRunsCapabilityChecks(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	old := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+	updated := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com", "maxResults": "five"}, "kb")
+
+	_, err := v.ValidateUpdate(context.Background(), old, updated)
+	if err == nil || !strings.Contains(err.Error(), "/maxResults") {
+		t.Fatalf("update path must run the config-schema check, got %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsCrossNamespaceCapabilityRef(t *testing.T) {
+	v := &AgentCustomValidator{Reader: readerWith(t, capabilityCR("kb"))}
+	agent := validAgent()
+	agent.Spec.Capabilities = []agentv1alpha1.CapabilityAttachment{{
+		Ref: agentv1alpha1.NamespacedRef{Name: "kb", Namespace: "other"},
+	}}
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "cross-namespace") {
+		t.Fatalf("cross-namespace capability ref must be denied generically, got %v", err)
+	}
+	// The denial must not echo the foreign capability's internals.
+	if strings.Contains(err.Error(), "pydantic-ai") || strings.Contains(err.Error(), "sha256") {
+		t.Errorf("cross-namespace denial leaked capability internals: %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsCollidingEntryNames(t *testing.T) {
+	a := capabilityCR("kb-a") // entrypoint flokoa_kb-a.capability:KB → entry "KB"
+	b := capabilityCR("kb-b") // entrypoint flokoa_kb-b.capability:KB → entry "KB"
+	v := &AgentCustomValidator{Reader: readerWith(t, a, b)}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb-a", "kb-b")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "spec entry \"KB\"") {
+		t.Fatalf("colliding entry names must be denied, got %v", err)
+	}
+}
+
+func TestAgentWebhookRejectsNonObjectCapabilityConfig(t *testing.T) {
+	permissive := capabilityCR("freeform", func(c *agentv1alpha1.Capability) {
+		c.Spec.SchemaPolicy = agentv1alpha1.SchemaPolicyPermissive
+		c.Spec.ConfigSchema = nil
+	})
+	v := &AgentCustomValidator{Reader: readerWith(t, permissive)}
+	agent := validAgent()
+	agent.Spec.Capabilities = []agentv1alpha1.CapabilityAttachment{{
+		Ref:    agentv1alpha1.NamespacedRef{Name: "freeform"},
+		Config: &apiextensionsv1.JSON{Raw: []byte(`["not","an","object"]`)},
+	}}
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "must be a JSON object") {
+		t.Fatalf("non-object config must be denied even for permissive capabilities, got %v", err)
 	}
 }
 

@@ -50,6 +50,12 @@ import (
 type AgentCustomValidator struct {
 	Reader client.Reader
 
+	// CapabilityReader reads Capability CRs for the admission checks. It is
+	// the manager's uncached APIReader so a Capability created moments before
+	// an Agent cannot slip past the deny checks through a stale cache. Falls
+	// back to Reader when unset (direct-call unit tests).
+	CapabilityReader client.Reader
+
 	// DefaultRunnerVersion resolves which embedded runner baseline the
 	// capability checks evaluate against when the Agent doesn't pin one.
 	// Empty falls back to spec.DefaultRunnerVersion.
@@ -62,8 +68,20 @@ var _ webhook.CustomValidator = &AgentCustomValidator{}
 func SetupAgentWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&agentv1alpha1.Agent{}).
-		WithValidator(&AgentCustomValidator{Reader: mgr.GetClient(), DefaultRunnerVersion: spec.DefaultRunnerVersion}).
+		WithValidator(&AgentCustomValidator{
+			Reader:               mgr.GetClient(),
+			CapabilityReader:     mgr.GetAPIReader(),
+			DefaultRunnerVersion: spec.DefaultRunnerVersion,
+		}).
 		Complete()
+}
+
+// capabilityReader returns the reader used for Capability lookups.
+func (v *AgentCustomValidator) capabilityReader() client.Reader {
+	if v.CapabilityReader != nil {
+		return v.CapabilityReader
+	}
+	return v.Reader
 }
 
 func (v *AgentCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -233,6 +251,14 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 			field.NewPath("spec", "runtime", "runnerVersion"), runnerVersion, err.Error()))
 	}
 
+	// Fragment-native capability names participate in entry-name uniqueness.
+	entryOwners := map[string]string{}
+	if agent.Spec.Spec != nil {
+		for _, frag := range agent.Spec.Spec.Capabilities {
+			entryOwners[frag.Name] = "spec.spec.capabilities[" + frag.Name + "]"
+		}
+	}
+
 	seen := map[types.NamespacedName]bool{}
 	deps := make([]capabilitydomain.Deps, 0, len(agent.Spec.Capabilities))
 	for i, att := range agent.Spec.Capabilities {
@@ -242,6 +268,18 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 			key.Namespace = agent.Namespace
 		}
 
+		// Cross-namespace capability references are not supported yet:
+		// per-namespace allow-listing is roadmap post-P1, and echoing a
+		// foreign namespace's Capability internals (requires tuple, schema,
+		// dependency pins) through admission errors would be a cross-tenant
+		// information-disclosure oracle. Reject with a generic message that
+		// reveals nothing about the referenced resource.
+		if key.Namespace != agent.Namespace {
+			allErrs = append(allErrs, field.Invalid(attPath.Child("ref", "namespace"), att.Ref.Namespace,
+				"cross-namespace Capability references are not supported yet; reference a Capability in the agent's namespace"))
+			continue
+		}
+
 		if seen[key] {
 			allErrs = append(allErrs, field.Duplicate(attPath.Child("ref"), key.String()))
 			continue
@@ -249,10 +287,28 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 		seen[key] = true
 
 		var capCR agentv1alpha1.Capability
-		if err := v.Reader.Get(ctx, key, &capCR); err != nil {
+		if err := v.capabilityReader().Get(ctx, key, &capCR); err != nil {
 			warnings = append(warnings, fmt.Sprintf(
 				"referenced Capability %s not found — compatibility and config checks run at compile time once it exists", key))
 			continue
+		}
+
+		// Entry-name uniqueness: two attachments (or an attachment and a
+		// fragment-native entry) compiling to the same spec entry name make
+		// the runner's capability registry raise at bootstrap.
+		entryName := capabilitydomain.EntryName(capCR.Spec.Entrypoint, capCR.Spec.SerializationName)
+		if owner, dup := entryOwners[entryName]; dup {
+			allErrs = append(allErrs, field.Invalid(attPath, entryName, fmt.Sprintf(
+				"capability %s compiles to spec entry %q, already claimed by %s; set spec.serializationName to disambiguate",
+				key, entryName, owner)))
+		} else {
+			entryOwners[entryName] = key.String()
+		}
+
+		// Config must be a JSON object (matches the compiler's contract).
+		if att.Config != nil && !isJSONObject(att.Config.Raw) {
+			allErrs = append(allErrs, field.Invalid(attPath.Child("config"), string(att.Config.Raw),
+				"capability config must be a JSON object"))
 		}
 
 		// Requires-tuple compatibility (runtime contract §5).
@@ -280,7 +336,9 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 			}
 		}
 
-		deps = append(deps, capabilitydomain.Deps{Name: capCR.Name, Pins: capCR.Spec.Dependencies})
+		// Key Deps by namespaced identity so two same-named CRs in different
+		// namespaces (once cross-namespace lands) stay distinct.
+		deps = append(deps, capabilitydomain.Deps{Name: key.String(), Pins: capCR.Spec.Dependencies})
 	}
 
 	// Dependency-conflict detection across attachments + the runner baseline.
@@ -289,6 +347,12 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 	}
 
 	return warnings, allErrs
+}
+
+// isJSONObject reports whether raw is a JSON object ({...}).
+func isJSONObject(raw []byte) bool {
+	var m map[string]json.RawMessage
+	return json.Unmarshal(raw, &m) == nil
 }
 
 // validateReferences checks that cross-resource references exist.

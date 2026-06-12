@@ -376,11 +376,37 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 		return nil, nil, &ValidationError{RunnerVersion: runnerVersion, Err: err}
 	}
 
+	// Entry names already claimed: fragment-native entries plus the platform
+	// entries injected last. Attachments may not collide with any of them.
+	entryOwners := map[string]string{}
+	if agent.Spec.Spec != nil {
+		for _, frag := range agent.Spec.Spec.Capabilities {
+			entryOwners[frag.Name] = "spec.spec.capabilities"
+		}
+	}
+	for _, inj := range c.opts.Injected {
+		entryOwners[inj.Name] = "injected platform capability"
+	}
+
 	entries := make([]any, 0, len(agent.Spec.Capabilities))
 	artifacts := make([]CapabilityArtifact, 0, len(agent.Spec.Capabilities))
 	deps := make([]capabilitydomain.Deps, 0, len(agent.Spec.Capabilities))
+	seen := map[string]bool{}
 	for _, att := range agent.Spec.Capabilities {
 		key := types.NamespacedName{Name: att.Ref.Name, Namespace: defaultNS(att.Ref.Namespace, agent.Namespace)}
+
+		// Cross-namespace capability references are not supported yet (see the
+		// Agent webhook for the rationale): reject without reading the foreign
+		// CR so its internals cannot leak into the Agent's status.
+		if key.Namespace != agent.Namespace {
+			return nil, nil, flokoaerrors.NewPermanentf(
+				"cross-namespace Capability reference %s is not supported yet; reference a Capability in the agent's namespace", key)
+		}
+		if seen[key.String()] {
+			return nil, nil, flokoaerrors.NewPermanentf("Capability %s is attached more than once", key)
+		}
+		seen[key.String()] = true
+
 		capCR, err := c.deps.Capabilities.GetCapability(ctx, key)
 		if err != nil {
 			return nil, nil, flokoaerrors.NewDependencyf("referenced Capability %s not found: %v", key, err)
@@ -413,9 +439,19 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 		}
 
 		entryName := capabilitydomain.EntryName(capCR.Spec.Entrypoint, capCR.Spec.SerializationName)
+		if err := capabilitydomain.ValidateEntryName(entryName); err != nil {
+			return nil, nil, flokoaerrors.NewPermanentf("Capability %s: %v", key, err)
+		}
+		if owner, dup := entryOwners[entryName]; dup {
+			return nil, nil, flokoaerrors.NewPermanentf(
+				"Capability %s compiles to spec entry %q, already claimed by %s; set spec.serializationName to disambiguate",
+				key, entryName, owner)
+		}
+		entryOwners[entryName] = key.String()
+
 		entries = append(entries, capabilityEntry(entryName, config))
 		artifacts = append(artifacts, CapabilityArtifact{Name: capCR.Name, Artifact: capCR.Spec.Artifact, EntryName: entryName})
-		deps = append(deps, capabilitydomain.Deps{Name: capCR.Name, Pins: capCR.Spec.Dependencies})
+		deps = append(deps, capabilitydomain.Deps{Name: key.String(), Pins: capCR.Spec.Dependencies})
 	}
 
 	if msgs := capabilitydomain.DetectConflicts(deps, runner); len(msgs) > 0 {

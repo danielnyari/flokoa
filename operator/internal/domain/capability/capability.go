@@ -108,18 +108,23 @@ func ParsePin(pin string) (name, version string, err error) {
 
 // DetectConflicts unions pinned dependencies across capabilities and the
 // runner baseline, returning one message per conflict (deterministic order:
-// capabilities and pins are processed in the order given; same-package
-// conflicts across capabilities are reported once, after baseline checks).
+// capabilities and pins are processed in the order given; baseline collisions
+// and intra-capability contradictions are reported as they are seen,
+// cross-capability conflicts against the first capability that pinned the
+// package). Conflicts are reported even when two Deps entries share a Name —
+// callers key Deps by namespaced identity so the names disambiguate.
 func DetectConflicts(caps []Deps, runner RunnerInfo) []string {
 	var conflicts []string
 	type pinned struct {
+		idx     int
 		capName string
 		version string
 	}
-	seen := map[string]pinned{}
-	crossConflicts := map[string]bool{}
+	established := map[string]pinned{} // first capability to pin each package
+	reportedCross := map[string]bool{} // package + current index, so each pair reports once
 
-	for _, c := range caps {
+	for idx, c := range caps {
+		local := map[string]string{} // this capability's own pins, for intra checks
 		for _, pin := range c.Pins {
 			pkg, version, err := ParsePin(pin)
 			if err != nil {
@@ -133,19 +138,58 @@ func DetectConflicts(caps []Deps, runner RunnerInfo) []string {
 					c.Name, pkg, version, runner.RunnerVersion, pkg, baseVersion))
 			}
 
-			prev, ok := seen[pkg]
+			// Intra-capability contradiction: the same package pinned twice at
+			// different versions within one capability.
+			if prevVersion, ok := local[pkg]; ok {
+				if prevVersion != version {
+					conflicts = append(conflicts, fmt.Sprintf(
+						"capability %q pins %s at conflicting versions (%s and %s)",
+						c.Name, pkg, prevVersion, version))
+				}
+			} else {
+				local[pkg] = version
+			}
+
+			// Cross-capability conflict against the first capability that
+			// pinned this package. Distinct Deps entries conflict even when
+			// they share a Name (namespaced aliasing must not hide it).
+			prev, ok := established[pkg]
 			switch {
 			case !ok:
-				seen[pkg] = pinned{capName: c.Name, version: version}
-			case prev.version != version && prev.capName != c.Name && !crossConflicts[pkg]:
-				conflicts = append(conflicts, fmt.Sprintf(
-					"capabilities %q and %q pin conflicting versions of %s (%s vs %s)",
-					prev.capName, c.Name, pkg, prev.version, version))
-				crossConflicts[pkg] = true
+				established[pkg] = pinned{idx: idx, capName: c.Name, version: version}
+			case prev.idx != idx && prev.version != version:
+				crossKey := fmt.Sprintf("%s\x00%d", pkg, idx)
+				if !reportedCross[crossKey] {
+					conflicts = append(conflicts, fmt.Sprintf(
+						"capabilities %q and %q pin conflicting versions of %s (%s vs %s)",
+						prev.capName, c.Name, pkg, prev.version, version))
+					reportedCross[crossKey] = true
+				}
 			}
 		}
 	}
 	return conflicts
+}
+
+// PlatformCapabilityPrefix is reserved for operator-injected capability
+// entries; user-published Capabilities may not claim a name under it.
+const PlatformCapabilityPrefix = "flokoa.platform/"
+
+// ValidateEntryName checks a compiled-spec capability entry name (the
+// serialization name a Capability contributes). It mirrors the inline-fragment
+// rule: no module/class path punctuation, and the operator-injected
+// flokoa.platform/ prefix is reserved.
+func ValidateEntryName(name string) error {
+	if name == "" {
+		return fmt.Errorf("capability entry name must not be empty")
+	}
+	if strings.HasPrefix(name, PlatformCapabilityPrefix) {
+		return fmt.Errorf("capability entry name %q uses the reserved %q prefix (operator-injected capabilities only)", name, PlatformCapabilityPrefix)
+	}
+	if strings.ContainsAny(name, "./:") {
+		return fmt.Errorf("capability entry name %q must not contain '.', '/', or ':' (it is the pydantic-ai capability class name)", name)
+	}
+	return nil
 }
 
 // ValidateRequires parse-checks a requires tuple without evaluating it
@@ -183,12 +227,24 @@ func CompileSchema(schema []byte) error {
 	return err
 }
 
+// denySchemaLoader refuses every external schema reference. A configSchema
+// comes verbatim from an untrusted CR; santhosh-tekuri's default loader reads
+// file:// $refs from the operator pod's filesystem, so we deny all external
+// resolution — only the in-memory resource and intra-document #/… pointers
+// resolve.
+type denySchemaLoader struct{}
+
+func (denySchemaLoader) Load(url string) (any, error) {
+	return nil, fmt.Errorf("external schema reference %q is not allowed", url)
+}
+
 func compileSchema(schema []byte) (*jsonschema.Schema, error) {
 	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema))
 	if err != nil {
 		return nil, fmt.Errorf("configSchema is not valid JSON: %v", err)
 	}
 	c := jsonschema.NewCompiler()
+	c.UseLoader(denySchemaLoader{})
 	const url = "flokoa://capability/config-schema.json"
 	if err := c.AddResource(url, doc); err != nil {
 		return nil, fmt.Errorf("configSchema is not a JSON Schema document: %v", err)
@@ -242,19 +298,92 @@ func ValidateConfig(schema, config []byte) error {
 		if !ok {
 			return &ConfigError{Message: err.Error()}
 		}
-		for _, leaf := range collectLeaves(verr) {
-			path := "/" + strings.Join(leaf.InstanceLocation, "/")
-			if placeholders[path] && suppressibleForPlaceholder(leaf.ErrorKind) {
-				continue
-			}
-			return &ConfigError{Path: path, Message: leaf.ErrorKind.LocalizedString(errPrinter)}
+		if placeholderSatisfied(verr, placeholders) {
+			return nil
+		}
+		leaf := firstGenuineLeaf(verr, placeholders)
+		return &ConfigError{
+			Path:    "/" + joinPointer(leaf.InstanceLocation),
+			Message: leaf.ErrorKind.LocalizedString(errPrinter),
 		}
 	}
 	return nil
 }
 
+// placeholderSatisfied reports whether a validation error tree is fully
+// excused by ${secret:NAME} placeholders. The walk is composition-aware: an
+// anyOf/oneOf node passes if ANY branch is satisfied (so "integer or
+// secret-string" accepts a placeholder via the string branch); every other
+// node passes only if ALL its causes are satisfied; a leaf passes only if the
+// instance is a placeholder and the failed constraint is a suppressible
+// string-level one.
+func placeholderSatisfied(v *jsonschema.ValidationError, placeholders map[string]bool) bool {
+	switch v.ErrorKind.(type) {
+	case *kind.AnyOf, *kind.OneOf:
+		for _, c := range v.Causes {
+			if placeholderSatisfied(c, placeholders) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(v.Causes) == 0 {
+		return placeholders["/"+joinPointer(v.InstanceLocation)] && suppressibleForPlaceholder(v.ErrorKind)
+	}
+	for _, c := range v.Causes {
+		if !placeholderSatisfied(c, placeholders) {
+			return false
+		}
+	}
+	return true
+}
+
+// firstGenuineLeaf returns a leaf that is not excused by a placeholder, to
+// report. Inside an unsatisfied anyOf/oneOf it descends the branch with the
+// deepest instance location (the alternative the config actually attempted).
+func firstGenuineLeaf(v *jsonschema.ValidationError, placeholders map[string]bool) *jsonschema.ValidationError {
+	switch v.ErrorKind.(type) {
+	case *kind.AnyOf, *kind.OneOf:
+		deepest, depth := v, -1
+		for _, c := range v.Causes {
+			leaf := firstGenuineLeaf(c, placeholders)
+			if d := len(leaf.InstanceLocation); d > depth {
+				deepest, depth = leaf, d
+			}
+		}
+		return deepest
+	}
+	if len(v.Causes) == 0 {
+		return v
+	}
+	for _, c := range v.Causes {
+		if !placeholderSatisfied(c, placeholders) {
+			return firstGenuineLeaf(c, placeholders)
+		}
+	}
+	return v
+}
+
+// escapePointerToken applies RFC 6901 escaping so a property key containing
+// '/' or '~' cannot collide with a structural path segment.
+func escapePointerToken(t string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(t, "~", "~0"), "/", "~1")
+}
+
+// joinPointer builds an RFC 6901 pointer body (no leading slash) from a token
+// slice. Both placeholder collection and error reporting use it, so a key with
+// a '/' maps to the same escaped path on both sides.
+func joinPointer(tokens []string) string {
+	escaped := make([]string, len(tokens))
+	for i, t := range tokens {
+		escaped[i] = escapePointerToken(t)
+	}
+	return strings.Join(escaped, "/")
+}
+
 // collectPlaceholderPaths records the JSON-pointer path of every string value
-// containing a ${secret:NAME} placeholder.
+// containing a ${secret:NAME} placeholder (paths RFC 6901-escaped to match
+// the validator's instance locations).
 func collectPlaceholderPaths(doc any, path string, into map[string]bool) {
 	switch v := doc.(type) {
 	case string:
@@ -271,7 +400,7 @@ func collectPlaceholderPaths(doc any, path string, into map[string]bool) {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			collectPlaceholderPaths(v[k], path+"/"+k, into)
+			collectPlaceholderPaths(v[k], path+"/"+escapePointerToken(k), into)
 		}
 	case []any:
 		for i, item := range v {
@@ -283,24 +412,23 @@ func collectPlaceholderPaths(doc any, path string, into map[string]bool) {
 // suppressibleForPlaceholder reports whether an error kind is a string-level
 // constraint a secret placeholder is allowed to bypass. Type errors are never
 // suppressed: secrets resolve to strings, so a placeholder satisfies
-// `type: string` only.
+// `type: string` only. Enum/Const are suppressed only when a string value is
+// actually allowed — a placeholder cannot satisfy an all-numeric enum.
 func suppressibleForPlaceholder(k jsonschema.ErrorKind) bool {
-	switch k.(type) {
-	case *kind.Pattern, *kind.MinLength, *kind.MaxLength, *kind.Enum, *kind.Const,
-		*kind.Format, *kind.ContentEncoding, *kind.ContentMediaType:
+	switch e := k.(type) {
+	case *kind.Pattern, *kind.MinLength, *kind.MaxLength, *kind.Format,
+		*kind.ContentEncoding, *kind.ContentMediaType:
 		return true
+	case *kind.Enum:
+		for _, want := range e.Want {
+			if _, ok := want.(string); ok {
+				return true
+			}
+		}
+		return false
+	case *kind.Const:
+		_, ok := e.Want.(string)
+		return ok
 	}
 	return false
-}
-
-// collectLeaves returns every leaf cause of a validation error tree.
-func collectLeaves(v *jsonschema.ValidationError) []*jsonschema.ValidationError {
-	if len(v.Causes) == 0 {
-		return []*jsonschema.ValidationError{v}
-	}
-	var leaves []*jsonschema.ValidationError
-	for _, c := range v.Causes {
-		leaves = append(leaves, collectLeaves(c)...)
-	}
-	return leaves
 }

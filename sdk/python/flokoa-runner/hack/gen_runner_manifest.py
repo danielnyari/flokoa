@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from flokoa_runner import CONTRACT_VERSION, RUNNER_VERSION
+from packaging.markers import Marker
 
 PYTHON_MINOR = "3.13"
 
@@ -28,14 +29,60 @@ PLATFORM_CAPABILITIES_RESERVED = {
     "flokoa.platform/budget-guardrail": "reserved",
 }
 
+# The runner image is a multi-arch linux container. A pinned package belongs in
+# the baseline only if it would actually install for at least one supported
+# arch — otherwise platform-gated entries (pywin32, win32 colorama) would seed
+# false-positive dependency conflicts at admission. Markers are evaluated
+# against these target environments.
+_RUNNER_TARGET_ENVS = [
+    {
+        "os_name": "posix",
+        "sys_platform": "linux",
+        "platform_system": "Linux",
+        "platform_machine": machine,
+        "platform_python_implementation": "CPython",
+        "implementation_name": "cpython",
+        "python_version": PYTHON_MINOR,
+        "python_full_version": f"{PYTHON_MINOR}.0",
+        "implementation_version": f"{PYTHON_MINOR}.0",
+        "platform_release": "",
+        "platform_version": "",
+    }
+    for machine in ("x86_64", "aarch64")
+]
+
+# PEP 503 normalization, matching the Go conflict detector
+# (internal/domain/capability.NormalizePackageName): lowercase, runs of
+# -, _, . collapsed to a single -.
+_NAME_SEPARATORS = re.compile(r"[-_.]+")
+
+
+def normalize_name(name: str) -> str:
+    return _NAME_SEPARATORS.sub("-", name).lower()
+
+
+def _marker_holds_on_runner(marker: str) -> bool:
+    parsed = Marker(marker)
+    return any(parsed.evaluate(env) for env in _RUNNER_TARGET_ENVS)
+
 
 def parse_lock_versions(lock_text: str) -> dict[str, str]:
-    """Extract `name==version` pins from an exported requirements-format lockfile."""
+    """Extract `name==version` pins from an exported requirements-format lockfile.
+
+    Packages whose environment marker excludes every supported runner arch are
+    dropped: they are not installed in the runner, so they are not part of the
+    baseline against which capability dependencies are checked.
+    """
     versions: dict[str, str] = {}
     for line in lock_text.splitlines():
-        m = re.match(r"^([A-Za-z0-9._-]+)==([^ ;\\]+)", line.strip())
-        if m:
-            versions[m.group(1).lower().replace("_", "-")] = m.group(2)
+        stripped = line.strip()
+        m = re.match(r"^([A-Za-z0-9._-]+)==([^ ;\\]+)\s*(?:;\s*(.+?))?\s*$", stripped)
+        if not m:
+            continue
+        name, version, marker = m.group(1), m.group(2), m.group(3)
+        if marker and not _marker_holds_on_runner(marker):
+            continue
+        versions[normalize_name(name)] = version
     return versions
 
 

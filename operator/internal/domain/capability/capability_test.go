@@ -180,6 +180,37 @@ func TestDetectConflicts(t *testing.T) {
 			},
 		},
 		{
+			name: "same Deps name still reports a conflict (namespaced aliasing must not hide it)",
+			caps: []Deps{
+				{Name: "kb", Pins: []string{"pydantic-ai-harness==0.2.1"}},
+				{Name: "kb", Pins: []string{"pydantic-ai-harness==0.3.0"}},
+			},
+			want: []string{
+				`capabilities "kb" and "kb" pin conflicting versions of pydantic-ai-harness (0.2.1 vs 0.3.0)`,
+			},
+		},
+		{
+			name: "intra-capability contradictory pins are reported",
+			caps: []Deps{
+				{Name: "a", Pins: []string{"foo==1.0", "foo==2.0"}},
+			},
+			want: []string{
+				`capability "a" pins foo at conflicting versions (1.0 and 2.0)`,
+			},
+		},
+		{
+			name: "three capabilities pinning three versions report each pair once",
+			caps: []Deps{
+				{Name: "a", Pins: []string{"pkg==1.0"}},
+				{Name: "b", Pins: []string{"pkg==2.0"}},
+				{Name: "c", Pins: []string{"pkg==3.0"}},
+			},
+			want: []string{
+				`capabilities "a" and "b" pin conflicting versions of pkg (1.0 vs 2.0)`,
+				`capabilities "a" and "c" pin conflicting versions of pkg (1.0 vs 3.0)`,
+			},
+		},
+		{
 			name: "invalid pin is reported",
 			caps: []Deps{
 				{Name: "a", Pins: []string{"not-a-pin"}},
@@ -306,7 +337,11 @@ const kbSchema = `{
 		"endpoint": {"type": "string", "pattern": "^https://"},
 		"apiKey": {"type": "string", "minLength": 20},
 		"mode": {"type": "string", "enum": ["read", "write"]},
+		"label": {"type": "string", "const": "fixed"},
 		"maxResults": {"type": "integer"},
+		"port": {"anyOf": [{"type": "integer"}, {"type": "string", "pattern": "^\\d+$"}]},
+		"level": {"enum": [1, 2, 3]},
+		"urls": {"type": "array", "items": {"type": "string", "pattern": "^https://"}},
 		"nested": {
 			"type": "object",
 			"properties": {"token": {"type": "string", "pattern": "^tok-"}}
@@ -372,6 +407,33 @@ func TestValidateConfig(t *testing.T) {
 			wantOK:   false,
 		},
 		{
+			name:   "placeholder satisfies a string branch of anyOf",
+			config: `{"endpoint": "https://kb.example.com", "port": "${secret:kb-port}"}`,
+			wantOK: true,
+		},
+		{
+			name:   "placeholder satisfies const string",
+			config: `{"endpoint": "https://kb.example.com", "label": "${secret:kb-label}"}`,
+			wantOK: true,
+		},
+		{
+			name:     "placeholder does not satisfy an all-non-string enum",
+			config:   `{"endpoint": "https://kb.example.com", "level": "${secret:kb-level}"}`,
+			wantPath: "/level",
+			wantOK:   false,
+		},
+		{
+			name:   "placeholder inside an array satisfies the item pattern",
+			config: `{"endpoint": "https://kb.example.com", "urls": ["${secret:kb-url}"]}`,
+			wantOK: true,
+		},
+		{
+			name:     "plain array element still fails the item pattern",
+			config:   `{"endpoint": "https://kb.example.com", "urls": ["http://insecure"]}`,
+			wantPath: "/urls/0",
+			wantOK:   false,
+		},
+		{
 			name:     "plain string still fails pattern",
 			config:   `{"endpoint": "http://insecure.example.com"}`,
 			wantPath: "/endpoint",
@@ -402,6 +464,60 @@ func TestValidateConfig(t *testing.T) {
 				t.Fatalf("ValidateConfig() path = %q, want %q (err: %v)", cfgErr.Path, tt.wantPath, err)
 			}
 		})
+	}
+}
+
+func TestValidateConfigPointerCollision(t *testing.T) {
+	// A property key containing "/" must not collide with a nested path: the
+	// genuine pattern violation at key "a/b" must not be suppressed by a
+	// placeholder at a.b (RFC 6901 escaping).
+	schema := `{"type":"object","properties":{
+		"a/b":{"type":"string","pattern":"^x$"},
+		"a":{"type":"object","properties":{"b":{"type":"string","pattern":"^x$"}}}
+	}}`
+	config := `{"a/b":"zzz","a":{"b":"${secret:X}"}}`
+	if err := ValidateConfig([]byte(schema), []byte(config)); err == nil {
+		t.Fatal("violation at key \"a/b\" must not be suppressed by a placeholder at a.b")
+	}
+}
+
+func TestValidateEntryName(t *testing.T) {
+	tests := []struct {
+		name    string
+		entry   string
+		wantErr string
+	}{
+		{name: "plain class name", entry: "KBSearch"},
+		{name: "reserved platform prefix", entry: "flokoa.platform/telemetry", wantErr: "reserved"},
+		{name: "contains slash", entry: "some/name", wantErr: "must not contain"},
+		{name: "contains colon", entry: "mod:Cls", wantErr: "must not contain"},
+		{name: "dotted module path", entry: "pkg.mod.Cls", wantErr: "must not contain"},
+		{name: "empty", entry: "", wantErr: "must not be empty"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEntryName(tt.entry)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateEntryName(%q) = %v, want nil", tt.entry, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ValidateEntryName(%q) = %v, want error containing %q", tt.entry, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestCompileSchemaRejectsExternalRef(t *testing.T) {
+	// A file:// $ref must not be resolved against the operator pod filesystem.
+	if err := CompileSchema([]byte(`{"$ref":"file:///etc/hostname"}`)); err == nil {
+		t.Fatal("external file:// $ref must be rejected, not loaded")
+	}
+	// Intra-document refs still compile.
+	if err := CompileSchema([]byte(`{"$defs":{"s":{"type":"string"}},"$ref":"#/$defs/s"}`)); err != nil {
+		t.Fatalf("intra-document $ref must compile, got %v", err)
 	}
 }
 
