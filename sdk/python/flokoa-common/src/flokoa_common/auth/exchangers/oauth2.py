@@ -185,7 +185,8 @@ class OAuth2CredentialExchanger(BaseAuthCredentialExchanger):
             logger.warning("Cannot refresh token: no token endpoint found in auth scheme.")
             return auth_credential
 
-        validate_url(token_endpoint)
+        # validate_url does a blocking DNS lookup; keep it off the event loop.
+        await asyncio.to_thread(validate_url, token_endpoint)
 
         data = {
             "grant_type": "refresh_token",

@@ -293,6 +293,26 @@ class TestPathParamPercentEncoding:
         return _prepare([self._path_param()], kwargs)
 
 
+class TestQueryParamFalsyValues:
+    """Query params with falsy-but-meaningful values (0, False, "") must be
+    sent; only None is dropped."""
+
+    def _query_param(self, name: str) -> ApiParameter:
+        return ApiParameter(original_name=name, param_location="query", param_schema=Schema(type="string"))
+
+    def test_zero_false_and_empty_string_are_kept(self):
+        params = _prepare(
+            [self._query_param("limit"), self._query_param("active"), self._query_param("q")],
+            {"limit": 0, "active": False, "q": ""},
+            path="/pets",
+        )
+        assert params["params"] == {"limit": 0, "active": False, "q": ""}
+
+    def test_none_is_dropped(self):
+        params = _prepare([self._query_param("limit")], {"limit": None}, path="/pets")
+        assert "limit" not in params["params"]
+
+
 class TestHeaderParamCrlfStripping:
     """CR/LF in header param values is stripped before the request is built,
     so a value cannot smuggle extra headers (or echo CRLF into error logs)."""

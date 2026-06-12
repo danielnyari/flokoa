@@ -46,7 +46,8 @@ def _route_kwargs_to_locations(
         if location == "path":
             path_params[original_k] = v
         elif location == "query":
-            if v:
+            # Keep falsy-but-meaningful values (0, False, ""); drop only None.
+            if v is not None:
                 query_params[original_k] = v
         elif location == "header":
             # Strip CR/LF so model-provided values cannot smuggle extra

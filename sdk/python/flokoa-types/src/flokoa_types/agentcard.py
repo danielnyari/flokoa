@@ -24,8 +24,10 @@ class Capabilities(BaseModel):
         populate_by_name=True,
     )
     extensions: list[Extension] | None = None
-    push_notifications: Annotated[bool | None, Field(alias="pushNotifications")] = None
-    state_transition_history: Annotated[bool | None, Field(alias="stateTransitionHistory")] = None
+    push_notifications: Annotated[bool | None, Field(alias='pushNotifications')] = None
+    state_transition_history: Annotated[
+        bool | None, Field(alias='stateTransitionHistory')
+    ] = None
     streaming: bool | None = None
 
 
@@ -33,34 +35,38 @@ class Skill(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
     )
-    description: Annotated[str, Field(description="Detailed description of what the skill does")]
+    description: Annotated[
+        str, Field(description='Detailed description of what the skill does')
+    ]
     examples: Annotated[
         list[str] | None,
-        Field(description="Sample prompts or use cases demonstrating the skill"),
+        Field(description='Sample prompts or use cases demonstrating the skill'),
     ] = None
-    id: Annotated[str, Field(description="Unique identifier for the skill")]
+    id: Annotated[str, Field(description='Unique identifier for the skill')]
     input_modes: Annotated[
         list[str] | None,
         Field(
-            alias="inputModes",
+            alias='inputModes',
             description="Supported input MIME types for this skill, overriding the agent's defaults",
         ),
     ] = None
-    name: Annotated[str, Field(description="Human-readable name for the skill")]
+    name: Annotated[str, Field(description='Human-readable name for the skill')]
     output_modes: Annotated[
         list[str] | None,
         Field(
-            alias="outputModes",
+            alias='outputModes',
             description="Supported output MIME types for this skill, overriding the agent's defaults",
         ),
     ] = None
     security: Annotated[
         list[dict[str, list[str]]] | None,
         Field(
-            description="Security schemes necessary for the agent to leverage this skill\nEach map entry represents security schemes that must be used together (AND)\nMultiple entries represent alternatives (OR)"
+            description='Security schemes necessary for the agent to leverage this skill\nEach map entry represents security schemes that must be used together (AND)\nMultiple entries represent alternatives (OR)'
         ),
     ] = None
-    tags: Annotated[list[str], Field(description="Keywords for categorization and discovery")]
+    tags: Annotated[
+        list[str], Field(description='Keywords for categorization and discovery')
+    ]
 
 
 class AgentCard(BaseModel):
@@ -68,8 +74,8 @@ class AgentCard(BaseModel):
         populate_by_name=True,
     )
     capabilities: Capabilities
-    default_input_modes: Annotated[list[str], Field(alias="defaultInputModes")]
-    default_output_modes: Annotated[list[str], Field(alias="defaultOutputModes")]
+    default_input_modes: Annotated[list[str], Field(alias='defaultInputModes')]
+    default_output_modes: Annotated[list[str], Field(alias='defaultOutputModes')]
     description: str
     name: str
     skills: list[Skill]

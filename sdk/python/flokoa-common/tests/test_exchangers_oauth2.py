@@ -199,6 +199,17 @@ class TestRefreshAccessToken:
         assert len(captured) == 1
         assert captured[0].url == "https://example.com/token"
 
+    async def test_refresh_rejects_internal_token_endpoint(self):
+        # SSRF validation still fires even though it now runs via
+        # asyncio.to_thread to keep the blocking DNS lookup off the event loop.
+        from flokoa_common.utils.url_validation import SSRFError
+
+        exchanger, captured = _exchanger_with_responses([httpx.Response(200, json={})])
+        scheme = _make_openid_scheme(token_endpoint="http://169.254.169.254/token")
+        with pytest.raises(SSRFError):
+            await exchanger._refresh_access_token(scheme, _make_oauth2_credential())
+        assert captured == []  # never reached the transport
+
     async def test_refresh_without_refresh_token_returns_original(self):
         exchanger, captured = _exchanger_with_responses([httpx.Response(200, json={})])
         cred = _make_oauth2_credential()

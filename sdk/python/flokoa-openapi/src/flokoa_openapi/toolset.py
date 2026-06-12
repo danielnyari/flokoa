@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import ssl
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -420,8 +421,11 @@ def _tool_name(operation_name: str, *, prefix: str | None, taken: Any) -> str:
         name = f"{prefix}_{name}" if name else prefix
     if not name:
         name = "operation"
-    if not name.isidentifier():
-        name = f"op_{name}"
+    # Coerce to a valid Python identifier: a non-identifier prefix (e.g.
+    # "petstore-v2") would otherwise leave invalid chars in place.
+    name = re.sub(r"\W", "_", name)
+    if name[0].isdigit():
+        name = f"_{name}"
     base = name
     counter = 2
     while name in taken:
@@ -458,10 +462,12 @@ def _extract_return_schema(operation: Operation) -> dict[str, Any] | None:
         content = responses[code].content
         if not content:
             continue
-        media_type = next(
-            (m for m in content if m.split(";")[0].strip().lower() == "application/json" or m.endswith("+json")),
-            None,
-        )
+
+        def _is_json_media_type(m: str) -> bool:
+            base = m.split(";")[0].strip().lower()
+            return base == "application/json" or base.endswith("+json")
+
+        media_type = next((m for m in content if _is_json_media_type(m)), None)
         if media_type is None:
             continue
         schema = content[media_type].schema_

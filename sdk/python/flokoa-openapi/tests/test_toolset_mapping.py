@@ -67,6 +67,30 @@ class TestToolDefinitionMapping:
         assert defs["delete_pet"].return_schema is None  # 204, no content
         assert defs["get_pet_photo"].return_schema is None  # image/png only
 
+    def test_return_schema_from_vendor_json_with_charset(self, petstore_spec):
+        # A +json vendor media type carrying a charset parameter must still be
+        # recognised as JSON (the suffix check has to ignore `; charset=...`).
+        petstore_spec["paths"]["/jsonapi"] = {
+            "get": {
+                "operationId": "get_jsonapi",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "content": {
+                            "application/vnd.api+json; charset=utf-8": {
+                                "schema": {"type": "object", "properties": {"data": {"type": "string"}}}
+                            }
+                        },
+                    }
+                },
+            }
+        }
+        defs = _defs_by_name(OpenAPIToolset(petstore_spec))
+        schema = defs["get_jsonapi"].return_schema
+        assert schema is not None
+        assert schema["type"] == "object"
+        assert "data" in schema["properties"]
+
     def test_metadata_flag_set(self, petstore_spec):
         for td in OpenAPIToolset(petstore_spec).tool_definitions:
             assert td.metadata == {TOOL_METADATA_KEY: True}
@@ -139,6 +163,14 @@ class TestFilteringAndNaming:
         toolset = OpenAPIToolset(petstore_spec)
         for td in toolset.tool_definitions:
             assert td.name.isidentifier(), td.name
+
+    def test_non_identifier_prefix_is_sanitized(self, petstore_spec):
+        # A prefix with invalid identifier chars (hyphen, dot) must not leak
+        # them into the tool name.
+        toolset = OpenAPIToolset(petstore_spec, prefix="petstore-v2.0")
+        names = {td.name for td in toolset.tool_definitions}
+        assert all(name.isidentifier() for name in names), names
+        assert "petstore_v2_0_list_pets" in names
 
     def test_spec_as_json_string(self, petstore_spec):
         import json
