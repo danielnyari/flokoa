@@ -23,8 +23,6 @@ rules:
   - secrets
   verbs:
   - get
-  - list
-  - watch
 - apiGroups:
   - agent.flokoa.ai
   resources:

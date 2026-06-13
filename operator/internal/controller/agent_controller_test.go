@@ -903,30 +903,6 @@ var _ = Describe("Agent Controller", func() {
 				requests := r.findAgentsForCapability(ctx, capability)
 				Expect(requests).To(ContainElement(reconcile.Request{NamespacedName: typeNamespacedName}))
 			})
-
-			It("findAgentsForSecret should return agents with a matching secretRef", func() {
-				secretName := fmt.Sprintf("watch-secret-%d", time.Now().UnixNano())
-
-				agent := minimalAgent(typeNamespacedName)
-				agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
-					"github-token": {
-						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-						Key:                  "token",
-					},
-				}
-				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
-
-				secret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: agentNamespace},
-					Data:       map[string][]byte{"token": []byte("t")},
-				}
-				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-				defer func() { _ = k8sClient.Delete(ctx, secret) }()
-
-				r := newAgentReconciler()
-				requests := r.findAgentsForSecret(ctx, secret)
-				Expect(requests).To(ContainElement(reconcile.Request{NamespacedName: typeNamespacedName}))
-			})
 		})
 	})
 })

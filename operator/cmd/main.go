@@ -360,7 +360,7 @@ func main() {
 		Deployments:   &repo.DeploymentRepoImpl{Client: k8sClient},
 		Services:      serviceRepo,
 		ServiceReader: serviceRepo,
-		Secrets:       &repo.SecretRepoImpl{Client: k8sClient},
+		Secrets:       &repo.SecretRepoImpl{Client: mgr.GetAPIReader()},
 		OwnerSetter:   &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
 	}, agentapp.Config{
 		DefaultRunnerVersion:        spec.DefaultRunnerVersion,
@@ -465,7 +465,7 @@ func main() {
 	triggerAppService := triggerapp.NewService(triggerapp.Deps{
 		Agents:      &repo.AgentRepoImpl{Client: k8sClient},
 		ConfigMaps:  &repo.ConfigMapRepoImpl{Client: k8sClient},
-		Secrets:     &repo.SecretRepoImpl{Client: k8sClient},
+		Secrets:     &repo.SecretRepoImpl{Client: mgr.GetAPIReader()},
 		OwnerSetter: &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
 	})
 	if err := (&controller.AgentTriggerReconciler{

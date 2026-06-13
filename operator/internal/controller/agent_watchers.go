@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -140,109 +139,6 @@ func (r *AgentReconciler) agentsReferencingModels(ctx context.Context, models ma
 			requests = append(requests, requestFor(&agent))
 		}
 	}
-	return requests
-}
-
-// findAgentsForSecret returns Agents affected by Secret changes: directly via
-// spec.secretRefs, via AgentTool headerSecrets, or via
-// ModelProvider -> Model -> Agent references.
-func (r *AgentReconciler) findAgentsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
-	secret, ok := obj.(*corev1.Secret)
-	if !ok {
-		log.FromContext(ctx).Error(nil, "findAgentsForSecret received unexpected object type", "type", fmt.Sprintf("%T", obj))
-		return nil
-	}
-	logger := log.FromContext(ctx)
-
-	seen := map[types.NamespacedName]struct{}{}
-	var requests []reconcile.Request
-	add := func(reqs ...reconcile.Request) {
-		for _, req := range reqs {
-			if _, dup := seen[req.NamespacedName]; !dup {
-				seen[req.NamespacedName] = struct{}{}
-				requests = append(requests, req)
-			}
-		}
-	}
-
-	// Direct references: agents in the secret's namespace with a matching
-	// secretRefs selector.
-	agentList := &agentv1alpha1.AgentList{}
-	if err := r.List(ctx, agentList, client.InNamespace(secret.Namespace)); err != nil {
-		logger.Error(err, "Failed to list Agents for Secret watch")
-		return nil
-	}
-	for _, agent := range agentList.Items {
-		for _, selector := range agent.Spec.SecretRefs {
-			if selector.Name == secret.Name {
-				add(requestFor(&agent))
-				break
-			}
-		}
-	}
-
-	// Via AgentTool header secrets.
-	toolList := &agentv1alpha1.AgentToolList{}
-	if err := r.List(ctx, toolList, client.InNamespace(secret.Namespace)); err != nil {
-		logger.Error(err, "Failed to list AgentTools for Secret watch")
-		return nil
-	}
-	for _, tool := range toolList.Items {
-		uses := false
-		for _, hs := range tool.Spec.HeaderSecrets {
-			if hs.SecretRef.Name == secret.Name {
-				uses = true
-				break
-			}
-		}
-		if uses {
-			add(r.findAgentsForAgentTool(ctx, &tool)...)
-		}
-	}
-
-	// Via ModelProvider -> Model -> Agent.
-	providerList := &agentv1alpha1.ModelProviderList{}
-	if err := r.List(ctx, providerList, client.InNamespace(secret.Namespace)); err != nil {
-		logger.Error(err, "Failed to list ModelProviders for Secret watch")
-		return nil
-	}
-
-	affectedProviders := map[string]struct{}{}
-	for _, provider := range providerList.Items {
-		if provider.Spec.APIKeySecretRef != nil && provider.Spec.APIKeySecretRef.Name == secret.Name {
-			affectedProviders[provider.Name] = struct{}{}
-		}
-		if provider.Spec.Google != nil && provider.Spec.Google.ServiceAccountKeySecretRef != nil && provider.Spec.Google.ServiceAccountKeySecretRef.Name == secret.Name {
-			affectedProviders[provider.Name] = struct{}{}
-		}
-	}
-
-	if len(affectedProviders) > 0 {
-		modelList := &agentv1alpha1.ModelList{}
-		if err := r.List(ctx, modelList); err != nil {
-			logger.Error(err, "Failed to list Models for Secret watch")
-			return nil
-		}
-
-		affectedModels := map[types.NamespacedName]struct{}{}
-		for _, model := range modelList.Items {
-			providerNamespace := model.Spec.ProviderRef.Namespace
-			if providerNamespace == "" {
-				providerNamespace = model.Namespace
-			}
-			if providerNamespace != secret.Namespace {
-				continue
-			}
-			if _, ok := affectedProviders[model.Spec.ProviderRef.Name]; ok {
-				affectedModels[types.NamespacedName{Name: model.Name, Namespace: model.Namespace}] = struct{}{}
-			}
-		}
-
-		if len(affectedModels) > 0 {
-			add(r.agentsReferencingModels(ctx, affectedModels)...)
-		}
-	}
-
 	return requests
 }
 
