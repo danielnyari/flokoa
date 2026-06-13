@@ -43,7 +43,6 @@ test/e2e/
 │   ├── tool_service.py           # Mock tool service
 │   └── Dockerfile.tool-service   # Tool service container image
 └── testdata/
-    ├── secret.yaml               # API key secret for ModelProvider
     ├── modelprovider.yaml        # ModelProvider pointing to LLM stub
     ├── model.yaml                # Model configuration
     ├── instruction.yaml          # Instruction with template variables

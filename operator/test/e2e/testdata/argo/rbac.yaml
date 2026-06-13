@@ -1,4 +1,9 @@
-# RBAC for Argo Workflows to access agents in flokoa-system namespace
+# RBAC granting the workflow + A2A executor-plugin service accounts read
+# access to Agents (so the plugin can resolve agent endpoints at run time).
+# These SAs live in the operator's deploy namespace, which the e2e harness
+# randomizes; the subjects below deliberately omit a namespace so the harness'
+# kustomize overlay stamps the deploy namespace onto them. Subjects that must
+# stay in the fixed `argo` namespace keep their explicit namespace.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -24,11 +29,7 @@ subjects:
     name: default
     namespace: argo
   - kind: ServiceAccount
-    name: flokoa-controller
-    namespace: flokoa-system
-  - kind: ServiceAccount
     name: a2a-executor-plugin
-    namespace: flokoa-system
 roleRef:
   kind: ClusterRole
   name: argo-agent-reader
@@ -50,7 +51,7 @@ metadata:
     kubernetes.io/service-account.name: a2a-executor-plugin
 type: kubernetes.io/service-account-token
 ---
-# Service account for workflows running in flokoa-system
+# Service account for workflows running in the operator's deploy namespace
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -72,10 +73,8 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: flokoa-workflow
-    namespace: flokoa-system
   - kind: ServiceAccount
     name: a2a-executor-plugin
-    namespace: flokoa-system
 roleRef:
   kind: ClusterRole
   name: argo-agent-reader
@@ -107,10 +106,8 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: flokoa-workflow
-    namespace: flokoa-system
   - kind: ServiceAccount
     name: a2a-executor-plugin
-    namespace: flokoa-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

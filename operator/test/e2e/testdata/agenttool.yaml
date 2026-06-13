@@ -1,7 +1,7 @@
-# Declarative MCP endpoint pointing at the in-cluster tool service.
-# NOTE: the petstore test service does not actually speak MCP yet; this
-# fixture exists to exercise the AgentTool -> MCP capability compilation
-# path (schema-valid spec, ${secret:...}-free endpoint resolution).
+# Declarative MCP endpoint pointing at the in-cluster tool service, which runs
+# a minimal streamable-HTTP MCP server (petstore_mcp.py) exposing a list_pets
+# tool. Exercises both the AgentTool -> MCP compilation path and a real tool
+# call when an agent built from this spec is actually invoked.
 apiVersion: agent.flokoa.ai/v1alpha1
 kind: AgentTool
 metadata:
