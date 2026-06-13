@@ -65,10 +65,17 @@ done < <(jq -r '.dependencies // [] | .[]' "${ARTIFACT_JSON}")
 echo "Building wheelhouse for ${NAME}==${VERSION} inside ${RUNNER_IMAGE}..."
 # The runner venv is uv-managed and ships without pip; ensurepip seeds it
 # inside the disposable build container only. Root user: the build container
-# is a throwaway compiler, not the pod path.
+# is a throwaway compiler, not the pod path. Because root writes the wheels to
+# the /out bind mount, they land root-owned on the host; reclaim them for the
+# invoking user (numeric ids, no passwd entry needed) so the host-side chmod
+# and manifest steps work on Linux CI. macOS Docker Desktop already remaps
+# ownership, so the chown is a harmless no-op there (|| true guards the rare
+# file-sharing driver that rejects it).
 "${CONTAINER_TOOL}" run --rm \
   --user 0 \
   -e HOME=/tmp \
+  -e HOST_UID="$(id -u)" \
+  -e HOST_GID="$(id -g)" \
   -v "${FIXTURE_DIR}:/src:ro" \
   -v "${WHEELHOUSE}:/out" \
   --entrypoint /bin/sh \
@@ -78,7 +85,8 @@ echo "Building wheelhouse for ${NAME}==${VERSION} inside ${RUNNER_IMAGE}..."
       python -m pip wheel --no-deps --wheel-dir /out /src;
       for pin in "$@"; do
         python -m pip wheel --no-deps --wheel-dir /out "${pin}";
-      done' build-wheelhouse ${DEP_PINS[@]+"${DEP_PINS[@]}"}
+      done;
+      chown -R "${HOST_UID}:${HOST_GID}" /out 2>/dev/null || true' build-wheelhouse ${DEP_PINS[@]+"${DEP_PINS[@]}"}
 
 # Wheels-only boundary (runtime contract §4): refuse sdists or anything else.
 ls "${WHEELHOUSE}"/*.whl >/dev/null 2>&1 || { echo "ERROR: wheelhouse is empty" >&2; exit 1; }

@@ -121,7 +121,8 @@ class TestContainerSession:
                 session.exec(["python", "/flokoa-inrunner/freeze_baseline.py", "--work", "/work"], step="freeze")
         start_argv = run.call_args_list[0].args[0]
         exec_argv = run.call_args_list[1].args[0]
-        rm_argv = run.call_args_list[2].args[0]
+        # rm is the last call; an ownership-reclaim chown may run just before it.
+        rm_argv = run.call_args_list[-1].args[0]
         assert start_argv[:2] == ["docker", "run"]
         assert exec_argv[:2] == ["docker", "exec"]
         assert exec_argv[3:] == ["python", "/flokoa-inrunner/freeze_baseline.py", "--work", "/work"]
@@ -129,11 +130,42 @@ class TestContainerSession:
         # No shell strings anywhere — every call is an argv list.
         assert all(isinstance(call.args[0], list) for call in run.call_args_list)
 
+    def test_exit_reclaims_rw_mount_ownership(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """On exit the session chowns its read-write mounts back to the host user.
+
+        The build container runs as root, so outputs it writes into the work
+        mount are root-owned; without reclaiming them the non-root host (Linux
+        CI) cannot write the manifest into the container-created wheelhouse dir.
+        Read-only mounts, which the container never writes to, are left alone.
+        """
+        monkeypatch.setattr(container.os, "getuid", lambda: 4242)
+        monkeypatch.setattr(container.os, "getgid", lambda: 4243)
+        session = self._session()
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(container.subprocess, "run", return_value=completed) as run:
+            with session:
+                pass
+        chown_calls = [c.args[0] for c in run.call_args_list if "chown" in c.args[0]]
+        assert len(chown_calls) == 1, "only the single read-write mount is reclaimed"
+        assert chown_calls[0][3:] == ["chown", "-R", "4242:4243", "/work"]
+        assert all("/flokoa-inrunner" not in argv for argv in chown_calls), "read-only mount is never chowned"
+
+    def test_exit_skips_reclaim_without_posix_ownership(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Where the OS has no uid/gid (e.g. Windows), reclaim is skipped, not crashed."""
+        monkeypatch.delattr(container.os, "getuid", raising=False)
+        session = self._session()
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(container.subprocess, "run", return_value=completed) as run:
+            with session:
+                pass
+        assert not [c.args[0] for c in run.call_args_list if "chown" in c.args[0]]
+
     def test_exec_failure_raises_with_output(self) -> None:
         session = self._session()
         ok = mock.Mock(returncode=0, stdout="", stderr="")
         boom = mock.Mock(returncode=1, stdout="partial", stderr="pip exploded")
-        with mock.patch.object(container.subprocess, "run", side_effect=[ok, boom, ok]):
+        # start, failing exec, then __exit__'s reclaim-chown + rm.
+        with mock.patch.object(container.subprocess, "run", side_effect=[ok, boom, ok, ok]):
             with session, pytest.raises(CapabilityCliError, match=r"(?s)wheelhouse build failed.*pip exploded"):
                 session.exec(["python", "x.py"], step="wheelhouse build")
 
@@ -141,7 +173,8 @@ class TestContainerSession:
         session = self._session()
         ok = mock.Mock(returncode=0, stdout="", stderr="")
         boom = mock.Mock(returncode=1, stdout="", stderr="nope")
-        with mock.patch.object(container.subprocess, "run", side_effect=[ok, boom, ok]) as run:
+        # start, failing exec, then __exit__'s reclaim-chown + rm; rm is last.
+        with mock.patch.object(container.subprocess, "run", side_effect=[ok, boom, ok, ok]) as run:
             with pytest.raises(CapabilityCliError):
                 with session:
                     session.exec(["python", "x.py"], step="step")

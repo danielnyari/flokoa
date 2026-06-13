@@ -151,8 +151,36 @@ class ContainerSession:
             raise CapabilityCliError(f"{step} failed inside {self.image}:\n{output}")
         return result
 
+    def _reclaim_ownership(self) -> None:
+        """Chown read-write mount outputs back to the invoking host user.
+
+        The container runs as root, so files its build steps write into
+        read-write bind mounts (the wheelhouse, work dir) are root-owned on the
+        host. On Linux that leaves the non-root host user unable to write into
+        those container-created directories — e.g. the host cannot drop
+        ``manifest.json`` into the wheelhouse dir after the build. Reclaim
+        ownership before the container is removed. macOS Docker Desktop already
+        remaps ownership, so this is a Linux/CI fix and a no-op (or unsupported,
+        hence best-effort) elsewhere. Read-only mounts are left untouched.
+        """
+        getuid = getattr(os, "getuid", None)
+        getgid = getattr(os, "getgid", None)
+        if getuid is None or getgid is None:  # e.g. Windows — no POSIX ownership
+            return
+        owner = f"{getuid()}:{getgid()}"
+        for mount in self.mounts:
+            if mount.read_only:
+                continue
+            subprocess.run(  # noqa: S603
+                self.exec_argv(["chown", "-R", owner, mount.container]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
     def __exit__(self, *exc_info: object) -> None:
         if self._name is not None:
+            self._reclaim_ownership()
             subprocess.run(  # noqa: S603
                 [self.tool, "rm", "-f", self._name], capture_output=True, text=True, check=False
             )
