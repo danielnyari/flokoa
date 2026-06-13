@@ -81,6 +81,7 @@ never a runtime surprise.
 | Capability wheelhouses | `/opt/flokoa/capabilities/<name>/` (wheels + `manifest.json`) | delivery → runner |
 | Secret indirection | `${secret:NAME}` placeholders in the spec ↔ `FLOKOA_SECRET_<NORMALIZED_NAME>` env (`valueFrom.secretKeyRef`) | operator → runner, resolved at hydration |
 | Serving | `FLOKOA_HOST` (default `0.0.0.0`), `FLOKOA_PORT` (default `8080`), `FLOKOA_PUBLIC_URL` (the published endpoint, = `status.url`) | operator → runner |
+| Health / readiness | `GET /health` on `FLOKOA_PORT` → `200 {"status":"ok"}`, served (with the A2A endpoints) only once the FastAPI app is up | runner → operator (readiness + startup probes) |
 | Skew detection | `FLOKOA_EXPECTED_RUNNER_VERSION`, `FLOKOA_EXPECTED_SCHEMA_DIGEST` | operator → runner |
 | Telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | operator → runner |
 
@@ -104,6 +105,15 @@ stage, e.g.:
 A schema-invalid spec should never reach the runner (the compiler validates
 first); bootstrap failures are environment problems and must read as such.
 Secret values are never logged.
+
+Because `GET /health` is served only by the running FastAPI app — the final
+`serve` stage — it doubles as the bootstrap-completion signal. The operator
+gates the runner pod's **readiness probe** on it (and fronts that with a
+**startup probe** so a slow `install_capabilities` stage gets a generous
+budget without ever reporting Ready early). A pod that fails any earlier stage
+never reaches `serve`, so the probe never passes: the pod stays not-Ready, the
+Deployment reports zero `availableReplicas`, the Agent's `Ready` condition
+never flaps True, and the published Service routes no traffic to it.
 
 ## 3. Secret-placeholder grammar
 

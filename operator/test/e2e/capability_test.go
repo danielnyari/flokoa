@@ -262,27 +262,29 @@ var _ = Describe("Capability delivery", Ordered, func() {
 			g.Expect(logs).To(ContainSubstring("install_capabilities"))
 		}, 5*time.Minute, 5*time.Second).Should(Succeed())
 
-		By("verifying the tampered agent settles to not-Ready")
-		// The runner container has no readiness probe yet, so the kubelet
-		// briefly marks the pod Ready before bootstrap crashes — the Agent's
-		// Ready condition can flap True for a moment on each restart. What
-		// the product guarantees today is that the crash loop drives the
-		// Agent to (and keeps it at) Ready=False; assert that settled state.
-		// A readiness probe on the runner container would close the flap
-		// window and let this become a hard never-Ready assertion.
-		Eventually(func(g Gomega) {
+		By("verifying the tampered agent is never Ready (the readiness probe closes the flap window)")
+		// The runner container's readiness probe gates on GET /health, which
+		// the FastAPI app serves only once bootstrap reaches `serve`. A
+		// tampered wheelhouse fails at `install_capabilities`, so the server
+		// never starts and the probe never passes: across the whole crash
+		// loop the pod is never Ready, no replica ever counts as available,
+		// and the Agent's Ready condition can never flap True. The preceding
+		// log assertion already proved bootstrap crashed at least once, so
+		// this window observes the post-crash steady state — a hard
+		// never-Ready assertion, not a "settles to not-Ready" one.
+		Consistently(func(g Gomega) {
 			agent := &agentv1alpha1.Agent{}
 			g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: "capability-tampered-agent", Namespace: namespace,
 			}, agent)).To(Succeed())
-			ready := findCondition(agent.Status.Conditions, "Ready")
-			g.Expect(ready).NotTo(BeNil(), "tampered agent should report a Ready condition")
-			g.Expect(ready.Status).To(Equal(metav1.ConditionFalse),
-				"a tampered wheelhouse must leave the agent not-Ready (reason: %s, message: %s)",
-				ready.Reason, ready.Message)
+			if ready := findCondition(agent.Status.Conditions, "Ready"); ready != nil {
+				g.Expect(ready.Status).NotTo(Equal(metav1.ConditionTrue),
+					"a tampered wheelhouse must never let the agent become Ready (reason: %s, message: %s)",
+					ready.Reason, ready.Message)
+			}
 			g.Expect(agent.Status.AvailableReplicas).To(BeZero(),
-				"no replica of a tampered agent may count as available")
-		}, 3*time.Minute, 5*time.Second).Should(Succeed())
+				"no replica of a tampered agent may ever count as available")
+		}, 60*time.Second, 3*time.Second).Should(Succeed())
 	})
 
 	AfterAll(func() {
