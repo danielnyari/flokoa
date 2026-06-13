@@ -69,10 +69,6 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			err = applyManifestFile("test/e2e/testdata/argo/executor-plugin.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to install A2A executor plugin")
 
-			By("creating the plugin service account token secret")
-			err = applyManifestFile("test/e2e/testdata/secret.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to create plugin token secret")
-
 			By("deploying the tool service")
 			err = applyManifestFile("test/e2e/testdata/tool-service.yaml")
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy tool service")
@@ -365,7 +361,6 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			deleteManifestFile("test/e2e/testdata/instruction.yaml")
 			deleteManifestFile("test/e2e/testdata/model.yaml")
 			deleteManifestFile("test/e2e/testdata/modelprovider.yaml")
-			deleteManifestFile("test/e2e/testdata/secret.yaml")
 			deleteManifestFile("test/e2e/testdata/tool-service.yaml")
 
 			By("cleaning up Argo RBAC")
@@ -374,8 +369,11 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			By("uninstalling A2A executor plugin")
 			deleteManifestFile("test/e2e/testdata/argo/executor-plugin.yaml")
 
-			By("uninstalling Argo Workflows")
-			utils.UninstallArgoWorkflows(ctx, k8sClient)
+			// Argo Workflows is intentionally left running: the AgentWorkflow
+			// Failure Handling container below needs the Argo CRDs for the
+			// operator to compile a WorkflowTemplate, and tearing Argo down then
+			// re-installing risks a namespace-terminating race. The whole Kind
+			// cluster is deleted at suite teardown, so this leaks nothing.
 		})
 	})
 

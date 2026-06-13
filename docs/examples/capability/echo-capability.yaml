@@ -1,0 +1,35 @@
+# A published, digest-pinned Capability with a typed (strict) config schema.
+#
+# This is the shape `flokoa capability push` produces from a build: the spec
+# mirrors the artifact's manifest.json by value, and spec.artifact is pinned to
+# the pushed digest (admission rejects tag refs). The configSchema here is what
+# attaching agents validate their per-capability `config` against at admission.
+#
+# Mirrors the echo fixture at
+# operator/test/e2e/fixtures/capabilities/echo/. See docs/capability.md for the
+# field reference and docs/guides/capabilities.md for how to build and push one.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Capability
+metadata:
+  name: flokoa-cap-echo
+spec:
+  # Digest-pinned wheelhouse artifact (runtime contract §4). The digest below
+  # is illustrative — `flokoa capability push` records the real one.
+  artifact: ghcr.io/danielnyari/capabilities/flokoa-cap-echo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  version: 0.1.0
+  entrypoint: flokoa_cap_echo:EchoCapability
+  schemaPolicy: strict
+  configSchema:
+    type: object
+    properties:
+      prefix:
+        type: string
+        default: echo
+        description: Prefix prepended to every echoed message.
+    additionalProperties: false
+  requires:
+    python: "3.13"
+    pydanticAI: ">=1.107,<2"
+    flokoaRunner: ">=0.2"
+  # The echo capability has zero non-baseline dependencies, so its closure is
+  # empty; a capability with deps would mirror its pinned closure here.

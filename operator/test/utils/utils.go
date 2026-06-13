@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -181,14 +182,128 @@ func IsCertManagerCRDsInstalled() bool {
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
-	cluster := "kind"
-	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
-		cluster = v
-	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
+	kindOptions := []string{"load", "docker-image", name, "--name", kindClusterName()}
 	cmd := exec.Command("kind", kindOptions...)
 	_, err := Run(cmd)
 	return err
+}
+
+// kindClusterName returns the Kind cluster targeted by the e2e run.
+func kindClusterName() string {
+	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
+		return v
+	}
+	return "kind"
+}
+
+// LoadImageAndGetDigest loads a locally-built docker image into the Kind
+// cluster and returns a digest-pinned reference (repo@sha256:…) that pods —
+// and, in particular, Capability CRs, whose admission requires digest
+// pinning — can use without any registry.
+//
+// Locally-built images have no RepoDigest on the docker side (a manifest
+// digest only exists once an OCI manifest does), so the digest is read back
+// from the node's containerd store after `kind load` imports the archive.
+// This is the one place the e2e suite couples to Kind node internals
+// (`docker exec <node> crictl/ctr`); everything else consumes the returned
+// reference like any registry ref. If this ever proves brittle against a
+// Kind/containerd upgrade, the documented fallback is the standard
+// local-registry pattern (https://kind.sigs.k8s.io/docs/user/local-registry/):
+// run a registry container next to the cluster, `docker push` the fixture
+// images, and read the digest from the push output instead.
+func LoadImageAndGetDigest(name string) (string, error) {
+	if err := LoadImageToKindClusterWithName(name); err != nil {
+		return "", fmt.Errorf("loading %s into kind: %w", name, err)
+	}
+
+	nodesOut, err := Run(exec.Command("kind", "get", "nodes", "--name", kindClusterName()))
+	if err != nil {
+		return "", fmt.Errorf("listing kind nodes: %w", err)
+	}
+	nodes := GetNonEmptyLines(nodesOut)
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("kind cluster %q has no nodes", kindClusterName())
+	}
+
+	// Read the containerd-recorded manifest digest via CRI on the first node
+	// (kind load imports the image on every node; the archive is identical,
+	// so the digest is too).
+	inspectOut, err := Run(exec.Command(
+		"docker", "exec", nodes[0], "crictl", "inspecti", "--output", "json", name))
+	if err != nil {
+		return "", fmt.Errorf("inspecting %s on node %s: %w", name, nodes[0], err)
+	}
+	var inspect struct {
+		Status struct {
+			RepoTags    []string `json:"repoTags"`
+			RepoDigests []string `json:"repoDigests"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(inspectOut), &inspect); err != nil {
+		return "", fmt.Errorf("parsing crictl inspecti output for %s: %w", name, err)
+	}
+	if len(inspect.Status.RepoTags) == 0 {
+		return "", fmt.Errorf(
+			"no repoTags recorded for %s on node %s (crictl output: %s)",
+			name, nodes[0], inspectOut)
+	}
+	tagRef := inspect.Status.RepoTags[0]
+
+	var digestRef string
+	if len(inspect.Status.RepoDigests) > 0 {
+		digestRef = inspect.Status.RepoDigests[0]
+	} else {
+		// `kind load` imports a docker-archive: containerd computes and stores
+		// the manifest digest but records no repo@digest reference, so CRI
+		// reports empty repoDigests. Read the digest from containerd's image
+		// store instead and synthesize the canonical reference.
+		digest, err := nodeImageDigest(nodes[0], tagRef)
+		if err != nil {
+			return "", err
+		}
+		repo := tagRef
+		if i := strings.LastIndex(tagRef, ":"); i > strings.LastIndex(tagRef, "/") {
+			repo = tagRef[:i]
+		}
+		digestRef = repo + "@" + digest
+	}
+
+	// `kind load` only records the tag reference. Register the canonical
+	// repo@digest reference too, on every node, so the kubelet's
+	// by-digest lookup (IfNotPresent) resolves without a registry.
+	for _, node := range nodes {
+		if _, err := Run(exec.Command(
+			"docker", "exec", node, "ctr", "--namespace", "k8s.io",
+			"images", "tag", "--force", tagRef, digestRef)); err != nil {
+			return "", fmt.Errorf("registering digest ref %s on node %s: %w", digestRef, node, err)
+		}
+	}
+
+	return digestRef, nil
+}
+
+// nodeImageDigest reads an image's manifest digest from a Kind node's
+// containerd store (`ctr images ls` prints a table whose DIGEST column is
+// always populated, unlike CRI repoDigests for archive-imported images).
+func nodeImageDigest(node, tagRef string) (string, error) {
+	lsOut, err := Run(exec.Command(
+		"docker", "exec", node, "ctr", "--namespace", "k8s.io",
+		"images", "ls", "name=="+tagRef))
+	if err != nil {
+		return "", fmt.Errorf("listing %s in containerd on node %s: %w", tagRef, node, err)
+	}
+	for _, line := range GetNonEmptyLines(lsOut) {
+		if !strings.HasPrefix(line, tagRef+" ") {
+			continue
+		}
+		for _, field := range strings.Fields(line) {
+			if strings.HasPrefix(field, "sha256:") {
+				return field, nil
+			}
+		}
+	}
+	return "", fmt.Errorf(
+		"no containerd digest found for %s on node %s (ctr output: %s)", tagRef, node, lsOut)
 }
 
 // GetNonEmptyLines converts given command output string into individual objects

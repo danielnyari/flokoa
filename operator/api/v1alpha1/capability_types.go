@@ -23,11 +23,34 @@ const (
 
 // Condition types surfaced on Capability status.
 const (
-	// CapabilityConditionVerified reports artifact digest/signature
-	// verification (controller-side checks land with roadmap 09).
+	// CapabilityConditionVerified reports artifact signature verification
+	// (cosign at controller reconcile; roadmap 09).
 	CapabilityConditionVerified = "Verified"
 	// CapabilityConditionPermissive loudly surfaces schemaPolicy: permissive.
 	CapabilityConditionPermissive = "Permissive"
+)
+
+// Reasons on the Verified condition. Shared constants because the Agent
+// webhook and the spec compiler read the condition to enforce the
+// requireVerified cluster policy and must phrase denials by reason
+// (an in-flight Unknown reads as retryable, never as "invalid").
+const (
+	// CapabilityVerifiedReasonDisabled: cosign verification is not enabled
+	// on this cluster (Verified=Unknown).
+	CapabilityVerifiedReasonDisabled = "VerificationDisabled"
+	// CapabilityVerifiedReasonVerified: the artifact signature verified
+	// (Verified=True); the condition message records the verified digest.
+	CapabilityVerifiedReasonVerified = "SignatureVerified"
+	// CapabilityVerifiedReasonMissing: no signature exists for the artifact
+	// (Verified=False, definitive for this digest).
+	CapabilityVerifiedReasonMissing = "SignatureMissing"
+	// CapabilityVerifiedReasonInvalid: a signature exists but did not verify
+	// (Verified=False, definitive for this digest).
+	CapabilityVerifiedReasonInvalid = "SignatureInvalid"
+	// CapabilityVerifiedReasonError: verification could not complete
+	// (registry blip, trust-root fetch failure); Verified=Unknown and the
+	// controller retries with backoff.
+	CapabilityVerifiedReasonError = "VerifyError"
 )
 
 // CapabilityRequires is the compatibility tuple mirrored from the artifact
@@ -145,6 +168,7 @@ type CapabilityStatus struct {
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version"
 // +kubebuilder:printcolumn:name="Runner",type="string",JSONPath=".spec.requires.flokoaRunner"
 // +kubebuilder:printcolumn:name="Policy",type="string",JSONPath=".spec.schemaPolicy"
+// +kubebuilder:printcolumn:name="Verified",type="string",JSONPath=".status.conditions[?(@.type=='Verified')].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Capability is the Schema for the capabilities API: a versioned,

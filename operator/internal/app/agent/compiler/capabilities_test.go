@@ -339,3 +339,113 @@ func TestCompileTwoCompatibleCapabilities(t *testing.T) {
 		t.Errorf("hash not deterministic: %s vs %s", res.Hash, res2.Hash)
 	}
 }
+
+// --- requireVerified compile-time policy (roadmap 09) ---
+
+// stampVerified mutates a Capability with a Verified condition.
+func stampVerified(status metav1.ConditionStatus, reason, message string) func(*agentv1alpha1.Capability) {
+	return func(c *agentv1alpha1.Capability) {
+		c.Status.Conditions = []metav1.Condition{{
+			Type:               agentv1alpha1.CapabilityConditionVerified,
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
+			LastTransitionTime: metav1.Now(),
+		}}
+	}
+}
+
+func TestCompileRequireVerifiedAdmitsVerifiedCapability(t *testing.T) {
+	f := newFixture(Options{RequireVerified: true})
+	f.addCapability("kb", stampVerified(metav1.ConditionTrue,
+		agentv1alpha1.CapabilityVerifiedReasonVerified, "cosign signature verified"))
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		attachKB(t, a, "kb")
+	})
+
+	if _, err := f.compiler.Compile(context.Background(), agent); err != nil {
+		t.Fatalf("a verified capability must compile under requireVerified, got %v", err)
+	}
+}
+
+func TestCompileRequireVerifiedBlocksUnverifiedCapability(t *testing.T) {
+	f := newFixture(Options{RequireVerified: true})
+	f.addCapability("kb", stampVerified(metav1.ConditionFalse,
+		agentv1alpha1.CapabilityVerifiedReasonInvalid, "signature did not verify"))
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		attachKB(t, a, "kb")
+	})
+
+	_, err := f.compiler.Compile(context.Background(), agent)
+	if err == nil {
+		t.Fatal("an unverified capability must not compile under requireVerified")
+	}
+	// Dependency (requeue) error, not permanent: a signature published later
+	// flips the condition without any Agent edit.
+	if !flokoaerrors.IsDependency(err) {
+		t.Fatalf("requireVerified failures must be dependency errors, got %v", err)
+	}
+	for _, want := range []string{"is not verified", "Verified=False", "reason SignatureInvalid", "requireVerified"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should contain %q", err.Error(), want)
+		}
+	}
+}
+
+func TestCompileRequireVerifiedInFlightIsRetryable(t *testing.T) {
+	// Transient nuance (§4.6): Unknown/VerifyError must read as in-flight,
+	// never as invalid, and must requeue.
+	f := newFixture(Options{RequireVerified: true})
+	f.addCapability("kb", stampVerified(metav1.ConditionUnknown,
+		agentv1alpha1.CapabilityVerifiedReasonError, "registry unavailable"))
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		attachKB(t, a, "kb")
+	})
+
+	_, err := f.compiler.Compile(context.Background(), agent)
+	if err == nil || !flokoaerrors.IsDependency(err) {
+		t.Fatalf("in-flight verification must be a dependency error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "verification is in flight") {
+		t.Fatalf("error %q should read as in-flight", err.Error())
+	}
+	if strings.Contains(err.Error(), "is not verified") {
+		t.Fatalf("an in-flight error must not read as a failed verification: %q", err.Error())
+	}
+}
+
+func TestCompileRequireVerifiedNoConditionIsRetryable(t *testing.T) {
+	f := newFixture(Options{RequireVerified: true})
+	f.addCapability("kb") // controller has not stamped Verified yet
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		attachKB(t, a, "kb")
+	})
+
+	_, err := f.compiler.Compile(context.Background(), agent)
+	if err == nil || !flokoaerrors.IsDependency(err) {
+		t.Fatalf("a missing Verified condition must be a dependency error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "verification is in flight") {
+		t.Fatalf("error %q should read as in-flight", err.Error())
+	}
+}
+
+func TestCompileWithoutRequireVerifiedIgnoresCondition(t *testing.T) {
+	// Policy off (the default): the Verified condition does not gate
+	// compilation.
+	f := newFixture(Options{})
+	f.addCapability("kb", stampVerified(metav1.ConditionFalse,
+		agentv1alpha1.CapabilityVerifiedReasonMissing, "no cosign signature found"))
+	agent := agentWith(func(a *agentv1alpha1.Agent) {
+		a.Spec.Spec = &agentv1alpha1.AgentSpecFragment{Model: "openai:gpt-5-mini"}
+		attachKB(t, a, "kb")
+	})
+
+	if _, err := f.compiler.Compile(context.Background(), agent); err != nil {
+		t.Fatalf("without requireVerified the condition must not gate compilation, got %v", err)
+	}
+}

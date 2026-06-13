@@ -31,6 +31,18 @@ jobs:
         working-directory: ./operator
         run: kind version
 
+      # Build the capability fixture artifacts (echo, upper) before the suite
+      # runs: the wheelhouse build needs docker + network (PyPI) and runs
+      # inside the pinned runner image, so that image is built first with the
+      # tag build.sh resolves from spec.DefaultRunnerVersion. The e2e suite
+      # rebuilds both from warm caches; failing here fails fast and legibly.
+      - name: Build capability fixture artifacts
+        run: |
+          RUNNER_VERSION="$(sed -n 's/^var DefaultRunnerVersion = "\(.*\)"$/\1/p' operator/internal/spec/spec.go)"
+          docker build -f sdk/python/flokoa-runner/Dockerfile \
+            -t "ghcr.io/danielnyari/flokoa-runner:${RUNNER_VERSION}" sdk/python
+          make -C operator build-e2e-capability-artifacts
+
       - name: Running Test e2e
         working-directory: ./operator
         env:
@@ -38,3 +50,51 @@ jobs:
         run: |
           go mod tidy
           make test-e2e
+
+  # Advisory until ImageVolume is GA and common in managed clusters: the same
+  # capability e2e spec on a feature-gated cluster (kind-config-imagevolume,
+  # containerd 2.x node image), with the operator in delivery mode `auto`.
+  # Asserts the probe lands on imageVolume, pods carry image volumes and zero
+  # cap-* initContainers, and the two-capability agent still answers — the
+  # "zero manifest changes" acceptance criterion of roadmap 09.
+  test-e2e-imagevolume:
+    name: ImageVolume delivery (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/go.mod
+
+      # kind >= v0.32.0 is required to `kind load` into the containerd 2.x
+      # node images this job uses.
+      - name: Install kind
+        working-directory: ./operator
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Build capability fixture artifacts
+        run: |
+          RUNNER_VERSION="$(sed -n 's/^var DefaultRunnerVersion = "\(.*\)"$/\1/p' operator/internal/spec/spec.go)"
+          docker build -f sdk/python/flokoa-runner/Dockerfile \
+            -t "ghcr.io/danielnyari/flokoa-runner:${RUNNER_VERSION}" sdk/python
+          make -C operator build-e2e-capability-artifacts
+
+      - name: Run capability e2e on a feature-gated cluster
+        working-directory: ./operator
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CAPABILITY_DELIVERY_EXPECT: imageVolume
+        run: |
+          go mod tidy
+          make test-e2e \
+            KIND_CONFIG=test/e2e/kind-config-imagevolume.yaml \
+            KIND_NODE_IMAGE='kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e940429c2ce42fa3a5619ec2bbc60b949c0ac95' \
+            E2E_GINKGO_FOCUS='Capability delivery'

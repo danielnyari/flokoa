@@ -43,7 +43,6 @@ test/e2e/
 │   ├── tool_service.py           # Mock tool service
 │   └── Dockerfile.tool-service   # Tool service container image
 └── testdata/
-    ├── secret.yaml               # API key secret for ModelProvider
     ├── modelprovider.yaml        # ModelProvider pointing to LLM stub
     ├── model.yaml                # Model configuration
     ├── instruction.yaml          # Instruction with template variables
@@ -84,3 +83,42 @@ go test ./test/e2e -v -ginkgo.focus="Template Agent E2E Test"
 ## Cleanup
 
 The test includes cleanup logic that deletes all created resources after completion or failure.
+
+## Capability Delivery E2E (`capability_test.go`)
+
+Validates roadmap 09 (capability artifacts & delivery): an Agent attaching two
+digest-pinned Capability CRs (`fixtures/capabilities/{echo,upper}`, built by
+`make build-e2e-capability-artifacts`) becomes Ready with the wheelhouses
+delivered into the runner pod, an A2A `message/send` exercises the echo
+capability tool (asserting the configured `e2e-cap:` prefix), and a tampered
+artifact (wheel bytes corrupted after manifest assembly) fails bootstrap with
+the structured `wheelhouse integrity check failed` error.
+
+### Delivery modes
+
+The same spec serves both CI jobs, gated on `CAPABILITY_DELIVERY_EXPECT`:
+
+- unset / `initContainer` (default job): asserts two `cap-*` copy
+  initContainers and the shared read-only emptyDir mount.
+- `imageVolume` (advisory job in `test-e2e.yml`): the test switches the
+  operator to `--capability-delivery-mode=auto`, then asserts the
+  `flokoa-capability-delivery` state ConfigMap records
+  `effectiveMode: imageVolume`, pods carry image volumes with zero `cap-*`
+  initContainers, and the agent still answers. Requires the cluster from
+  `kind-config-imagevolume.yaml` (ImageVolume feature gate) on a
+  containerd 2.x node image (kind >= v0.32.0, node image 1.35+).
+
+### Digest resolution without a registry
+
+Capability CRs must be digest-pinned, but locally-built images have no
+RepoDigest until a manifest exists. `utils.LoadImageAndGetDigest` loads the
+image with `kind load` and reads the containerd-recorded digest back from the
+node (`docker exec <node> crictl inspecti`; when CRI reports empty
+repoDigests — archive imports store the digest without a repo@digest
+reference — it falls back to the `ctr images ls` DIGEST column), then
+registers the canonical `repo@digest` reference on every node so the
+kubelet's by-digest lookup resolves. This is the suite's one coupling to Kind node internals, isolated in
+that util. **Fallback** if a Kind/containerd upgrade breaks it: the standard
+[local registry pattern](https://kind.sigs.k8s.io/docs/user/local-registry/) —
+run a registry container next to the cluster, `docker push` the fixture
+images, and take the digest from the push output.

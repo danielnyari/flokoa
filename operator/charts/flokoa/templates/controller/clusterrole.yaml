@@ -20,14 +20,17 @@ rules:
       - patch
       - update
       - watch
+  # Secrets are read by name through an uncached APIReader (agent/trigger
+  # secret-rotation hashing, missing-ref detection, and the cosign registry
+  # Secret in the operator namespace); they are never cached or watched. So
+  # get alone, cluster-wide — list/watch on Secrets would let the operator
+  # enumerate and stream every value in the cluster. Mirrors config/rbac.
   - apiGroups:
       - ""
     resources:
       - secrets
     verbs:
       - get
-      - list
-      - watch
   # Flokoa CRD resources
   - apiGroups:
       - agent.flokoa.ai

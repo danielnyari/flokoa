@@ -537,11 +537,20 @@ func dumpAgentPodDiagnostics(wfName, ns string) {
 
 // getPodContainerLogs retrieves logs from a specific container in a pod
 func getPodContainerLogs(podName, ns, containerName string) (string, error) {
+	return getPodContainerLogsWithOptions(podName, ns, containerName, false)
+}
+
+// getPodContainerLogsWithOptions retrieves logs from a specific container in
+// a pod; previous=true reads the prior (crashed) attempt's logs instead —
+// needed when a container crash-loops and the interesting line is on the
+// terminated attempt.
+func getPodContainerLogsWithOptions(podName, ns, containerName string, previous bool) (string, error) {
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return "", err
 	}
-	req := clientset.CoreV1().Pods(ns).GetLogs(podName, &corev1.PodLogOptions{Container: containerName})
+	req := clientset.CoreV1().Pods(ns).GetLogs(podName,
+		&corev1.PodLogOptions{Container: containerName, Previous: previous})
 	logs, err := req.Stream(ctx)
 	if err != nil {
 		return "", err

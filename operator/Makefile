@@ -130,6 +130,11 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= operator-test-e2e
 KIND_CONFIG ?= test/e2e/kind-config.yaml
+# Optional node image override (e.g. a 1.35+ image for the advisory
+# ImageVolume job paired with KIND_CONFIG=test/e2e/kind-config-imagevolume.yaml).
+KIND_NODE_IMAGE ?=
+# Optional ginkgo focus regex for running a subset of the e2e suite.
+E2E_GINKGO_FOCUS ?=
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
@@ -142,7 +147,8 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
 		*) \
 			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CONFIG) ;; \
+			$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CONFIG) \
+				$(if $(KIND_NODE_IMAGE),--image '$(KIND_NODE_IMAGE)') ;; \
 	esac
 
 .PHONY: test-integration
@@ -154,7 +160,8 @@ test-integration: manifests generate fmt vet setup-envtest ## Run the Docker-fre
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
 	@KUBECONFIG_FILE=$$(mktemp); \
 	$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $$KUBECONFIG_FILE; \
-	KIND_CLUSTER=$(KIND_CLUSTER) KUBECONFIG=$$KUBECONFIG_FILE go test ./test/e2e/ -v -ginkgo.v -timeout 60m; \
+	KIND_CLUSTER=$(KIND_CLUSTER) KUBECONFIG=$$KUBECONFIG_FILE go test ./test/e2e/ -v -ginkgo.v \
+		$(if $(E2E_GINKGO_FOCUS),-ginkgo.focus '$(E2E_GINKGO_FOCUS)') -timeout 60m; \
 	STATUS=$$?; \
 	rm -f $$KUBECONFIG_FILE; \
 	exit $$STATUS
@@ -194,6 +201,18 @@ endif
 		--dry-run=client -o yaml | $(KUBECTL) apply -f -
 	$(KUSTOMIZE) build test/e2e/testdata | $(KUBECTL) apply -f -
 	$(ARGO) submit -n $(E2E_NAMESPACE) test/e2e/testdata/argo/workflow.yaml
+
+CAPABILITY_FIXTURES ?= echo upper
+CAPABILITY_FIXTURES_DIR ?= test/e2e/fixtures/capabilities
+CAPABILITY_IMAGE_PLATFORM ?= linux/amd64
+
+.PHONY: build-e2e-capability-artifacts
+build-e2e-capability-artifacts: ## Build the reference capability artifact images (echo, upper) for e2e (roadmap 09).
+	@for fixture in $(CAPABILITY_FIXTURES); do \
+		CONTAINER_TOOL=$(CONTAINER_TOOL) \
+		CAPABILITY_IMAGE_PLATFORM=$(CAPABILITY_IMAGE_PLATFORM) \
+		$(CAPABILITY_FIXTURES_DIR)/build.sh $(CAPABILITY_FIXTURES_DIR)/$$fixture || exit 1; \
+	done
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter

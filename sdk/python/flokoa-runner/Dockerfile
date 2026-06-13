@@ -56,6 +56,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --project flokoa-runner \
             --no-dev --no-editable
 
+# Seed pip into the venv: uv-managed venvs ship without it, but the runner's
+# capability bootstrap installs wheelhouses via `python -m pip install
+# --no-index` (flokoa_runner/capabilities.py). ensurepip uses the CPython
+# bundled wheel — offline, lean, and deterministic per base-image patch
+# version. pip is a runtime tool here, not a dependency: it is intentionally
+# absent from runner.lock / runner-manifest.json (the locked baseline).
+RUN /app/.venv/bin/python -m ensurepip --upgrade
+
 # --- Stage 2: runtime ---
 FROM python:3.13-slim
 

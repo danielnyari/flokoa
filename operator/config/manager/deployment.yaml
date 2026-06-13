@@ -34,6 +34,13 @@ spec:
           - --health-probe-bind-address=:8081
         image: controller:latest
         name: controller
+        env:
+          # Downward-API namespace for resources the operator keeps in its
+          # own namespace (capability delivery probe pod + state ConfigMap).
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
         ports: []
         securityContext:
           allowPrivilegeEscalation: false

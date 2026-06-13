@@ -1,0 +1,25 @@
+{
+  "name": "flokoa-cap-upper",
+  "version": "0.1.0",
+  "contractVersion": 1,
+  "entrypoint": "flokoa_cap_upper:UpperCapability",
+  "requires": {
+    "python": "3.13",
+    "pydantic-ai": ">=1.107,<2",
+    "flokoa-runner": ">=0.2"
+  },
+  "dependencies": [
+    "inflection==0.5.1"
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "exclaim": {
+        "type": "boolean",
+        "default": false,
+        "description": "Append an exclamation mark to shouted messages."
+      }
+    },
+    "additionalProperties": false
+  }
+}

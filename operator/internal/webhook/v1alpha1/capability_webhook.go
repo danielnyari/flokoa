@@ -20,8 +20,10 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -57,7 +59,20 @@ func (v *CapabilityCustomValidator) ValidateCreate(_ context.Context, obj runtim
 	if !ok {
 		return nil, fmt.Errorf("expected a Capability but got %T", obj)
 	}
-	return validateCapability(capCR)
+
+	// Create-only (names are immutable): the builder derives container and
+	// volume names from cap-<name>, which must be RFC 1123 DNS labels —
+	// stricter than the DNS-subdomain rule object names get by default
+	// (no dots, at most 63 characters).
+	var nameErrs field.ErrorList
+	if msgs := validation.IsDNS1123Label(capCR.Name); len(msgs) > 0 {
+		nameErrs = append(nameErrs, field.Invalid(field.NewPath("metadata", "name"), capCR.Name, fmt.Sprintf(
+			"Capability names must be valid DNS labels (lowercase alphanumerics and '-', at most 63 characters) because "+
+				"runner pods derive container and volume names from cap-<name>: %s", strings.Join(msgs, "; "))))
+	}
+
+	warnings, allErrs := validateCapability(capCR)
+	return warnings, aggregateFieldErrors("Capability", capCR.Name, append(nameErrs, allErrs...))
 }
 
 func (v *CapabilityCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
@@ -65,7 +80,8 @@ func (v *CapabilityCustomValidator) ValidateUpdate(_ context.Context, _, newObj 
 	if !ok {
 		return nil, fmt.Errorf("expected a Capability but got %T", newObj)
 	}
-	return validateCapability(capCR)
+	warnings, allErrs := validateCapability(capCR)
+	return warnings, aggregateFieldErrors("Capability", capCR.Name, allErrs)
 }
 
 func (v *CapabilityCustomValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
@@ -77,7 +93,7 @@ var (
 	entrypointRe   = regexp.MustCompile(`^[\w.]+:[A-Za-z_]\w*$`)
 )
 
-func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, error) {
+func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, field.ErrorList) {
 	var warnings admission.Warnings
 	var allErrs field.ErrorList
 	specPath := field.NewPath("spec")
@@ -138,5 +154,5 @@ func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, er
 		}
 	}
 
-	return warnings, aggregateFieldErrors("Capability", capCR.Name, allErrs)
+	return warnings, allErrs
 }

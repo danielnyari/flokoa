@@ -32,7 +32,6 @@ import (
 // testManifests lists all the manifest files used in agent tests
 var testManifests = []string{
 	"test/e2e/testdata/tool-service.yaml",
-	"test/e2e/testdata/secret.yaml",
 	"test/e2e/testdata/modelprovider.yaml",
 	"test/e2e/testdata/model.yaml",
 	"test/e2e/testdata/instruction.yaml",
@@ -60,10 +59,6 @@ var _ = Describe("Agent", Ordered, func() {
 			By("waiting for tool service to be ready")
 			err = waitForDeploymentReady("tool-service", namespace, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "Tool service deployment not ready")
-
-			By("creating the plugin service account token secret")
-			err = applyManifestFile("test/e2e/testdata/secret.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to create plugin token secret")
 
 			By("creating/updating the OpenAI API key secret")
 			err = ensureOpenAIAPIKeySecret(namespace)
