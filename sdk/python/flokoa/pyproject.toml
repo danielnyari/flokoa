@@ -10,7 +10,9 @@ dependencies = [
     "fastapi>=0.128.0",
     "flokoa-common",
     "flokoa-types",
+    "jsonschema>=4.26.0",
     "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
@@ -63,6 +65,9 @@ python-version = "3.13"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "integration: requires docker and network; opt in with `pytest -m integration`",
+]
 
 [tool.ruff]
 target-version = "py313"
@@ -120,8 +125,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "S105", "S106", "B017", "F403", "RUF012", "RUF043", "E402", "SIM117"]
+"tests/*" = ["S101", "S105", "S106", "B017", "F403", "RUF012", "RUF043", "E402", "SIM117", "S603", "S607"]
 "src/*" = ["S105"]
+# In-runner build scripts: every subprocess call is an explicit argv array
+# ([sys.executable, "-m", "pip", ...]) — the pattern flokoa_runner uses.
+"src/flokoa/capability_cli/_inrunner/*" = ["S603"]
 
 [tool.ruff.format]
 preview = true

@@ -1,0 +1,16 @@
+[project]
+name = "flokoa-cap-upper"
+version = "0.1.0"
+description = "Reference e2e fixture: capability with one non-baseline dependency (closure exercise)"
+requires-python = ">=3.13"
+# inflection is deliberately NOT in the runner baseline (runner.lock): the
+# wheelhouse for this fixture must carry the pinned closure — two wheels —
+# so the dependency/closure machinery is genuinely exercised.
+dependencies = ["pydantic-ai>=1.107,<2", "inflection>=0.5.1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flokoa_cap_upper"]

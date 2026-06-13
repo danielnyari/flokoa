@@ -1,0 +1,49 @@
+{{- if .Values.controller.rbac.create }}
+# Capability delivery (roadmap 09): the operator probes ImageVolume support
+# with a short-lived pod in its own namespace (capabilities.delivery.mode:
+# auto) and records the resolution in the flokoa-capability-delivery
+# ConfigMap. Both live only in the operator namespace — a Role, not a
+# ClusterRole. Mirrors the namespaced manager-role slice in config/rbac.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}-capability-delivery
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - create
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flokoa.controller.fullname" . }}-capability-delivery
+  namespace: {{ include "flokoa.namespace" . }}
+  labels:
+    {{- include "flokoa.controller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "flokoa.controller.fullname" . }}-capability-delivery
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flokoa.controller.serviceAccountName" . }}
+    namespace: {{ include "flokoa.namespace" . }}
+{{- end }}

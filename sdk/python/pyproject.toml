@@ -67,3 +67,9 @@ ignore = ["E501", "E731", "TRY003"]
 "tests/*" = ["S101", "S104", "S105", "S106", "B017"]
 "**/tests/**" = ["S101", "S104", "S105", "S106", "B017", "S603", "S607"]
 "**/test/e2e/fixtures/**" = ["S104"]
+# Capability CLI: click command bodies are inherently branchy (C901 is tracked
+# separately, matching the flokoa package config). The in-runner build scripts
+# call pip via explicit argv arrays ([sys.executable, "-m", "pip", ...]) — the
+# same pattern flokoa_runner uses — so S603 and TRY300 are accepted there.
+"**/capability_cli/*" = ["C901"]
+"**/capability_cli/_inrunner/*" = ["S603", "C901", "TRY300"]

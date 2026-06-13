@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
@@ -51,6 +53,16 @@ type Config struct {
 	// OTLPEndpoint configures OTEL_EXPORTER_OTLP_ENDPOINT on runner pods
 	// (empty disables export).
 	OTLPEndpoint string
+
+	// CapabilityDelivery selects how capability wheelhouse artifacts reach
+	// runner pods (empty: builder.DeliveryInitContainer). Per-cluster policy,
+	// resolved by the operator entrypoint — never a per-Agent knob.
+	CapabilityDelivery builder.CapabilityDeliveryMode
+
+	// RequireVerifiedCapabilities mirrors the requireVerified cluster policy
+	// into the compiler: attached Capabilities whose Verified condition is
+	// not True fail compilation with a requeue (roadmap 09).
+	RequireVerifiedCapabilities bool
 }
 
 // ReconcileResult holds the result of a reconciliation.
@@ -85,6 +97,7 @@ func NewService(deps Deps, config Config) *Service {
 		}, compiler.Options{
 			DefaultRunnerVersion: config.DefaultRunnerVersion,
 			Injected:             config.Injected,
+			RequireVerified:      config.RequireVerifiedCapabilities,
 		}),
 	}
 }
@@ -252,6 +265,30 @@ func (s *Service) secretsState(ctx context.Context, namespace string, compiled *
 }
 
 func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.Agent, compiled *compiler.Result, specConfigMap, secretsHash string) (*appsv1.Deployment, error) {
+	// Map compiler delivery inputs to the builder's own type: infra/builder
+	// must not import app/agent/compiler (layering), so the translation
+	// happens here.
+	capabilities := make([]builder.CapabilityMount, 0, len(compiled.CapabilityArtifacts))
+	for _, artifact := range compiled.CapabilityArtifacts {
+		// The capability webhook enforces DNS-label names at admission, but
+		// the name flows into container names, volume subPaths, and mount
+		// paths — the builder must not trust that invariant blindly
+		// (pre-webhook objects, disabled webhooks, direct etcd writes).
+		if errs := validation.IsDNS1123Label(artifact.Name); len(errs) > 0 {
+			return nil, fmt.Errorf(
+				"capability name %q cannot be used for artifact delivery (it becomes a container name and volume subPath): %s",
+				artifact.Name, strings.Join(errs, "; "))
+		}
+		capabilities = append(capabilities, builder.CapabilityMount{
+			Name:     artifact.Name,
+			Artifact: artifact.Artifact,
+		})
+	}
+	delivery := s.config.CapabilityDelivery
+	if delivery == "" {
+		delivery = builder.DeliveryInitContainer
+	}
+
 	desired := builder.BuildDeployment(builder.DeploymentParams{
 		AgentName:             agent.Name,
 		AgentNamespace:        agent.Namespace,
@@ -268,6 +305,8 @@ func (s *Service) reconcileDeployment(ctx context.Context, agent *agentv1alpha1.
 		ProviderSecretEnv:     compiled.ProviderSecretEnv,
 		PublishedURL:          builder.PublishedURL(agent.Name, agent.Namespace),
 		OTLPEndpoint:          s.config.OTLPEndpoint,
+		Capabilities:          capabilities,
+		CapabilityDelivery:    delivery,
 	})
 
 	if err := s.deps.OwnerSetter.SetOwner(agent, desired); err != nil {

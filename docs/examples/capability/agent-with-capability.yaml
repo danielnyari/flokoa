@@ -1,0 +1,37 @@
+# An Agent attaching the published echo Capability with per-agent config.
+#
+# Pair this with echo-capability.yaml: the Capability CR publishes the
+# digest-pinned artifact and its config schema; the Agent references it by name
+# and supplies `config` that admission validates against that schema before any
+# pod starts. The runner delivers the wheelhouse, installs it, and registers the
+# EchoCapability entrypoint at bootstrap.
+#
+# See docs/capability.md for what admission checks and how attachments compile.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: echo-agent
+spec:
+  card:
+    name: echo-agent
+    description: "Echoes messages back through the echo capability"
+    version: "0.1.0"
+    skills:
+      - id: echo
+        name: Echo
+        description: "Echoes a message back, prefixed"
+        tags: [echo]
+
+  spec:
+    model: openai:gpt-5-mini
+    instructions:
+      - "Use the echo tool to repeat the user's message back."
+
+  # Attach the published Capability by name (same namespace) and supply the
+  # per-agent config. `prefix` is validated against the capability's
+  # configSchema at admission — a typo or wrong type is rejected before deploy.
+  capabilities:
+    - ref:
+        name: flokoa-cap-echo
+      config:
+        prefix: "agent-echo"

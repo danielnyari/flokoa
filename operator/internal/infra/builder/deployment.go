@@ -67,6 +67,14 @@ type DeploymentParams struct {
 
 	// OTLPEndpoint configures telemetry export (empty: no exporter).
 	OTLPEndpoint string
+
+	// Capabilities are the attached Capability artifacts to deliver into the
+	// runner pod (roadmap 09); empty means no delivery machinery is emitted.
+	Capabilities []CapabilityMount
+
+	// CapabilityDelivery selects how Capabilities reach the pod
+	// (empty: DeliveryInitContainer).
+	CapabilityDelivery CapabilityDeliveryMode
 }
 
 // BuildDeployment constructs a Kubernetes Deployment for an agent.
@@ -98,7 +106,7 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 			},
 		},
 		Env:             buildEnv(params),
-		SecurityContext: restrictedContainerSecurityContext(),
+		SecurityContext: RestrictedContainerSecurityContext(),
 	}
 	if params.Runtime.Resources != nil {
 		container.Resources = *params.Runtime.Resources
@@ -130,16 +138,25 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 		},
 	}
 
+	// Capability artifact delivery (roadmap 09): with zero capabilities every
+	// helper returns nil and the Deployment is byte-identical to before.
+	volumes = append(volumes, capabilityVolumes(params)...)
+	container.VolumeMounts = append(container.VolumeMounts, capabilityRunnerMounts(params)...)
+	initContainers := capabilityInitContainers(params)
+
 	podAnnotations := map[string]string{
 		"flokoa.ai/spec-hash": params.SpecHash,
 	}
 	if params.SecretsHash != "" {
 		podAnnotations["flokoa.ai/secrets-hash"] = params.SecretsHash
 	}
+	if len(params.Capabilities) > 0 {
+		podAnnotations[CapabilityDeliveryAnnotation] = string(effectiveCapabilityDelivery(params))
+	}
 
 	podSecurityContext := overrides.SecurityContext
 	if podSecurityContext == nil {
-		podSecurityContext = restrictedPodSecurityContext()
+		podSecurityContext = RestrictedPodSecurityContext()
 	}
 
 	return &appsv1.Deployment{
@@ -159,6 +176,7 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 					Annotations: podAnnotations,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers:     initContainers,
 					Containers:         []corev1.Container{container},
 					Volumes:            volumes,
 					ImagePullSecrets:   overrides.ImagePullSecrets,
@@ -210,7 +228,10 @@ func buildEnv(params DeploymentParams) []corev1.EnvVar {
 	return env
 }
 
-func restrictedContainerSecurityContext() *corev1.SecurityContext {
+// RestrictedContainerSecurityContext is the restricted-profile container
+// security context applied to every operator-built container (runner,
+// capability initContainers, the delivery probe pod).
+func RestrictedContainerSecurityContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
 		RunAsNonRoot:             boolPtr(true),
@@ -223,7 +244,9 @@ func restrictedContainerSecurityContext() *corev1.SecurityContext {
 	}
 }
 
-func restrictedPodSecurityContext() *corev1.PodSecurityContext {
+// RestrictedPodSecurityContext is the restricted-profile pod security
+// context counterpart of RestrictedContainerSecurityContext.
+func RestrictedPodSecurityContext() *corev1.PodSecurityContext {
 	return &corev1.PodSecurityContext{
 		RunAsNonRoot: boolPtr(true),
 		SeccompProfile: &corev1.SeccompProfile{

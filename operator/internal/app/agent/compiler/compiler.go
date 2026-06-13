@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
@@ -53,6 +55,13 @@ type Options struct {
 
 	// Injected platform capabilities, appended in order.
 	Injected []InjectedCapability
+
+	// RequireVerified mirrors the requireVerified cluster policy at compile
+	// time (roadmap 09): attached Capabilities whose Verified condition is
+	// not True fail compilation with a dependency (requeue) error. Admission
+	// runs the same check; re-running it here closes the hole where a
+	// Capability digest is edited after Agent admission.
+	RequireVerified bool
 }
 
 // CapabilityArtifact is the delivery input one Capability attachment
@@ -412,6 +421,16 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 			return nil, nil, flokoaerrors.NewDependencyf("referenced Capability %s not found: %v", key, err)
 		}
 
+		// requireVerified cluster policy: only Verified=True compiles. Always
+		// a dependency (requeue) error — verification may still be in flight,
+		// and a False verdict can flip once a signature is published — with
+		// phrasing that keeps the transient case readable as retryable.
+		if c.opts.RequireVerified {
+			if err := checkVerified(key.String(), capCR); err != nil {
+				return nil, nil, err
+			}
+		}
+
 		req := capabilitydomain.Requires{
 			Python:       capCR.Spec.Requires.Python,
 			PydanticAI:   capCR.Spec.Requires.PydanticAI,
@@ -466,6 +485,31 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 	}
 
 	return entries, artifacts, nil
+}
+
+// checkVerified enforces the requireVerified policy against one Capability's
+// Verified condition. Nil means Verified=True. All failures are dependency
+// errors (the Agent requeues and re-compiles); the messages distinguish
+// "verification in flight" (Unknown / no condition yet) from a definitive
+// failed verification so the Agent's status reads correctly.
+func checkVerified(capName string, capCR *agentv1alpha1.Capability) error {
+	cond := meta.FindStatusCondition(capCR.Status.Conditions, agentv1alpha1.CapabilityConditionVerified)
+	switch {
+	case cond == nil:
+		return flokoaerrors.NewDependencyf(
+			"Capability %s has no Verified condition yet and this cluster requires verified capabilities (requireVerified): verification is in flight",
+			capName)
+	case cond.Status == metav1.ConditionTrue:
+		return nil
+	case cond.Status == metav1.ConditionUnknown:
+		return flokoaerrors.NewDependencyf(
+			"Capability %s verification is in flight (Verified=%s, reason %s) and this cluster requires verified capabilities (requireVerified): %s",
+			capName, cond.Status, cond.Reason, cond.Message)
+	default: // ConditionFalse
+		return flokoaerrors.NewDependencyf(
+			"Capability %s is not verified (Verified=%s, reason %s) and this cluster requires verified capabilities (requireVerified): %s",
+			capName, cond.Status, cond.Reason, cond.Message)
+	}
 }
 
 func defaultNS(ns, fallback string) string {

@@ -1,3 +1,5 @@
+{{- include "flokoa.validateCapabilitiesVerification" . }}
+{{- $cosignKeyMount := and .Values.capabilities.verification.cosign.enabled .Values.capabilities.verification.cosign.keySecretRef }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -64,6 +66,26 @@ spec:
             - --telemetry-otlp-endpoint={{ .Values.telemetry.otlpEndpoint }}
             {{- end }}
             - --inject-telemetry={{ .Values.platformCapabilities.telemetry.enabled }}
+            - --capability-delivery-mode={{ .Values.capabilities.delivery.mode }}
+            - --capability-delivery-probe-timeout={{ .Values.capabilities.delivery.probe.timeoutSeconds }}s
+            {{- if .Values.capabilities.delivery.probe.image }}
+            - --capability-delivery-probe-image={{ .Values.capabilities.delivery.probe.image }}
+            {{- end }}
+            {{- if .Values.capabilities.verification.cosign.enabled }}
+            - --capability-cosign-enabled=true
+            {{- if .Values.capabilities.verification.cosign.keySecretRef }}
+            - --capability-cosign-key-path=/etc/flokoa/cosign/cosign.pub
+            {{- else }}
+            - --capability-cosign-keyless-issuer={{ .Values.capabilities.verification.cosign.keyless.issuer }}
+            - --capability-cosign-keyless-identity-regexp={{ .Values.capabilities.verification.cosign.keyless.identityRegexp }}
+            {{- end }}
+            {{- if .Values.capabilities.verification.registrySecretRef }}
+            - --capability-registry-secret-name={{ .Values.capabilities.verification.registrySecretRef }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.capabilities.verification.requireVerified }}
+            - --capability-require-verified=true
+            {{- end }}
             {{- range .Values.controller.extraArgs }}
             - {{ . }}
             {{- end }}
@@ -73,10 +95,16 @@ spec:
               containerPort: 9443
               protocol: TCP
           {{- end }}
-          {{- with .Values.controller.extraEnv }}
           env:
+            # Downward-API namespace for resources the operator keeps in its
+            # own namespace (capability delivery probe pod + state ConfigMap).
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- with .Values.controller.extraEnv }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.controller.securityContext | nindent 12 }}
           livenessProbe:
@@ -93,17 +121,34 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.controller.resources | nindent 12 }}
-          {{- if .Values.webhooks.enabled }}
+          {{- if or .Values.webhooks.enabled $cosignKeyMount }}
           volumeMounts:
+            {{- if .Values.webhooks.enabled }}
             - name: webhook-certs
               mountPath: /tmp/k8s-webhook-server/serving-certs
               readOnly: true
+            {{- end }}
+            {{- if $cosignKeyMount }}
+            - name: cosign-key
+              mountPath: /etc/flokoa/cosign
+              readOnly: true
+            {{- end }}
           {{- end }}
-      {{- if .Values.webhooks.enabled }}
+      {{- if or .Values.webhooks.enabled $cosignKeyMount }}
       volumes:
+        {{- if .Values.webhooks.enabled }}
         - name: webhook-certs
           secret:
             secretName: {{ include "flokoa.webhook.certSecretName" . }}
+        {{- end }}
+        {{- if $cosignKeyMount }}
+        - name: cosign-key
+          secret:
+            secretName: {{ .Values.capabilities.verification.cosign.keySecretRef }}
+            items:
+              - key: cosign.pub
+                path: cosign.pub
+        {{- end }}
       {{- end }}
       {{- with .Values.controller.nodeSelector }}
       nodeSelector:

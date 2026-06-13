@@ -130,34 +130,131 @@ replace every character outside `[A-Z0-9]` with `_`, then prefix
 Resolution is all-or-nothing: the runner collects **all** missing references
 and fails the `resolve_secrets` stage listing every one of them at once.
 
-## 4. Capability wheelhouse layout
+## 4. Capability artifacts and the wheelhouse layout
 
-Each Capability artifact is delivered (initContainer copy or ImageVolume
-mount) to `/opt/flokoa/capabilities/<name>/` containing:
+### The artifact image (normative)
 
-- the capability wheel plus the pinned closure of dependencies **not** in the
-  baseline,
-- `manifest.json` with at minimum:
+A Capability artifact is an OCI **image** (not a raw OCI artifact —
+initContainers must be able to run it, and image-ness keeps registries,
+caches, and scanners happy):
+
+```dockerfile
+FROM busybox:stable-musl
+COPY wheelhouse/ /wheelhouse/        # capability wheel + pinned non-baseline closure
+# /wheelhouse/manifest.json is part of wheelhouse/
+```
+
+- **Image labels** (mirroring the runner image's labeling convention):
+  `ai.flokoa.capability-name`, `ai.flokoa.capability-version`,
+  `ai.flokoa.contract-version`.
+- **Multi-arch** via an OCI image index (manifest list) for `linux/amd64` +
+  `linux/arm64`. Pure-Python capabilities (every wheel is
+  `*-py3-none-any.whl`) carry identical wheelhouse content on all
+  architectures; only the busybox base differs per platform.
+- **File modes**: every wheelhouse file is world-readable (`0644`) — the
+  initContainer copies as uid 65532 and the runner reads as uid 65532.
+- **Wheels only. No sdists, ever.** A wheelhouse contains `*.whl` files and
+  `manifest.json` — nothing else. sdists (`*.tar.gz`, `*.zip`, `setup.py`)
+  are refused at build time and again at bootstrap (installing a wheel
+  executes no setup code; an sdist would). **System-level dependencies
+  (binaries, apt packages, shared libraries) are out of scope for capability
+  artifacts — that is what custom agent images are for.** This boundary is
+  deliberate and load-bearing: an artifact that needs more than wheels is not
+  a capability artifact.
+
+### `manifest.json` (v1)
+
+`/wheelhouse/manifest.json` is the artifact's self-description and the source
+the Capability CR mirrors by value (`spec.version`, `entrypoint`,
+`serializationName`, `requires`, `dependencies`, `configSchema`;
+`schemaDigest` binds `configSchema` to the CR mirror). Schema (JSON Schema
+draft 2020-12):
 
 ```json
 {
-  "name": "…", "version": "…",
-  "entrypoint": "module:attr",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["name", "version", "contractVersion", "entrypoint", "requires", "wheels"],
+  "properties": {
+    "name":            {"type": "string", "description": "PEP 503-normalized distribution name"},
+    "version":         {"type": "string", "description": "PEP 440 version; matches the Capability CR spec.version"},
+    "contractVersion": {"type": "integer", "const": 1},
+    "entrypoint":      {"type": "string", "pattern": "^[\\w.]+:[A-Za-z_]\\w*$"},
+    "serializationName": {"type": "string", "pattern": "^[A-Za-z_]\\w*$"},
+    "requires": {
+      "type": "object",
+      "properties": {
+        "python":        {"type": "string", "pattern": "^\\d+\\.\\d+$"},
+        "pydantic-ai":   {"type": "string", "description": "PEP 440 specifier set"},
+        "flokoa-runner": {"type": "string", "description": "PEP 440 specifier set"}
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*==[A-Za-z0-9._+!-]+$"},
+      "description": "pinned non-baseline closure; mirrored to Capability CR spec.dependencies"
+    },
+    "wheels": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["file", "sha256"],
+        "properties": {
+          "file":   {"type": "string", "pattern": "\\.whl$"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "schemaDigest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$",
+                     "description": "sha256 of the canonical (sorted-keys, no-whitespace) configSchema JSON"},
+    "configSchema": {"type": "object", "description": "inline JSON Schema for per-agent config (additive optional field)"}
+  }
+}
+```
+
+Example:
+
+```json
+{
+  "name": "flokoa-cap-echo", "version": "0.1.0",
+  "contractVersion": 1,
+  "entrypoint": "flokoa_cap_echo:EchoCapability",
   "requires": {"python": "3.13", "pydantic-ai": ">=1.107,<2", "flokoa-runner": ">=0.2"},
-  "contractVersion": 1
+  "dependencies": [],
+  "wheels": [{"file": "flokoa_cap_echo-0.1.0-py3-none-any.whl", "sha256": "…"}]
 }
 ```
 
 Optional manifest fields: `serializationName` — the capability class's
 spec-entry name when it overrides pydantic-ai's default (the class name).
 The Capability CR mirrors it so compiled spec entries resolve against the
-class the runner registers from the wheelhouse.
+class the runner registers from the wheelhouse. `configSchema` /
+`schemaDigest` make the artifact fully self-describing: the CR can be
+regenerated from the artifact alone.
 
-The runner verifies the `requires` tuple against its own manifest (defense in
-depth — admission already checked it), then installs with
-`pip install --no-index --find-links <dir>` and registers the entrypoint class
-in `custom_capability_types`. System-level dependencies (binaries, apt
-packages) are out of scope for artifacts — that's what custom images are for.
+### Delivery and runner consumption
+
+Each Capability artifact is delivered (initContainer copy or ImageVolume
+mount) to `/opt/flokoa/capabilities/<name>/`: the capability wheel plus the
+pinned closure of dependencies **not** in the baseline, with `manifest.json`
+alongside. For each delivered directory the runner, in order:
+
+1. loads `manifest.json` and enforces its shape (an entrypoint, a non-empty
+   `wheels` list, valid `dependencies` pins; a present `contractVersion` must
+   match the runner's),
+2. re-checks the `requires` tuple against its own manifest (defense in depth
+   — admission already checked it),
+3. verifies wheelhouse integrity: every manifest-listed wheel must exist and
+   hash (streamed sha256) to its declared value; any unlisted `*.whl` and any
+   non-wheel installable (`*.tar.gz`, `*.zip`, `setup.py`) fails bootstrap —
+   this covers the window between artifact delivery and install,
+4. installs the **explicit pin set** —
+   `pip install --no-index --find-links <dir> <name>==<version> <dependencies…>`
+   — never free resolution from the directory,
+5. registers the entrypoint class in `custom_capability_types`.
+
+Every failure is a structured `BootstrapError` at stage
+`install_capabilities` (§2), e.g.
+`{"stage": "install_capabilities", "error": "wheelhouse integrity check failed", "capability": "echo", "file": "…", "expected_sha256": "…", "actual_sha256": "…"}`.
 
 ## 5. `requires` / compatibility semantics
 

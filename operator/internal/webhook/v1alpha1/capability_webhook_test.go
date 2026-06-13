@@ -141,3 +141,48 @@ func TestCapabilityWebhookUpdateValidates(t *testing.T) {
 		t.Fatal("update validation must apply the same checks")
 	}
 }
+
+// --- DNS-label name rule (roadmap 09) ---
+
+func TestCapabilityWebhookRequiresDNSLabelName(t *testing.T) {
+	// Runner pods derive container/volume names from cap-<name>, so the CR
+	// name must be a DNS label — stricter than the DNS-subdomain rule object
+	// names get by default.
+	cases := []string{
+		"my.cap",                // dots: valid object name, invalid DNS label
+		"My-Cap",                // uppercase
+		strings.Repeat("x", 64), // longer than 63
+	}
+	v := &CapabilityCustomValidator{}
+	for _, name := range cases {
+		c := capabilityCR("kb")
+		c.Name = name
+		_, err := v.ValidateCreate(context.Background(), c)
+		if err == nil || !strings.Contains(err.Error(), "DNS label") {
+			t.Fatalf("Capability name %q must be denied naming the DNS-label rule, got %v", name, err)
+		}
+		if !strings.Contains(err.Error(), "cap-<name>") {
+			t.Fatalf("the denial should explain the cap-<name> derivation, got %v", err)
+		}
+	}
+}
+
+func TestCapabilityWebhookAcceptsDNSLabelName(t *testing.T) {
+	v := &CapabilityCustomValidator{}
+	c := capabilityCR("kb")
+	c.Name = "echo-tools-2"
+	if _, err := v.ValidateCreate(context.Background(), c); err != nil {
+		t.Fatalf("a DNS-label name must be admitted, got %v", err)
+	}
+}
+
+func TestCapabilityWebhookNameRuleIsCreateOnly(t *testing.T) {
+	// Names are immutable, so update does not re-check them: a pre-rule CR
+	// with a non-label name must stay editable.
+	v := &CapabilityCustomValidator{}
+	c := capabilityCR("kb")
+	c.Name = "legacy.name"
+	if _, err := v.ValidateUpdate(context.Background(), c, c); err != nil {
+		t.Fatalf("update must not re-check the immutable name, got %v", err)
+	}
+}
