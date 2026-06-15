@@ -29,11 +29,11 @@ import (
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
-// testManifests lists all the manifest files used in agent tests
+// testManifests lists all the manifest files used in agent tests. The agent
+// runs on the built-in `test` model (see agent.yaml), so no ModelProvider /
+// Model / API-key secret is needed — this spec runs deterministically in CI.
 var testManifests = []string{
 	"test/e2e/testdata/tool-service.yaml",
-	"test/e2e/testdata/modelprovider.yaml",
-	"test/e2e/testdata/model.yaml",
 	"test/e2e/testdata/instruction.yaml",
 	"test/e2e/testdata/agenttool.yaml",
 	"test/e2e/testdata/agent.yaml",
@@ -44,13 +44,6 @@ var _ = Describe("Agent", Ordered, func() {
 	SetDefaultEventuallyPollingInterval(time.Second)
 
 	Context("Compiled Agent E2E Test", func() {
-		BeforeAll(func() {
-			By("ensuring OPENAI_API_KEY is available for real e2e run")
-			skipIfNoOpenAIKey()
-			err := ensureOpenAIAPIKeySecret(namespace)
-			Expect(err).NotTo(HaveOccurred(), "Failed to configure openai-api-key secret")
-		})
-
 		It("should compile the composition into an agent-spec ConfigMap and run it on the generic runner", func() {
 			By("deploying the tool service")
 			err := applyManifestFile("test/e2e/testdata/tool-service.yaml")
@@ -59,18 +52,6 @@ var _ = Describe("Agent", Ordered, func() {
 			By("waiting for tool service to be ready")
 			err = waitForDeploymentReady("tool-service", namespace, 5*time.Minute)
 			Expect(err).NotTo(HaveOccurred(), "Tool service deployment not ready")
-
-			By("creating/updating the OpenAI API key secret")
-			err = ensureOpenAIAPIKeySecret(namespace)
-			Expect(err).NotTo(HaveOccurred(), "Failed to configure openai-api-key secret")
-
-			By("applying the ModelProvider")
-			err = applyManifestFile("test/e2e/testdata/modelprovider.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply ModelProvider")
-
-			By("applying the Model")
-			err = applyManifestFile("test/e2e/testdata/model.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply Model")
 
 			By("applying the Instruction")
 			err = applyManifestFile("test/e2e/testdata/instruction.yaml")

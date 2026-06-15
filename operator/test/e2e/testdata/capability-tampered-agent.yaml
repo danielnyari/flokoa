@@ -21,8 +21,11 @@ spec:
         description: "Never serves: bootstrap fails on wheelhouse integrity"
         tags: ["echo", "e2e", "negative"]
 
-  modelRef:
-    name: gpt-5-mini
+  # Deterministic e2e: the built-in `test` model. The wheelhouse integrity
+  # check runs at install time — before the model is ever constructed — so the
+  # tampered agent still fails bootstrap and never becomes Ready, with no key.
+  spec:
+    model: "test"
 
   instructionRefs:
     - name: capability-instruction

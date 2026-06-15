@@ -315,7 +315,11 @@ func waitForDeploymentReady(name, ns string, timeout time.Duration) error {
 	})
 }
 
-// waitForAgentReady waits for an agent to reach Ready condition
+// waitForAgentReady waits for an agent to reach Ready condition.
+//
+// share one budget but pass it explicitly so per-test tuning stays a one-liner.
+//
+//nolint:unparam // timeout is part of this helper's API; call sites currently
 func waitForAgentReady(name, ns string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx2 context.Context) (bool, error) {
 		agent := &agentv1alpha1.Agent{}

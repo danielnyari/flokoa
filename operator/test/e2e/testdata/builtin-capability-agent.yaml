@@ -1,0 +1,54 @@
+# Agent exercising the BUILT-IN capability tier (source: builtin; architecture
+# §2): it attaches flokoa-openapi, which is baked into the runner image. The
+# built-in Capability CR is created programmatically by capability_test.go
+# (mirroring the operator's embedded built-in metadata). The pod must start with
+# NO cap-* initContainers and NO capabilities emptyDir — nothing is delivered.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: builtin-capability-agent
+  labels:
+    app.kubernetes.io/name: builtin-capability-agent
+    test: e2e
+spec:
+  card:
+    name: "Built-in Capability Agent"
+    description: "E2E agent exercising the built-in (baked-in) capability tier"
+    version: "1.0.0"
+    skills:
+      - id: "petstore"
+        name: "Petstore"
+        description: "Tools derived from an inline OpenAPI document"
+        tags: ["openapi", "e2e"]
+
+  # Deterministic e2e: the built-in `test` model (TestModel), no provider key.
+  spec:
+    model: "test"
+
+  instructionRefs:
+    - name: capability-instruction
+
+  capabilities:
+    - ref:
+        name: flokoa-openapi
+      config:
+        # A minimal inline OpenAPI document: enough for the flokoa.OpenAPI
+        # capability to hydrate and build its toolset from the runner's own
+        # baked-in flokoa_openapi package (no download, no wheelhouse).
+        base_url: "https://petstore.example.com"
+        defer_tools: none
+        spec:
+          openapi: "3.0.0"
+          info:
+            title: "Petstore"
+            version: "1.0.0"
+          paths:
+            /pets:
+              get:
+                operationId: listPets
+                responses:
+                  "200":
+                    description: "A list of pets"
+
+  runtime:
+    replicas: 1

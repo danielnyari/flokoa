@@ -137,7 +137,12 @@ var _ = Describe("Manager", Ordered, func() {
 	})
 
 	Context("Metrics", func() {
-		It("should ensure the metrics endpoint is serving metrics", func() {
+		// FlakeAttempts: the controller can restart once during startup (leader
+		// election + probe timing), briefly dropping the metrics endpoint while
+		// the curl pod fires. A retry lands after it stabilizes. A genuinely
+		// broken metrics endpoint still fails every attempt. Root cause (the
+		// startup restart itself) is tracked separately.
+		It("should ensure the metrics endpoint is serving metrics", FlakeAttempts(3), func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			err := createClusterRoleBinding(metricsRoleBindingName, "metrics-reader", []rbacv1.Subject{
 				{

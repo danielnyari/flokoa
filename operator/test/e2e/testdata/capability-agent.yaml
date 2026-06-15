@@ -21,8 +21,11 @@ spec:
         description: "Echo messages back with the configured prefix"
         tags: ["echo", "e2e"]
 
-  modelRef:
-    name: gpt-5-mini
+  # Deterministic e2e: the built-in `test` model (TestModel) runs the agent and
+  # calls each delivered capability tool once, with no provider key — so
+  # wheelhouse delivery + cosign integrity run on every PR, not just nightly.
+  spec:
+    model: "test"
 
   instructionRefs:
     - name: capability-instruction

@@ -23,32 +23,18 @@ spec:
         description: "Find, inspect, and manage pets in the petstore"
         tags: ["petstore", "api", "inventory"]
 
-  modelRef:
-    name: gpt-5-mini
-
   instructionRefs:
     - name: petstore-instruction
 
   tools:
     - name: petstore-api
 
-  # Inline pydantic-ai AgentSpec fragment, merged with the references above.
+  # Deterministic e2e: pydantic-ai's built-in `test` model (TestModel) runs the
+  # agent — calling each attached tool once — with no provider key or network,
+  # so the compile -> pod -> A2A -> MCP tool-call path runs on every PR. The
+  # real-LLM smoke (Label "real-llm") exercises a live provider nightly.
   spec:
-    outputSchema:
-      type: object
-      properties:
-        pets:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: integer
-              name:
-                type: string
-            required:
-              - id
-              - name
+    model: "test"
 
   runtime:
     replicas: 1

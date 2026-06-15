@@ -1,0 +1,30 @@
+# Real-LLM smoke agent (Label "real-llm", nightly only): a gpt-5-mini agent
+# that proves ModelProvider resolution + API-key secret wiring + a live
+# provider call end to end. The deterministic specs (model: "test") cover
+# compile/pod/A2A/MCP on every PR; this needs a real OPENAI_API_KEY.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: real-llm-agent
+  labels:
+    app.kubernetes.io/name: real-llm-agent
+    test: e2e
+spec:
+  card:
+    name: "Real LLM Agent"
+    description: "Nightly real-provider smoke"
+    version: "1.0.0"
+    skills:
+      - id: "chat"
+        name: "Chat"
+        description: "Answers a prompt with a live model"
+        tags: ["smoke"]
+
+  modelRef:
+    name: gpt-5-mini
+
+  instructionRefs:
+    - name: petstore-instruction
+
+  runtime:
+    replicas: 1

@@ -42,9 +42,6 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 
 	Context("A2A Plugin Integration", func() {
 		BeforeAll(func() {
-			By("checking OPENAI_API_KEY availability")
-			skipIfNoOpenAIKey()
-
 			By("building the A2A plugin image")
 			cmd := exec.Command("docker", "build",
 				"-f", "plugins/a2a/Dockerfile",
@@ -80,18 +77,6 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 
 		It("should deploy agent and execute AgentWorkflow with A2A plugin", func() {
 			var err error
-
-			By("creating/updating the OpenAI API key secret from OPENAI_API_KEY")
-			err = ensureOpenAIAPIKeySecret(namespace)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create OpenAI API key secret")
-
-			By("applying the ModelProvider")
-			err = applyManifestFile("test/e2e/testdata/modelprovider.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply ModelProvider")
-
-			By("applying the Model")
-			err = applyManifestFile("test/e2e/testdata/model.yaml")
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply Model")
 
 			By("applying the Instruction with template")
 			err = applyManifestFile("test/e2e/testdata/instruction.yaml")
@@ -253,7 +238,16 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			Expect(completedWf.Status.Phase).To(Equal(wfv1.WorkflowSucceeded), "Workflow should succeed")
 		})
 
-		It("should submit and complete workflow via SubmitWorkflowRun REST API", func() {
+		// Labeled real-llm (nightly): exercises the server's SubmitWorkflowRun
+		// REST API end to end. On the built-in `test` model the agent completes
+		// the A2A task almost instantly, which races the Argo workflow-controller
+		// finalizing a WorkflowTemplate-backed executor-plugin Workflow — the
+		// node reaches Succeeded but the overall Workflow can hang in Running.
+		// A live model paces it past the race, so this runs nightly; the direct
+		// A2A workflow above already covers the plugin path deterministically.
+		It("should submit and complete workflow via SubmitWorkflowRun REST API", Label("real-llm"), func() {
+			skipIfNoOpenAIKey()
+
 			By("creating an HTTP client via Kubernetes API server proxy")
 			httpClient, baseURL, err := serverRESTProxy()
 			Expect(err).NotTo(HaveOccurred())
@@ -359,8 +353,6 @@ var _ = Describe("AgentWorkflow with A2A Plugin", Ordered, func() {
 			deleteManifestFile("test/e2e/testdata/agent.yaml")
 			deleteManifestFile("test/e2e/testdata/agenttool.yaml")
 			deleteManifestFile("test/e2e/testdata/instruction.yaml")
-			deleteManifestFile("test/e2e/testdata/model.yaml")
-			deleteManifestFile("test/e2e/testdata/modelprovider.yaml")
 			deleteManifestFile("test/e2e/testdata/tool-service.yaml")
 
 			By("cleaning up Argo RBAC")

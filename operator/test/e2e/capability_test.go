@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
+	"github.com/danielnyari/flokoa/internal/spec"
 	"github.com/danielnyari/flokoa/test/utils"
 )
 
@@ -93,17 +94,17 @@ var _ = Describe("Capability delivery", Ordered, func() {
 
 	// capabilityManifests are the static manifests this context applies,
 	// deleted in reverse order by AfterAll.
+	// The capability agents run on the built-in `test` model (see
+	// capability-agent.yaml), so no ModelProvider / Model / API-key secret is
+	// needed and the whole delivery + cosign-integrity suite runs in CI.
 	capabilityManifests := []string{
-		"test/e2e/testdata/modelprovider.yaml",
-		"test/e2e/testdata/model.yaml",
 		"test/e2e/testdata/capability-instruction.yaml",
 		"test/e2e/testdata/capability-agent.yaml",
 		"test/e2e/testdata/capability-tampered-agent.yaml",
+		"test/e2e/testdata/builtin-capability-agent.yaml",
 	}
 
 	BeforeAll(func() {
-		skipIfNoOpenAIKey()
-
 		if expectedDeliveryMode() == "imageVolume" {
 			By("switching the operator to capability delivery mode 'auto'")
 			Expect(setOperatorCapabilityDeliveryMode("auto")).To(Succeed(),
@@ -129,18 +130,17 @@ var _ = Describe("Capability delivery", Ordered, func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Artifact refs:\n  echo:     %s\n  upper:    %s\n  tampered: %s\n",
 			echoRef, upperRef, tamperedRef)
 
-		By("creating/updating the OpenAI API key secret")
-		Expect(ensureOpenAIAPIKeySecret(namespace)).To(Succeed())
-
-		By("applying the ModelProvider, Model, and Instruction")
-		for _, m := range capabilityManifests[:3] {
-			Expect(applyManifestFile(m)).To(Succeed(), "Failed to apply %s", m)
-		}
+		By("applying the capability Instruction")
+		Expect(applyManifestFile(capabilityManifests[0])).To(Succeed(),
+			"Failed to apply %s", capabilityManifests[0])
 
 		By("creating the Capability CRs (digest-pinned, mirroring the artifact manifests)")
 		Expect(ensureCapability("flokoa-cap-echo", echoRef, echoCapabilitySpec)).To(Succeed())
 		Expect(ensureCapability("flokoa-cap-upper", upperRef, upperCapabilitySpec)).To(Succeed())
 		Expect(ensureCapability("flokoa-cap-echo-tampered", tamperedRef, echoCapabilitySpec)).To(Succeed())
+
+		By("creating the source: builtin flokoa-openapi Capability CR (no artifact)")
+		Expect(ensureBuiltinOpenAPICapability()).To(Succeed())
 	})
 
 	It("records the effective delivery mode in the state ConfigMap", func() {
@@ -287,12 +287,60 @@ var _ = Describe("Capability delivery", Ordered, func() {
 		}, 60*time.Second, 3*time.Second).Should(Succeed())
 	})
 
+	It("attaches a built-in capability with no delivery (no initContainers, no emptyDir)", func() {
+		By("applying the Agent attaching the built-in flokoa-openapi capability")
+		Expect(applyManifestFile("test/e2e/testdata/builtin-capability-agent.yaml")).To(Succeed())
+
+		By("waiting for the built-in Agent to reach Ready on a vanilla pod")
+		Expect(waitForAgentReady("builtin-capability-agent", namespace, 3*time.Minute)).To(Succeed(),
+			"builtin-capability-agent did not become Ready; pod diagnostics:\n%s",
+			describeAgentPods("builtin-capability-agent"))
+
+		By("verifying the pod has NO capability delivery machinery")
+		pod := getAgentPod("builtin-capability-agent")
+		// A built-in is baked into the runner image: the compiler emits the spec
+		// entry but zero CapabilityArtifacts, so the builder adds nothing.
+		Expect(capInitContainerNames(pod)).To(BeEmpty(),
+			"a built-in attachment must not emit any cap-* initContainers")
+		Expect(findVolume(pod, "flokoa-capabilities")).To(BeNil(),
+			"a built-in attachment must not create the capabilities emptyDir")
+		Expect(findVolume(pod, "cap-flokoa-openapi")).To(BeNil(),
+			"a built-in attachment must not create a per-capability volume")
+		// The delivery annotation only appears when something is delivered.
+		Expect(pod.Annotations).NotTo(HaveKey(capabilityDeliveryAnnotation),
+			"no delivery annotation should be set when only built-ins are attached")
+
+		By("confirming the built-in class is importable from the runner env (/health green via TestModel)")
+		httpClient, agentURL, err := agentA2AProxy("builtin-capability-agent")
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func(g Gomega) {
+			body, err := sendA2AMessage(httpClient, agentURL, "List the pets")
+			g.Expect(err).NotTo(HaveOccurred())
+			_, _ = fmt.Fprintf(GinkgoWriter, "A2A response: %s\n", body)
+			var rpc struct {
+				Error  map[string]any `json:"error"`
+				Result struct {
+					Status struct {
+						State string `json:"state"`
+					} `json:"status"`
+				} `json:"result"`
+			}
+			g.Expect(json.Unmarshal([]byte(body), &rpc)).To(Succeed())
+			// A completed run proves build_agent hydrated flokoa.OpenAPI from the
+			// runner's baked-in env — the capability imported with no download.
+			g.Expect(rpc.Error).To(BeNil(), "A2A error: %v", rpc.Error)
+			g.Expect(rpc.Result.Status.State).To(Equal("completed"))
+		}, 4*time.Minute, 20*time.Second).Should(Succeed())
+	})
+
 	AfterAll(func() {
 		By("cleaning up capability test resources")
 		for i := len(capabilityManifests) - 1; i >= 0; i-- {
 			deleteManifestFile(capabilityManifests[i])
 		}
-		for _, name := range []string{"flokoa-cap-echo", "flokoa-cap-upper", "flokoa-cap-echo-tampered"} {
+		for _, name := range []string{
+			"flokoa-cap-echo", "flokoa-cap-upper", "flokoa-cap-echo-tampered", "flokoa-openapi",
+		} {
 			capability := &agentv1alpha1.Capability{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 			}
@@ -360,6 +408,44 @@ func ensureCapability(name, artifactRef string, params capabilitySpecParams) err
 		},
 	}
 
+	err := k8sClient.Create(ctx, desired)
+	if apierrors.IsAlreadyExists(err) {
+		existing := &agentv1alpha1.Capability{}
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(desired), existing); err != nil {
+			return err
+		}
+		existing.Spec = desired.Spec
+		return k8sClient.Update(ctx, existing)
+	}
+	return err
+}
+
+// ensureBuiltinOpenAPICapability creates the source: builtin flokoa-openapi
+// Capability CR (no artifact) mirroring the operator's embedded built-in
+// metadata — the shape the Helm chart ships. The kustomize e2e path doesn't
+// install the chart's built-in CRs, so the test creates it directly from the
+// same embedded source the chart generator and admission use.
+func ensureBuiltinOpenAPICapability() error {
+	info, ok := spec.BuiltinCapability(spec.DefaultRunnerVersion, "flokoa-openapi")
+	if !ok {
+		return fmt.Errorf("embedded baseline missing flokoa-openapi built-in (run `make runner-contract`)")
+	}
+	desired := &agentv1alpha1.Capability{
+		ObjectMeta: metav1.ObjectMeta{Name: "flokoa-openapi", Namespace: namespace},
+		Spec: agentv1alpha1.CapabilitySpec{
+			Source:            agentv1alpha1.CapabilitySourceBuiltin,
+			Version:           spec.DefaultRunnerVersion,
+			Entrypoint:        info.Entrypoint,
+			SerializationName: info.SerializationName,
+			ConfigSchema:      &apiextensionsv1.JSON{Raw: info.ConfigSchema},
+			SchemaPolicy:      agentv1alpha1.SchemaPolicyStrict,
+			Requires: agentv1alpha1.CapabilityRequires{
+				Python:       info.Requires.Python,
+				PydanticAI:   info.Requires.PydanticAI,
+				FlokoaRunner: info.Requires.FlokoaRunner,
+			},
+		},
+	}
 	err := k8sClient.Create(ctx, desired)
 	if apierrors.IsAlreadyExists(err) {
 		existing := &agentv1alpha1.Capability{}
