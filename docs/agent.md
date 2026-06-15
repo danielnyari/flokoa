@@ -78,10 +78,24 @@ recompiles and follows.
 | `modelRef` | References a [Model](model.md). The fragment's inline `model` wins if both are set. |
 | `instructionRefs` | [Instruction](instruction.md) resources composed in order before inline instructions. |
 | `tools` | [AgentTool](agenttool.md) references (declarative MCP endpoints), compiled to MCP capability entries. |
-| `capabilities` | Capability resource attachments (ships with the Capability CRD; rejected until then). |
+| `capabilities` | [Capability](capability.md) CR attachments — each is a `ref` (name/namespace) plus optional per-attachment `config`. At admission the config is validated against the Capability's published JSON Schema, the `requires` tuple is checked against the agent's runner version, and dependency conflicts across attachments are rejected. |
 | `spec` | Inline pydantic-ai AgentSpec fragment — see below. |
-| `secretRefs` | Named secrets resolvable via `${secret:NAME}` placeholders (see [secrets](#secrets)). |
+| `secretRefs` | Named secrets resolvable via `${secret:NAME}` placeholders (see [secrets](#secrets)). Keys must match `[A-Za-z0-9._-]+`. |
 | `runtime` | How the compiled spec runs — see below. |
+
+### The agent card (`spec.card`)
+
+The card is the agent's published [A2A](https://a2a-protocol.org/) identity. It
+is **required**, and `name`, `description`, `version`, and `skills` within it
+are required too.
+
+| Field | Description |
+|---|---|
+| `name`, `description`, `version` | Card identity. Required. |
+| `skills` | What the agent advertises. Required (at least one). Each skill: `id`, `name`, `description`, and `tags` are required; `examples`, `inputModes`, `outputModes`, and `security` are optional. Skill `id`s must be unique. |
+| `defaultInputModes` | MIME types the agent accepts. Defaults to `["application/json"]`. Allowed values: `text`, `application/json`. |
+| `defaultOutputModes` | MIME types the agent produces. Defaults to `["application/json"]`. Same allowed values. |
+| `capabilities` | A2A card capabilities — `streaming`, `pushNotifications`, `stateTransitionHistory`, `extensions`. Defaults to `{streaming: false}`. *(Distinct from `spec.capabilities`, which attaches [Capability](capability.md) CRs.)* |
 
 ### The inline fragment (`spec.spec`)
 
@@ -115,14 +129,36 @@ the operator projects it as a `FLOKOA_SECRET_*` environment variable and the
 runner resolves placeholders at hydration. **Secret values never appear in
 the compiled spec ConfigMap.**
 
+## Admission checks
+
+The validating webhook checks the whole composition *statically*, before any
+Deployment is touched — a rejected Agent never reaches the runner:
+
+- Inline-fragment `capabilities` names must be **baseline-native** (no `.`, `/`,
+  or `:` in the name); harness/third-party capabilities are attached as
+  [Capability](capability.md) CRs instead.
+- Every `${secret:NAME}` placeholder — in the fragment *and* in capability
+  attachment configs — must have a matching `spec.secretRefs[NAME]` entry.
+- `spec.secretRefs` keys must match `[A-Za-z0-9._-]+`.
+- Card skill `id`s must be unique.
+- Capability attachments: `config` is validated against the Capability's
+  published JSON Schema, the Capability's `requires` tuple is checked against
+  the agent's runner version, and dependency conflicts (across attachments and
+  the runner baseline) are rejected. Cross-namespace and duplicate attachments,
+  and entry-name collisions, are rejected too.
+- `runtime.isolation: session` is rejected until the session router ships (P1).
+
 ## Status
 
 | Field | Description |
 |---|---|
+| `status.phase` | `Pending`, `Running`, or `Failed`. |
 | `status.url` | The published endpoint. Treat as opaque — port, path, and backing topology may change behind it. |
 | `status.specHash` | Hash of the resolved spec (drift detection, rollout trigger). |
 | `status.runnerVersion` | Runner release the spec was validated against. |
 | `status.injectedCapabilities` | Platform capability entries the operator appended. |
+| `status.replicas` / `status.availableReplicas` | Desired vs. ready runner pods (mirrors the Deployment). |
+| `status.observedGeneration` | The spec generation last reconciled. |
 | Conditions | `SpecValid` (composition compiled + schema-valid), `SecretsReady` (referenced secrets exist), `Ready` (deployment available). |
 
 ## What the operator creates

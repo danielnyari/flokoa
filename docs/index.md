@@ -23,8 +23,11 @@ Learn about each Custom Resource Definition (CRD):
 - **[AgentTool](agenttool.md)** - A declarative MCP endpoint (compiles to an MCP capability)
 - **[AgentTrigger](agenttrigger.md)** - Event-driven invocation via Argo Events
 - **[Instruction](instruction.md)** - Versioned system-prompt blocks (compiled, in order, into the agent's instructions)
+- **[Capability](capability.md)** - Versioned, digest-pinned capability artifacts (OCI wheelhouses) attached to agents, with machine-checked admission, in-pod delivery, and optional cosign verification
 - **AgentWorkflow** - Frozen, template-only A2A composition between deployed agents
-- _Capability_ - Packaged capability wheelhouses (coming in P0b)
+
+For building and running agents locally, see the **[Python SDK & CLI](sdk.md)**;
+to author and publish capability artifacts, see the **[capabilities guide](guides/capabilities.md)**.
 
 ## Architecture & Design
 
@@ -70,6 +73,10 @@ Browse example configurations in the [`examples/`](examples/) directory:
 - [`agenttool/send-email.yaml`](examples/agenttool/send-email.yaml) - MCP server for email notifications
 - [`agenttool/create-order.yaml`](examples/agenttool/create-order.yaml) - Internal MCP service (serviceRef + path)
 - [`agenttool/search-kb.yaml`](examples/agenttool/search-kb.yaml) - MCP server for knowledge-base search
+
+### Capability Examples
+- [`capability/echo-capability.yaml`](examples/capability/echo-capability.yaml) - A digest-pinned Capability CR
+- [`capability/agent-with-capability.yaml`](examples/capability/agent-with-capability.yaml) - Attaching a Capability to an Agent
 
 ### Complete Examples
 - [`complete-example.yaml`](examples/complete-example.yaml) - End-to-end customer service agent with all resources
@@ -278,8 +285,9 @@ kubectl get agent my-agent -o jsonpath='{.status.phase}'
 ## Additional Resources
 
 - [GitHub Repository](https://github.com/danielnyari/flokoa)
-- [Python SDK Documentation](../sdk/python/README.md)
-- [Operator Documentation](../operator/README.md)
+- [Python SDK & CLI](sdk.md)
+- [Python SDK README](https://github.com/danielnyari/flokoa/blob/main/sdk/python/README.md)
+- [Operator README](https://github.com/danielnyari/flokoa/blob/main/operator/README.md)
 
 ## Contributing
 
@@ -287,4 +295,4 @@ Found an issue or want to improve the documentation? Please open an issue or pul
 
 ## License
 
-Flokoa is licensed under the Apache License 2.0. See the [LICENSE](../LICENSE) file for details.
+Flokoa is licensed under the Apache License 2.0. See the [LICENSE](https://github.com/danielnyari/flokoa/blob/main/LICENSE) file for details.

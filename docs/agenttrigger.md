@@ -50,15 +50,15 @@ EventSource (Argo Events)          flokoa-server                     Agent
 
 | Field | Purpose |
 |-------|---------|
-| `eventSource` | Argo Events `EventSource` name + event name to consume (required) |
-| `eventBus` | Non-default Argo Events `EventBus` (optional) |
-| `filter.data[]` | JSONPath payload filters with Sensor data-filter semantics (AND across filters, OR within a filter's values; comparators `=`, `!=`, `>`, `<`, `>=`, `<=`) |
+| `eventSource` | Argo Events `EventSource` `name` + `eventName` to consume (required) |
+| `eventBus` | Non-default Argo Events `EventBus` (optional; defaults to `default`) |
+| `filter.data[]` | JSONPath payload filters with Sensor data-filter semantics (AND across filters, OR within a filter's values). Each: `path`, `type` (`string`, `float`, or `bool`), `value` (at least one), and `comparator` (`=`, `!=`, `>`, `<`, `>=`, `<=`; defaults to `=`) |
 | `filter.exprs[]` | CEL expression filters for complex boolean logic |
 | `agent` | The flokoa Agent to invoke (required) |
 | `task.sessionKeyFrom` | JSONPath into the event payload; the extracted value becomes the A2A `contextId`, giving events from the same entity a shared conversation context |
 | `task.metadata` | Static key/value pairs attached to every A2A task |
-| `pushNotification` | Result destination: `agentRef` (via the push gateway) or external HTTPS `url`, with optional `authentication` (schemes + Secret-referenced credentials) and `tokenRef` |
-| `limits` | `maxInvocationsPerHour`, `maxConcurrentTasks`, `tokenBudgetPerEvent`, `tokenBudgetPerHour`, and a `deadLetterSink` for dropped events |
+| `pushNotification` | Result destination — **exactly one** of `agentRef` (via the push gateway) or external `url` (must be `https://`), with optional `authentication` (required `schemes` + Secret-referenced credentials) and `tokenRef` |
+| `limits` | `maxInvocationsPerHour`, `maxConcurrentTasks`, `tokenBudgetPerEvent`, `tokenBudgetPerHour` (each `0` = unlimited), and a `deadLetterSink` for dropped events |
 
 ### Limits and dead-lettering
 
@@ -66,7 +66,9 @@ Rate and budget limits are enforced in flokoa-server before the agent is
 invoked. When a limit trips, the event is forwarded to
 `limits.deadLetterSink.uri` (with `X-Flokoa-Drop-Reason`,
 `X-Flokoa-Trigger-Name`, and `X-Flokoa-Trigger-Namespace` headers) or dropped
-with a metric increment if no sink is configured.
+with a metric increment if no sink is configured. The dead-letter `uri` may be
+`http://` or `https://`; a `pushNotification.url`, by contrast, must be
+`https://`.
 
 ## Example
 

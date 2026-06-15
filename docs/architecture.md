@@ -48,7 +48,7 @@ architecture. The normative operator↔runner interface is the
 │  │  • Model + ModelProvider (model id, settings, provider env)   │    │
 │  │  • Instruction (system-prompt → ConfigMap)                    │    │
 │  │  • AgentTool (declarative MCP endpoint)                       │    │
-│  │  • Capability (packaged wheelhouses — P0b)                    │    │
+│  │  • Capability (digest-pinned wheelhouse artifacts)            │    │
 │  │  • Secrets (projected into the runner, never into the spec)   │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────────┘
@@ -108,7 +108,7 @@ good generation keeps running.
 
 ### 2. Custom Resource Definitions (CRDs)
 
-Eight CRDs under `agent.flokoa.ai/v1alpha1` (capability artifact delivery and CLI arrive with roadmap 09/10):
+Eight CRDs under `agent.flokoa.ai/v1alpha1`:
 
 #### Agent
 The **composition root**: an inline AgentSpec fragment plus `modelRef`, `instructionRefs`, `tools`,
@@ -126,8 +126,10 @@ A **versioned, digest-pinned, schema-published unit of agent behavior**: the CR 
 wheelhouse artifact (harness/third-party capability implementations). Admission machine-checks the
 compatibility matrix — attachment config against the published `configSchema`, the `requires` tuple
 against the Agent's runner baseline, and dependency conflicts across attachments plus the baseline
-lockfile — before anything deploys. Artifact delivery into runner pods ships with roadmap 09; the
-`flokoa capability` CLI and registry seeding with roadmap 10. See [capability.md](capability.md).
+lockfile — before anything deploys. The operator delivers wheelhouse artifacts into runner pods
+(initContainer copy or ImageVolume mount), optionally verifies cosign provenance, and the
+`flokoa capability` CLI builds and publishes artifacts. Only registry **seeding** (a published
+first-party capability set) is still deferred. See [capability.md](capability.md).
 
 #### Model & ModelProvider
 **Model** is a named, shareable model config (identifier + typed `settings` + `providerRef`) that
@@ -158,10 +160,6 @@ limits, session-key extraction, and A2A push-notification delivery. See [agenttr
 **Frozen**, template-only: static A2A composition between deployed Agents, compiled to Argo
 `WorkflowTemplate`s that call agents via the [A2A executor plugin](argo/executor-plugins.md). The
 Argo Workflows execution path was removed; the `agentTask` task type is rejected by admission.
-
-#### Capability (P0b — not yet shipped)
-A versioned, digest-pinned OCI wheelhouse + JSON Schema config + `requires` tuple. Admission will
-validate the schema, the `requires` check, and dependency conflicts.
 
 ## Resource Relationships
 

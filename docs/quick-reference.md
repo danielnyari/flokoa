@@ -11,10 +11,11 @@ A quick reference guide for common tasks and patterns in Flokoa.
 | **ModelProvider** | Provider connection behind Model | Optional* | OpenAI, Anthropic, Google credentials |
 | **AgentTool** | Declarative MCP endpoint | Optional | External or in-cluster MCP server |
 | **Instruction** | Shareable system-prompt block | Optional | Shared support policy |
+| **Capability** | Digest-pinned wheelhouse artifact attached to an agent | Optional | Package a harness/third-party capability |
 | **AgentTrigger** | Event-driven invocation (Argo Events) | Optional | Run an agent on a webhook/event |
 | **AgentWorkflow** | Frozen, template-only A2A composition | Optional | Chain deployed agents |
 
-\* Not required if your agent doesn't use LLMs. (Capability — packaged wheelhouses — arrives in P0b.)
+\* Not required if your agent doesn't use LLMs.
 
 ## Common Commands
 

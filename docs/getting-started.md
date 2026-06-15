@@ -24,13 +24,24 @@ Flokoa consists of several key components:
 
 ### Install the Operator
 
+Install with Helm (chart published to GHCR on each release), or apply the
+bundled manifests:
+
 ```bash
-# Apply the Flokoa operator manifests
+# Helm (recommended)
+helm install flokoa oci://ghcr.io/danielnyari/charts/flokoa
+
+# …or the manifest bundle
 kubectl apply -f https://github.com/danielnyari/flokoa/releases/latest/download/install.yaml
 
 # Verify the operator is running
 kubectl get pods -n flokoa-system
 ```
+
+> **Pre-release:** no `v*` tag has been published yet, so both the Helm chart
+> and the `install.yaml` bundle above are unavailable until `v0.1.0` ships. To
+> try Flokoa today, boot the full stack locally with `make up` (see the
+> [repository README](https://github.com/danielnyari/flokoa#local-development-one-command)).
 
 ### Deploy Your First Agent
 
@@ -129,6 +140,8 @@ spec:
 - Learn about [ModelProviders](modelprovider.md) - How to connect to LLM providers
 - Learn about [Models](model.md) - How to configure LLM models
 - Learn about [AgentTools](agenttool.md) - How to give agents access to external APIs
+- Learn about [Capabilities](capability.md) - How to package and attach harness/third-party capabilities
+- Use the [Python SDK & CLI](sdk.md) - Run agents locally and author capabilities
 
 ## Common Patterns
 

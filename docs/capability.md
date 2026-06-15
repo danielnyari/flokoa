@@ -63,11 +63,12 @@ spec:
 | `schemaPolicy` | `strict` (default) or `permissive` — the **loud opt-out**: config skips validation, and the CR is flagged in status, admission warnings, and printcolumns. |
 | `requires` | Compatibility tuple mirrored from the artifact manifest: `python` (exact minor), `pydanticAI` and `flokoaRunner` (PEP 440 specifier sets). |
 | `dependencies` | The artifact's pinned dependency closure (`name==version`), mirrored for offline conflict detection. |
-| `provenance` | Signature/attestation metadata (verification mechanics land with artifact delivery, roadmap 09). |
+| `provenance` | Signature/attestation metadata mirrored from the artifact. Cosign verification drives the `Verified` condition — see [Signature verification](#signature-verification). |
 
 The spec mirrors the artifact manifest **by value** so admission never fetches
-from a registry. `flokoa capability push` (roadmap 10) generates the CR from
-the manifest, so the mirror never drifts in practice.
+from a registry. `flokoa capability push` generates the CR from the manifest,
+so the mirror never drifts in practice — see the
+[capabilities guide](guides/capabilities.md).
 
 ## What admission checks
 
@@ -124,9 +125,10 @@ capability's wheelhouse (runtime contract §4).
 and schema policy. Conditions:
 
 - `Permissive` — `True` with a loud message when `schemaPolicy: permissive`.
-- `Verified` — artifact digest/signature verification; stays `Unknown` until
-  controller-side verification ships with delivery (roadmap 09). Admission
-  already enforces the digest pin itself.
+- `Verified` — optional cosign provenance verification (see [Signature
+  verification](#signature-verification)). Defaults to `Unknown`
+  (`VerificationDisabled`) when cosign is not enabled on the cluster. Admission
+  always enforces the digest pin itself, independent of this condition.
 
 ## Artifact delivery
 
@@ -280,11 +282,11 @@ running both is redundant rather than conflicting.
     "rogue namespace admin" tier and is accepted, not silently ignored. Full
     closure would require an additional CRD field or injected digest env.
 
-## Current limits (roadmap 10)
+## Authoring and current limits
 
-The `flokoa capability build/push/import/search` CLI (roadmap 10) automates
-authoring and publishing artifacts. Registry **seeding** (publishing a
-first-party capability set, e.g. `flokoa-openapi`, to a public registry) is
-deferred. Until seeding lands you build and push capability artifacts
-yourself; the admission, delivery, and verification machinery described above
-is fully wired.
+The `flokoa capability build/push/import/search/list` CLI automates authoring
+and publishing artifacts — see the [capabilities guide](guides/capabilities.md).
+The admission, delivery, and signature-verification machinery described above is
+fully wired. The one piece still deferred is registry **seeding** (publishing a
+first-party capability set, e.g. `flokoa-openapi`, to a public registry): until
+it lands, you build and push capability artifacts yourself.

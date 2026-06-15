@@ -1,6 +1,6 @@
 # Operator Code Conventions & Architecture
 
-Reference for working in `operator/`. The day-to-day map is [`operator/CLAUDE.md`](../../operator/CLAUDE.md);
+Reference for working in `operator/`. The day-to-day map is [`operator/CLAUDE.md`](https://github.com/danielnyari/flokoa/blob/main/operator/CLAUDE.md);
 the operating principles are in [`design-docs/core-beliefs.md`](../design-docs/core-beliefs.md);
 this page holds the detail.
 

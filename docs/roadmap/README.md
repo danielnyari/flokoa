@@ -16,6 +16,12 @@ Each numbered document is a self-contained implementation unit sized to hand to 
 
 ## Units by phase
 
+> **Implementation status (this branch):** units 02–10 — all of Phase 0, P0a,
+> and P0b — are implemented and merged. The only deferred slice of unit 10 is
+> capability registry *seeding* (publishing a first-party capability index).
+> Units 11–16 (P1 and beyond) are not started. The table below is the original
+> *plan*; sizes/links are unchanged.
+
 | Phase | # | Spec | Size |
 |---|---|------|------|
 | — | 00 | [Product Brief v2.1](00-product-brief.md) (canonical strategy) | — |

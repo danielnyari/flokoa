@@ -54,6 +54,18 @@ spec:
   # OR bedrock: {}
 ```
 
+## Spec fields
+
+| Field | Description |
+|---|---|
+| `apiKeySecretRef` | Secret key holding the provider API key. Projected into the runner as the provider-native env var; never read operator-side. |
+| `openai` / `anthropic` / `google` / `bedrock` | **Exactly one** must be set — the present block selects the provider type (admission rejects zero or multiple). |
+| `openai.baseURL` / `anthropic.baseURL` | Optional endpoint override. Must be `http://` or `https://` — admission rejects other schemes (anti-SSRF). |
+| `google.project` / `google.location` / `google.serviceAccountKeySecretRef` | Vertex AI config; setting any of these selects `google-vertex`, otherwise `google-gla` (API-key mode). |
+| `bedrock.region` | AWS region for Bedrock. |
+| `tls` | TLS for custom endpoints: `insecureSkipVerify` (default `false`), `caSecretRef` (custom CA under `ca.crt`), `useSystemCAs` (default **`true`**). |
+| `defaultHeaders` | Static headers added to every request. |
+
 ## Provider Configurations
 
 ### OpenAI
@@ -213,7 +225,7 @@ spec:
       name: custom-ca-cert
       key: ca.crt
 
-    # Include system CAs in addition to custom CA
+    # Include system CAs in addition to custom CA (defaults to true)
     useSystemCAs: true
 ```
 

@@ -10,11 +10,16 @@ A Kubernetes-native runtime for single agents and swarms of [pydantic-ai](https:
 
 ## Quickstart
 
-Install the operator with Helm (chart published to GHCR on every release):
+Install the operator with Helm (the chart is published to GHCR on every release):
 
 ```bash
 helm install flokoa oci://ghcr.io/danielnyari/charts/flokoa
 ```
+
+> **Pre-release:** no `v*` tag has been cut yet, so the Helm chart and the
+> `releases/latest/download/install.yaml` bundle are not on GHCR/Releases until
+> `v0.1.0` ships. Until then, run the stack locally with
+> [`make up`](#local-development-one-command).
 
 Then follow the **[getting started guide](docs/getting-started.md)**.
 
@@ -61,7 +66,8 @@ ports. The underlying targets live in [`operator/Makefile`](operator/Makefile)
 
 - [Getting started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
-- [Agent CRD](docs/agent.md) · [AgentTool](docs/agenttool.md) · [Model](docs/model.md) · [ModelProvider](docs/modelprovider.md) · [AgentTrigger](docs/agenttrigger.md)
+- CRDs: [Agent](docs/agent.md) · [Model](docs/model.md) · [ModelProvider](docs/modelprovider.md) · [Instruction](docs/instruction.md) · [AgentTool](docs/agenttool.md) · [Capability](docs/capability.md) · [AgentTrigger](docs/agenttrigger.md)
+- [Python SDK & CLI](docs/sdk.md) · [Capabilities guide](docs/guides/capabilities.md)
 - [Quick reference](docs/quick-reference.md)
 - [Roadmap](docs/roadmap/README.md) — the Pivot v2.1 plan this project is executing
 
@@ -72,7 +78,7 @@ ports. The underlying targets live in [`operator/Makefile`](operator/Makefile)
 
 ## Status
 
-Early development, executing the Pivot v2.1 roadmap. Phase 0 and P0a — runtime contract, spec compiler, generic runner, virtual endpoint identity, and injected telemetry — are done; the Capability CRD (P0b) is next, and isolated sessions, the A2A session-routing gateway, and swarms (SwarmRun) are future work. See the [roadmap](docs/roadmap/README.md) for what is frozen, kept, and coming.
+Early development, executing the Pivot v2.1 roadmap. **Phase 0, P0a** (runtime contract, spec compiler, generic runner, virtual endpoint identity, injected telemetry) and **P0b** (the Capability CRD with machine-checked admission, wheelhouse artifact delivery, cosign verification, and the `flokoa capability` CLI) are done — only capability registry *seeding* is deferred. Next up (**P1**): isolated sessions, the A2A session-routing gateway, and swarms (SwarmRun). See the [roadmap](docs/roadmap/README.md) for what is frozen, kept, and coming.
 
 ## License
 

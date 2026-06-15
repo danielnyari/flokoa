@@ -47,15 +47,15 @@ spec:
 |---|---|
 | `type` | `mcp` (default). The `openapi` type is retired — see [migration](#migrating-from-openapi-tools). |
 | `description` | Human-readable description of the MCP server, surfaced to the model where supported. |
-| `url` | Full URL of the MCP server. Mutually exclusive with `serviceRef`. |
-| `serviceRef` | In-cluster Service (`name`, `namespace`, `port` or `portName`). |
-| `path` | Endpoint path with `serviceRef`. Defaults to `/mcp` (`streamableHTTP`) or `/sse` (`sse`). |
+| `url` | Full URL of the MCP server. Must be `http://` or `https://`. Mutually exclusive with `serviceRef`. |
+| `serviceRef` | In-cluster Service: `name` (required), `namespace`, and exactly one of `port` (1–65535) or `portName`. |
+| `path` | Endpoint path, only valid with `serviceRef`. Must start with `/`. Defaults to `/mcp` (`streamableHTTP`) or `/sse` (`sse`). |
 | `transport` | `streamableHTTP` (default) or `sse`. The MCP client infers the transport from the URL; for SSE servers the path conventionally ends in `/sse`. |
 | `headers` | Static HTTP headers sent to the MCP server. |
 | `headerSecrets` | Headers sourced from Secret keys, delivered as `${secret:tool-<name>-<header>}` placeholders. |
 | `toolPrefix` | Prefixes every tool name from this server (e.g. `kb` turns `search` into `kb_search`) — avoids collisions between servers. |
 | `allowedTools` | Filters the server's tools to this list. |
-| `timeoutSeconds` | Tool-call timeout. Compiles to the agent-level `tool_timeout` (the largest value across an agent's tools wins). |
+| `timeoutSeconds` | Tool-call timeout, `1`–`300`. Compiles to the agent-level `tool_timeout` (the largest value across an agent's tools wins). |
 
 ## How it compiles
 
@@ -81,6 +81,21 @@ capabilities:
 The agent pod connects to the MCP server itself (`local: true`) — in-cluster
 endpoints are not reachable from model providers' native MCP support.
 
+## Admission checks
+
+The validating webhook rejects an AgentTool before it can be referenced when:
+
+- neither or both of `url` / `serviceRef` are set (exactly one is required);
+- `url` is not `http://` or `https://` (anti-SSRF);
+- `path` is set without `serviceRef`, or does not start with `/`;
+- `serviceRef` sets neither or both of `port` / `portName`;
+- a `headerSecrets` name collides with a static `headers` key or another
+  `headerSecrets` entry (header names compare case-insensitively);
+- `type: openapi` is used — it is rejected with a migration pointer (below).
+
+A `sse` transport whose endpoint does not end in `/sse` is accepted with a
+**warning**, not an error.
+
 ## Migrating from OpenAPI tools
 
 The `openapi` tool type is retired with the v2.1 pivot; the admission webhook
@@ -95,9 +110,9 @@ rejects it. To front a REST API:
   with `${secret:NAME}` placeholders (API keys, OAuth2 refresh, Google
   service accounts — resolved in the runner, never stored in ConfigMaps).
   Usable today in SDK agents via
-  `Agent.from_spec(..., custom_capability_types=[OpenAPI])`; the Capability
-  CRD (P0b, in progress) is its CRD surface — AgentTool stays MCP-only.
-  See the package README for configuration detail.
+  `Agent.from_spec(..., custom_capability_types=[OpenAPI])`, and packaged as a
+  [Capability](capability.md) CR for declarative attachment — AgentTool stays
+  MCP-only. See the package README for configuration detail.
 - **Run an MCP adapter** in front of the API — an MCP server that exposes the
   API's operations as tools (`flokoa-codemode-mcp`, or one of several
   generators that build MCP servers from OpenAPI specs) — and point the

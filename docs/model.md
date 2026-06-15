@@ -31,8 +31,8 @@ carry a prefix are used as-is.
 
 | Field | Description |
 |---|---|
-| `model` | Model identifier (e.g. `gpt-4o`, `claude-sonnet-4-5`). |
-| `providerRef` | The [ModelProvider](modelprovider.md) supplying connection config. |
+| `model` | Model identifier (e.g. `gpt-4o`, `claude-sonnet-4-5`). Required. |
+| `providerRef` | The [ModelProvider](modelprovider.md) supplying connection config. Required. |
 | `settings` | Typed model settings — see below. |
 
 ### Settings
@@ -43,11 +43,11 @@ drift); the compiler emits JSON numbers.
 
 | Field | Type | Compiled key |
 |---|---|---|
-| `maxTokens` | int | `max_tokens` |
+| `maxTokens` | int (≥ 1) | `max_tokens` |
 | `temperature` | string ("0.0"–"2.0") | `temperature` |
 | `topP` | string ("0.0"–"1.0") | `top_p` |
-| `topK` | int | `top_k` |
-| `timeoutSeconds` | int | `timeout` |
+| `topK` | int (≥ 1) | `top_k` |
+| `timeoutSeconds` | int (≥ 1) | `timeout` |
 | `parallelToolCalls` | bool | `parallel_tool_calls` |
 | `seed` | int | `seed` |
 | `presencePenalty` | string ("-2.0"–"2.0") | `presence_penalty` |

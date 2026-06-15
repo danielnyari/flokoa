@@ -26,7 +26,8 @@ sdk/python/                          # Workspace root
 │   ├── pyproject.toml
 │   ├── src/flokoa/
 │   │   ├── __init__.py
-│   │   ├── __main__.py             # CLI: flokoa run -m module:agent | run -f agentspec.yaml
+│   │   ├── __main__.py             # CLI entrypoint: flokoa run + flokoa capability
+│   │   ├── capability_cli/         # flokoa capability {build,push,import,search,list}
 │   │   ├── serving.py              # A2A serving (SpecAgentExecutor + build_app), shared with the runner
 │   │   ├── context.py              # Agent/session accessors for capability authors
 │   │   ├── telemetry.py            # OTel init + pydantic-ai/FastAPI instrumentation
@@ -39,6 +40,7 @@ sdk/python/                          # Workspace root
 │       ├── agentcard.py            # Generated: AgentCard
 │       ├── agenttool.py            # Generated: AgentToolSpec (MCP endpoint shape)
 │       ├── agentworkflow.py        # Generated: AgentWorkflow
+│       ├── capability.py           # Generated: CapabilitySpec
 │       └── modelsettings.py        # Generated: ModelSettings
 ├── flokoa-runner/                  # Generic runner: bootstrap pipeline + runtime-contract artifacts
 │   ├── pyproject.toml              # Owns the platform pin (pydantic-ai==X.Y.Z exactly)
@@ -57,6 +59,7 @@ sdk/python/                          # Workspace root
 │   │   └── platform_capabilities/  # flokoa.platform/* (telemetry, …)
 │   └── tests/                      # Incl. the 03/04/05 contract tests
 ├── flokoa-codemode-mcp/            # Code-mode MCP server package
+├── flokoa-openapi/                 # OpenAPI → typed pydantic-ai tools (ships as a Capability)
 └── flokoa-common/                  # Shared internal helpers
 ```
 
@@ -113,8 +116,8 @@ This uses `datamodel-codegen` to extract JSON schemas from CRD YAML files and pr
 | `agenttool.py` | `agent.flokoa.ai_agenttools` | `AgentToolSpec` |
 | `agentcard.py` | `agent.flokoa.ai_agents` (card field) | `AgentCard` |
 | `agentworkflow.py` | `agent.flokoa.ai_agentworkflows` | `AgentWorkflow` |
-| `modelconfig.py` | Combined from `Models` + `ModelProviders` | `ModelConfig`, `ProviderType`, provider-specific configs |
-| `templateconfig.py` | `agent.flokoa.ai_agents` (runtime.template.config) | `TemplateConfig` |
+| `capability.py` | `agent.flokoa.ai_capabilities` | `CapabilitySpec` |
+| `modelsettings.py` | `agent.flokoa.ai_models` (settings field) | `ModelSettings` |
 
 The generation pipeline:
 1. `make manifests` in operator/ generates CRD YAML from Go types
@@ -128,17 +131,25 @@ Import types using `from flokoa_types import ...` (not `from flokoa.types`).
 
 ## CLI Usage
 
-The `flokoa` CLI runs agents locally:
+The `flokoa` CLI has two command groups: `run` (serve an agent) and
+`capability` (author/publish capability artifacts).
 
 ```bash
-# Run an agent (requires the pydantic-ai extra)
+# Run an agent (requires the pydantic-ai extra). Default bind: localhost:10001
 flokoa run -m my_module:my_agent
+flokoa run -m my_module:my_agent --host 0.0.0.0 --port 8000   # override host/port
+flokoa run -f agentspec.yaml                                  # hydrate an AgentSpec file
 
-# Specify host and port
-flokoa run -m my_module:my_agent --host 0.0.0.0 --port 8000
+# Author capabilities — see docs/guides/capabilities.md
+flokoa capability build ./my-capability --tag ghcr.io/me/caps/my-cap:0.1.0
+flokoa capability push  ghcr.io/me/caps/my-cap:0.1.0 --sign --apply
+flokoa capability import some-pypi-package --tag ghcr.io/me/caps/some:0.1.0
+flokoa capability search QUERY            # search the index + in-cluster CRs
+flokoa capability list                    # list everything
 ```
 
-The agent argument uses `module:object` syntax (similar to uvicorn).
+`run -m` uses `module:object` syntax (similar to uvicorn); exactly one of
+`-m` / `-f` is required.
 
 ## Framework Integration
 
@@ -171,8 +182,8 @@ Uses `ty` for static type checking. Configure in `pyproject.toml`:
 
 ```toml
 [tool.ty.environment]
-python = ".venv"
-python-version = "3.10"
+python = "../.venv"
+python-version = "3.13"
 ```
 
 ### Testing
@@ -194,7 +205,7 @@ Core dependencies (flokoa):
 - `pydantic` - Data validation
 
 Optional extras:
-- `pydantic-ai` - Pydantic AI framework support (>= 1.44.0)
+- `pydantic-ai` - Pydantic AI framework support (>= 1.107.0, < 2; the runner baseline pins `pydantic-ai==1.107.0`)
 - `tracing` - OpenTelemetry tracing support (opentelemetry-sdk, OTLP exporter, FastAPI instrumentation)
 
 Dev dependencies (in `dependency-groups`):
@@ -213,14 +224,12 @@ Install hooks:
 uv run pre-commit install
 ```
 
-## Multi-Version Testing
+## Testing
 
-tox.ini supports Python 3.10-3.14:
-
-```bash
-tox -e py313  # Test specific version
-tox           # Test all versions
-```
+The package requires **Python ≥ 3.13**. CI (`test-python.yml`) runs a single
+pass: `uv sync --all-packages --all-extras` + `pytest` with coverage. A
+`tox.ini` exists for local runs, but its lower envs predate the 3.13 floor and
+it is not the CI path — prefer `make test`.
 
 ## Common Patterns
 
@@ -232,7 +241,9 @@ flokoa run -f agentspec.yaml         # an AgentSpec file — the local mirror of
 ```
 
 Tools reach agents as **MCP endpoints** (AgentTool CRs compile to MCP
-capability entries); the former OpenAPI toolset machinery is retired.
+capability entries). The AgentTool `openapi` *type* is retired, but OpenAPI
+support lives on as the `flokoa-openapi` package (OpenAPI document → typed
+pydantic-ai tools), shipped as a Capability.
 
 ## CI/CD
 

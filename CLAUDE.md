@@ -51,6 +51,7 @@ flokoa/
 │       ├── flokoa-types/          # Auto-generated Pydantic v2 models from CRD schemas
 │       ├── flokoa-runner/         # Generic runner: compiled-spec hydration + A2A serving
 │       ├── flokoa-codemode-mcp/   # Code-mode MCP server package
+│       ├── flokoa-openapi/        # OpenAPI → typed pydantic-ai tools (ships as a Capability)
 │       └── flokoa-common/         # Shared internal helpers
 ├── docs/                          # Documentation (Zensical/MkDocs site)
 │   ├── *.md                       # Architecture, getting-started, CRD docs
@@ -190,9 +191,9 @@ All images use multi-stage builds. The operator uses `gcr.io/distroless/static:n
 - Helm chart for deployment
 
 ### Python SDK
-- uv workspace (flokoa, flokoa-types, flokoa-runner, flokoa-codemode-mcp, flokoa-common)
+- uv workspace (flokoa, flokoa-types, flokoa-runner, flokoa-codemode-mcp, flokoa-openapi, flokoa-common)
 - FastAPI + a2a-sdk for HTTP/A2A protocol
-- pydantic-ai >= 1.44.0 (the only framework integration)
+- pydantic-ai >= 1.107.0 (the only framework integration); the runner baseline pins `pydantic-ai==1.107.0`
 - Ruff for linting, ty for type checking, pytest for tests
 - Pre-commit hooks configured
 
@@ -221,9 +222,12 @@ All images use multi-stage builds. The operator uses `gcr.io/distroless/static:n
 
 This project is in early development, executing the Pivot v2.1 roadmap
 (`docs/roadmap/`). Phase 0, P0a (units 02–07: runtime contract, spec
-compiler, generic runner, virtual endpoint, injected telemetry), and unit 08
-(Capability CRD + admission) are done; the rest of P0b — 09 (capability
-artifacts & delivery) and 10 (capability CLI & registry seeding) — is next.
+compiler, generic runner, virtual endpoint, injected telemetry), and **all of
+P0b** (unit 08 Capability CRD + admission, unit 09 capability artifacts &
+delivery + cosign verification, unit 10 capability authoring CLI) are done —
+only capability registry *seeding* (a published first-party capability index)
+remains. P1 (isolated sessions, the A2A session-routing gateway, isolation
+tiers) is next.
 Key architectural components:
 - Eight CRDs with controllers, admission webhooks, and gRPC services
 - Python SDK with CLI, pydantic-ai integration, and OpenAPI tooling

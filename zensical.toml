@@ -11,13 +11,13 @@
 # The site_name is shown in the page header and the browser window title
 #
 # Read more: https://zensical.org/docs/setup/basics/#site_name
-site_name = "Documentation"
+site_name = "Flokoa"
 
 # The site_description is included in the HTML head and should contain a
 # meaningful description of the site content for use by search engines.
 #
 # Read more: https://zensical.org/docs/setup/basics/#site_description
-site_description = "A new project generated from the default template project."
+site_description = "Flokoa — the open-source agent harness for Kubernetes. Declarative pydantic-ai agents, packaged capabilities, event triggers, and A2A, on your own cluster."
 
 # The site_author attribute. This is used in the HTML head element.
 #
@@ -27,7 +27,7 @@ site_author = "Daniel Nyari"
 # The site_url is the canonical URL for your site. When building online
 # documentation you should set this.
 # Read more: https://zensical.org/docs/setup/basics/#site_url
-#site_url = "https://www.example.com/"
+site_url = "https://danielnyari.github.io/flokoa/"
 
 # The copyright notice appears in the page footer and can contain an HTML
 # fragment.
@@ -44,10 +44,43 @@ Copyright &copy; 2026 The authors
 # can be defined using TOML syntax.
 #
 # Read more: https://zensical.org/docs/setup/navigation/
-# nav = [
-#   { "Get started" = "index.md" },
-#   { "Markdown in 5min" = "markdown.md" },
-# ]
+#
+# An explicit nav keeps the sidebar curated. Pages not listed here (the roadmap
+# detail units, the vendored Argo examples under docs/argo/examples/, …) still
+# build but stay out of the sidebar.
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Architecture" = "architecture.md" },
+  { "Quick reference" = "quick-reference.md" },
+  { "Resources" = [
+    { "Agent" = "agent.md" },
+    { "Model" = "model.md" },
+    { "ModelProvider" = "modelprovider.md" },
+    { "Instruction" = "instruction.md" },
+    { "AgentTool" = "agenttool.md" },
+    { "Capability" = "capability.md" },
+    { "AgentTrigger" = "agenttrigger.md" },
+  ] },
+  { "Python SDK & CLI" = "sdk.md" },
+  { "Guides" = [
+    { "Capabilities" = "guides/capabilities.md" },
+  ] },
+  { "Examples" = "examples/README.md" },
+  { "Reference" = [
+    { "Runtime contract" = "reference/runtime-contract.md" },
+    { "Operator conventions" = "reference/operator-conventions.md" },
+    { "Argo executor plugins" = "argo/executor-plugins.md" },
+  ] },
+  { "Design & internals" = [
+    { "Design docs" = "design-docs/index.md" },
+    { "Core beliefs" = "design-docs/core-beliefs.md" },
+    { "ADR-001: salvage" = "design-docs/adr-001-salvage-2192bdbd.md" },
+    { "ADR-002: capability artifacts & CLI" = "design-docs/adr-002-capability-artifacts-and-cli.md" },
+    { "A2A stack decision" = "decisions/a2a-stack.md" },
+    { "Roadmap" = "roadmap/README.md" },
+  ] },
+]
 
 # With the "extra_css" option you can add your own CSS styling to customize
 # your Zensical project according to your needs. You can add any number of

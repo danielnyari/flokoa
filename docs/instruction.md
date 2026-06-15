@@ -19,7 +19,7 @@ spec:
 
 | Field | Description |
 |-------|-------------|
-| `content` | The system-prompt text. Required. |
+| `content` | The system-prompt text. Required and non-empty — empty content is rejected at admission. |
 
 ## How it compiles
 

@@ -1,140 +1,84 @@
-# operator
-// TODO(user): Add simple overview of use/purpose
+# Flokoa Operator
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+The Kubernetes operator behind [Flokoa](https://github.com/danielnyari/flokoa) —
+the open-source agent harness for Kubernetes. It manages AI agents declaratively
+through CRDs under the `agent.flokoa.ai` API group: it **compiles** each Agent
+(an inline pydantic-ai AgentSpec fragment plus Model/Instruction/AgentTool/
+Capability references) into one resolved, schema-validated spec and runs it on
+the generic runner — no per-agent image builds.
 
-## Getting Started
+It also ships a gRPC/REST API server, admission webhooks, an Argo Workflows A2A
+executor plugin, and a Helm chart.
 
-### Prerequisites
-- go version v1.24.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+- **Module guide (start here):** [`CLAUDE.md`](CLAUDE.md) — layout, commands, conventions
+- **User documentation:** [`../docs/`](../docs/) — [getting started](../docs/getting-started.md), [architecture](../docs/architecture.md), CRD reference
+- **Normative interface:** [runtime contract](../docs/reference/runtime-contract.md)
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+## Prerequisites
 
-```sh
-make docker-build docker-push IMG=<some-registry>/operator:tag
+- Go 1.24+
+- Docker (or Podman) and `kubectl`
+- A Kubernetes 1.25+ cluster (Helm 3.8+ for OCI chart installs)
+
+## Install
+
+```bash
+# Helm (chart published to GHCR on each release)
+helm install flokoa oci://ghcr.io/danielnyari/charts/flokoa
+
+# …or the manifest bundle attached to each GitHub release
+kubectl apply -f https://github.com/danielnyari/flokoa/releases/latest/download/install.yaml
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+> **Pre-release:** no `v*` tag is published yet, so neither the chart nor the
+> `install.yaml` bundle is on GHCR/Releases until `v0.1.0` ships. To run locally
+> in the meantime, use `make up` from the repository root (minikube one-shot).
 
-**Install the CRDs into the cluster:**
+## Local development
 
-```sh
-make install
+```bash
+# From the repo root: full local stack on minikube (operator + server + Argo + sample agent)
+make up        # build images into minikube, deploy, port-forward the UIs
+make down      # tear it down
+
+# From operator/: equivalent targets and a la carte deploys
+make local-up        # build images into minikube + deploy-full + port-forward
+make deploy-full     # operator + Argo Workflows + executor plugins
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+`make local-up` (script: [`hack/local-up.sh`](hack/local-up.sh)) builds images
+directly into minikube's docker daemon and reads `OPENAI_API_KEY` from a repo-root
+`.env`.
 
-```sh
-make deploy IMG=<some-registry>/operator:tag
+## Build, test, codegen
+
+Run from `operator/`; `make help` lists everything.
+
+```bash
+make build                 # manager + server binaries
+make test                  # unit tests (envtest)
+make test-integration      # Docker-free: manager + real runner over A2A
+make test-e2e              # Kind cluster
+
+make manifests generate    # CRDs, RBAC, webhooks, DeepCopy (after editing api/v1alpha1/*_types.go)
+make generate-python-models # regenerate the Python SDK types (needs yq)
+make buf-generate          # gRPC code from proto
+
+make lint                  # golangci-lint (incl. layer-boundary depguard)
+make verify-codegen        # fail if generated artifacts are stale
 ```
 
-By default, deployment runs without cert-manager/webhooks. To enable webhook TLS via cert-manager:
+## Images
 
-```sh
-make deploy DEPLOY_WITH_CERT_MANAGER=true IMG=<some-registry>/operator:tag
-```
+Image versions are driven by the release process (a `v*` tag); don't hand-maintain them.
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
-
-```sh
-kubectl apply -k config/samples/
-```
-
->**NOTE**: Ensure that the samples has default values to test it out.
-
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/operator:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/operator/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-operator-sdk edit --plugins=helm/v1-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+| Image | Make target | Registry |
+|-------|-------------|----------|
+| Operator | `docker-build` / `docker-push` | `ghcr.io/danielnyari/flokoa-operator` |
+| Server | `docker-build` / `docker-push` | `ghcr.io/danielnyari/flokoa-server` |
+| A2A plugin | `docker-build-plugins` / `docker-push-plugins` | `ghcr.io/danielnyari/flokoa-a2a-plugin` |
+| Generic runner | `make docker-build-runner` (in `sdk/python/`) | `ghcr.io/danielnyari/flokoa-runner` |
 
 ## License
 
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Apache 2.0 — see [LICENSE](../LICENSE).
