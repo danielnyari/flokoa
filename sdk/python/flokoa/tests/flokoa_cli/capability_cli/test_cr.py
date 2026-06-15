@@ -113,13 +113,18 @@ class TestRenderCapabilityCr:
 
 
 class TestNameValidation:
-    @pytest.mark.parametrize("name", ["flokoa-cap-echo", "echo", "a1", "ns.echo-2"])
-    def test_dns_safe_names_accepted(self, name: str) -> None:
+    # Capability metadata.name must be an RFC 1123 DNS *label* (no dots, max 63)
+    # — pod container/volume names derive from cap-<name>; admission enforces it.
+    @pytest.mark.parametrize("name", ["flokoa-cap-echo", "echo", "a1", "a" * 63])
+    def test_dns_label_names_accepted(self, name: str) -> None:
         assert cr.validate_cr_name(name) == name
 
-    @pytest.mark.parametrize("name", ["Echo", "echo_cap", "-echo", "echo-", "", "a" * 254])
-    def test_unsafe_names_refused(self, name: str) -> None:
-        with pytest.raises(CapabilityCliError, match="not a DNS-safe"):
+    @pytest.mark.parametrize(
+        "name",
+        ["Echo", "echo_cap", "-echo", "echo-", "", "ns.echo-2", "a.b", "a" * 64],
+    )
+    def test_non_label_names_refused(self, name: str) -> None:
+        with pytest.raises(CapabilityCliError, match="not an RFC 1123 DNS label"):
             cr.validate_cr_name(name)
 
     @pytest.mark.parametrize(
