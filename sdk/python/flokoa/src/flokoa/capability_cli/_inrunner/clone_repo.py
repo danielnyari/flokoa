@@ -99,9 +99,11 @@ def main() -> int:
     askpass = _write_askpass(args.work)
     env = _clone_env(args.scheme, askpass)
 
-    # Shallow-clone (single commit) by default; if a ref is given, clone the
-    # default branch then check out the ref (works for branch/tag/sha).
-    clone_argv = ["git", "clone", "--quiet", args.url, str(checkout)]
+    # No ref: shallow-clone the default branch (--depth 1) — only the tip commit
+    # is needed for the wheelhouse build. With a ref we must do a full clone then
+    # `git checkout <ref>`, because --depth 1 fetches only the default-branch tip
+    # and cannot reliably resolve an arbitrary branch/tag/sha.
+    clone_argv = ["git", "clone", "--quiet", *([] if args.ref else ["--depth", "1"]), args.url, str(checkout)]
     result = _run(clone_argv, env=env)
     if result.returncode != 0:
         print(

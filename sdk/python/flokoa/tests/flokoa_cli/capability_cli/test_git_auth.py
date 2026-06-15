@@ -94,6 +94,41 @@ class TestParseFromGitReject:
             git_auth.parse_from_git(value)
 
 
+class TestParseFromGitHttpsUserinfo:
+    """git+https URLs must not carry a `user@` prefix: the username is dropped
+    (credentials are resolved separately), so honoring it would mislead. ssh's
+    bare `git@` user stays allowed, and a credential-free git+https is fine."""
+
+    def test_https_user_prefix_is_rejected(self) -> None:
+        with pytest.raises(CapabilityCliError, match="must not include a 'user@' prefix"):
+            git_auth.parse_from_git("git+https://user@github.com/o/r")
+
+    def test_ssh_user_prefix_still_accepted(self) -> None:
+        parsed = git_auth.parse_from_git("git+ssh://git@github.com/o/r")
+        assert parsed.scheme == "ssh"
+        assert parsed.url == "ssh://git@github.com/o/r"
+
+    def test_https_without_user_prefix_still_accepted(self) -> None:
+        parsed = git_auth.parse_from_git("git+https://github.com/o/r")
+        assert parsed.scheme == "https"
+        assert parsed.url == "https://github.com/o/r"
+
+
+class TestParseFromGitPort:
+    """A non-standard `:port` is captured on ParsedGitSource (the credential
+    lookup needs it: git keys creds per host[:port])."""
+
+    def test_port_recorded_on_parsed_source(self) -> None:
+        parsed = git_auth.parse_from_git("git+https://gitlab.internal.example.com:8443/g/r")
+        assert parsed.host == "gitlab.internal.example.com"
+        assert parsed.port == "8443"
+        assert parsed.url == "https://gitlab.internal.example.com:8443/g/r"
+
+    def test_no_port_is_none(self) -> None:
+        parsed = git_auth.parse_from_git("git+https://github.com/org/repo")
+        assert parsed.port is None
+
+
 class TestParseFromGitRejectPathTraversal:
     """`..` components in the #subdirectory= or @ref are rejected on the HOST,
     before the value reaches the build container (the clone step bound-checks
@@ -214,6 +249,47 @@ class TestHttpsAuthPrecedence:
             auth = git_auth.resolve_https_auth("github.com")
         assert auth.token is None
         assert auth.source == "none"
+
+
+class TestHttpsAuthPort:
+    """A non-standard port must reach `git credential fill` as host=HOST:PORT
+    so git's per-host[:port] credential store resolves creds for self-hosted
+    instances."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+
+    def test_credential_fill_request_includes_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen_inputs: list[str | None] = []
+
+        def fake_run(argv, *, input_text=None):
+            seen_inputs.append(input_text)
+            if argv[:2] == ["git", "credential"]:
+                return mock.Mock(
+                    returncode=0,
+                    stdout="protocol=https\nhost=gitlab.internal.example.com:8443\npassword=port-pat\n",
+                    stderr="",
+                )
+            return mock.Mock(returncode=1, stdout="", stderr="")
+
+        parsed = git_auth.parse_from_git("git+https://gitlab.internal.example.com:8443/g/r")
+        assert parsed.port == "8443"
+        with (
+            mock.patch.object(git_auth.shutil, "which", side_effect=lambda t: f"/usr/bin/{t}"),
+            mock.patch.object(git_auth, "_run", side_effect=fake_run),
+        ):
+            auth = git_auth.resolve_auth(parsed)
+        assert auth.token == "port-pat"
+        # The credential request stdin carried the host WITH the port.
+        assert any(line and "host=gitlab.internal.example.com:8443" in line for line in seen_inputs)
+        assert not any(line and "host=gitlab.internal.example.com\n" in line for line in seen_inputs)
+
+    def test_auth_failure_message_shows_port(self) -> None:
+        parsed = git_auth.parse_from_git("git+https://gitlab.internal.example.com:8443/g/r")
+        msg = git_auth.auth_failure_message(parsed)
+        assert "gitlab.internal.example.com:8443" in msg
 
 
 class TestSshAuth:

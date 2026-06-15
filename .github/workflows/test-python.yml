@@ -104,11 +104,19 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --all-extras
 
+      # `flokoa capability build` now defaults its build environment to the
+      # capability *base* image (runner baseline + pinned build tooling), which
+      # only publishes on a release tag. CI builds the pinned runner locally and
+      # points the CLI's build environment at it via FLOKOA_CAPABILITY_BASE_IMAGE
+      # (the new resolver's env override). The runner lacks a pre-seeded pip, so
+      # the in-runner ensure_pip() fallback — kept for exactly this bare-runner
+      # override — bootstraps it; the base image's own build is verified
+      # separately. This exercises the full build pipeline end-to-end.
       - name: Build the pinned runner image locally
         run: docker buildx build --load -f flokoa-runner/Dockerfile -t flokoa-runner:ci .
 
       - name: Run capability CLI integration tests
         working-directory: sdk/python/flokoa
         env:
-          FLOKOA_RUNNER_IMAGE: flokoa-runner:ci
+          FLOKOA_CAPABILITY_BASE_IMAGE: flokoa-runner:ci
         run: uv run python -m pytest -m integration tests/flokoa_cli/capability_cli

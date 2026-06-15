@@ -29,23 +29,42 @@
 
 ARG RUNNER_VERSION=0.2.0
 
+# Pinned build front-end versions. These are NOT the runtime baseline (that
+# lives in runner.lock / runner-manifest.json) — they are the pip/wheel/
+# setuptools that resolve the wheelhouse at capability-build time. Pinning them
+# makes flokoa-capability-base:<runnerVersion> deterministic per runner release:
+# rebuilding the same tag yields the same build toolchain instead of whatever
+# happened to be latest on PyPI that day. Override per build with
+# `--build-arg PIP_VERSION=… --build-arg WHEEL_VERSION=… --build-arg
+# SETUPTOOLS_VERSION=…` if a newer front-end is needed.
+ARG PIP_VERSION=26.1.2
+ARG WHEEL_VERSION=0.47.0
+ARG SETUPTOOLS_VERSION=82.0.1
+
 FROM ghcr.io/danielnyari/flokoa-runner:${RUNNER_VERSION}
 
-# Re-declare after FROM so the LABEL below can interpolate it.
+# Re-declare after FROM so the LABEL and the RUN below can interpolate them.
 ARG RUNNER_VERSION=0.2.0
+ARG PIP_VERSION=26.1.2
+ARG WHEEL_VERSION=0.47.0
+ARG SETUPTOOLS_VERSION=82.0.1
 
 # The runner image runs as the non-root pod user (uid 65532); seeding the venv
 # needs write access to /app/.venv, so switch to root for the build layer.
 USER 0
 
 # Seed pip + the build front-end into the runner venv ONCE, at image-build
-# time. ensurepip uses the CPython bundled wheel (offline, deterministic per
-# base-image patch version); wheel + setuptools come from PyPI so the build
-# front-end is complete and current. pip remains a *build* tool here — it is
-# intentionally absent from runner.lock / runner-manifest.json (the locked
-# baseline), exactly as in the runner image.
+# time. ensurepip bootstraps pip from the CPython bundled wheel (offline) so we
+# have a pip to then install the exact pins with; the subsequent install pins
+# pip, wheel, and setuptools to the ARG versions so the build front-end is fully
+# deterministic per runner release (overridable via the ARGs above). pip
+# remains a *build* tool here — it is intentionally absent from runner.lock /
+# runner-manifest.json (the locked baseline), exactly as in the runner image.
 RUN /app/.venv/bin/python -m ensurepip --upgrade \
- && /app/.venv/bin/python -m pip install --no-cache-dir --upgrade pip wheel setuptools \
+ && /app/.venv/bin/python -m pip install --no-cache-dir \
+      "pip==${PIP_VERSION}" \
+      "wheel==${WHEEL_VERSION}" \
+      "setuptools==${SETUPTOOLS_VERSION}" \
  && /app/.venv/bin/python -m pip --version
 
 # git+ssh capability builds (`flokoa capability build --from-git git+ssh://…`)

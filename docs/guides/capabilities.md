@@ -315,7 +315,32 @@ capabilities are flagged in `kubectl get capabilities` and in `search` output;
 prefer a typed schema or `--schema`.
 
 A local `PATH` build records source tier
-[`image`](../capability.md#source-tiers) — the author-built-their-own case.
+[`image`](../capability.md#source-tiers) — the author-built-their-own case. You
+never hand-write the artifact, the `manifest.json`, or the `Capability` CR — all
+three are generated; `push` then pins the digest.
+
+### The capability name (`--name`)
+
+The `Capability` CR's `metadata.name` must be an **RFC 1123 DNS label**:
+lowercase alphanumerics and `-`, **no dots**, at most **63 characters**. The pod
+container and volume names the operator emits derive from `cap-<name>` (itself a
+DNS label), so admission requires it and the CLI enforces it up front.
+
+`--name` defaults to the PEP 503-normalized distribution name (`_`/`.`→`-`,
+lowercased) — already DNS-safe for ordinary package names. Pass `--name` when
+the normalized dist name is not a valid label (e.g. it exceeds 63 chars) or when
+you want a shorter handle; the CLI rejects an invalid name with the exact rule:
+
+```console
+$ flokoa capability build . --name my.cap
+Error: capability name 'my.cap' is not an RFC 1123 DNS label (lowercase
+alphanumerics and '-', no dots, max 63 chars) — pod container and volume names
+derive from cap-<name>, so admission requires a DNS label — pass --name
+```
+
+(The `serializationName` — the *spec-entry* name capabilities are referenced by
+in a compiled spec — is a separate thing and *may* carry a first-party dotted
+namespace for built-ins; see the [CR reference](../capability.md#spec-fields).)
 
 ### The base image
 
@@ -336,6 +361,18 @@ together with each release). Override it, highest precedence first:
 | `--base-version TEXT` | Version only, composed with the default base repository. |
 | `FLOKOA_CAPABILITY_BASE_IMAGE` env | Full image reference. |
 | `--runner-image` / `--runner-version` | Retained back-compat aliases for `--base-image` / `--base-version`. Pointing `--runner-image` at a *bare* runner image still works — the CLI falls back to seeding `pip` per build — but the happy path no longer needs it. |
+
+!!! note "Reproducible builds: the base image pins its build front-end"
+    The base image pins `pip`, `wheel`, and `setuptools` to exact versions per
+    runner release (baked once at image-build time, not re-fetched per CLI run).
+    Rebuilding `flokoa-capability-base:<runnerVersion>` therefore yields the same
+    build toolchain instead of whatever happened to be latest on PyPI that day —
+    so two builds of the same source against the same base tag resolve the same
+    wheelhouse. These pins are the *build* front-end, distinct from the runtime
+    baseline (`runner.lock` / `runner-manifest.json`); pip is intentionally
+    absent from the locked baseline, exactly as in the runner image. Override
+    them per build with `--build-arg PIP_VERSION=… WHEEL_VERSION=…
+    SETUPTOOLS_VERSION=…` when rebuilding the base image itself.
 
 ## Building from a private git repo
 
@@ -359,8 +396,20 @@ rejected:
 
 - **scheme** — `git+https://…` (the named, tested path) or `git+ssh://…`
   (works against `github.com` via the SSH agent).
+- **host** — `HOST` or `HOST:PORT`. A **non-standard `:port`** (anything other
+  than 80/443) is carried through to the clone *and* into the credential lookup,
+  so a self-hosted instance on a custom port resolves its per-`host:port`
+  credentials correctly.
+- **ssh user** — `git+ssh://git@HOST/…` may carry an ssh user (`git@`). A
+  **`git+https://…` URL must NOT carry a `user@` prefix**: https credentials are
+  resolved separately, so a username there has no effect and is rejected as
+  misleading — use `git+ssh://git@HOST/…` if you need an ssh user. (Embedded
+  passwords, `user:pass@`, are forbidden for both schemes.)
 - **`@ref`** (optional) — a branch, tag, or commit SHA. Recorded as
-  `provenance.git.ref`.
+  `provenance.git.ref`. With a ref, the clone is a full clone followed by
+  `git checkout <ref>`; **with no ref, the clone is shallow** (`--depth 1`) since
+  only the default-branch tip is needed for the wheelhouse build. A `..` path
+  component in `@ref` or `#subdirectory=` is rejected on the host.
 - **`#subdirectory=…`** (optional) — the path within the repo to the Python
   project. Recorded as `provenance.git.subdirectory`.
 
@@ -397,6 +446,17 @@ git stderr is credential-redacted before it can reach any error or log line.
 The resolved commit is the durable provenance — it pins the exact code built
 even if the branch or tag later moves. Non-GitHub `git+https`/`git+ssh` hosts
 should work via ambient credentials; GitHub is the named, tested path.
+
+### Troubleshooting git builds
+
+| Symptom | Fix |
+|---|---|
+| **Private `git+https` repo: clone fails with "requires credentials and none resolved"** | The host has no credential for the host. Set one of, in precedence order: a **git credential helper** (`git config --global credential.helper …` so `git credential fill` returns a token for the host), a **`gh` login** (`gh auth login`), or export **`GITHUB_TOKEN`** / **`GH_TOKEN`**. `build` resolves auth host-side and fails up front naming this exact ladder. |
+| **`git+ssh` repo: clone fails / "needs a running SSH agent ($SSH_AUTH_SOCK)"** | Start an agent and add your key: `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519`. The agent *socket* is forwarded into the build container (no private key is copied). Or switch to `git+https://…` with a credential helper / `GITHUB_TOKEN`. |
+| **`git+ssh` against a non-GitHub host: "Host key verification failed"** | The base image strict-checks host keys and pre-seeds **only `github.com`**'s keys. For another host, add its key to `flokoa-capability-base`'s `ssh_known_hosts` and rebuild the base image (point `--base-image` at it), or clone over `git+https` instead. `github.com` works out of the box. |
+| **"--from-git https URLs must not include a 'user@' prefix"** | https credentials are resolved separately, so a username is dropped — drop it. If you genuinely need an ssh user, use `git+ssh://git@HOST/…`. |
+| **"a bare https:// without git+ … are not accepted"** | Use the `git+https://` (or `git+ssh://`) scheme, not a plain `https://` URL — the grammar is uv/pip-style on purpose. |
+| **Token appears to have leaked into a log** | It cannot: the token rides an ephemeral `exec` env consumed via `GIT_ASKPASS`, the recorded remote URL is reset to the clean URL, and captured git stderr is credential-redacted before printing. If you see `<redacted>@` in output, that is the redactor working as intended. |
 
 ## Publishing
 
@@ -572,13 +632,25 @@ Options:
 flokoa capability search openapi
 flokoa capability list
 flokoa capability list --index ./capability-index   # a local checkout
+flokoa capability list --no-cluster                 # index only (skip kubectl)
 ```
 
-The output table has `NAME · VERSION · RUNNER · POLICY · SIGNED · SOURCE`
-columns; `SOURCE` is `index` or `cluster`. Permissive entries are flagged
-`permissive (!)` with a footnote — unvalidated per-agent config is a property
-the operator picking a capability must see. In-cluster rows derive `SIGNED` from
-the CR's `Verified` condition.
+The output table has `NAME · VERSION · TIER · RUNNER · POLICY · SIGNED · SOURCE`
+columns:
+
+- **`TIER`** is the [source tier](../capability.md#source-tiers) (`builtin` ·
+  `image` · `git` · `pypi`). A `pypi` row is flagged `pypi (!!)` with a red
+  footnote — it is the EXTREMELY DANGEROUS tier and the cluster may refuse it
+  via [`allowedSources`](../capability.md#source-policy-allowedsources). A row
+  with no recorded tier renders `-`.
+- **`SOURCE`** is `index` or `cluster` — which feed the row came from (distinct
+  from `TIER`, which is where the *code* came from).
+- **`POLICY`** is `strict` or, for permissive capabilities, `permissive (!)`
+  with a footnote — unvalidated per-agent config is a property the operator
+  picking a capability must see.
+- **`SIGNED`** is `yes`/`no`. In-cluster rows derive it from the CR's `Verified`
+  condition, so a `builtin` row shows `yes` (its `Verified=True / BuiltIn`
+  short-circuit); index rows use the published `signed` flag.
 
 > **The default index URL 404s today.** The published index ships with registry
 > seeding (roadmap 10); until then the default

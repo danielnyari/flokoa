@@ -36,9 +36,11 @@ def _args(work: Path, **overrides: Any) -> argparse.Namespace:
 class TestCloneHttps:
     def test_clone_writes_clean_report(self, tmp_path: Path) -> None:
         commit = "a" * 40
+        clone_calls: list[list[str]] = []
 
         def fake_run(argv, *, env=None):
             if argv[:2] == ["git", "clone"]:
+                clone_calls.append(argv)
                 (tmp_path / clone_repo._CHECKOUT_DIRNAME).mkdir(parents=True, exist_ok=True)
                 return _completed(0)
             if "rev-parse" in argv:
@@ -57,6 +59,8 @@ class TestCloneHttps:
         assert report["url"] == "https://github.com/org/repo"
         assert report["commit"] == commit
         assert report["ref"] is None
+        # No ref → shallow clone of the default-branch tip (--depth 1).
+        assert clone_calls[0][:5] == ["git", "clone", "--quiet", "--depth", "1"]
 
     def test_https_uses_git_askpass_not_url_token(self, tmp_path: Path) -> None:
         seen_envs: list[dict] = []
@@ -65,8 +69,11 @@ class TestCloneHttps:
             seen_envs.append(env or {})
             if argv[:2] == ["git", "clone"]:
                 (tmp_path / clone_repo._CHECKOUT_DIRNAME).mkdir(parents=True, exist_ok=True)
-                # The clone URL handed to git is the clean one — no creds.
-                assert "@" not in argv[argv.index("clone") + 2].split("//", 1)[1].split("/", 1)[0]
+                # The clone URL handed to git is the clean one — no creds. (The
+                # URL is the positional arg before the checkout dir; --depth 1
+                # may precede it on the no-ref shallow path.)
+                clone_url = next(arg for arg in argv if "//" in arg)
+                assert "@" not in clone_url.split("//", 1)[1].split("/", 1)[0]
                 return _completed(0)
             if "rev-parse" in argv:
                 return _completed(0, stdout="a" * 40 + "\n")
@@ -119,6 +126,11 @@ class TestCloneRefAndSubdir:
             rc = clone_repo.main()
         assert rc == 0
         assert any(argv[:3] == ["git", "-C", str(tmp_path / "clone")] and "checkout" in argv for argv in calls)
+        # With a ref → full clone (no --depth), so the ref can resolve to any
+        # branch/tag/sha, then a separate checkout.
+        clone_argv = next(argv for argv in calls if argv[:2] == ["git", "clone"])
+        assert "--depth" not in clone_argv
+        assert clone_argv[:3] == ["git", "clone", "--quiet"]
         import json
 
         assert json.loads((tmp_path / "clone-report.json").read_text())["ref"] == "v1.2.0"

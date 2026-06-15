@@ -77,6 +77,10 @@ class ParsedGitSource:
     url: str
     ref: str | None = None
     subdirectory: str | None = None
+    #: The non-standard ``:port`` (``None`` for the default 80/443). git's
+    #: credential helpers key creds per ``host[:port]``, so the credential
+    #: lookup must send ``host=HOST:PORT`` when a port is present.
+    port: str | None = None
 
 
 def parse_from_git(value: str) -> ParsedGitSource:
@@ -99,6 +103,15 @@ def parse_from_git(value: str) -> ParsedGitSource:
     userhost = match.group("userhost") or ""
     if _USERINFO_WITH_PASSWORD.match(userhost):  # pragma: no cover — grammar already forbids it
         raise CapabilityCliError("--from-git must not embed credentials in the URL; auth is resolved separately")
+    # The grammar accepts a bare `user@` for BOTH schemes, but for git+https the
+    # username is silently dropped (credentials are resolved separately), so a
+    # `user@` there is misleading — reject it rather than honor a username that
+    # has no effect. ssh keeps its `git@` user.
+    if scheme == "https" and userhost:
+        raise CapabilityCliError(
+            "--from-git https URLs must not include a 'user@' prefix; credentials are resolved "
+            "separately — use git+ssh://git@HOST/... if you need an ssh user"
+        )
     path = match.group("path")
     ref = match.group("ref")
     subdirectory = match.group("subdirectory")
@@ -123,6 +136,7 @@ def parse_from_git(value: str) -> ParsedGitSource:
         url=clean_url,
         ref=ref,
         subdirectory=subdirectory,
+        port=port,
     )
 
 
@@ -153,6 +167,9 @@ def _git_credential_fill(host: str) -> str | None:
     ``git credential fill`` reads a key=value request on stdin and prints the
     resolved ``password=…`` (the token) on stdout. Returns ``None`` when git is
     absent, no helper is configured, or no credential is produced.
+
+    ``host`` carries the ``:port`` for a non-standard port (git keys creds per
+    ``host[:port]``, and its credential ``host`` attribute includes the port).
     """
     if shutil.which("git") is None:
         return None
@@ -187,15 +204,20 @@ def _env_token() -> tuple[str, str] | None:
     return None
 
 
-def resolve_https_auth(host: str) -> GitAuth:
+def resolve_https_auth(host: str, port: str | None = None) -> GitAuth:
     """Resolve an https credential, ambient first then env-var fallback.
 
     Returns ``GitAuth(token=None, source="none")`` when nothing resolves — a
     public-repo clone proceeds with no credential; auth only matters if the
     clone hits a 401/403, in which case :func:`auth_failure_message` names the
     precedence the user can fix.
+
+    ``port`` (when set) is appended to the host for the credential lookup so
+    git's per-``host:port`` credential store resolves creds for self-hosted
+    instances on a non-standard port.
     """
-    token = _git_credential_fill(host)
+    lookup_host = f"{host}:{port}" if port else host
+    token = _git_credential_fill(lookup_host)
     if token:
         return GitAuth(token=token, source="ambient git credential helper")
     token = _gh_auth_token()
@@ -225,7 +247,7 @@ def resolve_auth(parsed: ParsedGitSource) -> GitAuth:
     """Resolve the credential plan for a parsed ``--from-git`` source."""
     if parsed.scheme == "ssh":
         return resolve_ssh_auth()
-    return resolve_https_auth(parsed.host)
+    return resolve_https_auth(parsed.host, parsed.port)
 
 
 def auth_failure_message(parsed: ParsedGitSource) -> str:

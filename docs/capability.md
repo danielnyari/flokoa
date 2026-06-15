@@ -84,6 +84,28 @@ from a local project (or any CR predating this field) is valid unchanged.
 | **`git`** | Built from a (typically private) **git repo at build time**. The output is the same self-contained, signable artifact — nothing is fetched from git at deploy/run time; the repo URL + resolved commit are recorded as provenance. | required, digest-pinned | Yes. |
 | **`pypi`** | Built from a **PyPI package** — **EXTREMELY DANGEROUS** (arbitrary maintainers, no first-party vetting). Kept for compatibility, but opt-in to build (`--allow-pypi`) and refusable to deploy. | required, digest-pinned | Yes. |
 
+**When to use each tier** (safest first):
+
+- **`builtin`** — when a first-party built-in already covers the need
+  (`flokoa-openapi` today). Nothing to build, publish, or download; the strongest
+  supply-chain story. Always check this first.
+- **`image`** (default) — for capabilities **your org wrote**. You hold the
+  source; `flokoa capability build PATH` produces a signable, digest-pinned
+  artifact against the published base image. This is the normal authoring path.
+- **`git`** — when the source lives in a (typically private) **git repo** you
+  don't want to check out locally. Same self-contained artifact as `image`, plus
+  recorded origin provenance (clean URL + resolved commit); the clone is
+  build-time only.
+- **`pypi`** — only for **third-party PyPI packages you cannot otherwise build**,
+  and only with eyes open: it is EXTREMELY DANGEROUS (arbitrary maintainers, no
+  vetting), requires `--allow-pypi`, and an operator can refuse it cluster-wide.
+  Prefer `git` or building your own first.
+
+The four tiers form a documentation/policy trust ordering
+(`builtin` > `image` > `git` > `pypi`) — not a numeric runtime comparison.
+`allowedSources` is an explicit set, so "allow `image` and `git` but not `pypi`"
+is a legitimate non-prefix policy.
+
 The **artifact-required/forbidden rule** is enforced at admission and
 re-checked at compile: `source: builtin` must **not** set `spec.artifact`
 (built-ins are baked in — there is nothing to deliver), and `image`/`git`/`pypi`
@@ -117,8 +139,32 @@ image-level, not per-artifact cosign. Built-ins also use **no** delivery path
 (no initContainer, no `emptyDir` copy), so they have *less* exposure than
 artifact-backed tiers, not more.
 
-The first-party built-in set ships with the chart (see the
-[capabilities guide](guides/capabilities.md#using-built-in-capabilities)).
+**Discovering and attaching a built-in.** The first-party built-in set ships
+with the chart (`capabilities.builtin.install`, default `true`) into the
+operator's release namespace — there is **nothing to build, publish, or
+download**. Find them with `flokoa capability search` (they show `TIER` =
+`builtin`) or `kubectl get capabilities` (`Source` = `builtin`, `Verified` =
+`True`), then attach one by `ref` like any Capability, with no artifact to
+publish first:
+
+```yaml
+spec:
+  capabilities:
+    - ref: {name: flokoa-openapi}      # front any OpenAPI spec as agent tools
+      config:
+        spec: https://api.example.com/openapi.json
+        base_url: https://api.example.com
+```
+
+The attaching Agent must be in the **same namespace** as the built-in CR
+(cross-namespace refs are unsupported), and an Agent with **only** built-ins
+gets a plain pod (no initContainer, no `emptyDir`, no download). The only
+first-party built-in today is **`flokoa-openapi`**; **`flokoa-codemode-mcp` is
+not yet built-in** — it is an MCP *server*, not an `AbstractCapability`, so it
+ships as a separately-deployed server fronted by an
+[`AgentTool`](agenttool.md). See the
+[capabilities guide](guides/capabilities.md#using-built-in-capabilities) for the
+full walkthrough.
 
 ## Source policy (`allowedSources`)
 
@@ -148,6 +194,32 @@ capabilities:
 
 `allowedSources` is operator configuration (like `requireVerified`), not a
 field on any CR.
+
+### Operator how-to: lock the cluster to built-in + image only
+
+A common hardened posture is to allow only the two strongest tiers — the
+first-party built-ins and capabilities your own org built (`image`) — and refuse
+both `git` and `pypi`:
+
+```yaml
+# values.yaml
+capabilities:
+  policy:
+    allowedSources: [builtin, image]
+```
+
+With this set, attaching any `git`- or `pypi`-sourced Capability to an Agent is
+**denied at admission**, and if someone edits a live Capability's `source` to
+`git`/`pypi` after the fact, the compiler re-checks and flags the dependent
+Agents `SpecValid=False` (last-good-generation pods keep running). The denial
+message names both the offending `source` and the configured set, and the
+[`Source` printcolumn](#source-tiers) in `kubectl get capabilities` makes the
+offending CR obvious.
+
+Pair it with `requireVerified` for defense in depth — `allowedSources` filters
+the *recorded tier* (asserted provenance), while cosign keyless identity +
+`requireVerified` proves *who* published the digest. The two are complementary;
+see [Signature verification](#signature-verification).
 
 ## What admission checks
 
@@ -367,10 +439,18 @@ running both is redundant rather than conflicting.
 ## Current limits
 
 The `flokoa capability build/push/import/search` CLI automates authoring and
-publishing artifacts. The first-party capability set is now shipped **baked
-into the runner image** as [built-in capabilities](#source-tiers) (currently
-`flokoa-openapi`), which subsumes the previously-deferred registry seeding: a
-built-in attaches with no artifact to publish. A hosted capability **index**
-(the `search`/`list` discovery feed) is still the v1 JSON index; the published
-default URL 404s until it is seeded (point `--index` at a checkout). The
-admission, delivery, and verification machinery described above is fully wired.
+publishing artifacts across all four [source tiers](#source-tiers): a local
+project (`image`), a git repo (`build --from-git`), and a PyPI package
+(`build --from-pypi`/`import`, gated behind `--allow-pypi`). The first-party
+capability set is now shipped **baked into the runner image** as built-in
+capabilities (currently `flokoa-openapi`), which subsumes the previously-deferred
+registry seeding: a built-in attaches with no artifact to publish. The
+admission, delivery, source-policy, and verification machinery described above is
+fully wired.
+
+The remaining gap is the hosted capability **index** (the `search`/`list`
+discovery feed): it is still the v1 JSON index, and the published default URL
+`https://raw.githubusercontent.com/danielnyari/flokoa/main/capability-index/index.json`
+**404s until it is seeded**. `search`/`list` say so and still list in-cluster
+Capability CRs; point `--index` (or `FLOKOA_CAPABILITY_INDEX`) at a published
+URL or a local checkout (`push --index <checkout>` is what populates one).
