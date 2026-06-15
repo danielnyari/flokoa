@@ -24,6 +24,12 @@ class RunnerManifest:
     pydantic_ai: str
     baseline: dict[str, str] = field(default_factory=dict)
     platform_capabilities: dict[str, str] = field(default_factory=dict)
+    # Built-in capabilities baked into the runner image (source: builtin;
+    # architecture §2.4): name → metadata ({entrypoint, serializationName,
+    # requires, dependencies, schemaDigest, configSchema}). The runner resolves
+    # each built-in's class from its own environment at bootstrap — nothing is
+    # delivered or integrity-checked (the image is the trust boundary).
+    builtin_capabilities: dict[str, dict[str, Any]] = field(default_factory=dict)
     agent_spec_schema_digest: str = ""
 
     @classmethod
@@ -35,6 +41,7 @@ class RunnerManifest:
             pydantic_ai=data["pydantic-ai"],
             baseline=data.get("baseline", {}),
             platform_capabilities=data.get("platformCapabilities", {}),
+            builtin_capabilities=data.get("builtinCapabilities", {}),
             agent_spec_schema_digest=data.get("agentSpecSchemaDigest", ""),
         )
 

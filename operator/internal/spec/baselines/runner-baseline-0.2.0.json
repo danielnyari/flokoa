@@ -1,4 +1,155 @@
 {
+  "builtinCapabilities": {
+    "flokoa-openapi": {
+      "configSchema": {
+        "properties": {
+          "allow_internal": {
+            "default": false,
+            "title": "Allow Internal",
+            "type": "boolean"
+          },
+          "allowed_operations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allowed Operations"
+          },
+          "auth": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Auth"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Base Url"
+          },
+          "defer_threshold": {
+            "default": 25,
+            "title": "Defer Threshold",
+            "type": "integer"
+          },
+          "defer_tools": {
+            "default": "auto",
+            "enum": [
+              "all",
+              "none",
+              "auto"
+            ],
+            "title": "Defer Tools",
+            "type": "string"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Headers"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Prefix"
+          },
+          "spec": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Spec"
+          },
+          "timeout": {
+            "default": 30.0,
+            "title": "Timeout",
+            "type": "number"
+          },
+          "toolset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Toolset Id"
+          },
+          "verify_ssl": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": true,
+            "title": "Verify Ssl"
+          }
+        },
+        "title": "OpenAPI",
+        "type": "object"
+      },
+      "dependencies": [],
+      "entrypoint": "flokoa_openapi.capability:OpenAPI",
+      "requires": {
+        "flokoa-runner": "==0.2.0",
+        "pydantic-ai": "==1.107.0",
+        "python": "3.13"
+      },
+      "schemaDigest": "sha256:12d528a483c7ab05a0d45f9935ab70e2619ae3e95bc484dda45b3a850016a266",
+      "serializationName": "flokoa.OpenAPI"
+    }
+  },
   "contractVersion": 1,
   "packages": {
     "a2a-sdk": "0.3.24",

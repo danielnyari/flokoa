@@ -31,10 +31,11 @@ The custom-image escape hatch plus scheduling overrides:
 
 ### Capability examples
 
-A published [`Capability`](../capability.md) and an Agent that attaches it.
-Together they show the shape `flokoa capability push` produces and how an Agent
-consumes it; see the [capabilities guide](../guides/capabilities.md) for how to
-author, build, and publish one.
+Capabilities across the [source tiers](../capability.md#source-tiers) and Agents
+that attach them. Together they show the shapes `flokoa capability build`/`push`
+produce and how an Agent consumes them; see the
+[capabilities guide](../guides/capabilities.md) for how to author, build, and
+publish one (or attach a built-in with no build at all).
 
 #### [capability/echo-capability.yaml](capability/echo-capability.yaml)
 A digest-pinned Capability with a typed (`schemaPolicy: strict`) config schema,
@@ -50,6 +51,24 @@ An Agent attaching the echo Capability by name with per-agent `config`
 pod starts.
 
 **Use when:** You want to attach a published capability to an agent.
+
+#### [capability/builtin-openapi-agent.yaml](capability/builtin-openapi-agent.yaml)
+An Agent attaching the **built-in** `flokoa-openapi` capability (source tier
+[`builtin`](../capability.md#source-tiers)) — baked into the runner image, so
+there is no `Capability` artifact to publish and nothing is downloaded. Just a
+`ref` by name plus per-agent `config`.
+
+**Use when:** You want to use a first-party capability with zero build/publish
+step.
+
+#### [capability/git-sourced-capability.yaml](capability/git-sourced-capability.yaml)
+A `Capability` built from a private git repo (source tier
+[`git`](../capability.md#source-tiers)): a normal digest-pinned artifact with
+recorded `provenance.git` (clean repo URL + resolved commit). Nothing is fetched
+from git at deploy/run time.
+
+**Use when:** You want to see the shape `flokoa capability build --from-git`
+produces, or to refuse non-git sources via `allowedSources`.
 
 ## Applying Examples
 

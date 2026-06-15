@@ -26,6 +26,44 @@ matrix — config schema, `requires` tuple, dependency conflicts — before
 anything reaches a pod. The artifact format is normative in
 [runtime contract §4](../reference/runtime-contract.md#4-capability-artifacts-and-the-wheelhouse-layout).
 
+## Using built-in capabilities
+
+Before you build anything, check whether a **built-in** already covers your
+need. Built-in capabilities are first-party capabilities baked into the runner
+image (source tier [`builtin`](../capability.md#source-tiers)): there is nothing
+to build, publish, or download — the chart installs their `Capability` CRs and
+attaching one is a one-liner.
+
+The first-party built-in today is **`flokoa-openapi`** (front any OpenAPI spec
+as agent tools). Built-in CRs ship with the Helm chart
+(`capabilities.builtin.install`, default `true`) into the operator's release
+namespace; they appear in `flokoa capability search` with `TIER` = `builtin`
+and `kubectl get capabilities` shows them with `SOURCE` = `builtin`,
+`VERIFIED` = `True` (reason `BuiltIn`).
+
+Attach one by name — the same shape as any Capability, but with no artifact to
+publish first:
+
+```yaml
+spec:
+  capabilities:
+    - ref:
+        name: flokoa-openapi
+      config:
+        spec: https://api.example.com/openapi.json
+        base_url: https://api.example.com
+```
+
+The attaching Agent must be in the same namespace as the built-in CR
+(cross-namespace capability refs are unsupported). An Agent with **only**
+built-ins gets a plain pod: no initContainer, no `emptyDir`, no download. See
+the [built-in attach example](../examples/README.md#capability-examples).
+
+> **`flokoa-codemode-mcp` is not yet built-in.** The Code-Mode MCP package is
+> an MCP *server*, not a capability class, so it ships as a separately-deployed
+> server fronted by an [`AgentTool`](../agenttool.md), not as a `builtin`
+> Capability. Only `flokoa-openapi` is baked in today.
+
 ## Prerequisites
 
 The CLI orchestrates a container build and registry pushes; it shells out to
@@ -33,11 +71,12 @@ the tools you already use rather than vendoring binaries into the wheel:
 
 | Tool | Needed by | Notes |
 |---|---|---|
-| `docker` or `podman` | `build`, `import` | The build runs **inside the pinned runner image**. `CONTAINER_TOOL` overrides detection (docker preferred). `podman` builds one platform per image; multi-arch needs `docker buildx`. |
+| `docker` or `podman` | `build`, `import` | The build runs **inside the Flokoa base image** (the runner baseline + build front-end). `CONTAINER_TOOL` overrides detection (docker preferred). `podman` builds one platform per image; multi-arch needs `docker buildx`. |
 | `crane` | `push`, `import` | Pushes the OCI-layout tarball and records the digest. `FLOKOA_CRANE` overrides the binary. Install: `brew install crane`. |
 | `cosign` | `push --sign`, `import --sign` | Signs the pushed digest. `FLOKOA_COSIGN` overrides. Install: `brew install cosign`. Only needed when you sign. |
 | `kubectl` | `push --apply`, `search --cluster` | Applies the pinned CR and merges in-cluster Capability CRs. Skipped gracefully by `search` when absent. |
-| The runner image | `build`, `import` | Resolved as `ghcr.io/danielnyari/flokoa-runner:<version>` (`--runner-version`/`--runner-image`/`FLOKOA_RUNNER_IMAGE` override). The build wheels against this exact environment, so the artifact's compatibility is satisfied by construction. |
+| The base image | `build`, `import` | Resolved as `ghcr.io/danielnyari/flokoa-capability-base:<version>` by default ([The base image](#the-base-image); `--base-image`/`--base-version`/`--runner-image`/`--runner-version`/`FLOKOA_CAPABILITY_BASE_IMAGE` override). The build wheels against this exact environment, so the artifact's compatibility is satisfied by construction. |
+| `git`, `gh`, or an SSH agent | `build --from-git` | Provide the ambient credentials for a private repo clone ([Building from a private git repo](#building-from-a-private-git-repo)). Optional — public repos and the `GITHUB_TOKEN`/`GH_TOKEN` fallback need none of them. |
 
 Each command preflights only the binaries its requested options actually need
 and fails up front with an install one-liner if one is missing — `build`
@@ -149,13 +188,19 @@ admission versus at pod bootstrap.
 ## Building
 
 `flokoa capability build` produces an artifact image, its manifest, and a
-generated `Capability` CR — all from one disposable container of the pinned
-runner image, so the compatibility matrix is satisfied by construction.
+generated `Capability` CR — all from one disposable container of the
+[base image](#the-base-image) (the pinned runner baseline plus the build
+front-end), so the compatibility matrix is satisfied by construction.
 
 ```text
 flokoa capability build [OPTIONS] [PATH]
 
-  Build a capability artifact from PATH (a Python project) or --from-pypi.
+  Build a capability artifact from PATH, --from-pypi, or --from-git.
+
+  Exactly one source is required:
+    PATH          a local Python project (source: image)
+    --from-pypi   a PyPI package (EXTREMELY DANGEROUS; needs --allow-pypi)
+    --from-git    a git repo, uv-style git+https://… / git+ssh://… (source: git)
 
   Produces in --output:
     <name>-artifact.oci.tar   OCI-layout artifact image (busybox + wheelhouse)
@@ -164,7 +209,12 @@ flokoa capability build [OPTIONS] [PATH]
     config-schema.json        the config schema (strict builds)
 
 Options:
-  --from-pypi TEXT       Build from PyPI: PKG or PKG==VERSION (excludes PATH).
+  --from-pypi TEXT       Build from PyPI: PKG or PKG==VERSION (requires
+                         --allow-pypi; excludes PATH/--from-git).
+  --allow-pypi           Acknowledge the EXTREMELY DANGEROUS PyPI tier
+                         (required with --from-pypi).
+  --from-git TEXT        Build from git: git+https://… or git+ssh://… [@ref]
+                         [#subdirectory=…] (excludes PATH/--from-pypi).
   --tag TEXT             Artifact image ref (default <name>:<version>);
                          required for push.
   --entrypoint TEXT      Capability class as module:attr (default: heuristic).
@@ -172,8 +222,14 @@ Options:
   --permissive           Accept an underivable schema (loud warning;
                          permissive CR).
   --name TEXT            Capability CR name (default: normalized dist name).
-  --runner-version TEXT  Runner release to build against (default: SDK-pinned).
-  --runner-image TEXT    Full runner image override.
+  --base-image TEXT      Full build image override (default: flokoa-
+                         capability-base:<ver>).
+  --base-version TEXT    Build base image version (composed with the base
+                         repository).
+  --runner-version TEXT  (retained) build environment version; the default now
+                         resolves to the base image.
+  --runner-image TEXT    (retained) full build image override (back-compat
+                         alias for --base-image).
   --platforms TEXT       OCI platforms, e.g. linux/amd64,linux/arm64 (default:
                          host arch).
   --output DIRECTORY     Output directory for the artifact tar, manifest, and
@@ -193,22 +249,23 @@ flokoa capability build . --tag ghcr.io/danielnyari/capabilities/flokoa-cap-echo
 Inside one container session (the venv state carries across steps, exactly like
 a runner pod's single venv), the build runs four steps:
 
-1. **Freeze the baseline** — `pip list --format=freeze` inside the runner image
-   *is* the baseline. The non-baseline closure is whatever the build resolves
-   minus these pins.
-2. **Build the wheelhouse** — `pip wheel` the target (the local `PATH` or
-   `pkg==version` for `--from-pypi`) with the baseline freeze as constraints
-   and `--only-binary :all:`, then drop wheels already in the baseline. Any
-   dependency that ships no wheel (sdist-only) is **refused** with an error
-   naming the custom-agent-image escape hatch — wheels only is the artifact
-   boundary.
+1. **Freeze the baseline** — `pip list --format=freeze` inside the base image
+   (whose baseline is byte-identical to the runner's) *is* the baseline. The
+   non-baseline closure is whatever the build resolves minus these pins.
+2. **Build the wheelhouse** — `pip wheel` the target (the local `PATH`,
+   `pkg==version` for `--from-pypi`, or the in-container git checkout for
+   `--from-git`, which is cloned first and then treated exactly like a `PATH`)
+   with the baseline freeze as constraints and `--only-binary :all:`, then drop
+   wheels already in the baseline. Any dependency that ships no wheel
+   (sdist-only) is **refused** with an error naming the custom-agent-image
+   escape hatch — wheels only is the artifact boundary.
 3. **Smoke test** — install the wheelhouse the same way a runner pod will
    (`pip install --no-index --find-links`), import the entrypoint, and
    instantiate it where possible. *A capability that can't import never gets an
    artifact.* `--skip-smoke-test` exists but warns loudly.
 4. **Derive the schema** — resolve the entrypoint (`--entrypoint`, else the
-   heuristic — see [Importing from PyPI](#importing-from-pypi)) and derive the
-   config schema.
+   heuristic — see [Selecting the entrypoint](#selecting-the-entrypoint)) and
+   derive the config schema.
 
 The host side then computes wheel sha256s, writes the doubly-validated
 `manifest.json` (against both the pydantic model and the published v1 JSON
@@ -256,6 +313,90 @@ strict). `--permissive` prints a loud warning and writes a
 skips admission validation and surfaces only inside the runner pod. Permissive
 capabilities are flagged in `kubectl get capabilities` and in `search` output;
 prefer a typed schema or `--schema`.
+
+A local `PATH` build records source tier
+[`image`](../capability.md#source-tiers) — the author-built-their-own case.
+
+### The base image
+
+`build` (and `import`) run their pipeline inside the Flokoa **base image**, not
+on your host interpreter. The base image is the pinned runner baseline plus the
+build front-end (`pip`/`wheel`/`setuptools`) — literally
+`FROM ghcr.io/danielnyari/flokoa-runner:<version>` plus a build-tooling layer —
+so the wheelhouse is resolved against the *exact* environment a runner pod has
+and the compatibility matrix holds by construction.
+
+It is resolved as `ghcr.io/danielnyari/flokoa-capability-base:<version>`, tagged
+to match the runner version (the base image, runner, and operator all move
+together with each release). Override it, highest precedence first:
+
+| Override | Effect |
+|---|---|
+| `--base-image TEXT` | Full image reference (repo + tag). |
+| `--base-version TEXT` | Version only, composed with the default base repository. |
+| `FLOKOA_CAPABILITY_BASE_IMAGE` env | Full image reference. |
+| `--runner-image` / `--runner-version` | Retained back-compat aliases for `--base-image` / `--base-version`. Pointing `--runner-image` at a *bare* runner image still works — the CLI falls back to seeding `pip` per build — but the happy path no longer needs it. |
+
+## Building from a private git repo
+
+`flokoa capability build --from-git` builds a normal signed artifact from a
+(typically private) git repo, recording source tier
+[`git`](../capability.md#source-tiers). The clone happens **at build time,
+inside the disposable build container**; the output is the same self-contained
+wheelhouse as any other build, and **nothing is fetched from git at deploy or
+run time**.
+
+```bash
+flokoa capability build \
+  --from-git git+https://github.com/org/private-cap@v1.2.0#subdirectory=pkg/cap \
+  --tag ghcr.io/org/capabilities/private-cap:1.2.0
+```
+
+The URL grammar is uv/pip-style and validated on the host before anything
+reaches the container — a bare `https://…` without `git+`, extras, environment
+markers, smuggled pip options, and embedded `user:pass@` credentials are all
+rejected:
+
+- **scheme** — `git+https://…` (the named, tested path) or `git+ssh://…`
+  (works against `github.com` via the SSH agent).
+- **`@ref`** (optional) — a branch, tag, or commit SHA. Recorded as
+  `provenance.git.ref`.
+- **`#subdirectory=…`** (optional) — the path within the repo to the Python
+  project. Recorded as `provenance.git.subdirectory`.
+
+### Authentication: ambient first, token fallback
+
+Credentials are resolved **on the host** (where your ambient creds live) and
+only the minimum is injected into the build container. The precedence is:
+
+1. **Ambient (preferred), nothing injected as a long-lived secret:**
+    - `git+https://…` — your **git credential helper** (`git credential fill`),
+      else your **GitHub CLI login** (`gh auth token`). Whatever your normal
+      `git`/`gh` already uses just works.
+    - `git+ssh://…` — your **SSH agent**: the agent *socket* (`$SSH_AUTH_SOCK`)
+      is forwarded into the build container with strict host-key checking — no
+      private-key material is copied. `github.com`'s host keys are pre-seeded in
+      the base image, so `git+ssh` against GitHub works out of the box.
+2. **Token fallback** — `GITHUB_TOKEN`, then `GH_TOKEN`, from the environment.
+3. **Public repos need no credential** — auth only matters on a 401/403.
+
+If a private clone needs auth and none resolves, `build` fails up front naming
+the precedence you can fix (e.g. *"tried the ambient git credential helper and
+gh auth token, then `$GITHUB_TOKEN` / `$GH_TOKEN`; set one to build from a
+private repo"*).
+
+### The token never leaks
+
+When an https token is used it is passed to the clone step **only** as an
+ephemeral env var on the container `exec` (consumed via `GIT_ASKPASS`) — never
+in the argv, a mount file, or the image. The recorded git remote URL is clean
+(no `user:token@`); the artifact is built from the checked-out source (no
+credentials in it); and the generated CR's `provenance.git` records only the
+**clean URL + resolved commit** (plus `ref`/`subdirectory` if given). Captured
+git stderr is credential-redacted before it can reach any error or log line.
+The resolved commit is the durable provenance — it pins the exact code built
+even if the branch or tag later moves. Non-GitHub `git+https`/`git+ssh` hosts
+should work via ambient credentials; GitHub is the named, tested path.
 
 ## Publishing
 
@@ -308,12 +449,39 @@ What it does:
 A maintainer can publish a typed, signed, indexed capability in well under five
 minutes with `build` + `push --sign --index ...`.
 
-## Importing from PyPI
+## Building or importing from PyPI
+
+!!! danger "PyPI is the EXTREMELY DANGEROUS tier"
+    Building from PyPI (`build --from-pypi`, and `import`) pulls code published
+    by **arbitrary maintainers with no first-party vetting** — a supply-chain
+    risk. The artifact is digest-pinned once built (integrity), but that says
+    **nothing** about whether the source package is malicious. Prefer
+    `--from-git` or building your own ([image tier](#building)), and restrict
+    the cluster with [`capabilities.policy.allowedSources`](../capability.md#source-policy-allowedsources).
+
+`build --from-pypi` records source tier
+[`pypi`](../capability.md#source-tiers) and **requires an explicit
+`--allow-pypi`** acknowledgment. Without it the command fails:
+
+```console
+$ flokoa capability build --from-pypi pydantic-ai-foo==1.2.0 --tag ...
+Error: --from-pypi builds from an unvetted PyPI package (arbitrary maintainers,
+no first-party vetting) — the EXTREMELY DANGEROUS tier. Re-run with --allow-pypi
+to acknowledge, and prefer --from-git or building your own (image tier).
+```
+
+With `--allow-pypi` the build proceeds, printing a loud red
+EXTREMELY-DANGEROUS banner first and stamping the CR `source: pypi` (with
+`provenance.pypi.requirement`). An operator can refuse the `pypi` tier
+cluster-wide via `allowedSources` — a `pypi` Capability is then denied at both
+admission and compile.
 
 `flokoa capability import` is the one-command promise: any
 `pydantic-ai-<name>` package on PyPI is one command from being an attachable
 Flokoa capability. It composes `build --from-pypi` → an interactive schema
-review → `push`.
+review → `push`. **`import` implies the `--allow-pypi` acknowledgment** (it *is*
+a PyPI build) but still prints the danger banner and stamps `source: pypi`, in
+addition to its own interactive schema-review gate.
 
 ```text
 flokoa capability import [OPTIONS] PACKAGE
@@ -429,3 +597,5 @@ the CR's `Verified` condition.
   CR and an Agent attaching it.
 - [ADR-002](../design-docs/adr-002-capability-artifacts-and-cli.md) — the design
   decisions behind artifact delivery and the CLI.
+- [ADR-003](../design-docs/adr-003-capability-source-tiers.md) — the design
+  decisions behind the source tiers, built-ins, and the git/pypi build sources.

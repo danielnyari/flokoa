@@ -55,7 +55,8 @@ spec:
 
 | Field | Description |
 |---|---|
-| `artifact` | OCI reference of the wheelhouse artifact image. **Must be digest-pinned** (`…@sha256:<64 hex>`); admission rejects tags. |
+| `source` | Where the capability's code came from: `builtin` \| `image` \| `git` \| `pypi` (default `image`). Drives the artifact-required/forbidden rule and the `allowedSources` cluster policy. See [Source tiers](#source-tiers). |
+| `artifact` | OCI reference of the wheelhouse artifact image. **Must be digest-pinned** (`…@sha256:<64 hex>`) when present; admission rejects tags. **Required** for `source: image`/`git`/`pypi`, **forbidden** for `source: builtin` (built-ins ship in the runner image, with no artifact to deliver). |
 | `version` | The capability's own semantic version (matches the artifact manifest). |
 | `entrypoint` | Python `module:attr` resolving to the capability class (a pydantic-ai `AbstractCapability` subclass). `attr` must be the class itself (a single identifier), bound under its own `__name__` — no factories or re-export aliases. |
 | `serializationName` | The capability's spec-entry name when the class overrides pydantic-ai's default. Defaults to the entrypoint class name (`attr`), which is pydantic-ai's own default serialization name. Must be a bare identifier; the `flokoa.platform/` prefix is reserved. |
@@ -63,11 +64,90 @@ spec:
 | `schemaPolicy` | `strict` (default) or `permissive` — the **loud opt-out**: config skips validation, and the CR is flagged in status, admission warnings, and printcolumns. |
 | `requires` | Compatibility tuple mirrored from the artifact manifest: `python` (exact minor), `pydanticAI` and `flokoaRunner` (PEP 440 specifier sets). |
 | `dependencies` | The artifact's pinned dependency closure (`name==version`), mirrored for offline conflict detection. |
-| `provenance` | Signature/attestation metadata (verification mechanics land with artifact delivery, roadmap 09). |
+| `provenance` | Signature/attestation metadata, plus source-origin provenance for `git`/`pypi` builds: `provenance.git.{url,ref,commit,subdirectory}` (the resolved commit is the durable record — it captures the exact code built even if the branch/tag later moves) and `provenance.pypi.requirement`. Provenance carries **no** credential material. |
 
 The spec mirrors the artifact manifest **by value** so admission never fetches
 from a registry. `flokoa capability push` (roadmap 10) generates the CR from
 the manifest, so the mirror never drifts in practice.
+
+## Source tiers
+
+`spec.source` records **where the capability's code came from**, ordered
+safest → riskiest. It is the lens for the `allowedSources` cluster policy and
+for the danger framing around PyPI. Defaults to `image`, so a Capability built
+from a local project (or any CR predating this field) is valid unchanged.
+
+| `source` | What it means | Artifact | Downloaded at deploy/run? |
+|---|---|---|---|
+| **`builtin`** | A first-party capability **baked into the runner image**. The code ships inside the runner the operator already deploys; nothing is fetched at deploy or run time. The strongest supply-chain story. | **forbidden** | No — the code is in the runner image. |
+| **`image`** (default) | You built **your own** capability with `flokoa capability build` against the Flokoa **base image** as the build environment. A normal digest-pinned, signable wheelhouse artifact. | required, digest-pinned | Yes (initContainer/ImageVolume). |
+| **`git`** | Built from a (typically private) **git repo at build time**. The output is the same self-contained, signable artifact — nothing is fetched from git at deploy/run time; the repo URL + resolved commit are recorded as provenance. | required, digest-pinned | Yes. |
+| **`pypi`** | Built from a **PyPI package** — **EXTREMELY DANGEROUS** (arbitrary maintainers, no first-party vetting). Kept for compatibility, but opt-in to build (`--allow-pypi`) and refusable to deploy. | required, digest-pinned | Yes. |
+
+The **artifact-required/forbidden rule** is enforced at admission and
+re-checked at compile: `source: builtin` must **not** set `spec.artifact`
+(built-ins are baked in — there is nothing to deliver), and `image`/`git`/`pypi`
+**must** set a digest-pinned `spec.artifact`. A `source: builtin` CR is
+additionally matched against the operator's embedded built-in metadata (name +
+entrypoint + config-schema digest) for the resolved runner version, so a forged
+`source: builtin` CR for an unknown capability is rejected — there is no
+"trust the CR's claim" path.
+
+!!! warning "`source` is asserted provenance, not a cryptographic claim"
+    `source` records the origin the **build** asserted; it is not a proof of
+    that origin. A user could stamp `source: image` on a CR built from anything.
+    The robust control for "only my org's builds may attach" is **cosign
+    keyless identity policy + `requireVerified`** (provenance *of the digest*);
+    `allowedSources` is a coarser, complementary filter on the recorded tier.
+
+The tier is surfaced in `kubectl get capabilities` as the **`Source`**
+printcolumn (`NAME · VERSION · SOURCE · RUNNER · POLICY · VERIFIED · AGE`) and
+in `flokoa capability search`/`list` as the **`TIER`** column.
+
+### Built-in capabilities and the `Verified` condition
+
+A built-in has no separate artifact to cosign-verify; its integrity rides on
+the **runner image digest**, which the cluster already pulls. The controller
+therefore short-circuits the `Verified` condition for `source: builtin` to
+`True` with reason **`BuiltIn`** and the message *"built into the runner image;
+integrity bound by the runner image digest"*. This keeps `requireVerified`
+clusters working with the most-trusted tier (denying built-ins under
+`requireVerified` would be perverse) while staying honest that the proof is
+image-level, not per-artifact cosign. Built-ins also use **no** delivery path
+(no initContainer, no `emptyDir` copy), so they have *less* exposure than
+artifact-backed tiers, not more.
+
+The first-party built-in set ships with the chart (see the
+[capabilities guide](guides/capabilities.md#using-built-in-capabilities)).
+
+## Source policy (`allowedSources`)
+
+An operator can restrict which source tiers may attach to Agents with the Helm
+value `capabilities.policy.allowedSources` (or the operator's repeatable
+`--capability-allowed-source` flag):
+
+```yaml
+capabilities:
+  policy:
+    # Empty list = allow ALL four tiers (the default — opt-in restriction).
+    # Valid entries: builtin, image, git, pypi.
+    allowedSources: [builtin, image, git]   # e.g. exclude pypi
+```
+
+- **Default is allow-all.** An **empty** list means no restriction; you opt in
+  to a narrower set. Entries must be a subset of `builtin|image|git|pypi`; both
+  the chart and the operator binary refuse an unknown source at config time, so
+  a typo fails fast rather than silently allowing everything.
+- A disallowed source is **refused at both gates**, mirroring
+  [`requireVerified`](#the-requireverified-cluster-policy): **admission** denies
+  attaching such a Capability to an Agent, and the **compiler** re-checks once a
+  Capability's `source` is edited after Agent admission (surfacing as
+  `SpecValid=False`, last-good-generation pods kept running). Denial messages
+  name both the offending `source` and the configured `allowedSources`, so the
+  `Source` printcolumn makes the fix obvious.
+
+`allowedSources` is operator configuration (like `requireVerified`), not a
+field on any CR.
 
 ## What admission checks
 
@@ -120,13 +200,17 @@ capability's wheelhouse (runtime contract §4).
 
 ## Status
 
-`kubectl get capabilities` (short name: `cap`) shows version, runner range,
-and schema policy. Conditions:
+`kubectl get capabilities` (short name: `cap`) shows version, [source
+tier](#source-tiers), runner range, schema policy, and the `Verified` status.
+Conditions:
 
 - `Permissive` — `True` with a loud message when `schemaPolicy: permissive`.
-- `Verified` — artifact digest/signature verification; stays `Unknown` until
-  controller-side verification ships with delivery (roadmap 09). Admission
-  already enforces the digest pin itself.
+- `Verified` — artifact digest/signature verification. `source: builtin`
+  short-circuits to `True / BuiltIn` (integrity bound by the runner image
+  digest, [above](#built-in-capabilities-and-the-verified-condition)); for
+  artifact-backed tiers it stays `Unknown` until cosign is enabled
+  (see [Signature verification](#signature-verification)). Admission already
+  enforces the digest pin itself.
 
 ## Artifact delivery
 
@@ -280,11 +364,13 @@ running both is redundant rather than conflicting.
     "rogue namespace admin" tier and is accepted, not silently ignored. Full
     closure would require an additional CRD field or injected digest env.
 
-## Current limits (roadmap 10)
+## Current limits
 
-The `flokoa capability build/push/import/search` CLI (roadmap 10) automates
-authoring and publishing artifacts. Registry **seeding** (publishing a
-first-party capability set, e.g. `flokoa-openapi`, to a public registry) is
-deferred. Until seeding lands you build and push capability artifacts
-yourself; the admission, delivery, and verification machinery described above
-is fully wired.
+The `flokoa capability build/push/import/search` CLI automates authoring and
+publishing artifacts. The first-party capability set is now shipped **baked
+into the runner image** as [built-in capabilities](#source-tiers) (currently
+`flokoa-openapi`), which subsumes the previously-deferred registry seeding: a
+built-in attaches with no artifact to publish. A hosted capability **index**
+(the `search`/`list` discovery feed) is still the v1 JSON index; the published
+default URL 404s until it is seeded (point `--index` at a checkout). The
+admission, delivery, and verification machinery described above is fully wired.

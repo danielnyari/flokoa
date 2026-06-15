@@ -197,3 +197,17 @@ success; fails the release on contradictory config:
 {{- end -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Validate the capabilities.policy block (source-tier policy §5). Renders nothing
+on success; fails the release if allowedSources contains an entry that is not
+one of builtin|image|git|pypi (a typo would silently allow every source).
+*/}}
+{{- define "flokoa.validateCapabilitiesPolicy" -}}
+{{- $allowed := dict "builtin" true "image" true "git" true "pypi" true -}}
+{{- range .Values.capabilities.policy.allowedSources -}}
+{{- if not (hasKey $allowed .) -}}
+{{- fail (printf "capabilities.policy.allowedSources contains %q, which is not a valid capability source: use one of builtin, image, git, pypi" .) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}

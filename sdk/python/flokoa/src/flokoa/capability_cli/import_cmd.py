@@ -129,6 +129,11 @@ def import_command(
         build_mod.build,
         path=None,
         from_pypi=package,
+        # import IS a PyPI build, so it implies the acknowledgment — but build
+        # still prints the loud EXTREMELY-DANGEROUS banner (and stamps
+        # source: pypi). import additionally has its own schema-review gate.
+        allow_pypi=True,
+        from_git=None,
         tag=tag,
         entrypoint=entrypoint,
         schema_file=schema_file,

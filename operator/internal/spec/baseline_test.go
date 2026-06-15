@@ -53,3 +53,44 @@ func TestRunnerBaselineUnknownVersion(t *testing.T) {
 		t.Errorf("error %q should name the unknown version and the supported ones", err)
 	}
 }
+
+func TestBuiltinCapabilityFlokoaOpenAPI(t *testing.T) {
+	info, ok := BuiltinCapability(DefaultRunnerVersion, "flokoa-openapi")
+	if !ok {
+		t.Fatalf("BuiltinCapability(%s, flokoa-openapi) not found — run `make runner-contract`", DefaultRunnerVersion)
+	}
+	if info.Entrypoint != "flokoa_openapi.capability:OpenAPI" {
+		t.Errorf("Entrypoint = %q, want flokoa_openapi.capability:OpenAPI", info.Entrypoint)
+	}
+	if info.SerializationName != "flokoa.OpenAPI" {
+		t.Errorf("SerializationName = %q, want flokoa.OpenAPI", info.SerializationName)
+	}
+	// requires is pinned to the runner's own versions (the capability is the
+	// runner): exact python minor, ==pydantic-ai pin, ==runner version.
+	if info.Requires.Python == "" || info.Requires.PydanticAI == "" || info.Requires.FlokoaRunner == "" {
+		t.Errorf("requires tuple incomplete: %+v", info.Requires)
+	}
+	if !strings.HasPrefix(info.Requires.FlokoaRunner, "==") {
+		t.Errorf("Requires.FlokoaRunner = %q, want a == pin to the runner version", info.Requires.FlokoaRunner)
+	}
+	// Built-ins are baseline: no dependency closure (so no conflict against the
+	// baseline they are part of).
+	if len(info.Dependencies) != 0 {
+		t.Errorf("Dependencies = %v, want empty for a built-in", info.Dependencies)
+	}
+	if !strings.HasPrefix(info.SchemaDigest, "sha256:") {
+		t.Errorf("SchemaDigest = %q, want a sha256: digest", info.SchemaDigest)
+	}
+	if len(info.ConfigSchema) == 0 {
+		t.Error("ConfigSchema is empty — admission needs it to validate attach-time config")
+	}
+}
+
+func TestBuiltinCapabilityUnknownNameAndVersion(t *testing.T) {
+	if _, ok := BuiltinCapability(DefaultRunnerVersion, "no-such-builtin"); ok {
+		t.Error("BuiltinCapability returned ok for a name that is not a built-in")
+	}
+	if _, ok := BuiltinCapability("9.9.9", "flokoa-openapi"); ok {
+		t.Error("BuiltinCapability returned ok for a runner version with no embedded baseline")
+	}
+}

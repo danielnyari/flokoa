@@ -72,7 +72,7 @@ class TestSearchMerge:
         result = CliRunner().invoke(search, [])
         assert result.exit_code == 0, result.output
         lines = result.output.splitlines()
-        assert lines[0].split() == ["NAME", "VERSION", "RUNNER", "POLICY", "SIGNED", "SOURCE"]
+        assert lines[0].split() == ["NAME", "VERSION", "TIER", "RUNNER", "POLICY", "SIGNED", "SOURCE"]
         body = "\n".join(lines[1:])
         assert "flokoa-openapi" in body
         assert "flokoa-cap-echo" in body
@@ -164,3 +164,108 @@ class TestListAlias:
         searched = CliRunner().invoke(search, [])
         assert listed.exit_code == 0, listed.output
         assert listed.output == searched.output
+
+
+# Index entries and cluster items carrying the source tier (§5.5 / §6.5).
+TIER_INDEX = index_mod.CapabilityIndex.model_validate({
+    "schemaVersion": 1,
+    "updatedAt": "2026-06-12T00:00:00Z",
+    "capabilities": [
+        {
+            "name": "git-cap",
+            "version": "1.0.0",
+            "artifact": "ghcr.io/example/git-cap@sha256:" + "a" * 64,
+            "source": "git",
+        },
+        {
+            "name": "danger-cap",
+            "version": "1.0.0",
+            "artifact": "ghcr.io/example/danger-cap@sha256:" + "b" * 64,
+            "source": "pypi",
+        },
+        {
+            # No source field (older index) → TIER renders as "-".
+            "name": "legacy-cap",
+            "version": "1.0.0",
+            "artifact": "ghcr.io/example/legacy-cap@sha256:" + "c" * 64,
+        },
+    ],
+})
+
+TIER_CLUSTER: list[dict[str, Any]] = [
+    {
+        "metadata": {"name": "builtin-cap"},
+        "spec": {"version": "0.2.0", "source": "builtin"},
+        "status": {"conditions": []},
+    },
+    {
+        # A pre-source-field CR has no spec.source → defaults to image.
+        "metadata": {"name": "old-image-cap"},
+        "spec": {"version": "0.1.0"},
+        "status": {"conditions": []},
+    },
+    {
+        "metadata": {"name": "cluster-pypi-cap"},
+        "spec": {"version": "9.9.9", "source": "pypi"},
+        "status": {"conditions": []},
+    },
+]
+
+
+@pytest.fixture
+def tier_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(index_mod.INDEX_ENV_VAR, raising=False)
+    monkeypatch.setattr(search_mod.index_mod, "load_index", mock.Mock(return_value=TIER_INDEX.model_copy(deep=True)))
+    monkeypatch.setattr(
+        search_mod.kubectl_mod,
+        "list_capabilities",
+        mock.Mock(return_value=ClusterCapabilities(items=list(TIER_CLUSTER))),
+    )
+
+
+class TestTierColumn:
+    def test_tier_column_header_present(self, tier_sources: None) -> None:
+        result = CliRunner().invoke(search, [])
+        assert result.exit_code == 0, result.output
+        header = result.output.splitlines()[0].split()
+        assert header == ["NAME", "VERSION", "TIER", "RUNNER", "POLICY", "SIGNED", "SOURCE"]
+
+    def test_tier_from_index_source(self, tier_sources: None) -> None:
+        result = CliRunner().invoke(search, [])
+        assert result.exit_code == 0, result.output
+        git_row = next(line for line in result.output.splitlines() if line.startswith("git-cap"))
+        assert "git" in git_row
+
+    def test_tier_from_cluster_spec_source(self, tier_sources: None) -> None:
+        result = CliRunner().invoke(search, [])
+        assert result.exit_code == 0, result.output
+        builtin_row = next(line for line in result.output.splitlines() if line.startswith("builtin-cap"))
+        assert "builtin" in builtin_row
+
+    def test_cluster_cr_without_source_defaults_to_image(self, tier_sources: None) -> None:
+        result = CliRunner().invoke(search, [])
+        assert result.exit_code == 0, result.output
+        old_row = next(line for line in result.output.splitlines() if line.startswith("old-image-cap"))
+        assert "image" in old_row
+
+    def test_index_entry_without_source_renders_dash(self, tier_sources: None) -> None:
+        result = CliRunner().invoke(search, [])
+        assert result.exit_code == 0, result.output
+        legacy_row = next(line for line in result.output.splitlines() if line.startswith("legacy-cap"))
+        # TIER cell is "-" for an index entry with no source.
+        assert legacy_row.split()[2] == "-"
+
+    def test_pypi_rows_flagged_and_footnoted(self, tier_sources: None) -> None:
+        result = CliRunner().invoke(search, [])
+        assert result.exit_code == 0, result.output
+        danger_row = next(line for line in result.output.splitlines() if line.startswith("danger-cap"))
+        cluster_pypi_row = next(line for line in result.output.splitlines() if line.startswith("cluster-pypi-cap"))
+        assert "pypi (!!)" in danger_row
+        assert "pypi (!!)" in cluster_pypi_row
+        assert "unvetted PyPI package" in result.output
+
+    def test_no_pypi_footnote_without_pypi_rows(self, sources: dict[str, mock.Mock]) -> None:
+        # The default `sources` fixture has no pypi-tier rows.
+        result = CliRunner().invoke(search, [])
+        assert result.exit_code == 0, result.output
+        assert "unvetted PyPI package" not in result.output

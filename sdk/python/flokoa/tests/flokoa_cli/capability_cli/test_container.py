@@ -46,34 +46,80 @@ class TestDetectContainerTool:
             container.detect_container_tool()
 
 
-class TestResolveRunnerImage:
+class TestResolveBuildImage:
+    """Precedence: --base-image > --base-version > env > base repo + default ver.
+
+    The default build image is the capability base image (not a bare runner);
+    --runner-image / --runner-version are retained back-compat aliases.
+    """
+
     @pytest.fixture(autouse=True)
     def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FLOKOA_CAPABILITY_BASE_IMAGE", raising=False)
+        monkeypatch.delenv("FLOKOA_CAPABILITY_BASE_REPOSITORY", raising=False)
         monkeypatch.delenv("FLOKOA_RUNNER_IMAGE", raising=False)
         monkeypatch.delenv("FLOKOA_RUNNER_REPOSITORY", raising=False)
 
-    def test_default(self) -> None:
-        assert container.resolve_runner_image() == (
-            f"{container.DEFAULT_RUNNER_REPOSITORY}:{container.DEFAULT_RUNNER_VERSION}"
+    def test_default_is_capability_base_image(self) -> None:
+        assert container.resolve_build_image() == (
+            f"{container.DEFAULT_CAPABILITY_BASE_REPOSITORY}:{container.DEFAULT_RUNNER_VERSION}"
         )
 
-    def test_runner_image_flag_wins(self) -> None:
-        assert container.resolve_runner_image("example.com/runner:dev", "9.9.9") == "example.com/runner:dev"
+    def test_base_image_wins_over_everything(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FLOKOA_CAPABILITY_BASE_IMAGE", "env/base:ci")
+        assert (
+            container.resolve_build_image(
+                base_image="example.com/base:dev",
+                base_version="9.9.9",
+                runner_image="example.com/runner:legacy",
+                runner_version="8.8.8",
+            )
+            == "example.com/base:dev"
+        )
 
-    def test_runner_version_composes_with_repository(self) -> None:
-        assert container.resolve_runner_image(None, "0.3.0") == f"{container.DEFAULT_RUNNER_REPOSITORY}:0.3.0"
+    def test_base_version_beats_env_and_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FLOKOA_CAPABILITY_BASE_IMAGE", "env/base:ci")
+        assert (
+            container.resolve_build_image(base_version="0.3.0")
+            == f"{container.DEFAULT_CAPABILITY_BASE_REPOSITORY}:0.3.0"
+        )
 
     def test_env_image_used_when_no_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FLOKOA_RUNNER_IMAGE", "local/runner:ci")
-        assert container.resolve_runner_image() == "local/runner:ci"
+        monkeypatch.setenv("FLOKOA_CAPABILITY_BASE_IMAGE", "env/base:ci")
+        assert container.resolve_build_image() == "env/base:ci"
 
-    def test_runner_version_flag_beats_env_image(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FLOKOA_RUNNER_IMAGE", "local/runner:ci")
-        assert container.resolve_runner_image(None, "0.3.0") == f"{container.DEFAULT_RUNNER_REPOSITORY}:0.3.0"
+    def test_env_repository_override_composes_with_default_version(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FLOKOA_CAPABILITY_BASE_REPOSITORY", "registry.local/flokoa-capability-base")
+        assert container.resolve_build_image() == (
+            f"registry.local/flokoa-capability-base:{container.DEFAULT_RUNNER_VERSION}"
+        )
 
-    def test_env_repository_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FLOKOA_RUNNER_REPOSITORY", "registry.local/flokoa-runner")
-        assert container.resolve_runner_image() == f"registry.local/flokoa-runner:{container.DEFAULT_RUNNER_VERSION}"
+    def test_base_version_composes_with_env_repository(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FLOKOA_CAPABILITY_BASE_REPOSITORY", "registry.local/flokoa-capability-base")
+        assert container.resolve_build_image(base_version="0.3.0") == "registry.local/flokoa-capability-base:0.3.0"
+
+    def test_legacy_runner_image_alias_full_override(self) -> None:
+        assert container.resolve_build_image(runner_image="example.com/runner:legacy") == "example.com/runner:legacy"
+
+    def test_legacy_runner_version_alias_composes_with_base_repo(self) -> None:
+        # The legacy version alias now composes with the BASE repo, not the
+        # bare runner repo — the build env defaults to the base image.
+        assert (
+            container.resolve_build_image(runner_version="0.3.0")
+            == f"{container.DEFAULT_CAPABILITY_BASE_REPOSITORY}:0.3.0"
+        )
+
+    def test_base_image_beats_legacy_runner_image(self) -> None:
+        assert (
+            container.resolve_build_image(base_image="example.com/base:dev", runner_image="example.com/runner:legacy")
+            == "example.com/base:dev"
+        )
+
+    def test_base_version_beats_legacy_runner_version(self) -> None:
+        assert (
+            container.resolve_build_image(base_version="0.3.0", runner_version="0.9.9")
+            == f"{container.DEFAULT_CAPABILITY_BASE_REPOSITORY}:0.3.0"
+        )
 
     def test_default_version_matches_operator_pin(self) -> None:
         """DEFAULT_RUNNER_VERSION must track operator spec.DefaultRunnerVersion.
@@ -89,6 +135,26 @@ class TestResolveRunnerImage:
         match = re.search(r'var DefaultRunnerVersion = "([^"]+)"', spec_go.read_text(encoding="utf-8"))
         assert match is not None, "could not read DefaultRunnerVersion from spec.go"
         assert match.group(1) == container.DEFAULT_RUNNER_VERSION
+
+
+class TestResolveRunnerImageBackCompat:
+    """The retained resolve_runner_image shim delegates to resolve_build_image."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FLOKOA_CAPABILITY_BASE_IMAGE", raising=False)
+        monkeypatch.delenv("FLOKOA_CAPABILITY_BASE_REPOSITORY", raising=False)
+
+    def test_default_now_resolves_to_base_image(self) -> None:
+        assert container.resolve_runner_image() == (
+            f"{container.DEFAULT_CAPABILITY_BASE_REPOSITORY}:{container.DEFAULT_RUNNER_VERSION}"
+        )
+
+    def test_runner_image_flag_full_override(self) -> None:
+        assert container.resolve_runner_image("example.com/runner:dev", "9.9.9") == "example.com/runner:dev"
+
+    def test_runner_version_composes_with_base_repo(self) -> None:
+        assert container.resolve_runner_image(None, "0.3.0") == f"{container.DEFAULT_CAPABILITY_BASE_REPOSITORY}:0.3.0"
 
 
 class TestContainerSession:
@@ -169,6 +235,57 @@ class TestContainerSession:
             with session, pytest.raises(CapabilityCliError, match=r"(?s)wheelhouse build failed.*pip exploded"):
                 session.exec(["python", "x.py"], step="wheelhouse build")
 
+    def test_exec_secret_env_injected_via_dash_e_not_argv(self) -> None:
+        """A secret reaches the container ONLY as `-e KEY` + the subprocess env.
+
+        The value is NEVER on the command line (argv): `docker exec -e KEY`
+        copies KEY from the tool process env, which we set on the exec
+        subprocess's env= only.
+        """
+        session = self._session()
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(container.subprocess, "run", return_value=ok) as run:
+            with session:
+                session.exec(
+                    ["python", "clone_repo.py"],
+                    step="git clone",
+                    secret_env={"GIT_ASKPASS_TOKEN": "ghp_secret"},
+                )
+        exec_call = run.call_args_list[1]
+        exec_argv = exec_call.args[0]
+        # `-e KEY` (bare, no =VALUE) is present; the value is nowhere in argv.
+        assert exec_argv[:2] == ["docker", "exec"]
+        assert "-e" in exec_argv
+        assert "GIT_ASKPASS_TOKEN" in exec_argv
+        assert all("ghp_secret" not in arg for arg in exec_argv), "secret must never appear in argv"
+        # The value rides the subprocess env= only.
+        passed_env = exec_call.kwargs["env"]
+        assert passed_env is not None
+        assert passed_env["GIT_ASKPASS_TOKEN"] == "ghp_secret"
+
+    def test_exec_without_secret_env_passes_no_env(self) -> None:
+        session = self._session()
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(container.subprocess, "run", return_value=ok) as run:
+            with session:
+                session.exec(["python", "x.py"], step="step")
+        exec_call = run.call_args_list[1]
+        assert exec_call.kwargs["env"] is None
+        assert "-e" not in exec_call.args[0][2:4]  # no secret -e flags injected
+
+    def test_exec_failure_output_is_credential_redacted(self) -> None:
+        """A credentialed URL git might echo on error is scrubbed in the raised message."""
+        session = self._session()
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        leaky = mock.Mock(
+            returncode=1, stdout="", stderr="fatal: clone of https://x-access-token:ghp_LEAK@github.com/o/r failed"
+        )
+        with mock.patch.object(container.subprocess, "run", side_effect=[ok, leaky, ok, ok]):
+            with session, pytest.raises(CapabilityCliError) as exc_info:
+                session.exec(["python", "clone_repo.py"], step="git clone")
+        assert "ghp_LEAK" not in str(exc_info.value)
+        assert "<redacted>@github.com" in str(exc_info.value)
+
     def test_container_removed_even_on_failure(self) -> None:
         session = self._session()
         ok = mock.Mock(returncode=0, stdout="", stderr="")
@@ -188,3 +305,15 @@ class TestContainerSession:
             pytest.raises(CapabilityCliError, match=r"(?s)could not start the build container.*pull access denied"),
         ):
             session.__enter__()
+
+
+class TestRedactUrlCredentials:
+    def test_redacts_userinfo(self) -> None:
+        assert (
+            container.redact_url_credentials("clone https://x-access-token:ghp_abc@github.com/o/r")
+            == "clone https://<redacted>@github.com/o/r"
+        )
+
+    def test_leaves_clean_urls_untouched(self) -> None:
+        text = "clone https://github.com/o/r at deadbeef"
+        assert container.redact_url_credentials(text) == text

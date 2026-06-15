@@ -87,6 +87,64 @@
     "configSchema": {
       "type": "object",
       "description": "inline JSON Schema for per-agent config (additive optional field)"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "builtin",
+        "image",
+        "git",
+        "pypi"
+      ],
+      "default": "image",
+      "description": "Where the capability's code came from (additive optional field; default image). Mirrored to Capability CR spec.source."
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Origin provenance; shape depends on source. Carries no credential material. Mirrored to Capability CR spec.provenance.",
+      "properties": {
+        "git": {
+          "type": "object",
+          "required": [
+            "url",
+            "commit"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "clean repository URL (no embedded credentials)"
+            },
+            "ref": {
+              "type": "string",
+              "description": "requested branch, tag, or commit (informational)"
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{7,40}$",
+              "description": "resolved git commit (the durable provenance record)"
+            },
+            "subdirectory": {
+              "type": "string",
+              "description": "path within the repo to the Python project, if any"
+            }
+          },
+          "additionalProperties": false
+        },
+        "pypi": {
+          "type": "object",
+          "required": [
+            "requirement"
+          ],
+          "properties": {
+            "requirement": {
+              "type": "string",
+              "description": "resolved PyPI requirement, e.g. some-pkg==1.2.0"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

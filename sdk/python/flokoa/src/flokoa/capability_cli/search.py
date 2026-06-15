@@ -25,7 +25,18 @@ _PERMISSIVE_FOOTNOTE = (
     "attacker-shaped config surface only inside the runner pod."
 )
 
-_COLUMNS = ("NAME", "VERSION", "RUNNER", "POLICY", "SIGNED", "SOURCE")
+# A pypi-tier row is flagged visibly — it is the EXTREMELY DANGEROUS source.
+_PYPI_TIER_MARK = "pypi (!!)"
+
+_PYPI_FOOTNOTE = (
+    "(!!) pypi: built from an unvetted PyPI package (arbitrary maintainers, no "
+    "first-party vetting) — the cluster may refuse it via allowedSources."
+)
+
+# TIER is the capability source tier (builtin|image|git|pypi). It is distinct
+# from the SOURCE column, which records whether the row came from the index or
+# the cluster (§1.4 / §5.5).
+_COLUMNS = ("NAME", "VERSION", "TIER", "RUNNER", "POLICY", "SIGNED", "SOURCE")
 
 
 @dataclass
@@ -38,12 +49,15 @@ class Row:
     policy: str
     signed: bool
     source: str
+    tier: str
 
     def cells(self) -> tuple[str, ...]:
         policy = _PERMISSIVE_MARK if self.policy == "permissive" else self.policy
+        tier = _PYPI_TIER_MARK if self.tier == "pypi" else (self.tier or "-")
         return (
             self.name,
             self.version,
+            tier,
             self.runner or "-",
             policy,
             "yes" if self.signed else "no",
@@ -60,6 +74,7 @@ def _index_rows(entries: list[index_mod.IndexEntry]) -> list[Row]:
             policy=entry.schema_policy,
             signed=entry.signed,
             source="index",
+            tier=entry.source or "",
         )
         for entry in entries
     ]
@@ -84,6 +99,9 @@ def _cluster_rows(items: list[dict[str, Any]], query: str | None) -> list[Row]:
                 policy=spec.get("schemaPolicy", "strict"),
                 signed=signed,
                 source="cluster",
+                # spec.source defaults to image (CRD default), so a CR predating
+                # the field still renders a meaningful tier.
+                tier=spec.get("source", "image"),
             )
         )
     return rows
@@ -123,6 +141,8 @@ def _run_search(query: str | None, index_source: str | None, cluster: bool) -> N
     click.echo(_render_table(rows))
     if any(row.policy == "permissive" for row in rows):
         click.secho(_PERMISSIVE_FOOTNOTE, fg="yellow")
+    if any(row.tier == "pypi" for row in rows):
+        click.secho(_PYPI_FOOTNOTE, fg="red")
 
 
 _INDEX_OPTION_HELP = f"Index URL or local path (default: {index_mod.DEFAULT_INDEX_URL}, env {index_mod.INDEX_ENV_VAR})."

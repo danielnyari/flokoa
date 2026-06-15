@@ -140,6 +140,9 @@ def _index_entry(
         schema_policy=spec.get("schemaPolicy", "strict"),
         signed=signed,
         keywords=[],
+        # The CR's spec.source defaults to image (CRD default), so a CR built
+        # before this field existed still records a meaningful tier in the index.
+        source=spec.get("source", "image"),
     )
 
 

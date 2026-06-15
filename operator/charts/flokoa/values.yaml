@@ -87,6 +87,24 @@ capabilities:
     # cannot be attached to Agents (admission denial + compile-time denial).
     # Requires cosign.enabled — the chart refuses the combination otherwise.
     requireVerified: false
+  policy:
+    # -- Cluster policy: restrict which capability source tiers may attach to
+    # Agents. Empty list = allow ALL four (the default — opt-in restriction).
+    # A disallowed source is refused at BOTH admission and compile, mirroring
+    # capabilities.verification.requireVerified.
+    # Valid entries: builtin, image, git, pypi. e.g. [builtin, image, git] to
+    # exclude pypi.
+    allowedSources: []
+  builtin:
+    # -- Install the generated source: builtin Capability CRs (first-party
+    # capabilities baked into the runner image; no artifact, no download). They
+    # let an Agent attach a built-in capability the moment the chart is
+    # installed. Set false to manage them out-of-band.
+    install: true
+    # -- Namespace the built-in Capability CRs install into. Empty means the
+    # release namespace. Attaching Agents must be in the same namespace
+    # (cross-namespace capability refs are unsupported).
+    namespace: ""
 
 # =============================================================================
 # Admission webhooks

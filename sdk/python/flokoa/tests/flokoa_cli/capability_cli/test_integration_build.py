@@ -10,9 +10,14 @@ Builds the chunk-1 echo fixture through the CLI and checks:
     (name/version/entrypoint/requires/dependencies),
   * an unimportable package is refused by the smoke test.
 
-The runner image defaults to the SDK pin; CI (and laptops without ghcr
-access) override via ``FLOKOA_RUNNER_IMAGE`` after building
-``flokoa-runner/Dockerfile`` locally.
+The build image defaults to the capability base image at the SDK pin
+(``flokoa-capability-base:<DEFAULT_RUNNER_VERSION>``). CI (and laptops without
+ghcr access) override via ``FLOKOA_CAPABILITY_BASE_IMAGE`` after building the
+base image locally — ``make docker-build-capability-base`` (which is
+``FROM flokoa-runner:<ver>``, so build the runner first) — and tag/load it
+where the container tool can see it. The legacy ``FLOKOA_RUNNER_IMAGE`` /
+``--runner-image`` override still works against a bare runner (the in-runner
+``ensure_pip()`` fallback covers it), but the base image is the happy path.
 """
 
 from __future__ import annotations
@@ -70,6 +75,7 @@ class TestEchoFixtureBuild:
     def test_manifest_passes_published_schema(self, echo_build: Path) -> None:
         manifest = json.loads((echo_build / "manifest.json").read_text())
         validate_manifest_dict(manifest)
+        assert manifest["source"] == "image"
 
     def test_manifest_parity_with_fixture_artifact_json(self, echo_build: Path) -> None:
         """The CLI and the chunk-1 build.sh path must agree on the mirror fields."""
@@ -101,6 +107,8 @@ class TestEchoFixtureBuild:
         assert doc["kind"] == "Capability"
         assert doc["metadata"]["name"] == "flokoa-cap-echo"
         assert doc["spec"]["artifact"] == "flokoa-cap-echo:integration@sha256:DIGEST-PENDING"
+        assert doc["spec"]["source"] == "image"  # a PATH build is the image tier
+        assert "provenance" not in doc["spec"]
         assert doc["spec"]["entrypoint"] == "flokoa_cap_echo:EchoCapability"
         assert doc["spec"]["requires"] == {"python": "3.13", "pydanticAI": ">=1.107,<2", "flokoaRunner": ">=0.2"}
         # Echo's config schema is derived from the dataclass: the prefix field.

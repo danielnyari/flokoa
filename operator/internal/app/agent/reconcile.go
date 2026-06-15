@@ -63,6 +63,11 @@ type Config struct {
 	// into the compiler: attached Capabilities whose Verified condition is
 	// not True fail compilation with a requeue (roadmap 09).
 	RequireVerifiedCapabilities bool
+
+	// AllowedSources mirrors the capability source-tier policy (§5) into the
+	// compiler: an attached Capability whose spec.source is not in this set
+	// fails compilation permanently. Empty means "no restriction".
+	AllowedSources []agentv1alpha1.CapabilitySource
 }
 
 // ReconcileResult holds the result of a reconciliation.
@@ -98,6 +103,7 @@ func NewService(deps Deps, config Config) *Service {
 			DefaultRunnerVersion: config.DefaultRunnerVersion,
 			Injected:             config.Injected,
 			RequireVerified:      config.RequireVerifiedCapabilities,
+			AllowedSources:       config.AllowedSources,
 		}),
 	}
 }

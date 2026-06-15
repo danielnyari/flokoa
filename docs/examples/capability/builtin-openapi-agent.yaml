@@ -1,0 +1,43 @@
+# An Agent attaching the BUILT-IN flokoa-openapi capability.
+#
+# Built-in capabilities (source tier `builtin`) are baked into the runner image
+# and ship as Capability CRs with the Helm chart (capabilities.builtin.install,
+# default true) — there is NOTHING to build, publish, or download. Attaching one
+# is just a `ref` by name, the same shape as any Capability, but with no
+# artifact to publish first. An Agent with only built-ins gets a plain pod: no
+# initContainer, no emptyDir copy, no download.
+#
+# The built-in CR itself is generated and installed by the chart; you do not
+# write it. See docs/capability.md (Source tiers) and the capabilities guide
+# (Using built-in capabilities). The attaching Agent must be in the same
+# namespace as the built-in CR (cross-namespace capability refs are
+# unsupported).
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: openapi-agent
+spec:
+  card:
+    name: openapi-agent
+    description: "Calls a REST API exposed as tools via the built-in flokoa-openapi capability"
+    version: "0.1.0"
+    skills:
+      - id: call-api
+        name: Call API
+        description: "Invokes operations from the configured OpenAPI spec"
+        tags: [openapi, rest]
+
+  spec:
+    model: openai:gpt-5-mini
+    instructions:
+      - "Use the available API tools to satisfy the user's request."
+
+  # Attach the built-in by name and supply per-agent config, validated against
+  # the built-in's published configSchema at admission. `flokoa-openapi` fronts
+  # any OpenAPI spec as agent tools.
+  capabilities:
+    - ref:
+        name: flokoa-openapi
+      config:
+        spec: https://api.example.com/openapi.json
+        base_url: https://api.example.com

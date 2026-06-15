@@ -31,6 +31,7 @@ import (
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 	capabilitydomain "github.com/danielnyari/flokoa/internal/domain/capability"
+	"github.com/danielnyari/flokoa/internal/spec"
 )
 
 // +kubebuilder:webhook:path=/validate-agent-flokoa-ai-v1alpha1-capability,mutating=false,failurePolicy=fail,sideEffects=None,groups=agent.flokoa.ai,resources=capabilities,verbs=create;update,versions=v1alpha1,name=vcapability-v1alpha1.kb.io,admissionReviewVersions=v1
@@ -98,9 +99,32 @@ func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, fi
 	var allErrs field.ErrorList
 	specPath := field.NewPath("spec")
 
-	if !digestPinnedRe.MatchString(capCR.Spec.Artifact) {
-		allErrs = append(allErrs, field.Invalid(specPath.Child("artifact"), capCR.Spec.Artifact,
-			"artifact must be digest-pinned (…@sha256:<64 hex chars>); tags are not immutable"))
+	// Per-source artifact rule (§2.3). The CRD defaults spec.source to image,
+	// so a stored CR always carries one; treat an empty source as image too
+	// for direct-call unit tests that bypass defaulting.
+	source := capCR.Spec.Source
+	if source == "" {
+		source = agentv1alpha1.CapabilitySourceImage
+	}
+	switch source {
+	case agentv1alpha1.CapabilitySourceBuiltin:
+		// Built-in capabilities are baked into the runner image; nothing is
+		// delivered, so an artifact must not be set.
+		if capCR.Spec.Artifact != "" {
+			allErrs = append(allErrs, field.Forbidden(specPath.Child("artifact"),
+				"source builtin must not set artifact; built-in capabilities are baked into the runner image"))
+		}
+		// Match against the operator's embedded built-in metadata (§2.3): the
+		// name must be a real built-in for some supported runner, and the
+		// entrypoint + configSchema must match that metadata. This closes the
+		// spoofing hole — a user cannot create source: builtin for an arbitrary
+		// name and have admission wave it through with no artifact.
+		allErrs = append(allErrs, validateBuiltinAgainstMetadata(capCR, specPath)...)
+	default: // image | git | pypi: artifact required and digest-pinned.
+		if !digestPinnedRe.MatchString(capCR.Spec.Artifact) {
+			allErrs = append(allErrs, field.Invalid(specPath.Child("artifact"), capCR.Spec.Artifact,
+				"artifact must be digest-pinned (…@sha256:<64 hex chars>); tags are not immutable"))
+		}
 	}
 
 	if !entrypointRe.MatchString(capCR.Spec.Entrypoint) {
@@ -110,13 +134,20 @@ func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, fi
 
 	// The compiled-spec entry name (serializationName, else the entrypoint
 	// class) may not claim a reserved platform name or carry path punctuation.
+	// Built-ins serialize under the first-party dotted namespace (flokoa.X), so
+	// they use the dot-tolerant validator; user capabilities use a bare class
+	// name.
 	entryName := capabilitydomain.EntryName(capCR.Spec.Entrypoint, capCR.Spec.SerializationName)
-	if err := capabilitydomain.ValidateEntryName(entryName); err != nil {
+	entryNameErr := capabilitydomain.ValidateEntryName(entryName)
+	if source == agentv1alpha1.CapabilitySourceBuiltin {
+		entryNameErr = capabilitydomain.ValidateBuiltinEntryName(entryName)
+	}
+	if entryNameErr != nil {
 		fld := specPath.Child("entrypoint")
 		if capCR.Spec.SerializationName != "" {
 			fld = specPath.Child("serializationName")
 		}
-		allErrs = append(allErrs, field.Invalid(fld, entryName, err.Error()))
+		allErrs = append(allErrs, field.Invalid(fld, entryName, entryNameErr.Error()))
 	}
 
 	// Schema-policy coherence: strict requires a published schema; permissive
@@ -155,4 +186,79 @@ func validateCapability(capCR *agentv1alpha1.Capability) (admission.Warnings, fi
 	}
 
 	return warnings, allErrs
+}
+
+// validateBuiltinAgainstMetadata matches a source: builtin Capability CR against
+// the operator's embedded built-in metadata (architecture §2.3, §2.4). The
+// runner version is not on the CR, so the CR is admitted if it matches a real
+// built-in for ANY supported runner version: the name must be a known built-in
+// and its entrypoint + configSchema must match that built-in's metadata. A CR
+// that doesn't match any real built-in is rejected — there is no "trust the CR"
+// path for the most-trusted tier.
+func validateBuiltinAgainstMetadata(capCR *agentv1alpha1.Capability, specPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var matched bool
+	var lastErr string
+	for _, runnerVersion := range spec.SupportedBaselineVersions() {
+		info, ok := spec.BuiltinCapability(runnerVersion, capCR.Name)
+		if !ok {
+			continue
+		}
+		if err := matchBuiltin(capCR, info); err != nil {
+			lastErr = err.Error()
+			continue
+		}
+		matched = true
+		break
+	}
+
+	if matched {
+		return allErrs
+	}
+	if lastErr != "" {
+		// The name is a built-in for some runner, but the CR's
+		// entrypoint/configSchema disagree with the embedded metadata.
+		allErrs = append(allErrs, field.Invalid(specPath, capCR.Name, fmt.Sprintf(
+			"source builtin: %s. Built-in Capability CRs are generated and shipped by the chart — do not hand-edit them.", lastErr)))
+		return allErrs
+	}
+	allErrs = append(allErrs, field.Invalid(specPath.Child("source"), string(agentv1alpha1.CapabilitySourceBuiltin), fmt.Sprintf(
+		"Capability %q is not a built-in capability for any supported runner (supported: %s); "+
+			"source builtin is reserved for first-party capabilities baked into the runner image",
+		capCR.Name, strings.Join(spec.SupportedBaselineVersions(), ", "))))
+	return allErrs
+}
+
+// matchBuiltin reports whether a builtin CR agrees with one built-in's embedded
+// metadata: entrypoint + serialization name + configSchema must match.
+func matchBuiltin(capCR *agentv1alpha1.Capability, info spec.BuiltinCapabilityInfo) error {
+	if capCR.Spec.Entrypoint != info.Entrypoint {
+		return fmt.Errorf("entrypoint %q does not match the built-in metadata (%q)", capCR.Spec.Entrypoint, info.Entrypoint)
+	}
+	gotEntry := capabilitydomain.EntryName(capCR.Spec.Entrypoint, capCR.Spec.SerializationName)
+	wantEntry := capabilitydomain.EntryName(info.Entrypoint, info.SerializationName)
+	if gotEntry != wantEntry {
+		return fmt.Errorf("serialization name %q does not match the built-in metadata (%q)", gotEntry, wantEntry)
+	}
+	// When the embedded metadata HAS a schema, the CR must publish it too: a CR
+	// that omits configSchema while the built-in has one would otherwise skip
+	// the schema match and pass — an attacker could ship a schema-less builtin CR
+	// for a real name to dodge the schema comparison. Built-in CRs are generated
+	// by the chart, so the schema is always present in a legitimate one.
+	if len(info.ConfigSchema) > 0 {
+		if capCR.Spec.ConfigSchema == nil {
+			return fmt.Errorf(
+				"built-in capability has a configSchema in the embedded metadata but the CR omits it; " +
+					"built-in CRs are generated by the chart — do not hand-edit them")
+		}
+		match, err := capabilitydomain.SchemasMatch(capCR.Spec.ConfigSchema.Raw, info.ConfigSchema)
+		if err != nil {
+			return fmt.Errorf("configSchema is invalid: %v", err)
+		}
+		if !match {
+			return fmt.Errorf("configSchema does not match the built-in metadata")
+		}
+	}
+	return nil
 }

@@ -28,6 +28,15 @@ WHEELHOUSE_PATH = "/wheelhouse"
 
 _SCHEMA_RESOURCE = "artifact-manifest-v1.schema.json"
 
+#: Where a capability's code came from, safest → riskiest. Mirrors the CRD's
+#: spec.source enum (operator/api/v1alpha1/capability_types.go). The artifact
+#: path only ever records image/git/pypi; builtin has no artifact/manifest.
+CapabilitySource = Literal["builtin", "image", "git", "pypi"]
+
+#: Default source for a built artifact: the author built it themselves
+#: (PATH build) against the base image. Matches the CRD field default.
+DEFAULT_SOURCE: CapabilitySource = "image"
+
 # Mirrors `_NON_WHEEL_SUFFIXES` in flokoa_runner.capabilities: non-wheel
 # installables are banned from wheelhouses (sdists execute setup code).
 _NON_WHEEL_SUFFIXES = (".tar.gz", ".zip")
@@ -52,6 +61,38 @@ class ManifestRequires(BaseModel):
     flokoa_runner: Annotated[str | None, Field(alias="flokoa-runner")] = None
 
 
+class GitProvenance(BaseModel):
+    """Git origin recorded for a ``source: git`` build (no credential material).
+
+    ``commit`` is the resolved 7-to-40-hex commit — the durable record even if
+    the branch/tag moves. ``url`` is the clean repository URL (no ``user:tok@``).
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    url: str
+    commit: Annotated[str, Field(pattern=r"^[a-f0-9]{7,40}$")]
+    ref: str | None = None
+    subdirectory: str | None = None
+
+
+class PypiProvenance(BaseModel):
+    """PyPI origin recorded for a ``source: pypi`` build."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    requirement: str
+
+
+class Provenance(BaseModel):
+    """Origin provenance; shape depends on source. image/builtin omit it."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    git: GitProvenance | None = None
+    pypi: PypiProvenance | None = None
+
+
 class ArtifactManifest(BaseModel):
     """``manifest.json`` v1 — the artifact's self-description (§3.1)."""
 
@@ -70,6 +111,11 @@ class ArtifactManifest(BaseModel):
     wheels: Annotated[list[WheelEntry], Field(min_length=1)]
     schema_digest: Annotated[str | None, Field(alias="schemaDigest", pattern=r"^sha256:[a-f0-9]{64}$")] = None
     config_schema: Annotated[dict[str, Any] | None, Field(alias="configSchema")] = None
+    # Additive v1 fields (runtime contract §8 — new optional manifest fields).
+    # The artifact path only ever records image/git/pypi (builtin has no
+    # artifact); default is image, the author-built-their-own case.
+    source: CapabilitySource = DEFAULT_SOURCE
+    provenance: Provenance | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         return self.model_dump(by_alias=True, exclude_none=True)
@@ -133,8 +179,15 @@ def build_manifest(
     wheelhouse: Path,
     serialization_name: str | None = None,
     config_schema: dict[str, Any] | None = None,
+    source: CapabilitySource = DEFAULT_SOURCE,
+    provenance: Provenance | None = None,
 ) -> ArtifactManifest:
-    """Assemble and doubly-validate (model + schema file) the manifest."""
+    """Assemble and doubly-validate (model + schema file) the manifest.
+
+    ``source`` defaults to ``image`` (a PATH build is the author-built-their-own
+    case). ``provenance`` is recorded for git/pypi builds (PR4/PR5); a PATH
+    build records ``source: image`` with no provenance.
+    """
     try:
         manifest = ArtifactManifest(
             name=name,
@@ -146,6 +199,8 @@ def build_manifest(
             wheels=wheel_entries(wheelhouse),
             schema_digest=canonical_schema_digest(config_schema) if config_schema is not None else None,
             config_schema=config_schema,
+            source=source,
+            provenance=provenance,
         )
     except ValidationError as exc:
         raise CapabilityCliError(f"assembled manifest is invalid: {exc}") from exc

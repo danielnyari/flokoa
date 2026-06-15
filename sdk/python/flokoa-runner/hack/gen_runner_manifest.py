@@ -107,6 +107,8 @@ def build_manifest(lock_path: Path, schema_path: Path) -> dict:
     for name in PLATFORM_CAPABILITY_TYPES:
         platform_capabilities[name] = RUNNER_VERSION
 
+    from gen_builtin_capabilities import build_builtin_metadata
+
     return {
         "contractVersion": CONTRACT_VERSION,
         "runnerVersion": RUNNER_VERSION,
@@ -114,6 +116,7 @@ def build_manifest(lock_path: Path, schema_path: Path) -> dict:
         "pydantic-ai": versions["pydantic-ai"],
         "baseline": {name: versions[name] for name in BASELINE_PACKAGES if name in versions},
         "platformCapabilities": platform_capabilities,
+        "builtinCapabilities": build_builtin_metadata(),
         "agentSpecSchemaDigest": schema_digest,
     }
 
@@ -124,6 +127,8 @@ def build_operator_baseline(lock_path: Path) -> dict:
     with any baseline package — not just the headline libraries — must be
     caught before anything deploys.
     """
+    from gen_builtin_capabilities import build_builtin_metadata
+
     versions = parse_lock_versions(lock_path.read_text(encoding="utf-8"))
     return {
         "contractVersion": CONTRACT_VERSION,
@@ -131,6 +136,9 @@ def build_operator_baseline(lock_path: Path) -> dict:
         "python": PYTHON_MINOR,
         "pydantic-ai": versions["pydantic-ai"],
         "packages": versions,
+        # Built-in capability metadata is the offline source of truth the
+        # operator validates source: builtin CRs against (architecture §2.4).
+        "builtinCapabilities": build_builtin_metadata(),
     }
 
 
@@ -152,6 +160,13 @@ def main() -> None:
     baseline_path.parent.mkdir(parents=True, exist_ok=True)
     baseline_path.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {baseline_path}")
+
+    # Emit the source: builtin Capability CRs (chart files + config samples)
+    # from the same introspection, so the metadata baked into the manifest and
+    # baseline above and the shipped CRs can never disagree (risk §11.4).
+    from gen_builtin_capabilities import main as gen_builtin_crs
+
+    gen_builtin_crs()
 
 
 if __name__ == "__main__":

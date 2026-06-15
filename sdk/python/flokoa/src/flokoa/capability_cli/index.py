@@ -18,7 +18,14 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from flokoa.capability_cli.artifact import CapabilitySource
 from flokoa.capability_cli.errors import CapabilityCliError
+
+# Re-exported so the IndexEntry.source annotation (a deferred string under
+# `from __future__ import annotations`) resolves at model-build time and the
+# import is not flagged unused. The index source tier mirrors the CRD/manifest
+# CapabilitySource enum.
+__all__ = ["CapabilityIndex", "CapabilitySource", "IndexEntry"]
 
 #: Raw GitHub URL of this repo's published index file. The file ships with
 #: registry seeding (roadmap 10) — until then fetches 404 and the CLI says so.
@@ -44,6 +51,10 @@ class IndexEntry(BaseModel):
     signed: bool = False
     keywords: Annotated[list[str], Field(default_factory=list)]
     homepage: str | None = None
+    #: The capability source tier (builtin|image|git|pypi). Optional so older
+    #: index files (no source) still parse; populated by ``push --index`` from
+    #: the CR's spec.source. ``search``/``list`` surface it as the TIER column.
+    source: CapabilitySource | None = None
 
     @property
     def key(self) -> tuple[str, str]:

@@ -16,6 +16,16 @@ dependencies = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
     "opentelemetry-instrumentation-fastapi>=0.41b0",
+    # First-party built-in capabilities baked into the runner image (source:
+    # builtin tier). They install into the venv via uv sync and ride into the
+    # runtime stage, so attaching one downloads nothing. Their non-baseline
+    # transitive deps land in runner.lock and become baseline packages — by
+    # design (one pod, one env; a third-party cap pinning a different version
+    # is then a correct admission conflict). Pinned to the baseline pydantic-ai.
+    # flokoa-codemode-mcp is NOT baked in: it is an MCP server, not an
+    # AbstractCapability subclass (architecture §2.7) — future built-in once it
+    # grows a capability-class entrypoint.
+    "flokoa-openapi",
 ]
 
 [build-system]
@@ -31,6 +41,7 @@ package = true
 [tool.uv.sources]
 flokoa = { workspace = true }
 flokoa-types = { workspace = true }
+flokoa-openapi = { workspace = true }
 
 [dependency-groups]
 dev = [

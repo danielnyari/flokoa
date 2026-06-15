@@ -1,7 +1,7 @@
 """Container execution for the ``flokoa capability`` CLI.
 
 docker/podman detection (honoring the repo-wide ``CONTAINER_TOOL``
-convention), runner image resolution, and a single disposable container
+convention), build image resolution, and a single disposable container
 session the build pipeline's ``_inrunner/`` scripts execute in.
 
 All subprocess invocations are explicit argv arrays — never shell strings.
@@ -10,6 +10,7 @@ All subprocess invocations are explicit argv arrays — never shell strings.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -18,12 +19,40 @@ from pathlib import Path
 
 from flokoa.capability_cli.errors import CapabilityCliError
 
+# URL userinfo (``user`` or ``user:password`` before the host) in captured
+# git/pip output. CapabilityCliError messages and logs surface captured
+# stderr, so any credentialed URL the tool echoes back on error must be
+# scrubbed first. Mirrors flokoa_runner.capabilities._redact_url_credentials
+# (the same posture, replicated CLI-side per the design — §4.3).
+_URL_CREDENTIALS_PATTERN = re.compile(r"(https?://)[^/@\s]+@")
+
+
+def redact_url_credentials(text: str) -> str:
+    """Replace URL userinfo (``https://user:tok@`` …) with a redaction marker.
+
+    Used on every captured stderr stream that may echo a credentialed git
+    remote (the ephemeral token, or a fallback ``user:token@host`` URL) before
+    it reaches a :class:`CapabilityCliError` message or a log line.
+    """
+    return _URL_CREDENTIALS_PATTERN.sub(r"\1<redacted>@", text)
+
+
+# The default *build* environment: the capability base image (the pinned runner
+# baseline + the build front-end, pip/wheel/setuptools, seeded at image-build
+# time). `flokoa capability build` runs its _inrunner/ pipeline inside this by
+# default — see flokoa-capability-base/Dockerfile.
+DEFAULT_CAPABILITY_BASE_REPOSITORY = "ghcr.io/danielnyari/flokoa-capability-base"
+
+# Retained for back-compat: a bare runner image still works as a build
+# environment (the CLI's ensure_pip() fallback seeds pip per build there), but
+# the happy path now resolves to the base image above.
 DEFAULT_RUNNER_REPOSITORY = "ghcr.io/danielnyari/flokoa-runner"
 
 # The runner release this SDK pairs with by default. Aligned with the
 # operator's spec.DefaultRunnerVersion (operator/internal/spec/spec.go) by the
-# release process: release.yml derives both — and the runner image tag — from
-# the release tag, so don't hand-bump one without the other.
+# release process: release.yml derives the base image tag, the runner image
+# tag, and this value from the release tag, so don't hand-bump one without the
+# others. The base image is tagged to match this runner version.
 DEFAULT_RUNNER_VERSION = "0.2.0"
 
 _SUPPORTED_TOOLS = ("docker", "podman")
@@ -49,22 +78,63 @@ def detect_container_tool() -> str:
     )
 
 
-def resolve_runner_image(runner_image: str | None = None, runner_version: str | None = None) -> str:
-    """Resolve the pinned runner image the build runs inside.
+def resolve_build_image(
+    *,
+    base_image: str | None = None,
+    base_version: str | None = None,
+    runner_image: str | None = None,
+    runner_version: str | None = None,
+) -> str:
+    """Resolve the build image the ``_inrunner/`` pipeline runs inside.
 
-    Precedence: ``--runner-image`` > ``--runner-version`` (composed with the
-    repository) > ``FLOKOA_RUNNER_IMAGE`` env > default repository
-    (``FLOKOA_RUNNER_REPOSITORY`` env override) + ``DEFAULT_RUNNER_VERSION``.
+    The default is the capability **base** image (pinned runner baseline + the
+    build front-end). ``--runner-image`` / ``--runner-version`` are retained as
+    back-compat aliases for the build environment — an explicit full override
+    or version override, respectively — but the default no longer points at a
+    bare runner.
+
+    Precedence (highest first):
+
+      1. ``--base-image`` (full override) — or the ``--runner-image`` alias.
+      2. ``--base-version`` (composed with the base repository) — or the
+         ``--runner-version`` alias.
+      3. ``FLOKOA_CAPABILITY_BASE_IMAGE`` env (full override).
+      4. base repository (``FLOKOA_CAPABILITY_BASE_REPOSITORY`` env override)
+         + ``DEFAULT_RUNNER_VERSION`` (the base image is tagged to the runner
+         version).
+
+    A ``--runner-image`` override pointing at a bare runner image still works:
+    the in-runner ``ensure_pip()`` fallback seeds pip for that case.
     """
-    if runner_image:
-        return runner_image
-    repository = os.environ.get("FLOKOA_RUNNER_REPOSITORY") or DEFAULT_RUNNER_REPOSITORY
-    if runner_version:
-        return f"{repository}:{runner_version}"
-    env_image = os.environ.get("FLOKOA_RUNNER_IMAGE")
+    # 1. Full override — the new flag wins, the legacy alias is honored too.
+    full_override = base_image or runner_image
+    if full_override:
+        return full_override
+
+    repository = os.environ.get("FLOKOA_CAPABILITY_BASE_REPOSITORY") or DEFAULT_CAPABILITY_BASE_REPOSITORY
+
+    # 2. Version-only override, composed with the base repository.
+    version_override = base_version or runner_version
+    if version_override:
+        return f"{repository}:{version_override}"
+
+    # 3. Environment full override.
+    env_image = os.environ.get("FLOKOA_CAPABILITY_BASE_IMAGE")
     if env_image:
         return env_image
+
+    # 4. Default: base repository + the SDK-pinned runner version.
     return f"{repository}:{DEFAULT_RUNNER_VERSION}"
+
+
+def resolve_runner_image(runner_image: str | None = None, runner_version: str | None = None) -> str:
+    """Back-compat shim: resolve the build image from the legacy runner flags.
+
+    Retained so existing callers keep working; new code should call
+    :func:`resolve_build_image`. The default now resolves to the capability
+    base image, not a bare runner.
+    """
+    return resolve_build_image(runner_image=runner_image, runner_version=runner_version)
 
 
 @dataclass
@@ -82,12 +152,17 @@ class Mount:
 
 @dataclass
 class ContainerSession:
-    """One disposable runner-image container the whole build executes in.
+    """One disposable build-image container the whole build executes in.
 
     The container idles on ``sleep infinity``; each pipeline step is a
-    ``<tool> exec``. One session means the venv state carries across steps
-    (ensurepip runs once; the smoke install is visible to schema derivation),
-    exactly like a runner pod's single venv.
+    ``<tool> exec``. One session means the venv state carries across steps (the
+    smoke install is visible to schema derivation), exactly like a runner pod's
+    single venv.
+
+    The default build image is the capability base image, which already ships
+    pip + wheel + setuptools (seeded at image-build time), so the happy path
+    runs no per-build ``ensurepip``. The in-runner ``ensure_pip()`` fallback
+    survives only for someone overriding ``--runner-image`` to a bare runner.
 
     Runs as root with ``HOME=/tmp`` (matching the fixture ``build.sh``): the
     build container is a throwaway compiler writing to bind mounts the host
@@ -126,8 +201,17 @@ class ContainerSession:
         argv += ["--entrypoint", "sleep", self.image, "infinity"]
         return argv
 
-    def exec_argv(self, argv: list[str]) -> list[str]:
-        return [self.tool, "exec", self.name, *argv]
+    def exec_argv(self, argv: list[str], *, secret_env_keys: tuple[str, ...] = ()) -> list[str]:
+        """Assemble the ``<tool> exec`` argv.
+
+        Secret env keys are passed as bare ``-e KEY`` flags (NOT ``KEY=VALUE``):
+        ``docker``/``podman exec -e KEY`` copies ``KEY`` from the *tool
+        process's* environment into the container, so the value lives only in
+        the subprocess ``env=`` (§4.3/§8.2) — never on the command line, never
+        in ``ps``, never in a mount file or the image.
+        """
+        secret_flags = [flag for key in secret_env_keys for flag in ("-e", key)]
+        return [self.tool, "exec", *secret_flags, self.name, *argv]
 
     def __enter__(self) -> ContainerSession:
         name = f"flokoa-capability-build-{uuid.uuid4().hex[:12]}"
@@ -141,13 +225,39 @@ class ContainerSession:
         self._name = name
         return self
 
-    def exec(self, argv: list[str], *, step: str) -> subprocess.CompletedProcess[str]:
-        """Run one pipeline step inside the session; raise with output on failure."""
+    def exec(
+        self,
+        argv: list[str],
+        *,
+        step: str,
+        secret_env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run one pipeline step inside the session; raise with output on failure.
+
+        ``secret_env`` injects ephemeral credentials (the git token, §4.3) into
+        the container step. Each key is forwarded as a bare ``-e KEY`` flag and
+        the value is set on this ``exec`` subprocess's environment only — it
+        never appears in the argv, in any other step, or in the image. The
+        process env is a fresh copy of ``os.environ`` plus the secrets, so the
+        value vanishes when the subprocess exits.
+
+        Captured stderr/stdout is routed through the URL-credential redactor
+        before it reaches a :class:`CapabilityCliError`, so a credentialed URL
+        the tool might echo on error is scrubbed first.
+        """
+        secret_env = secret_env or {}
+        run_env: dict[str, str] | None = None
+        if secret_env:
+            run_env = {**os.environ, **secret_env}
         result = subprocess.run(  # noqa: S603
-            self.exec_argv(argv), capture_output=True, text=True, check=False
+            self.exec_argv(argv, secret_env_keys=tuple(secret_env)),
+            capture_output=True,
+            text=True,
+            check=False,
+            env=run_env,
         )
         if result.returncode != 0:
-            output = (result.stdout + "\n" + result.stderr).strip()[-4000:]
+            output = redact_url_credentials((result.stdout + "\n" + result.stderr).strip())[-4000:]
             raise CapabilityCliError(f"{step} failed inside {self.image}:\n{output}")
         return result
 

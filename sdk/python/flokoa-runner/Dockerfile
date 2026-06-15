@@ -31,12 +31,17 @@ COPY flokoa/pyproject.toml ./flokoa/pyproject.toml
 COPY flokoa-common/pyproject.toml ./flokoa-common/pyproject.toml
 COPY flokoa-types/pyproject.toml ./flokoa-types/pyproject.toml
 COPY flokoa-runner/pyproject.toml ./flokoa-runner/pyproject.toml
+# flokoa-openapi is a runner runtime dependency (source: builtin capability),
+# so its project file participates in workspace resolution.
+COPY flokoa-openapi/pyproject.toml ./flokoa-openapi/pyproject.toml
 
 # Stub packages so hatchling can discover them for workspace resolution
 RUN mkdir -p flokoa/src/flokoa flokoa-common/src/flokoa_common \
-             flokoa-types/src/flokoa_types flokoa-runner/src/flokoa_runner && \
+             flokoa-types/src/flokoa_types flokoa-runner/src/flokoa_runner \
+             flokoa-openapi/src/flokoa_openapi && \
     touch flokoa/src/flokoa/__init__.py flokoa-common/src/flokoa_common/__init__.py \
-          flokoa-types/src/flokoa_types/__init__.py flokoa-runner/src/flokoa_runner/__init__.py
+          flokoa-types/src/flokoa_types/__init__.py flokoa-runner/src/flokoa_runner/__init__.py \
+          flokoa-openapi/src/flokoa_openapi/__init__.py
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --project flokoa-runner \
@@ -51,6 +56,8 @@ COPY flokoa-types/README.md ./flokoa-types/README.md
 COPY flokoa-types/src ./flokoa-types/src
 COPY flokoa-runner/README.md ./flokoa-runner/README.md
 COPY flokoa-runner/src ./flokoa-runner/src
+COPY flokoa-openapi/README.md ./flokoa-openapi/README.md
+COPY flokoa-openapi/src ./flokoa-openapi/src
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --project flokoa-runner \

@@ -131,6 +131,20 @@ func (r *CapabilityReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 //	signature invalid            → False   / SignatureInvalid  (periodic re-check)
 //	transient verification error → Unknown / VerifyError + backoff requeue
 func (r *CapabilityReconciler) verifiedCondition(ctx context.Context, capability *agentv1alpha1.Capability) verifyOutcome {
+	// Built-in capabilities have no separate artifact to cosign-verify; their
+	// integrity rides on the runner image digest (§8.3). Short-circuit to
+	// Verified=True/BuiltIn before the cosign/disabled branches so the most-
+	// trusted tier keeps working under requireVerified. (Harmless until
+	// built-ins exist — no CR carries source: builtin yet in PR1.)
+	if capability.Spec.Source == agentv1alpha1.CapabilitySourceBuiltin {
+		return verifyOutcome{condition: metav1.Condition{
+			Type:    agentv1alpha1.CapabilityConditionVerified,
+			Status:  metav1.ConditionTrue,
+			Reason:  agentv1alpha1.CapabilityVerifiedReasonBuiltIn,
+			Message: "built into the runner image; integrity bound by the runner image digest",
+		}}
+	}
+
 	if r.Verifier == nil {
 		return verifyOutcome{condition: metav1.Condition{
 			Type:    agentv1alpha1.CapabilityConditionVerified,
