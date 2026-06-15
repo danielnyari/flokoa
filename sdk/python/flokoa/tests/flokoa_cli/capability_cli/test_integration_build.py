@@ -23,6 +23,7 @@ where the container tool can see it. The legacy ``FLOKOA_RUNNER_IMAGE`` /
 from __future__ import annotations
 
 import json
+import subprocess
 import tarfile
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from click.testing import CliRunner
 
 from flokoa.capability_cli.artifact import validate_manifest_dict
 from flokoa.capability_cli.build import build
+from flokoa.capability_cli.container import detect_container_tool, resolve_build_image
 
 pytestmark = pytest.mark.integration
 
@@ -150,3 +152,35 @@ packages = ["src/broken_cap"]
         assert "module_that_does_not_exist" in result.output
         assert not (output / "broken-cap-artifact.oci.tar").exists()
         assert not (output / "broken-cap.capability.yaml").exists()
+
+
+class TestBuildImageTooling:
+    """The build image must carry the tools the build pipeline shells out to.
+
+    Regression guard for the missing-``git`` Copilot finding: ``--from-git``
+    clones with ``git`` inside the build container, and the whole pipeline needs
+    a usable ``pip``. The fixture builds above only exercise a local PATH build,
+    so they would not catch a build image without ``git``.
+    """
+
+    def _run_in_build_image(self, *cmd: str) -> subprocess.CompletedProcess[str]:
+        tool = detect_container_tool()
+        image = resolve_build_image()
+        return subprocess.run(
+            [tool, "run", "--rm", "--entrypoint", cmd[0], image, *cmd[1:]],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_git_is_available(self) -> None:
+        """`--from-git` shells out to git; the base image must provide it."""
+        result = self._run_in_build_image("git", "--version")
+        assert result.returncode == 0, f"git missing from the build image: {result.stderr}"
+        assert "git version" in result.stdout
+
+    def test_pip_is_available(self) -> None:
+        """The wheelhouse build runs pip; the base image seeds it (pinned)."""
+        result = self._run_in_build_image("/app/.venv/bin/python", "-m", "pip", "--version")
+        assert result.returncode == 0, f"pip missing from the build image: {result.stderr}"
+        assert "pip" in result.stdout

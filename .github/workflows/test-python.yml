@@ -104,19 +104,22 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --all-extras
 
-      # `flokoa capability build` now defaults its build environment to the
-      # capability *base* image (runner baseline + pinned build tooling), which
-      # only publishes on a release tag. CI builds the pinned runner locally and
-      # points the CLI's build environment at it via FLOKOA_CAPABILITY_BASE_IMAGE
-      # (the new resolver's env override). The runner lacks a pre-seeded pip, so
-      # the in-runner ensure_pip() fallback — kept for exactly this bare-runner
-      # override — bootstraps it; the base image's own build is verified
-      # separately. This exercises the full build pipeline end-to-end.
+      # `flokoa capability build` defaults its build environment to the capability
+      # *base* image (runner baseline + pinned pip/wheel/setuptools + git/ssh for
+      # --from-git), which only publishes on a release tag. CI builds it locally so
+      # the integration tests exercise the REAL default build environment (this is
+      # what catches base-image regressions like a missing build tool). The base
+      # image FROMs the runner, so both pre-builds use the `default` docker-driver
+      # builder (it resolves FROM from the daemon); the container-driver builder
+      # from setup-buildx-action stays the default for the CLI's own OCI export.
       - name: Build the pinned runner image locally
-        run: docker buildx build --load -f flokoa-runner/Dockerfile -t flokoa-runner:ci .
+        run: docker buildx build --builder default --load -f flokoa-runner/Dockerfile -t ghcr.io/danielnyari/flokoa-runner:ci .
+
+      - name: Build the capability base image locally
+        run: docker buildx build --builder default --load -f flokoa-capability-base/Dockerfile --build-arg RUNNER_VERSION=ci -t flokoa-capability-base:ci .
 
       - name: Run capability CLI integration tests
         working-directory: sdk/python/flokoa
         env:
-          FLOKOA_CAPABILITY_BASE_IMAGE: flokoa-runner:ci
+          FLOKOA_CAPABILITY_BASE_IMAGE: flokoa-capability-base:ci
         run: uv run python -m pytest -m integration tests/flokoa_cli/capability_cli

@@ -67,17 +67,18 @@ RUN /app/.venv/bin/python -m ensurepip --upgrade \
       "setuptools==${SETUPTOOLS_VERSION}" \
  && /app/.venv/bin/python -m pip --version
 
-# git+ssh capability builds (`flokoa capability build --from-git git+ssh://…`)
-# clone with `ssh -o StrictHostKeyChecking=yes` (clone_repo.py). The runner base
-# (python:3.13-slim) ships neither the ssh client nor any known_hosts, so strict
-# host-key checking would reject every host as unknown and the clone would fail.
-# Install the ssh client and seed GitHub's published host keys into the system
-# known_hosts so git+ssh against github.com works out of the box without
-# disabling host-key verification. github.com is the supported host; the keys are
-# baked statically (not ssh-keyscan'd at build time) so the image is reproducible
-# and the build needs no network access to github.com:22.
+# `flokoa capability build --from-git` shells out to `git` (clone_repo.py:
+# git clone/checkout/rev-parse), and git+ssh clones additionally use
+# `ssh -o StrictHostKeyChecking=yes`. The runner base (python:3.13-slim) ships
+# neither git nor the ssh client nor any known_hosts, so without them a --from-git
+# build fails ("git: command not found") and git+ssh would reject every host as
+# unknown. Install git + the ssh client, and seed GitHub's published host keys
+# into the system known_hosts so git+ssh against github.com works out of the box
+# without disabling host-key verification. github.com is the supported host; the
+# keys are baked statically (not ssh-keyscan'd at build time) so the image is
+# reproducible and the build needs no network access to github.com:22.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssh-client \
+ && apt-get install -y --no-install-recommends git openssh-client \
  && rm -rf /var/lib/apt/lists/*
 COPY flokoa-capability-base/github-known-hosts /etc/ssh/ssh_known_hosts
 RUN chmod 0644 /etc/ssh/ssh_known_hosts
