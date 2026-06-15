@@ -20,8 +20,10 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -31,8 +33,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -45,7 +49,9 @@ import (
 	triggerapp "github.com/danielnyari/flokoa/internal/app/trigger"
 	"github.com/danielnyari/flokoa/internal/controller"
 	"github.com/danielnyari/flokoa/internal/infra/builder"
+	"github.com/danielnyari/flokoa/internal/infra/delivery"
 	"github.com/danielnyari/flokoa/internal/infra/repo"
+	"github.com/danielnyari/flokoa/internal/infra/verify"
 	"github.com/danielnyari/flokoa/internal/spec"
 	"github.com/danielnyari/flokoa/internal/telemetry"
 	webhookagentv1alpha1 "github.com/danielnyari/flokoa/internal/webhook/v1alpha1"
@@ -109,6 +115,51 @@ func main() {
 		"Inject the flokoa.platform/telemetry capability into every compiled spec. "+
 			"Cluster policy only — per-Agent opt-out does not exist by design.")
 
+	var capabilityDeliveryMode string
+	flag.StringVar(&capabilityDeliveryMode, "capability-delivery-mode", delivery.ModeInitContainer,
+		"How capability artifacts reach runner pods: initContainer (works everywhere), "+
+			"imageVolume (requires the ImageVolume feature gate and containerd 2.x), or "+
+			"auto (probe at startup, silent fallback to initContainer).")
+
+	var capabilityDeliveryProbeTimeout time.Duration
+	flag.DurationVar(&capabilityDeliveryProbeTimeout, "capability-delivery-probe-timeout", 60*time.Second,
+		"Timeout for the auto-mode image volume probe pod.")
+
+	var capabilityDeliveryProbeImage string
+	flag.StringVar(&capabilityDeliveryProbeImage, "capability-delivery-probe-image", "",
+		"Image used for the probe pod and its image volume "+
+			"(empty: the operator's pinned runner image).")
+
+	var capabilityCosignEnabled bool
+	flag.BoolVar(&capabilityCosignEnabled, "capability-cosign-enabled", false,
+		"Verify capability artifact cosign signatures in the Capability controller "+
+			"(the Verified condition). Requires either a key path or the keyless pair.")
+
+	var capabilityCosignKeyPath string
+	flag.StringVar(&capabilityCosignKeyPath, "capability-cosign-key-path", "",
+		"Path of a PEM public key file for key-based cosign verification "+
+			"(mutually exclusive with the keyless settings).")
+
+	var capabilityCosignKeylessIssuer string
+	flag.StringVar(&capabilityCosignKeylessIssuer, "capability-cosign-keyless-issuer", "",
+		"Exact OIDC issuer required on the Fulcio signing certificate (keyless mode).")
+
+	var capabilityCosignKeylessIdentityRegexp string
+	flag.StringVar(&capabilityCosignKeylessIdentityRegexp, "capability-cosign-keyless-identity-regexp", "",
+		"Regexp the signing certificate identity (SAN) must match (keyless mode). "+
+			"Required with the issuer; wildcard-only patterns are rejected.")
+
+	var capabilityRegistrySecretName string
+	flag.StringVar(&capabilityRegistrySecretName, "capability-registry-secret-name", "",
+		"Name of a kubernetes.io/dockerconfigjson Secret in the operator namespace "+
+			"used for registry access during signature verification (private artifact registries).")
+
+	var capabilityRequireVerified bool
+	flag.BoolVar(&capabilityRequireVerified, "capability-require-verified", false,
+		"Cluster policy: Capabilities whose Verified condition is not True cannot be "+
+			"attached to Agents (admission denial + compile-time denial). Requires "+
+			"--capability-cosign-enabled — without verification the policy would deny everything.")
+
 	var artifactIOEnabled bool
 	var artifactGCStrategy string
 	flag.BoolVar(&artifactIOEnabled, "artifact-io-enabled", false,
@@ -122,6 +173,16 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// requireVerified without verification would deny every capability
+	// attachment (Verified stays Unknown forever): refuse to start instead
+	// of bricking admission. The Helm chart enforces the same rule.
+	if capabilityRequireVerified && !capabilityCosignEnabled {
+		setupLog.Error(nil, "--capability-require-verified requires --capability-cosign-enabled: "+
+			"without signature verification the Verified condition stays Unknown and the policy "+
+			"would deny every capability attachment")
+		os.Exit(1)
+	}
 
 	// Initialize OpenTelemetry distributed tracing.
 	otelShutdown, err := telemetry.Init(context.Background(), "flokoa-operator")
@@ -224,7 +285,20 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	restConfig := ctrl.GetConfigOrDie()
+
+	// Resolve the capability delivery mode once, synchronously, before the
+	// manager starts: every reconcile sees a settled per-cluster mode, and
+	// each restart re-probes (cluster upgrades change the answer).
+	capabilityDelivery, err := resolveCapabilityDelivery(context.Background(), restConfig,
+		capabilityDeliveryMode, capabilityDeliveryProbeImage, capabilityDeliveryProbeTimeout,
+		runnerImageRepository)
+	if err != nil {
+		setupLog.Error(err, "unable to resolve the capability delivery mode")
+		os.Exit(1)
+	}
+
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
@@ -248,6 +322,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Construct the artifact verifier only when enabled (nil = the Verified
+	// condition stays Unknown/VerificationDisabled). Construction validates
+	// the mode config — key file readable, keyless identity policy present
+	// and non-wildcard — so misconfiguration fails startup, not reconciles.
+	var artifactVerifier verify.ArtifactVerifier
+	if capabilityCosignEnabled {
+		cosignVerifier, err := verify.NewCosignVerifier(verify.Options{
+			KeyPath:               capabilityCosignKeyPath,
+			KeylessIssuer:         capabilityCosignKeylessIssuer,
+			KeylessIdentityRegexp: capabilityCosignKeylessIdentityRegexp,
+			RegistrySecretName:    capabilityRegistrySecretName,
+			Namespace:             delivery.OperatorNamespace(),
+			// The uncached reader keeps the manager from caching (and
+			// needing watch RBAC on) every Secret in the cluster.
+			SecretReader: mgr.GetAPIReader(),
+		})
+		if err != nil {
+			setupLog.Error(err, "invalid capability cosign verification configuration")
+			os.Exit(1)
+		}
+		artifactVerifier = cosignVerifier
+	}
+
 	// Build repository implementations for agent app service.
 	k8sClient := mgr.GetClient()
 	agentToolRepo := &repo.AgentToolRepoImpl{Client: k8sClient}
@@ -263,13 +360,15 @@ func main() {
 		Deployments:   &repo.DeploymentRepoImpl{Client: k8sClient},
 		Services:      serviceRepo,
 		ServiceReader: serviceRepo,
-		Secrets:       &repo.SecretRepoImpl{Client: k8sClient},
+		Secrets:       &repo.SecretRepoImpl{Client: mgr.GetAPIReader()},
 		OwnerSetter:   &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
 	}, agentapp.Config{
-		DefaultRunnerVersion:  spec.DefaultRunnerVersion,
-		RunnerImageRepository: runnerImageRepository,
-		Injected:              injectedCapabilities(injectTelemetry),
-		OTLPEndpoint:          telemetryOTLPEndpoint,
+		DefaultRunnerVersion:        spec.DefaultRunnerVersion,
+		RunnerImageRepository:       runnerImageRepository,
+		Injected:                    injectedCapabilities(injectTelemetry),
+		OTLPEndpoint:                telemetryOTLPEndpoint,
+		CapabilityDelivery:          capabilityDelivery,
+		RequireVerifiedCapabilities: capabilityRequireVerified,
 	})
 
 	if err := (&controller.AgentReconciler{
@@ -309,14 +408,15 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.CapabilityReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Verifier: artifactVerifier,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Capability")
 		os.Exit(1)
 	}
 	if enableWebhooks {
-		if err := webhookagentv1alpha1.SetupAgentWebhookWithManager(mgr); err != nil {
+		if err := webhookagentv1alpha1.SetupAgentWebhookWithManager(mgr, capabilityRequireVerified); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Agent")
 			os.Exit(1)
 		}
@@ -365,7 +465,7 @@ func main() {
 	triggerAppService := triggerapp.NewService(triggerapp.Deps{
 		Agents:      &repo.AgentRepoImpl{Client: k8sClient},
 		ConfigMaps:  &repo.ConfigMapRepoImpl{Client: k8sClient},
-		Secrets:     &repo.SecretRepoImpl{Client: k8sClient},
+		Secrets:     &repo.SecretRepoImpl{Client: mgr.GetAPIReader()},
 		OwnerSetter: &repo.OwnerSetterImpl{Scheme: mgr.GetScheme()},
 	})
 	if err := (&controller.AgentTriggerReconciler{
@@ -408,6 +508,51 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// resolveCapabilityDelivery settles how capability artifacts reach runner
+// pods (roadmap 09) via delivery.Resolver, then publishes the result
+// (Prometheus gauges, the flokoa-capability-delivery state ConfigMap, a log
+// line). It uses a direct client — the manager cache is not running yet.
+// Only an invalid configured mode is an error; auto-probe failures fall back
+// to initContainer.
+func resolveCapabilityDelivery(ctx context.Context, restConfig *rest.Config,
+	mode, probeImage string, probeTimeout time.Duration, runnerRepo string,
+) (builder.CapabilityDeliveryMode, error) {
+	directClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		return "", fmt.Errorf("creating the direct client for delivery resolution: %w", err)
+	}
+
+	if probeImage == "" {
+		repository := runnerRepo
+		if repository == "" {
+			repository = builder.DefaultRunnerImageRepository
+		}
+		// The pinned runner image is guaranteed pullable — it is what agent
+		// pods pull anyway — and bakes the file the probe reads.
+		probeImage = fmt.Sprintf("%s:%s", repository, spec.DefaultRunnerVersion)
+	}
+
+	namespace := delivery.OperatorNamespace()
+	log := ctrl.Log.WithName("capability-delivery")
+	resolver := &delivery.Resolver{
+		Mode: mode,
+		Prober: &delivery.Probe{
+			Client:    directClient,
+			Namespace: namespace,
+			Image:     probeImage,
+			Timeout:   probeTimeout,
+			Log:       log,
+		},
+	}
+
+	result, err := resolver.Resolve(ctx)
+	if err != nil {
+		return "", err
+	}
+	delivery.Publish(ctx, directClient, namespace, result, log)
+	return result.EffectiveMode, nil
 }
 
 // injectedCapabilities assembles the platform capability entries appended to

@@ -112,7 +112,7 @@ var _ = BeforeSuite(func() {
 	err = SetupAgentWorkflowWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = SetupAgentWebhookWithManager(mgr)
+	err = SetupAgentWebhookWithManager(mgr, false)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = SetupCapabilityWebhookWithManager(mgr)

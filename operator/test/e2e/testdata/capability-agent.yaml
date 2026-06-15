@@ -1,0 +1,41 @@
+# Agent exercising capability wheelhouse delivery (roadmap 09): two attached
+# Capability CRs — echo (no extra deps) and upper (one pinned non-baseline
+# dependency). The Capability CRs themselves are created programmatically by
+# capability_test.go because their spec.artifact digests are only known after
+# the fixture images are built and loaded into Kind.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Agent
+metadata:
+  name: capability-agent
+  labels:
+    app.kubernetes.io/name: capability-agent
+    test: e2e
+spec:
+  card:
+    name: "Capability Agent"
+    description: "E2E agent exercising capability wheelhouse delivery"
+    version: "1.0.0"
+    skills:
+      - id: "echo"
+        name: "Echo"
+        description: "Echo messages back with the configured prefix"
+        tags: ["echo", "e2e"]
+
+  modelRef:
+    name: gpt-5-mini
+
+  instructionRefs:
+    - name: capability-instruction
+
+  capabilities:
+    - ref:
+        name: flokoa-cap-echo
+      config:
+        prefix: e2e-cap
+    - ref:
+        name: flokoa-cap-upper
+      config:
+        exclaim: true
+
+  runtime:
+    replicas: 1

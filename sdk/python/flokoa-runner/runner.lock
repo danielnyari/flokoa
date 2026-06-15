@@ -231,7 +231,9 @@ jsonpath-python==1.1.6
 jsonref==1.1.0
     # via fastmcp-slim
 jsonschema==4.26.0
-    # via mcp
+    # via
+    #   flokoa
+    #   mcp
 jsonschema-path==0.4.2
     # via fastmcp-slim
 jsonschema-specifications==2025.9.1
@@ -439,6 +441,7 @@ pywin32-ctypes==0.2.3 ; sys_platform == 'win32'
 pyyaml==6.0.3
     # via
     #   fastmcp-slim
+    #   flokoa
     #   flokoa-runner
     #   huggingface-hub
     #   jsonschema-path

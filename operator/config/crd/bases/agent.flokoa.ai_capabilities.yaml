@@ -26,6 +26,9 @@ spec:
     - jsonPath: .spec.schemaPolicy
       name: Policy
       type: string
+    - jsonPath: .status.conditions[?(@.type=='Verified')].status
+      name: Verified
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

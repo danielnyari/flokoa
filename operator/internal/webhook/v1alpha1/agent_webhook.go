@@ -25,6 +25,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -60,18 +62,27 @@ type AgentCustomValidator struct {
 	// capability checks evaluate against when the Agent doesn't pin one.
 	// Empty falls back to spec.DefaultRunnerVersion.
 	DefaultRunnerVersion string
+
+	// RequireVerifiedCapabilities enforces the requireVerified cluster
+	// policy (roadmap 09): a Capability whose Verified condition is not True
+	// cannot be attached, and a missing Capability CR is a denial too — an
+	// unverifiable capability must never deploy. The compiler re-runs the
+	// same check (belt and braces: Capability edits recompile dependent
+	// Agents without re-admission).
+	RequireVerifiedCapabilities bool
 }
 
 var _ webhook.CustomValidator = &AgentCustomValidator{}
 
 // SetupAgentWebhookWithManager registers the webhook for Agent in the manager.
-func SetupAgentWebhookWithManager(mgr ctrl.Manager) error {
+func SetupAgentWebhookWithManager(mgr ctrl.Manager, requireVerifiedCapabilities bool) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&agentv1alpha1.Agent{}).
 		WithValidator(&AgentCustomValidator{
-			Reader:               mgr.GetClient(),
-			CapabilityReader:     mgr.GetAPIReader(),
-			DefaultRunnerVersion: spec.DefaultRunnerVersion,
+			Reader:                      mgr.GetClient(),
+			CapabilityReader:            mgr.GetAPIReader(),
+			DefaultRunnerVersion:        spec.DefaultRunnerVersion,
+			RequireVerifiedCapabilities: requireVerifiedCapabilities,
 		}).
 		Complete()
 }
@@ -288,6 +299,14 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 
 		var capCR agentv1alpha1.Capability
 		if err := v.capabilityReader().Get(ctx, key, &capCR); err != nil {
+			if v.RequireVerifiedCapabilities {
+				// Under requireVerified, the ordering-tolerant warning becomes
+				// a denial: an unverifiable capability must never deploy.
+				allErrs = append(allErrs, field.Forbidden(attPath.Child("ref"), fmt.Sprintf(
+					"referenced Capability %s was not found and this cluster requires verified capabilities (requireVerified): "+
+						"create the Capability and wait for its Verified condition to become True before attaching it", key)))
+				continue
+			}
 			warnings = append(warnings, fmt.Sprintf(
 				"referenced Capability %s not found — compatibility and config checks run at compile time once it exists", key))
 			continue
@@ -319,6 +338,15 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 		}
 		if err := capabilitydomain.CheckRequires(capCR.Name, req, runner); err != nil {
 			allErrs = append(allErrs, field.Forbidden(attPath, err.Error()))
+		}
+
+		// requireVerified cluster policy: only Verified=True may attach.
+		// The phrasing tracks the condition state — an in-flight Unknown
+		// must read as retryable, never as "invalid" (§4.6).
+		if v.RequireVerifiedCapabilities {
+			if msg := requireVerifiedDenial(key.String(), &capCR); msg != "" {
+				allErrs = append(allErrs, field.Forbidden(attPath, msg))
+			}
 		}
 
 		// Config-schema validation (permissive skips with a loud warning).
@@ -354,6 +382,36 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 	}
 
 	return warnings, allErrs
+}
+
+// requireVerifiedDenial phrases the requireVerified admission denial for a
+// Capability whose Verified condition is not True; empty means admit. The
+// messages are product surface: they name the capability, the condition
+// state, and the reason, and they distinguish "verification in flight"
+// (retryable) from a definitive failed verification.
+func requireVerifiedDenial(capName string, capCR *agentv1alpha1.Capability) string {
+	cond := meta.FindStatusCondition(capCR.Status.Conditions, agentv1alpha1.CapabilityConditionVerified)
+	switch {
+	case cond == nil:
+		return fmt.Sprintf(
+			"Capability %s has no Verified condition yet and this cluster requires verified capabilities (requireVerified): "+
+				"verification is in flight — retry once the Capability's Verified condition is True", capName)
+	case cond.Status == metav1.ConditionTrue:
+		return ""
+	case cond.Reason == agentv1alpha1.CapabilityVerifiedReasonDisabled:
+		return fmt.Sprintf(
+			"Capability %s cannot be verified (Verified=%s, reason %s): cosign verification is disabled on this cluster "+
+				"but the requireVerified policy is enabled — enable capabilities.verification.cosign in the operator configuration",
+			capName, cond.Status, cond.Reason)
+	case cond.Status == metav1.ConditionUnknown:
+		return fmt.Sprintf(
+			"Capability %s verification is in flight (Verified=%s, reason %s) and this cluster requires verified capabilities (requireVerified): "+
+				"retry once the signature check completes — %s", capName, cond.Status, cond.Reason, cond.Message)
+	default: // ConditionFalse
+		return fmt.Sprintf(
+			"Capability %s is not verified (Verified=%s, reason %s) and this cluster requires verified capabilities (requireVerified): %s",
+			capName, cond.Status, cond.Reason, cond.Message)
+	}
 }
 
 // isJSONObject reports whether raw is a JSON object ({...}).

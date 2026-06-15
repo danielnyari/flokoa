@@ -6,6 +6,10 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
+        # controller-gen emits multi-document manifests (e.g. config/rbac/role.yaml
+        # carries a ClusterRole + a namespaced Role); Helm templates under charts/
+        # aren't valid standalone YAML, so stay excluded.
+        args: [--allow-multiple-documents]
         exclude: ^(docs/.*|operator/charts/.*|operator/test/e2e/testdata/.*\.yaml)$
       - id: check-json
         exclude: ^(.devcontainer/devcontainer.json|schemas/.*\.schema\.json)

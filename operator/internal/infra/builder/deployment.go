@@ -6,6 +6,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
@@ -22,6 +23,13 @@ const (
 	AgentSpecMountPath    = "/etc/flokoa/agent-spec.yaml"
 	AgentCardConfigMapKey = "agent-card.json"
 	AgentCardMountPath    = "/etc/flokoa/agent-card.json"
+
+	// RuntimeHealthPath is the runner's lightweight A2A health endpoint
+	// (served by flokoa.utils.router, mounted at the app root). It answers
+	// only once the FastAPI app is up — i.e. after a successful bootstrap —
+	// so the operator gates pod readiness and a slow-install startup budget on
+	// it (runtime contract §2).
+	RuntimeHealthPath = "/health"
 )
 
 // SpecConfigMapName names the compiled-spec ConfigMap for an agent.
@@ -67,6 +75,14 @@ type DeploymentParams struct {
 
 	// OTLPEndpoint configures telemetry export (empty: no exporter).
 	OTLPEndpoint string
+
+	// Capabilities are the attached Capability artifacts to deliver into the
+	// runner pod (roadmap 09); empty means no delivery machinery is emitted.
+	Capabilities []CapabilityMount
+
+	// CapabilityDelivery selects how Capabilities reach the pod
+	// (empty: DeliveryInitContainer).
+	CapabilityDelivery CapabilityDeliveryMode
 }
 
 // BuildDeployment constructs a Kubernetes Deployment for an agent.
@@ -98,7 +114,9 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 			},
 		},
 		Env:             buildEnv(params),
-		SecurityContext: restrictedContainerSecurityContext(),
+		SecurityContext: RestrictedContainerSecurityContext(),
+		StartupProbe:    runnerStartupProbe(),
+		ReadinessProbe:  runnerReadinessProbe(),
 	}
 	if params.Runtime.Resources != nil {
 		container.Resources = *params.Runtime.Resources
@@ -130,16 +148,25 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 		},
 	}
 
+	// Capability artifact delivery (roadmap 09): with zero capabilities every
+	// helper returns nil and the Deployment is byte-identical to before.
+	volumes = append(volumes, capabilityVolumes(params)...)
+	container.VolumeMounts = append(container.VolumeMounts, capabilityRunnerMounts(params)...)
+	initContainers := capabilityInitContainers(params)
+
 	podAnnotations := map[string]string{
 		"flokoa.ai/spec-hash": params.SpecHash,
 	}
 	if params.SecretsHash != "" {
 		podAnnotations["flokoa.ai/secrets-hash"] = params.SecretsHash
 	}
+	if len(params.Capabilities) > 0 {
+		podAnnotations[CapabilityDeliveryAnnotation] = string(effectiveCapabilityDelivery(params))
+	}
 
 	podSecurityContext := overrides.SecurityContext
 	if podSecurityContext == nil {
-		podSecurityContext = restrictedPodSecurityContext()
+		podSecurityContext = RestrictedPodSecurityContext()
 	}
 
 	return &appsv1.Deployment{
@@ -159,6 +186,7 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 					Annotations: podAnnotations,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers:     initContainers,
 					Containers:         []corev1.Container{container},
 					Volumes:            volumes,
 					ImagePullSecrets:   overrides.ImagePullSecrets,
@@ -169,6 +197,49 @@ func BuildDeployment(params DeploymentParams) *appsv1.Deployment {
 					Affinity:           overrides.Affinity,
 				},
 			},
+		},
+	}
+}
+
+// runnerReadinessProbe gates pod readiness on the A2A server actually
+// serving. Until the runner finishes bootstrapping (manifest → spec →
+// secrets → capability install → agent → serve) and answers RuntimeHealthPath,
+// the pod is not Ready, the Deployment reports zero availableReplicas, and the
+// published Service routes nothing to it. This closes the window in which the
+// kubelet would otherwise mark a still-bootstrapping — or crash-looping —
+// container Ready just for being "running".
+func runnerReadinessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:     healthProbeHandler(),
+		PeriodSeconds:    10,
+		TimeoutSeconds:   3,
+		FailureThreshold: 3,
+		SuccessThreshold: 1,
+	}
+}
+
+// runnerStartupProbe gives bootstrap — dominated by capability wheelhouse
+// installs (pip) — a generous budget before the readiness regime takes over.
+// Kubernetes gates readiness behind a successful startup probe, so a
+// slow-but-legitimate boot never reports Ready prematurely, while a boot that
+// never completes (e.g. a failed wheelhouse integrity check) stays not-Ready
+// the whole time. Budget: 5s × 60 = 300s.
+func runnerStartupProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:     healthProbeHandler(),
+		PeriodSeconds:    5,
+		TimeoutSeconds:   3,
+		FailureThreshold: 60,
+		SuccessThreshold: 1,
+	}
+}
+
+// healthProbeHandler is the shared HTTP GET on the runner's health endpoint.
+func healthProbeHandler() corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: RuntimeHealthPath,
+			Port: intstr.FromInt32(RuntimePort),
 		},
 	}
 }
@@ -210,7 +281,10 @@ func buildEnv(params DeploymentParams) []corev1.EnvVar {
 	return env
 }
 
-func restrictedContainerSecurityContext() *corev1.SecurityContext {
+// RestrictedContainerSecurityContext is the restricted-profile container
+// security context applied to every operator-built container (runner,
+// capability initContainers, the delivery probe pod).
+func RestrictedContainerSecurityContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
 		RunAsNonRoot:             boolPtr(true),
@@ -223,7 +297,9 @@ func restrictedContainerSecurityContext() *corev1.SecurityContext {
 	}
 }
 
-func restrictedPodSecurityContext() *corev1.PodSecurityContext {
+// RestrictedPodSecurityContext is the restricted-profile pod security
+// context counterpart of RestrictedContainerSecurityContext.
+func RestrictedPodSecurityContext() *corev1.PodSecurityContext {
 	return &corev1.PodSecurityContext{
 		RunAsNonRoot: boolPtr(true),
 		SeccompProfile: &corev1.SeccompProfile{

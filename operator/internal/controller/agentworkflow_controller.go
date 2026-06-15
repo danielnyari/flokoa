@@ -70,7 +70,8 @@ type AgentWorkflowReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=instructions,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// The workflow compiler only projects secretKeyRef into Argo templates; it
+// never reads Secret contents, so it needs no Secret RBAC of its own.
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

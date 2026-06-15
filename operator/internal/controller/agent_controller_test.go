@@ -666,6 +666,132 @@ var _ = Describe("Agent Controller", func() {
 			})
 		})
 
+		Context("Capability artifact delivery", func() {
+			makeCapability := func(name, artifact, entrypoint string) *agentv1alpha1.Capability {
+				return &agentv1alpha1.Capability{
+					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: agentNamespace},
+					Spec: agentv1alpha1.CapabilitySpec{
+						Artifact:     artifact,
+						Version:      "0.1.0",
+						Entrypoint:   entrypoint,
+						SchemaPolicy: agentv1alpha1.SchemaPolicyPermissive,
+						Requires:     agentv1alpha1.CapabilityRequires{FlokoaRunner: ">=0.2"},
+					},
+				}
+			}
+
+			It("should deliver attached Capability artifacts via copy initContainers", func() {
+				echoName := fmt.Sprintf("cap-echo-%d", time.Now().UnixNano())
+				upperName := fmt.Sprintf("cap-upper-%d", time.Now().UnixNano())
+				echoArtifact := "ghcr.io/danielnyari/capabilities/echo@sha256:" + strings.Repeat("a", 64)
+				upperArtifact := "ghcr.io/danielnyari/capabilities/upper@sha256:" + strings.Repeat("b", 64)
+
+				echo := makeCapability(echoName, echoArtifact, "flokoa_cap_echo:EchoCapability")
+				Expect(k8sClient.Create(ctx, echo)).To(Succeed())
+				defer func() { _ = k8sClient.Delete(ctx, echo) }()
+				upper := makeCapability(upperName, upperArtifact, "flokoa_cap_upper:UpperCapability")
+				Expect(k8sClient.Create(ctx, upper)).To(Succeed())
+				defer func() { _ = k8sClient.Delete(ctx, upper) }()
+
+				agent := minimalAgent(typeNamespacedName)
+				agent.Spec.Capabilities = []agentv1alpha1.CapabilityAttachment{
+					{Ref: agentv1alpha1.NamespacedRef{Name: echoName}},
+					{Ref: agentv1alpha1.NamespacedRef{Name: upperName}},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
+
+				deployment := getDeployment(ctx, typeNamespacedName)
+				pod := deployment.Spec.Template.Spec
+
+				By("Verifying one copy initContainer per capability, in declaration order")
+				Expect(pod.InitContainers).To(HaveLen(2))
+				Expect(pod.InitContainers[0].Name).To(Equal("cap-" + echoName))
+				Expect(pod.InitContainers[0].Image).To(Equal(echoArtifact), "the digest ref passes through verbatim")
+				Expect(pod.InitContainers[1].Name).To(Equal("cap-" + upperName))
+				Expect(pod.InitContainers[1].Image).To(Equal(upperArtifact))
+
+				By("Verifying subPath isolation between the copy steps")
+				Expect(pod.InitContainers[0].VolumeMounts).To(HaveLen(1))
+				Expect(pod.InitContainers[0].VolumeMounts[0].Name).To(Equal(builder.CapabilitiesVolumeName))
+				Expect(pod.InitContainers[0].VolumeMounts[0].SubPath).To(Equal(echoName))
+				Expect(pod.InitContainers[1].VolumeMounts[0].SubPath).To(Equal(upperName))
+
+				By("Verifying the shared emptyDir and the runner's read-only view")
+				var capVolumes []corev1.Volume
+				for _, v := range pod.Volumes {
+					if v.Name == builder.CapabilitiesVolumeName {
+						capVolumes = append(capVolumes, v)
+					}
+				}
+				Expect(capVolumes).To(HaveLen(1))
+				Expect(capVolumes[0].EmptyDir).NotTo(BeNil())
+
+				container := firstContainer(deployment)
+				Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+					Name:      builder.CapabilitiesVolumeName,
+					MountPath: builder.CapabilitiesMountPath,
+					ReadOnly:  true,
+				}))
+
+				By("Verifying the delivery-mode annotation")
+				Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue(
+					builder.CapabilityDeliveryAnnotation, string(builder.DeliveryInitContainer),
+				))
+			})
+
+			It("should refuse delivery for a capability whose name is not a DNS label", func() {
+				// The webhook enforces DNS-label capability names at
+				// admission, but the name becomes a container name and a
+				// volume subPath — the mapping must not trust that invariant
+				// blindly. No webhooks run in this suite, so the dotted name
+				// (a valid object name) is creatable.
+				dottedName := fmt.Sprintf("cap.dotted.%d", time.Now().UnixNano())
+				dotted := makeCapability(dottedName,
+					"ghcr.io/danielnyari/capabilities/dotted@sha256:"+strings.Repeat("c", 64),
+					"flokoa_cap_dotted:DottedCapability")
+				Expect(k8sClient.Create(ctx, dotted)).To(Succeed())
+				defer func() { _ = k8sClient.Delete(ctx, dotted) }()
+
+				agent := minimalAgent(typeNamespacedName)
+				agent.Spec.Capabilities = []agentv1alpha1.CapabilityAttachment{
+					{Ref: agentv1alpha1.NamespacedRef{Name: dottedName}},
+				}
+				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+				r := newAgentReconciler()
+				_, err := reconcileOnce(ctx, r, typeNamespacedName) // finalizer pass
+				Expect(err).NotTo(HaveOccurred())
+				_, err = reconcileOnce(ctx, r, typeNamespacedName)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("cannot be used for artifact delivery"))
+				Expect(err.Error()).To(ContainSubstring(dottedName))
+
+				By("Verifying no Deployment was emitted for the rejected name")
+				deployment := &appsv1.Deployment{}
+				getErr := k8sClient.Get(ctx, typeNamespacedName, deployment)
+				Expect(errors.IsNotFound(getErr)).To(BeTrue(), "no Deployment must exist, got %v", getErr)
+			})
+
+			It("should keep the pod template free of delivery machinery without capabilities", func() {
+				Expect(k8sClient.Create(ctx, minimalAgent(typeNamespacedName))).To(Succeed())
+
+				r := newAgentReconciler()
+				reconcileAgent(ctx, r, typeNamespacedName)
+
+				deployment := getDeployment(ctx, typeNamespacedName)
+				pod := deployment.Spec.Template.Spec
+
+				Expect(pod.InitContainers).To(BeEmpty())
+				for _, v := range pod.Volumes {
+					Expect(v.Name).NotTo(Equal(builder.CapabilitiesVolumeName))
+				}
+				Expect(deployment.Spec.Template.Annotations).NotTo(HaveKey(builder.CapabilityDeliveryAnnotation))
+			})
+		})
+
 		Context("Watch handlers", func() {
 			It("findAgentsForModel should return agents referencing the given Model", func() {
 				modelName := fmt.Sprintf("watch-model-%d", time.Now().UnixNano())
@@ -775,30 +901,6 @@ var _ = Describe("Agent Controller", func() {
 
 				r := newAgentReconciler()
 				requests := r.findAgentsForCapability(ctx, capability)
-				Expect(requests).To(ContainElement(reconcile.Request{NamespacedName: typeNamespacedName}))
-			})
-
-			It("findAgentsForSecret should return agents with a matching secretRef", func() {
-				secretName := fmt.Sprintf("watch-secret-%d", time.Now().UnixNano())
-
-				agent := minimalAgent(typeNamespacedName)
-				agent.Spec.SecretRefs = map[string]corev1.SecretKeySelector{
-					"github-token": {
-						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-						Key:                  "token",
-					},
-				}
-				Expect(k8sClient.Create(ctx, agent)).To(Succeed())
-
-				secret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: agentNamespace},
-					Data:       map[string][]byte{"token": []byte("t")},
-				}
-				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-				defer func() { _ = k8sClient.Delete(ctx, secret) }()
-
-				r := newAgentReconciler()
-				requests := r.findAgentsForSecret(ctx, secret)
 				Expect(requests).To(ContainElement(reconcile.Request{NamespacedName: typeNamespacedName}))
 			})
 		})

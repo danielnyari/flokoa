@@ -5,11 +5,13 @@ on:
     paths:
       - 'sdk/python/**'
       - 'operator/internal/spec/schemas/**'
+      - 'operator/test/e2e/fixtures/capabilities/**'
       - '.github/workflows/test-python.yml'
   pull_request:
     paths:
       - 'sdk/python/**'
       - 'operator/internal/spec/schemas/**'
+      - 'operator/test/e2e/fixtures/capabilities/**'
       - '.github/workflows/test-python.yml'
 
 permissions:
@@ -65,3 +67,48 @@ jobs:
           files: sdk/python/flokoa/coverage.xml
           flags: python-sdk
           name: python-sdk-coverage
+
+  # Docker-gated `flokoa capability build` integration tests (roadmap 10).
+  # Marker-gated (`-m integration`): the job above stays fast — the markers
+  # are skipped there and only run here, against a locally built runner image.
+  capability-cli-integration:
+    name: Capability CLI Integration Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      # `flokoa capability build` exports the artifact image as an OCI-layout
+      # tar (docker buildx build --output type=oci), which the runner's default
+      # `docker` buildx driver cannot do ("OCI exporter is not supported for
+      # the docker driver"). A docker-container-driver builder provides the OCI
+      # exporter; the runner image below then uses `buildx build --load` so it
+      # still lands in the daemon for the wheelhouse `docker run`.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sdk/python/uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: sdk/python/.python-version
+
+      - name: Install dependencies
+        run: uv sync --all-packages --all-extras
+
+      - name: Build the pinned runner image locally
+        run: docker buildx build --load -f flokoa-runner/Dockerfile -t flokoa-runner:ci .
+
+      - name: Run capability CLI integration tests
+        working-directory: sdk/python/flokoa
+        env:
+          FLOKOA_RUNNER_IMAGE: flokoa-runner:ci
+        run: uv run python -m pytest -m integration tests/flokoa_cli/capability_cli

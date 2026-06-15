@@ -473,3 +473,172 @@ func TestAgentWebhookDeniesUnknownRunnerVersionWithCapabilities(t *testing.T) {
 		t.Fatalf("unknown runner version must be denied when capabilities are attached, got %v", err)
 	}
 }
+
+// --- requireVerified cluster policy (roadmap 09) ---
+
+// withVerified returns a mutator stamping the Verified condition.
+func withVerified(status metav1.ConditionStatus, reason, message string) func(*agentv1alpha1.Capability) {
+	return func(c *agentv1alpha1.Capability) {
+		c.Status.Conditions = []metav1.Condition{{
+			Type:               agentv1alpha1.CapabilityConditionVerified,
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
+			LastTransitionTime: metav1.Now(),
+		}}
+	}
+}
+
+func requireVerifiedValidator(t *testing.T, objs ...client.Object) *AgentCustomValidator {
+	t.Helper()
+	return &AgentCustomValidator{
+		Reader:                      readerWith(t, objs...),
+		RequireVerifiedCapabilities: true,
+	}
+}
+
+func TestAgentWebhookRequireVerifiedAdmitsVerifiedCapability(t *testing.T) {
+	verified := capabilityCR("kb", withVerified(metav1.ConditionTrue,
+		agentv1alpha1.CapabilityVerifiedReasonVerified, "cosign signature verified"))
+	v := requireVerifiedValidator(t, verified)
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatalf("a verified capability must be admitted under requireVerified, got %v", err)
+	}
+}
+
+func TestAgentWebhookRequireVerifiedDeniesUnverifiedCapability(t *testing.T) {
+	unverified := capabilityCR("kb", withVerified(metav1.ConditionFalse,
+		agentv1alpha1.CapabilityVerifiedReasonInvalid, "signature did not verify"))
+	v := requireVerifiedValidator(t, unverified)
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("an unverified capability must be denied under requireVerified")
+	}
+	// Exact message content is product surface: capability, status, reason.
+	for _, want := range []string{
+		"Capability default/kb is not verified",
+		"Verified=False",
+		"reason SignatureInvalid",
+		"requireVerified",
+		"signature did not verify",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("denial %q should contain %q", err.Error(), want)
+		}
+	}
+}
+
+func TestAgentWebhookRequireVerifiedDeniesMissingSignature(t *testing.T) {
+	missing := capabilityCR("kb", withVerified(metav1.ConditionFalse,
+		agentv1alpha1.CapabilityVerifiedReasonMissing, "no cosign signature found"))
+	v := requireVerifiedValidator(t, missing)
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "reason SignatureMissing") {
+		t.Fatalf("an unsigned capability must be denied naming the reason, got %v", err)
+	}
+}
+
+func TestAgentWebhookRequireVerifiedInFlightReadsAsRetryable(t *testing.T) {
+	// Transient nuance (§4.6): Unknown/VerifyError must read as a retryable
+	// in-flight verification, never as "invalid".
+	inFlight := capabilityCR("kb", withVerified(metav1.ConditionUnknown,
+		agentv1alpha1.CapabilityVerifiedReasonError, "registry unavailable"))
+	v := requireVerifiedValidator(t, inFlight)
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("an in-flight verification must still deny under requireVerified")
+	}
+	for _, want := range []string{"verification is in flight", "Verified=Unknown", "reason VerifyError", "retry"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("denial %q should contain %q", err.Error(), want)
+		}
+	}
+	// The aggregate error wrapper always says `is invalid`; the policy
+	// message itself must not call the capability unverified or its
+	// signature invalid.
+	for _, reject := range []string{"not verified", "SignatureInvalid"} {
+		if strings.Contains(err.Error(), reject) {
+			t.Errorf("an in-flight denial must not read as %q: %q", reject, err.Error())
+		}
+	}
+}
+
+func TestAgentWebhookRequireVerifiedNoConditionReadsAsRetryable(t *testing.T) {
+	// A Capability the controller hasn't reconciled yet has no Verified
+	// condition at all — also in flight, also retryable.
+	fresh := capabilityCR("kb")
+	v := requireVerifiedValidator(t, fresh)
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("a not-yet-verified capability must be denied under requireVerified")
+	}
+	for _, want := range []string{"has no Verified condition yet", "verification is in flight", "retry"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("denial %q should contain %q", err.Error(), want)
+		}
+	}
+}
+
+func TestAgentWebhookRequireVerifiedNamesDisabledVerification(t *testing.T) {
+	// Misconfiguration surface: the policy is on but verification is off
+	// (the chart and the operator entrypoint both refuse this; the webhook
+	// still phrases it helpfully if it happens).
+	disabled := capabilityCR("kb", withVerified(metav1.ConditionUnknown,
+		agentv1alpha1.CapabilityVerifiedReasonDisabled, "cosign verification is not enabled on this cluster"))
+	v := requireVerifiedValidator(t, disabled)
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), "cosign verification is disabled on this cluster") {
+		t.Fatalf("the disabled-verification case must be named explicitly, got %v", err)
+	}
+}
+
+func TestAgentWebhookRequireVerifiedDeniesMissingCapability(t *testing.T) {
+	// Without the policy a missing CR is an ordering-tolerant warning; under
+	// requireVerified an unverifiable capability must never deploy.
+	v := requireVerifiedValidator(t) // no Capability exists
+	agent := attachedAgent(t, nil, "kb")
+
+	warnings, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("a missing Capability must be denied under requireVerified")
+	}
+	for _, want := range []string{
+		"Capability default/kb was not found",
+		"requireVerified",
+		"Verified condition to become True",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("denial %q should contain %q", err.Error(), want)
+		}
+	}
+	for _, w := range warnings {
+		if strings.Contains(w, "not found") {
+			t.Errorf("the missing-CR warning must be replaced by the denial, got warning %q", w)
+		}
+	}
+}
+
+func TestAgentWebhookWithoutPolicyIgnoresVerifiedCondition(t *testing.T) {
+	// requireVerified off (the default): an unverified capability attaches
+	// fine — verification is observability, not policy.
+	unverified := capabilityCR("kb", withVerified(metav1.ConditionFalse,
+		agentv1alpha1.CapabilityVerifiedReasonMissing, "no cosign signature found"))
+	v := &AgentCustomValidator{Reader: readerWith(t, unverified)}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatalf("without requireVerified the Verified condition must not gate admission, got %v", err)
+	}
+}

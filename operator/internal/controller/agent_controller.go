@@ -44,7 +44,13 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
+// The operator never caches Secrets. Agent secret content is read on demand
+// through an uncached APIReader (to hash resourceVersions and flag missing
+// refs); rotation rolls pods at the next reconcile rather than via a Secret
+// watch. So Secrets need get alone, cluster-wide — no list/watch, which on
+// Secrets would let the operator enumerate and stream every value in the
+// cluster. See also the cosign registry Secret read in internal/infra/verify.
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get
 
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -125,10 +131,6 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&agentv1alpha1.Instruction{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForInstruction),
-		).
-		Watches(
-			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.findAgentsForSecret),
 		).
 		Watches(
 			&agentv1alpha1.Model{},

@@ -29,6 +29,28 @@ The custom-image escape hatch plus scheduling overrides:
 
 **Use when:** You need fine-grained control over scheduling, security, and observability.
 
+### Capability examples
+
+A published [`Capability`](../capability.md) and an Agent that attaches it.
+Together they show the shape `flokoa capability push` produces and how an Agent
+consumes it; see the [capabilities guide](../guides/capabilities.md) for how to
+author, build, and publish one.
+
+#### [capability/echo-capability.yaml](capability/echo-capability.yaml)
+A digest-pinned Capability with a typed (`schemaPolicy: strict`) config schema,
+mirroring the `echo` fixture
+(`operator/test/e2e/fixtures/capabilities/echo/`). The `configSchema` is what
+attaching agents validate their per-capability `config` against at admission.
+
+**Use when:** You want to see the published Capability CR shape.
+
+#### [capability/agent-with-capability.yaml](capability/agent-with-capability.yaml)
+An Agent attaching the echo Capability by name with per-agent `config`
+(`prefix: "agent-echo"`), validated against the capability's schema before any
+pod starts.
+
+**Use when:** You want to attach a published capability to an agent.
+
 ## Applying Examples
 
 ```bash

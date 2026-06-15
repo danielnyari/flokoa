@@ -1,0 +1,22 @@
+# Kind config for the advisory ImageVolume e2e job (roadmap 09): the base
+# kind-config.yaml plus the ImageVolume feature gate, enabled across all
+# components. ImageVolume is beta since Kubernetes 1.33 (default-off until
+# 1.35) and needs containerd 2.x in the node image — use this config with a
+# kind release >= v0.32.0 and a 1.35+ node image (the CI job pins one).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+featureGates:
+  ImageVolume: true
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        evictionHard:
+          memory.available: "100Mi"
+          nodefs.available: "3%"
+          imagefs.available: "3%"
+        evictionSoft:
+          memory.available: "200Mi"
+        evictionSoftGracePeriod:
+          memory.available: "1m"

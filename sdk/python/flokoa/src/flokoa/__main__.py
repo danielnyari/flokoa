@@ -7,10 +7,15 @@ from pathlib import Path
 import click
 import uvicorn
 
+from flokoa.capability_cli import capability
+
 
 @click.group()
 def cli() -> None:
     """Flokoa - AI Agent platform CLI."""
+
+
+cli.add_command(capability)
 
 
 @cli.command()

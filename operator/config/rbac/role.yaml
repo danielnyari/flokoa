@@ -23,8 +23,6 @@ rules:
   - secrets
   verbs:
   - get
-  - list
-  - watch
 - apiGroups:
   - agent.flokoa.ai
   resources:
@@ -111,4 +109,29 @@ rules:
   - list
   - patch
   - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: manager-role
+  namespace: flokoa-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
   - watch

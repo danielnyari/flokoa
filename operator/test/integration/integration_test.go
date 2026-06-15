@@ -154,7 +154,7 @@ var _ = Describe("Operator integration (manager-driven)", Ordered, func() {
 		Expect(cm.Data[builder.AgentSpecConfigMapKey]).To(ContainSubstring("Always answer in English."))
 	})
 
-	It("rolls the secrets hash when the provider API key rotates (watch-driven)", func() {
+	It("rolls the secrets hash on the next reconcile after the provider API key rotates (lazy)", func() {
 		deployment := &appsv1.Deployment{}
 		Expect(k8sClient.Get(ctx, nn("petstore-agent"), deployment)).To(Succeed())
 		before := deployment.Spec.Template.Annotations["flokoa.ai/secrets-hash"]
@@ -164,6 +164,19 @@ var _ = Describe("Operator integration (manager-driven)", Ordered, func() {
 		Expect(k8sClient.Get(ctx, nn("openai-api-key"), secret)).To(Succeed())
 		secret.StringData = map[string]string{"api-key": "sk-rotated"}
 		Expect(k8sClient.Update(ctx, secret)).To(Succeed())
+
+		// The operator no longer watches Secrets — it reads their values on
+		// demand through an uncached APIReader, never caching or watching them,
+		// so a cluster-wide Secret get is the only RBAC it needs. The rotation
+		// therefore does not re-enqueue the agent on its own; the new value is
+		// picked up (and the secrets hash rolls) on the next reconcile, here
+		// triggered by an unrelated change to the Agent.
+		agent := getAgent()
+		if agent.Annotations == nil {
+			agent.Annotations = map[string]string{}
+		}
+		agent.Annotations["flokoa.ai/integration-nudge"] = "secret-rotated"
+		Expect(k8sClient.Update(ctx, agent)).To(Succeed())
 
 		Eventually(func() string {
 			d := &appsv1.Deployment{}

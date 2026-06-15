@@ -175,3 +175,25 @@ Webhook serving certificate secret name.
 {{- define "flokoa.webhook.certSecretName" -}}
 {{- default (printf "%s-webhook-server-cert" (include "flokoa.fullname" .) | trunc 63 | trimSuffix "-") .Values.webhooks.certSecretName }}
 {{- end }}
+
+{{/*
+Validate the capabilities.verification block (roadmap 09). Renders nothing on
+success; fails the release on contradictory config:
+- requireVerified without cosign verification would deny every capability
+  attachment (the Verified condition stays Unknown forever).
+- cosign enabled needs exactly one mode: keySecretRef, or BOTH keyless fields.
+*/}}
+{{- define "flokoa.validateCapabilitiesVerification" -}}
+{{- $v := .Values.capabilities.verification -}}
+{{- if and $v.requireVerified (not $v.cosign.enabled) -}}
+{{- fail "capabilities.verification.requireVerified requires capabilities.verification.cosign.enabled: without signature verification the Verified condition stays Unknown and the policy would deny every capability attachment" -}}
+{{- end -}}
+{{- if $v.cosign.enabled -}}
+{{- if and $v.cosign.keySecretRef (or $v.cosign.keyless.issuer $v.cosign.keyless.identityRegexp) -}}
+{{- fail "capabilities.verification.cosign: configure either keySecretRef (key-based) or the keyless block, not both" -}}
+{{- end -}}
+{{- if and (not $v.cosign.keySecretRef) (not (and $v.cosign.keyless.issuer $v.cosign.keyless.identityRegexp)) -}}
+{{- fail "capabilities.verification.cosign.enabled requires keySecretRef, or BOTH keyless.issuer and keyless.identityRegexp (identity-free keyless verification is rejected)" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}

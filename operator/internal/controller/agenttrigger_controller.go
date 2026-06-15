@@ -54,7 +54,9 @@ type AgentTriggerReconciler struct {
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agenttriggers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=agent.flokoa.ai,resources=agents,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
+// Trigger secret refs (auth + push-notification tokens) are read by name
+// through an uncached APIReader, never cached or watched — get alone.
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get
 // +kubebuilder:rbac:groups=argoproj.io,resources=sensors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=argoproj.io,resources=eventsources,verbs=get;list;watch
 // +kubebuilder:rbac:groups=argoproj.io,resources=eventbus,verbs=get;list;watch

@@ -46,6 +46,48 @@ platformCapabilities:
     # -- Inject flokoa.platform/telemetry into every compiled spec
     enabled: true
 
+# -- Capability artifact delivery & verification (roadmap 09)
+capabilities:
+  delivery:
+    # -- How capability artifacts reach runner pods:
+    # initContainer (default, works everywhere) | imageVolume (requires the
+    # ImageVolume feature gate and containerd 2.x — trusted, not probed) |
+    # auto (probe at operator startup; silent fallback to initContainer —
+    # inspect the flokoa-capability-delivery ConfigMap for the result)
+    mode: initContainer
+    probe:
+      # -- Probe timeout for auto mode
+      timeoutSeconds: 60
+      # -- Image used for the probe pod and its image volume
+      # (empty: the operator's pinned runner image)
+      image: ""
+  verification:
+    cosign:
+      # -- Verify capability artifact cosign signatures in the Capability
+      # controller (drives the Verified condition). Configure either
+      # keySecretRef (key-based) or both keyless fields — exactly one mode.
+      enabled: false
+      # -- Key-based mode: name of a Secret in the operator namespace holding
+      # the cosign public key under the "cosign.pub" key (mounted read-only
+      # into the controller).
+      keySecretRef: ""
+      # -- Keyless mode (Fulcio/Rekor): BOTH must be set when keySecretRef is
+      # empty. Identity-free or wildcard-only policies are rejected.
+      keyless:
+        # -- Exact OIDC issuer required on the signing certificate,
+        # e.g. https://token.actions.githubusercontent.com
+        issuer: ""
+        # -- Regexp the certificate identity (SAN) must match
+        identityRegexp: ""
+    # -- Name of a kubernetes.io/dockerconfigjson Secret in the operator
+    # namespace used for registry access during verification (private
+    # artifact registries). Empty: ambient credentials only.
+    registrySecretRef: ""
+    # -- Cluster policy: Capabilities whose Verified condition is not True
+    # cannot be attached to Agents (admission denial + compile-time denial).
+    # Requires cosign.enabled — the chart refuses the combination otherwise.
+    requireVerified: false
+
 # =============================================================================
 # Admission webhooks
 # =============================================================================

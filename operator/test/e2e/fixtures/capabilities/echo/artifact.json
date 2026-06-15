@@ -1,0 +1,23 @@
+{
+  "name": "flokoa-cap-echo",
+  "version": "0.1.0",
+  "contractVersion": 1,
+  "entrypoint": "flokoa_cap_echo:EchoCapability",
+  "requires": {
+    "python": "3.13",
+    "pydantic-ai": ">=1.107,<2",
+    "flokoa-runner": ">=0.2"
+  },
+  "dependencies": [],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "prefix": {
+        "type": "string",
+        "default": "echo",
+        "description": "Prefix prepended to every echoed message."
+      }
+    },
+    "additionalProperties": false
+  }
+}
