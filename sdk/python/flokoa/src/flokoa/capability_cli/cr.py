@@ -46,6 +46,30 @@ _CR_HEADER = """\
 """
 
 
+def _provenance_doc(manifest: ArtifactManifest) -> dict[str, Any]:
+    """Mirror the manifest's git/pypi provenance into the CR spec shape.
+
+    image/builtin builds carry no provenance (the source field alone is the
+    record), so this returns an empty dict for them. The git URL recorded here
+    is the clean repository URL — provenance never carries credentials (§4.3).
+    """
+    if manifest.provenance is None:
+        return {}
+    provenance: dict[str, Any] = {}
+    git = manifest.provenance.git
+    if git is not None:
+        git_doc: dict[str, Any] = {"url": git.url, "commit": git.commit}
+        if git.ref:
+            git_doc["ref"] = git.ref
+        if git.subdirectory:
+            git_doc["subdirectory"] = git.subdirectory
+        provenance["git"] = git_doc
+    pypi = manifest.provenance.pypi
+    if pypi is not None:
+        provenance["pypi"] = {"requirement": pypi.requirement}
+    return provenance
+
+
 def validate_cr_name(name: str) -> str:
     try:
         _dns_label_adapter.validate_python(name)
@@ -66,6 +90,7 @@ def capability_cr_doc(name: str, tag: str, manifest: ArtifactManifest, *, permis
     spec: dict[str, Any] = {
         "artifact": f"{tag}@sha256:{DIGEST_PLACEHOLDER}",
         "version": manifest.version,
+        "source": manifest.source,
         "entrypoint": manifest.entrypoint,
         "requires": {},
     }
@@ -79,6 +104,9 @@ def capability_cr_doc(name: str, tag: str, manifest: ArtifactManifest, *, permis
         spec["serializationName"] = manifest.serialization_name
     if manifest.dependencies:
         spec["dependencies"] = list(manifest.dependencies)
+    provenance = _provenance_doc(manifest)
+    if provenance:
+        spec["provenance"] = provenance
     if permissive:
         spec["schemaPolicy"] = "permissive"
     elif manifest.config_schema is not None:

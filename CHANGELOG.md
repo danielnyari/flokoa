@@ -49,6 +49,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `search`/`list` merge a v1 JSON index with in-cluster Capability CRs,
   flagging permissive entries. Authoring guide:
   [docs/guides/capabilities.md](docs/guides/capabilities.md).
+- **Capability sourcing tiers & provenance**: a new `spec.source` tier on the
+  `Capability` CRD (`builtin` | `image` | `git` | `pypi`, default `image`)
+  records where a capability's code came from, ordered safest → riskiest, and
+  lets an operator refuse sources it doesn't trust. `spec.artifact` is now
+  optional — required for `image`/`git`/`pypi`, forbidden for `builtin` — with a
+  `Source` printcolumn and `spec.provenance.git`/`.pypi` origin metadata.
+  - **Built-in tier**: the first-party capability set (currently
+    `flokoa-openapi`, entrypoint `flokoa_openapi.capability:OpenAPI`) is now
+    **baked into the runner image** and shipped as generated `source: builtin`
+    Capability CRs via the Helm chart (`capabilities.builtin.install`, default
+    true). Attaching one downloads nothing — no artifact, no initContainer —
+    and a `source: builtin` CR is matched against the operator's embedded
+    `builtinCapabilities` metadata (no trust-me). Its `Verified` condition
+    short-circuits to `True / BuiltIn` (integrity bound by the runner image
+    digest). This subsumes the deferred registry seeding.
+  - **Image tier**: `flokoa capability build` now builds inside a published
+    `flokoa-capability-base` image (the runner baseline + build front-end) by
+    default, retiring the per-build `ensurepip` hack; `--base-image`/
+    `--base-version` override (`--runner-image`/`--runner-version` retained as
+    aliases). A local `PATH` build records `source: image`.
+  - **Git tier**: `flokoa capability build --from-git git+https://… / git+ssh://…
+    [@ref] [#subdirectory=…]` builds a normal signed artifact from a (typically
+    private) repo at build time — nothing is fetched from git at deploy/run
+    time. Auth is ambient-first (git credential helper / `gh auth token` / SSH
+    agent socket) with a `GITHUB_TOKEN`/`GH_TOKEN` fallback; the token never
+    reaches the artifact, CR, or any log. Provenance records the clean repo URL
+    + resolved commit.
+  - **PyPI tier gated**: `--from-pypi` now requires an explicit `--allow-pypi`
+    acknowledgment and prints a loud EXTREMELY-DANGEROUS banner, stamping
+    `source: pypi`; `import` inherits the gate. A new cluster policy
+    `capabilities.policy.allowedSources` (default empty = allow all four) refuses
+    disallowed sources at **both** admission and compile, mirroring
+    `requireVerified`. `search`/`list` gained a `TIER` column flagging `pypi`.
+  - The artifact `manifest.json` and runner manifest gained additive optional
+    `source`/`provenance` and `builtinCapabilities` fields (contract version
+    unchanged). See [ADR-003](docs/design-docs/adr-003-capability-source-tiers.md).
 
 ## [0.2.0] - 2026-06-11
 

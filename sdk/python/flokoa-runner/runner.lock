@@ -176,6 +176,7 @@ httpx==0.28.1
     #   cohere
     #   fastmcp-slim
     #   flokoa-common
+    #   flokoa-openapi
     #   google-genai
     #   groq
     #   huggingface-hub
@@ -395,6 +396,7 @@ pydantic==2.12.5
 pydantic-ai==1.107.0
     # via
     #   flokoa
+    #   flokoa-openapi
     #   flokoa-runner
 pydantic-ai-slim==1.107.0
     # via
@@ -442,6 +444,7 @@ pyyaml==6.0.3
     # via
     #   fastmcp-slim
     #   flokoa
+    #   flokoa-openapi
     #   flokoa-runner
     #   huggingface-hub
     #   jsonschema-path

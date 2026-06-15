@@ -1,0 +1,47 @@
+# A git-sourced Capability CR (source tier `git`).
+#
+# This is the shape `flokoa capability build --from-git ... && flokoa capability
+# push` produces: a NORMAL, self-contained, digest-pinned wheelhouse artifact —
+# the git clone happens at build time, nothing is fetched from git at deploy or
+# run time. What `git` adds over the default `image` tier is the recorded origin
+# provenance (the clean repo URL + the RESOLVED commit, which pins the exact
+# code built even if the branch/tag later moves). No credential material is ever
+# recorded.
+#
+# An operator can refuse the `git` tier (or any tier) cluster-wide via
+# capabilities.policy.allowedSources. See docs/capability.md (Source tiers) and
+# docs/guides/capabilities.md (Building from a private git repo). The digest and
+# commit below are illustrative — `push` records the real digest, the build
+# records the real commit.
+apiVersion: agent.flokoa.ai/v1alpha1
+kind: Capability
+metadata:
+  name: private-cap
+spec:
+  source: git
+  # Digest-pinned wheelhouse artifact (runtime contract §4). Required for git
+  # (and image/pypi); admission rejects tag refs.
+  artifact: ghcr.io/org/capabilities/private-cap@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  version: 1.2.0
+  entrypoint: private_cap.capability:PrivateCapability
+  schemaPolicy: strict
+  configSchema:
+    type: object
+    properties:
+      endpoint:
+        type: string
+        pattern: "^https://"
+    required: [endpoint]
+    additionalProperties: false
+  requires:
+    python: "3.13"
+    pydanticAI: ">=1.107,<2"
+    flokoaRunner: ">=0.2"
+  # Source-origin provenance: the clean repo URL + the resolved commit (the
+  # durable record). `ref`/`subdirectory` are recorded when given. No token, ever.
+  provenance:
+    git:
+      url: https://github.com/org/private-cap
+      ref: v1.2.0
+      commit: 0123456789abcdef0123456789abcdef01234567
+      subdirectory: pkg/cap

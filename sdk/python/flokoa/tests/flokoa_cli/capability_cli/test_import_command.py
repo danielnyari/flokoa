@@ -92,6 +92,15 @@ class TestNonInteractive:
         assert kwargs["cr_name_opt"] == "foo-cap"
         assert kwargs["skip_smoke_test"] is False
 
+    def test_import_inherits_pypi_acknowledgment(self, harness) -> None:
+        """import IS a PyPI build, so it implies --allow-pypi for the build it runs
+        (build still prints the danger banner + stamps source: pypi)."""
+        result, build_calls, _ = harness("--yes")
+        assert result.exit_code == 0, result.output
+        kwargs = build_calls[-1]
+        assert kwargs["allow_pypi"] is True
+        assert kwargs["from_git"] is None
+
     def test_push_options_forwarded(self, harness, tmp_path: Path) -> None:
         key = tmp_path / "cosign.key"
         key.write_text("key")

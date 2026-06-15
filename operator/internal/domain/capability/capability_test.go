@@ -510,6 +510,59 @@ func TestValidateEntryName(t *testing.T) {
 	}
 }
 
+func TestValidateBuiltinEntryName(t *testing.T) {
+	tests := []struct {
+		name    string
+		entry   string
+		wantErr string
+	}{
+		{name: "first-party dotted namespace", entry: "flokoa.OpenAPI"},
+		{name: "plain class name", entry: "OpenAPI"},
+		{name: "reserved platform prefix", entry: "flokoa.platform/telemetry", wantErr: "reserved"},
+		{name: "contains slash", entry: "flokoa/OpenAPI", wantErr: "must not contain"},
+		{name: "contains colon", entry: "mod:OpenAPI", wantErr: "must not contain"},
+		{name: "empty", entry: "", wantErr: "must not be empty"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateBuiltinEntryName(tt.entry)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateBuiltinEntryName(%q) = %v, want nil", tt.entry, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ValidateBuiltinEntryName(%q) = %v, want error containing %q", tt.entry, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSchemasMatch(t *testing.T) {
+	// Whole-number float defaults must compare equal across the YAML/JSON
+	// round-trip: "30.0" (raw JSON literal) and "30" (after a float64 round-trip
+	// through the apiserver) are the same schema.
+	withFloat := []byte(`{"type":"object","properties":{"timeout":{"default":30.0,"type":"number"}}}`)
+	withInt := []byte(`{"properties":{"timeout":{"type":"number","default":30}},"type":"object"}`)
+	match, err := SchemasMatch(withFloat, withInt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("schemas differing only by 30.0 vs 30 and key order must match")
+	}
+
+	different := []byte(`{"type":"object","properties":{"timeout":{"default":60,"type":"number"}}}`)
+	match, err = SchemasMatch(withFloat, different)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if match {
+		t.Error("schemas with different default values must not match")
+	}
+}
+
 func TestCompileSchemaRejectsExternalRef(t *testing.T) {
 	// A file:// $ref must not be resolved against the operator pod filesystem.
 	if err := CompileSchema([]byte(`{"$ref":"file:///etc/hostname"}`)); err == nil {

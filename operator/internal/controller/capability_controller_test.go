@@ -97,6 +97,28 @@ var _ = Describe("Capability Controller", func() {
 			Expect(verified.Status).To(Equal(metav1.ConditionUnknown))
 		})
 
+		It("short-circuits Verified=True/BuiltIn for a source: builtin capability", func() {
+			// Built-in capabilities have no artifact to cosign-verify; their
+			// integrity rides on the runner image digest (§8.3). The reconciler
+			// short-circuits to Verified=True/BuiltIn even with no verifier
+			// wired, so requireVerified clusters keep working with the most-
+			// trusted tier.
+			builtin := newCapability(agentv1alpha1.SchemaPolicyStrict)
+			builtin.Spec.Source = agentv1alpha1.CapabilitySourceBuiltin
+			builtin.Spec.Artifact = "" // builtin carries no artifact
+			Expect(k8sClient.Create(ctx, builtin)).To(Succeed())
+			reconcileOnce()
+
+			c := &agentv1alpha1.Capability{}
+			Expect(k8sClient.Get(ctx, nn, c)).To(Succeed())
+
+			verified := meta.FindStatusCondition(c.Status.Conditions, agentv1alpha1.CapabilityConditionVerified)
+			Expect(verified).NotTo(BeNil())
+			Expect(verified.Status).To(Equal(metav1.ConditionTrue))
+			Expect(verified.Reason).To(Equal(agentv1alpha1.CapabilityVerifiedReasonBuiltIn))
+			Expect(verified.Message).To(ContainSubstring("runner image digest"))
+		})
+
 		It("skips the status write when a second reconcile changes nothing", func() {
 			Expect(k8sClient.Create(ctx, newCapability(agentv1alpha1.SchemaPolicyStrict))).To(Succeed())
 			reconcileOnce()

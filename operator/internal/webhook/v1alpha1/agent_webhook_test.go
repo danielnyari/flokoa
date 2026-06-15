@@ -642,3 +642,128 @@ func TestAgentWebhookWithoutPolicyIgnoresVerifiedCondition(t *testing.T) {
 		t.Fatalf("without requireVerified the Verified condition must not gate admission, got %v", err)
 	}
 }
+
+// --- allowedSources cluster policy (source tiers PR1) ---
+
+// withSource returns a mutator stamping the Capability's source tier.
+func withSource(source agentv1alpha1.CapabilitySource) func(*agentv1alpha1.Capability) {
+	return func(c *agentv1alpha1.Capability) { c.Spec.Source = source }
+}
+
+func TestAgentWebhookAllowedSourcesEmptyAdmitsAll(t *testing.T) {
+	// Empty allowedSources = no restriction: every tier attaches, including
+	// the dangerous pypi tier.
+	for _, source := range []agentv1alpha1.CapabilitySource{
+		agentv1alpha1.CapabilitySourceBuiltin,
+		agentv1alpha1.CapabilitySourceImage,
+		agentv1alpha1.CapabilitySourceGit,
+		agentv1alpha1.CapabilitySourcePypi,
+	} {
+		cap := capabilityCR("kb", withSource(source))
+		if source == agentv1alpha1.CapabilitySourceBuiltin {
+			cap.Spec.Artifact = "" // builtin carries no artifact
+		}
+		v := &AgentCustomValidator{Reader: readerWith(t, cap)} // AllowedSources nil
+		agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+		if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+			t.Fatalf("empty allowedSources must admit source %q, got %v", source, err)
+		}
+	}
+}
+
+func TestAgentWebhookAllowedSourcesDeniesDisallowedTier(t *testing.T) {
+	// allowedSources = [builtin, image, git]: a pypi attachment is denied with
+	// the exact policy message naming the offending source and the policy set.
+	pypiCap := capabilityCR("kb", withSource(agentv1alpha1.CapabilitySourcePypi))
+	v := &AgentCustomValidator{
+		Reader: readerWith(t, pypiCap),
+		AllowedSources: []agentv1alpha1.CapabilitySource{
+			agentv1alpha1.CapabilitySourceBuiltin,
+			agentv1alpha1.CapabilitySourceImage,
+			agentv1alpha1.CapabilitySourceGit,
+		},
+	}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil {
+		t.Fatal("a pypi attachment must be denied when pypi is not in allowedSources")
+	}
+	for _, want := range []string{
+		`Capability default/kb has source "pypi"`,
+		"this cluster does not allow",
+		"capabilities.policy.allowedSources = [builtin image git]",
+		"attach a capability from an allowed source",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("denial %q should contain %q", err.Error(), want)
+		}
+	}
+}
+
+func TestAgentWebhookAllowedSourcesAdmitsAllowedTier(t *testing.T) {
+	// An image-tier attachment is admitted when image is in allowedSources.
+	imageCap := capabilityCR("kb", withSource(agentv1alpha1.CapabilitySourceImage))
+	v := &AgentCustomValidator{
+		Reader: readerWith(t, imageCap),
+		AllowedSources: []agentv1alpha1.CapabilitySource{
+			agentv1alpha1.CapabilitySourceBuiltin,
+			agentv1alpha1.CapabilitySourceImage,
+			agentv1alpha1.CapabilitySourceGit,
+		},
+	}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	if _, err := v.ValidateCreate(context.Background(), agent); err != nil {
+		t.Fatalf("an allowed source must be admitted, got %v", err)
+	}
+}
+
+func TestAgentWebhookAllowedSourcesMissingCapabilityKeepsWarning(t *testing.T) {
+	// The source can't be known for a missing CR, so the ordering-tolerant
+	// warning semantics are kept (the compiler re-checks once it appears).
+	v := &AgentCustomValidator{
+		Reader:         readerWith(t), // no Capability exists
+		AllowedSources: []agentv1alpha1.CapabilitySource{agentv1alpha1.CapabilitySourceImage},
+	}
+	agent := attachedAgent(t, nil, "kb")
+
+	warnings, err := v.ValidateCreate(context.Background(), agent)
+	if err != nil {
+		t.Fatalf("a missing Capability must not be denied by allowedSources alone, got %v", err)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "not found") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("a missing Capability must keep the ordering-tolerant warning, got %v", warnings)
+	}
+}
+
+func TestAgentWebhookAllowedSourcesWithRequireVerified(t *testing.T) {
+	// Both gates compose: a pypi capability that is verified is still denied
+	// by allowedSources (the two policies are independent and both must pass).
+	pypiVerified := capabilityCR("kb",
+		withSource(agentv1alpha1.CapabilitySourcePypi),
+		withVerified(metav1.ConditionTrue,
+			agentv1alpha1.CapabilityVerifiedReasonVerified, "cosign signature verified"))
+	v := &AgentCustomValidator{
+		Reader:                      readerWith(t, pypiVerified),
+		RequireVerifiedCapabilities: true,
+		AllowedSources: []agentv1alpha1.CapabilitySource{
+			agentv1alpha1.CapabilitySourceBuiltin,
+			agentv1alpha1.CapabilitySourceImage,
+			agentv1alpha1.CapabilitySourceGit,
+		},
+	}
+	agent := attachedAgent(t, map[string]any{"endpoint": "https://kb.example.com"}, "kb")
+
+	_, err := v.ValidateCreate(context.Background(), agent)
+	if err == nil || !strings.Contains(err.Error(), `has source "pypi"`) {
+		t.Fatalf("a verified-but-disallowed-source capability must still be denied by allowedSources, got %v", err)
+	}
+}

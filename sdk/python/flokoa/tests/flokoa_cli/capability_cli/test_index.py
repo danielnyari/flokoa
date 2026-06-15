@@ -7,6 +7,7 @@ import io
 import json
 import urllib.error
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -14,7 +15,7 @@ import pytest
 from flokoa.capability_cli import index
 from flokoa.capability_cli.errors import CapabilityCliError
 
-SPEC_EXAMPLE = {
+SPEC_EXAMPLE: dict[str, Any] = {
     "schemaVersion": 1,
     "updatedAt": "2026-06-12T00:00:00Z",
     "capabilities": [
@@ -129,6 +130,46 @@ class TestLoadIndex:
             pytest.raises(CapabilityCliError, match="name or service not known"),
         ):
             index.load_index("https://example.com/index.json")
+
+
+class TestSourceField:
+    """The optional source tier on index entries (§6.5): absent in old files,
+    round-trips when present, and is dropped from the written JSON when unset."""
+
+    def test_entry_without_source_parses_as_none(self) -> None:
+        parsed = example_index()
+        assert parsed.capabilities[0].source is None
+        assert parsed.capabilities[1].source is None
+
+    def test_entry_with_source_round_trips(self, tmp_path: Path) -> None:
+        payload = {
+            **SPEC_EXAMPLE,
+            "capabilities": [{**SPEC_EXAMPLE["capabilities"][0], "source": "git"}],
+        }
+        file = tmp_path / "index.json"
+        file.write_text(json.dumps(payload))
+        loaded = index.load_index(str(file))
+        assert loaded.capabilities[0].source == "git"
+
+    def test_write_drops_unset_source(self, tmp_path: Path) -> None:
+        file = index.write_index(example_index(), tmp_path / "index.json")
+        payload = json.loads(file.read_text())
+        assert "source" not in payload["capabilities"][0]
+
+    def test_write_keeps_set_source(self, tmp_path: Path) -> None:
+        idx = example_index()
+        idx.capabilities[0].source = "pypi"
+        file = index.write_index(idx, tmp_path / "index.json")
+        payload = json.loads(file.read_text())
+        assert payload["capabilities"][0]["source"] == "pypi"
+
+    def test_invalid_source_rejected(self) -> None:
+        bad = {
+            **SPEC_EXAMPLE,
+            "capabilities": [{**SPEC_EXAMPLE["capabilities"][0], "source": "ftp"}],
+        }
+        with pytest.raises(CapabilityCliError, match="v1 format"):
+            index._parse_index(json.dumps(bad), source="test")
 
 
 class TestSearchEntries:

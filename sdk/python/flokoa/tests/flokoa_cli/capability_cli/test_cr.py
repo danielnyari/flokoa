@@ -7,7 +7,13 @@ import yaml
 from flokoa_types.capability import CapabilitySpec
 
 from flokoa.capability_cli import cr
-from flokoa.capability_cli.artifact import ArtifactManifest, ManifestRequires
+from flokoa.capability_cli.artifact import (
+    ArtifactManifest,
+    GitProvenance,
+    ManifestRequires,
+    Provenance,
+    PypiProvenance,
+)
 from flokoa.capability_cli.errors import CapabilityCliError
 
 
@@ -45,6 +51,7 @@ metadata:
 spec:
   artifact: ghcr.io/example/capabilities/echo:0.1.0@sha256:DIGEST-PENDING
   version: 0.1.0
+  source: image
   entrypoint: flokoa_cap_echo:EchoCapability
   requires:
     python: '3.13'
@@ -110,6 +117,85 @@ class TestRenderCapabilityCr:
         doc = yaml.safe_load(rendered)
         assert doc["kind"] == "Capability"
         assert doc["apiVersion"] == "agent.flokoa.ai/v1alpha1"
+
+
+class TestSourceAndProvenance:
+    """spec.source defaults to image; git/pypi provenance is mirrored and the
+    spec validates through the regenerated flokoa_types model."""
+
+    def _validate(self, doc: dict) -> CapabilitySpec:
+        spec = {**doc["spec"], "artifact": "ghcr.io/example/echo:0.1.0@sha256:" + "0" * 64}
+        return CapabilitySpec.model_validate(spec)
+
+    def test_path_build_records_source_image_no_provenance(self) -> None:
+        doc = cr.capability_cr_doc("flokoa-cap-echo", "ghcr.io/example/echo:0.1.0", echo_manifest())
+        assert doc["spec"]["source"] == "image"
+        assert "provenance" not in doc["spec"]
+        validated = self._validate(doc)
+        assert validated.source is not None
+        assert validated.source.value == "image"
+        assert validated.provenance is None
+
+    def test_git_source_and_provenance_mirrored_and_validates(self) -> None:
+        manifest = echo_manifest(
+            source="git",
+            provenance=Provenance(
+                git=GitProvenance(
+                    url="https://github.com/org/repo",
+                    ref="v1.2.0",
+                    commit="a" * 40,
+                    subdirectory="pkg/cap",
+                )
+            ),
+        )
+        doc = cr.capability_cr_doc("flokoa-cap-echo", "ghcr.io/example/echo:0.1.0", manifest)
+        assert doc["spec"]["source"] == "git"
+        assert doc["spec"]["provenance"]["git"] == {
+            "url": "https://github.com/org/repo",
+            "ref": "v1.2.0",
+            "commit": "a" * 40,
+            "subdirectory": "pkg/cap",
+        }
+        validated = self._validate(doc)
+        assert validated.source is not None
+        assert validated.source.value == "git"
+        assert validated.provenance is not None
+        assert validated.provenance.git is not None
+        assert validated.provenance.git.commit == "a" * 40
+        assert validated.provenance.git.url == "https://github.com/org/repo"
+
+    def test_git_provenance_omits_empty_optionals(self) -> None:
+        manifest = echo_manifest(
+            source="git",
+            provenance=Provenance(git=GitProvenance(url="https://github.com/org/repo", commit="abc1234")),
+        )
+        doc = cr.capability_cr_doc("flokoa-cap-echo", "ghcr.io/example/echo:0.1.0", manifest)
+        assert doc["spec"]["provenance"]["git"] == {"url": "https://github.com/org/repo", "commit": "abc1234"}
+        self._validate(doc)  # must not raise
+
+    def test_pypi_source_and_provenance_mirrored_and_validates(self) -> None:
+        manifest = echo_manifest(
+            source="pypi",
+            provenance=Provenance(pypi=PypiProvenance(requirement="demo-pkg==1.0.0")),
+        )
+        doc = cr.capability_cr_doc("flokoa-cap-echo", "ghcr.io/example/echo:0.1.0", manifest)
+        assert doc["spec"]["source"] == "pypi"
+        assert doc["spec"]["provenance"]["pypi"] == {"requirement": "demo-pkg==1.0.0"}
+        validated = self._validate(doc)
+        assert validated.source is not None
+        assert validated.source.value == "pypi"
+        assert validated.provenance is not None
+        assert validated.provenance.pypi is not None
+        assert validated.provenance.pypi.requirement == "demo-pkg==1.0.0"
+
+    def test_provenance_carries_no_credentials_in_url(self) -> None:
+        """The mirrored git URL is the clean URL — never user:token@host."""
+        manifest = echo_manifest(
+            source="git",
+            provenance=Provenance(git=GitProvenance(url="https://github.com/org/repo", commit="a" * 40)),
+        )
+        doc = cr.capability_cr_doc("flokoa-cap-echo", "ghcr.io/example/echo:0.1.0", manifest)
+        assert "@" not in doc["spec"]["provenance"]["git"]["url"].split("//", 1)[1].split("/", 1)[0]
 
 
 class TestNameValidation:

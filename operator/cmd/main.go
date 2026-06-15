@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -160,6 +161,12 @@ func main() {
 			"attached to Agents (admission denial + compile-time denial). Requires "+
 			"--capability-cosign-enabled — without verification the policy would deny everything.")
 
+	var capabilityAllowedSources stringSliceFlag
+	flag.Var(&capabilityAllowedSources, "capability-allowed-source",
+		"Cluster policy: restrict which capability source tiers may attach to Agents "+
+			"(admission denial + compile-time denial). Repeatable; one of builtin|image|git|pypi. "+
+			"Omit entirely to allow all four sources (the default).")
+
 	var artifactIOEnabled bool
 	var artifactGCStrategy string
 	flag.BoolVar(&artifactIOEnabled, "artifact-io-enabled", false,
@@ -181,6 +188,16 @@ func main() {
 		setupLog.Error(nil, "--capability-require-verified requires --capability-cosign-enabled: "+
 			"without signature verification the Verified condition stays Unknown and the policy "+
 			"would deny every capability attachment")
+		os.Exit(1)
+	}
+
+	// Validate and convert the capability source-tier policy (§5): an unknown
+	// source is a typo that would silently allow everything — fail fast at
+	// startup, like the requireVerified guard. The Helm chart enforces the
+	// same rule. An empty set means "no restriction" (allow all four).
+	allowedSources, err := parseAllowedSources(capabilityAllowedSources)
+	if err != nil {
+		setupLog.Error(err, "invalid --capability-allowed-source")
 		os.Exit(1)
 	}
 
@@ -369,6 +386,7 @@ func main() {
 		OTLPEndpoint:                telemetryOTLPEndpoint,
 		CapabilityDelivery:          capabilityDelivery,
 		RequireVerifiedCapabilities: capabilityRequireVerified,
+		AllowedSources:              allowedSources,
 	})
 
 	if err := (&controller.AgentReconciler{
@@ -416,7 +434,8 @@ func main() {
 		os.Exit(1)
 	}
 	if enableWebhooks {
-		if err := webhookagentv1alpha1.SetupAgentWebhookWithManager(mgr, capabilityRequireVerified); err != nil {
+		if err := webhookagentv1alpha1.SetupAgentWebhookWithManager(
+			mgr, capabilityRequireVerified, allowedSources); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Agent")
 			os.Exit(1)
 		}
@@ -553,6 +572,43 @@ func resolveCapabilityDelivery(ctx context.Context, restConfig *rest.Config,
 	}
 	delivery.Publish(ctx, directClient, namespace, result, log)
 	return result.EffectiveMode, nil
+}
+
+// stringSliceFlag collects a repeatable string flag into a slice (the standard
+// Go pattern: each --flag=value occurrence appends one entry).
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) String() string { return strings.Join(*s, ",") }
+
+func (s *stringSliceFlag) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+// parseAllowedSources validates the --capability-allowed-source set (§5) and
+// converts it to the typed slice the webhook and compiler consume. An unknown
+// source is rejected (a typo would silently allow everything). An empty set
+// means "no restriction" and yields a nil slice.
+func parseAllowedSources(raw []string) ([]agentv1alpha1.CapabilitySource, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	valid := map[agentv1alpha1.CapabilitySource]bool{
+		agentv1alpha1.CapabilitySourceBuiltin: true,
+		agentv1alpha1.CapabilitySourceImage:   true,
+		agentv1alpha1.CapabilitySourceGit:     true,
+		agentv1alpha1.CapabilitySourcePypi:    true,
+	}
+	out := make([]agentv1alpha1.CapabilitySource, 0, len(raw))
+	for _, r := range raw {
+		src := agentv1alpha1.CapabilitySource(r)
+		if !valid[src] {
+			return nil, fmt.Errorf(
+				"unknown capability source %q: --capability-allowed-source accepts one of builtin, image, git, pypi", r)
+		}
+		out = append(out, src)
+	}
+	return out, nil
 }
 
 // injectedCapabilities assembles the platform capability entries appended to

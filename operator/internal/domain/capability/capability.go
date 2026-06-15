@@ -7,6 +7,8 @@ package capability
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -17,6 +19,8 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
+
+	agentv1alpha1 "github.com/danielnyari/flokoa/api/v1alpha1"
 )
 
 var errPrinter = message.NewPrinter(language.English)
@@ -51,6 +55,26 @@ type Deps struct {
 	Name string
 	// Pins are "name==version" entries mirrored from the artifact manifest.
 	Pins []string
+}
+
+// SourceAllowed reports whether a capability's source tier is permitted by the
+// cluster's allowedSources policy (§5). An empty allowed list means "no
+// restriction" (allow all four tiers) — the opt-in default. An empty source is
+// treated as image (the CRD default), so a CR that predates the source field
+// is evaluated as the author-built-their-own tier it always was.
+func SourceAllowed(source agentv1alpha1.CapabilitySource, allowed []agentv1alpha1.CapabilitySource) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	if source == "" {
+		source = agentv1alpha1.CapabilitySourceImage
+	}
+	for _, a := range allowed {
+		if a == source {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckRequires evaluates a capability's requires tuple against a runner
@@ -175,10 +199,12 @@ func DetectConflicts(caps []Deps, runner RunnerInfo) []string {
 // entries; user-published Capabilities may not claim a name under it.
 const PlatformCapabilityPrefix = "flokoa.platform/"
 
-// ValidateEntryName checks a compiled-spec capability entry name (the
-// serialization name a Capability contributes). It mirrors the inline-fragment
-// rule: no module/class path punctuation, and the operator-injected
-// flokoa.platform/ prefix is reserved.
+// ValidateEntryName checks a user (image/git/pypi) capability's compiled-spec
+// entry name (the serialization name a Capability contributes). It mirrors the
+// inline-fragment rule: no module/class path punctuation, and the
+// operator-injected flokoa.platform/ prefix is reserved. Built-in (first-party)
+// capabilities use a dotted namespace (e.g. flokoa.OpenAPI) and are checked with
+// ValidateBuiltinEntryName instead.
 func ValidateEntryName(name string) error {
 	if name == "" {
 		return fmt.Errorf("capability entry name must not be empty")
@@ -188,6 +214,26 @@ func ValidateEntryName(name string) error {
 	}
 	if strings.ContainsAny(name, "./:") {
 		return fmt.Errorf("capability entry name %q must not contain '.', '/', or ':' (it is the pydantic-ai capability class name)", name)
+	}
+	return nil
+}
+
+// ValidateBuiltinEntryName checks a built-in (source: builtin) capability's
+// compiled-spec entry name. First-party capabilities serialize under a dotted
+// namespace (e.g. flokoa.OpenAPI), so a single dot is allowed — but '/' and ':'
+// (path/module punctuation) are still forbidden and the operator-injected
+// flokoa.platform/ prefix stays reserved. The name is additionally machine-
+// checked against the operator's embedded built-in metadata at admission and
+// compile, so this is a structural floor, not the trust boundary.
+func ValidateBuiltinEntryName(name string) error {
+	if name == "" {
+		return fmt.Errorf("built-in capability entry name must not be empty")
+	}
+	if strings.HasPrefix(name, PlatformCapabilityPrefix) {
+		return fmt.Errorf("built-in capability entry name %q uses the reserved %q prefix (operator-injected capabilities only)", name, PlatformCapabilityPrefix)
+	}
+	if strings.ContainsAny(name, "/:") {
+		return fmt.Errorf("built-in capability entry name %q must not contain '/' or ':' (it is the pydantic-ai capability serialization name)", name)
 	}
 	return nil
 }
@@ -225,6 +271,62 @@ func EntryName(entrypoint, override string) string {
 func CompileSchema(schema []byte) error {
 	_, err := compileSchema(schema)
 	return err
+}
+
+// canonicalizeSchema parses a JSON Schema and re-serializes it deterministically
+// (sorted keys, no whitespace, no HTML escaping). Numbers are decoded into Go
+// float64 so a JSON literal "30.0" and "30" normalize identically — this is the
+// crux of matching a CR's configSchema (which has already crossed the
+// YAML→apiserver→JSON boundary, where a whole-number float can lose its ".0")
+// against the operator's embedded built-in metadata. Both sides are normalized
+// through this function, so the comparison is robust to that round-trip rather
+// than depending on float repr matching across Python and Go.
+func canonicalizeSchema(schema []byte) ([]byte, error) {
+	var doc any
+	if err := json.Unmarshal(schema, &doc); err != nil {
+		return nil, fmt.Errorf("configSchema is not valid JSON: %v", err)
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(doc); err != nil {
+		return nil, fmt.Errorf("canonicalizing configSchema: %v", err)
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// CanonicalSchemaDigest computes a stable sha256 digest of a JSON Schema as
+// "sha256:<64 hex>", normalized through canonicalizeSchema. Used to compare a
+// built-in CR's configSchema against the operator's embedded built-in metadata.
+// NOTE: this is NOT byte-identical to the CLI's Python canonical_schema_digest
+// when the schema carries whole-number float literals (Python keeps "30.0", Go
+// normalizes to "30"); use SchemasMatch (which normalizes both inputs through
+// the same Go path) for the built-in metadata-match check rather than comparing
+// against a Python-produced digest string.
+func CanonicalSchemaDigest(schema []byte) (string, error) {
+	canonical, err := canonicalizeSchema(schema)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	return fmt.Sprintf("sha256:%x", sum), nil
+}
+
+// SchemasMatch reports whether two JSON Schemas are structurally identical after
+// canonicalization (both normalized through the same Go path, so the result is
+// robust to the YAML/JSON whole-number-float round-trip). It is the machine
+// check behind the built-in metadata match (architecture §2.3): a source:
+// builtin CR's configSchema must match the operator's embedded built-in schema.
+func SchemasMatch(a, b []byte) (bool, error) {
+	ca, err := canonicalizeSchema(a)
+	if err != nil {
+		return false, err
+	}
+	cb, err := canonicalizeSchema(b)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(ca, cb), nil
 }
 
 // denySchemaLoader refuses every external schema reference. A configSchema

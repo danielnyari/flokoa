@@ -45,12 +45,34 @@ Every runner image carries its identity at `/etc/flokoa/runner-manifest.json`:
   "pydantic-ai": "1.107.0",
   "baseline": {"httpx": "…", "starlette": "…", "pydantic": "…", "opentelemetry-sdk": "…"},
   "platformCapabilities": {"flokoa.platform/telemetry": "0.2.0", "…": "…"},
-  "agentSpecSchemaDigest": "sha256:…"
+  "agentSpecSchemaDigest": "sha256:…",
+  "builtinCapabilities": {
+    "flokoa-openapi": {
+      "entrypoint": "flokoa_openapi.capability:OpenAPI",
+      "serializationName": "flokoa.OpenAPI",
+      "requires": {"python": "3.13", "pydantic-ai": "==1.107.0", "flokoa-runner": "==0.2.0"},
+      "dependencies": [],
+      "schemaDigest": "sha256:…",
+      "configSchema": { "…": "…" }
+    }
+  }
 }
 ```
 
+`builtinCapabilities` (additive optional field) is a names→metadata map
+describing the [built-in capabilities](../capability.md#source-tiers) baked into
+the runner image (source tier `builtin`): no artifact is delivered, so the
+runner resolves their `entrypoint` from its own environment, and the operator
+embeds the **same** map (in `operator/internal/spec/baselines/runner-baseline-<v>.json`)
+so it can admit a `source: builtin` Capability CR offline — matching the CR's
+name, `entrypoint`, and `schemaDigest` against this metadata for the resolved
+runner version, with zero registry access. Each entry mirrors the fields a
+built-in's CR carries (`entrypoint`, `serializationName`, `requires`,
+`dependencies`, `schemaDigest`, inline `configSchema`).
+
 The manifest is generated from the lockfile (`make runner-contract` in
-`sdk/python/`); CI verifies lockfile ↔ manifest ↔ schema agreement. The image
+`sdk/python/`); CI verifies lockfile ↔ manifest ↔ schema agreement, and image
+manifest ↔ embedded baseline ↔ generated built-in CRs agreement. The image
 is labeled with `ai.flokoa.runner-version` and `ai.flokoa.contract-version`.
 
 ### The AgentSpec JSON Schema
@@ -216,7 +238,21 @@ draft 2020-12):
     },
     "schemaDigest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$",
                      "description": "sha256 of the canonical (sorted-keys, no-whitespace) configSchema JSON"},
-    "configSchema": {"type": "object", "description": "inline JSON Schema for per-agent config (additive optional field)"}
+    "configSchema": {"type": "object", "description": "inline JSON Schema for per-agent config (additive optional field)"},
+    "source": {"type": "string", "enum": ["builtin", "image", "git", "pypi"], "default": "image",
+               "description": "source tier the build asserted (additive optional field); mirrored to Capability CR spec.source"},
+    "provenance": {
+      "type": "object",
+      "description": "source-origin provenance (additive optional field); carries no credential material",
+      "properties": {
+        "git":  {"type": "object", "required": ["url", "commit"],
+                 "properties": {"url": {"type": "string"}, "ref": {"type": "string"},
+                                "commit": {"type": "string", "pattern": "^[a-f0-9]{7,40}$"},
+                                "subdirectory": {"type": "string"}}},
+        "pypi": {"type": "object", "required": ["requirement"],
+                 "properties": {"requirement": {"type": "string"}}}
+      }
+    }
   }
 }
 ```
@@ -239,7 +275,13 @@ spec-entry name when it overrides pydantic-ai's default (the class name).
 The Capability CR mirrors it so compiled spec entries resolve against the
 class the runner registers from the wheelhouse. `configSchema` /
 `schemaDigest` make the artifact fully self-describing: the CR can be
-regenerated from the artifact alone.
+regenerated from the artifact alone. `source` records the
+[source tier](../capability.md#source-tiers) the build asserted (default
+`image`; `builtin` never reaches a wheelhouse `manifest.json` — built-ins have
+no artifact), and `provenance` records the build origin for `git` builds (clean
+repo URL + resolved commit) and `pypi` builds (the requirement). Both are
+mirrored to the Capability CR (`spec.source`, `spec.provenance`); provenance
+carries no credential material.
 
 ### Delivery and runner consumption
 

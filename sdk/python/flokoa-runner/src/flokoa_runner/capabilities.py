@@ -60,6 +60,22 @@ def install_capabilities(
     runner_manifest: RunnerManifest,
     root: str | Path | None = None,
 ) -> list[type[AbstractCapability[Any]]]:
+    """Resolve all capability classes for hydration: delivered + built-in.
+
+    Delivered capabilities (source image/git/pypi) arrive as wheelhouses under
+    ``/opt/flokoa/capabilities/<name>/`` — installed offline and integrity
+    checked. Built-in capabilities (source: builtin) have no wheelhouse: they
+    are baked into the runner image, so the runner resolves their classes from
+    its own environment by the manifest's ``builtinCapabilities`` metadata. The
+    combined list feeds ``build_agent``'s ``custom_capability_types``.
+    """
+    return _install_delivered(runner_manifest, root) + resolve_builtin_capabilities(runner_manifest)
+
+
+def _install_delivered(
+    runner_manifest: RunnerManifest,
+    root: str | Path | None = None,
+) -> list[type[AbstractCapability[Any]]]:
     """Install every delivered wheelhouse and return the entrypoint classes."""
     cap_root = Path(root or os.environ.get("FLOKOA_CAPABILITIES_PATH", DEFAULT_CAPABILITIES_ROOT))
     if not cap_root.is_dir():
@@ -73,6 +89,55 @@ def install_capabilities(
         _pip_install(cap_dir, manifest)
         classes.append(_load_entrypoint(cap_dir.name, manifest))
     return classes
+
+
+def resolve_builtin_capabilities(
+    runner_manifest: RunnerManifest,
+) -> list[type[AbstractCapability[Any]]]:
+    """Resolve built-in capability classes from the runner's own environment.
+
+    Built-ins (source: builtin) are baked into the image — there is no
+    wheelhouse and nothing to install or integrity check (the runner image's
+    own digest is the integrity boundary, architecture §2.6). For each name in
+    the manifest's ``builtinCapabilities`` map, import its ``entrypoint``
+    (``module:attr``) from the venv via importlib and return the class.
+
+    All manifest-listed built-ins are resolved (not just attached ones):
+    importing a class is cheap and idempotent, and ``Agent.from_spec`` only
+    instantiates entries that actually appear in the compiled spec. A built-in
+    whose entrypoint fails to import is a loud ``BootstrapError`` naming the
+    built-in — image corruption, never a silent skip.
+    """
+    classes: list[type[AbstractCapability[Any]]] = []
+    for name in sorted(runner_manifest.builtin_capabilities):
+        info = runner_manifest.builtin_capabilities[name]
+        entrypoint = info.get("entrypoint")
+        if not isinstance(entrypoint, str) or ":" not in entrypoint:
+            raise BootstrapError(
+                STAGE,
+                "built-in capability metadata missing a module:attr entrypoint",
+                capability=name,
+                entrypoint=entrypoint,
+            )
+        classes.append(_load_builtin_entrypoint(name, entrypoint))
+    return classes
+
+
+def _load_builtin_entrypoint(name: str, entrypoint: str) -> type[AbstractCapability[Any]]:
+    """Import a built-in's class from the runner env (no wheelhouse, no pip)."""
+    module_name, _, attr = entrypoint.partition(":")
+    if not module_name or not attr:
+        raise BootstrapError(STAGE, "built-in entrypoint must be module:attr", capability=name, entrypoint=entrypoint)
+    try:
+        module = importlib.import_module(module_name)
+        return getattr(module, attr)
+    except (ImportError, AttributeError) as exc:
+        raise BootstrapError(
+            STAGE,
+            f"built-in capability entrypoint failed to import (runner image corruption?): {exc}",
+            capability=name,
+            entrypoint=entrypoint,
+        ) from exc
 
 
 def _load_capability_manifest(cap_dir: Path, runner: RunnerManifest) -> dict[str, Any]:

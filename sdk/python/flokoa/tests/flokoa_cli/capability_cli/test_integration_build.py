@@ -10,14 +10,20 @@ Builds the chunk-1 echo fixture through the CLI and checks:
     (name/version/entrypoint/requires/dependencies),
   * an unimportable package is refused by the smoke test.
 
-The runner image defaults to the SDK pin; CI (and laptops without ghcr
-access) override via ``FLOKOA_RUNNER_IMAGE`` after building
-``flokoa-runner/Dockerfile`` locally.
+The build image defaults to the capability base image at the SDK pin
+(``flokoa-capability-base:<DEFAULT_RUNNER_VERSION>``). CI (and laptops without
+ghcr access) override via ``FLOKOA_CAPABILITY_BASE_IMAGE`` after building the
+base image locally — ``make docker-build-capability-base`` (which is
+``FROM flokoa-runner:<ver>``, so build the runner first) — and tag/load it
+where the container tool can see it. The legacy ``FLOKOA_RUNNER_IMAGE`` /
+``--runner-image`` override still works against a bare runner (the in-runner
+``ensure_pip()`` fallback covers it), but the base image is the happy path.
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
 import tarfile
 from pathlib import Path
 
@@ -27,6 +33,7 @@ from click.testing import CliRunner
 
 from flokoa.capability_cli.artifact import validate_manifest_dict
 from flokoa.capability_cli.build import build
+from flokoa.capability_cli.container import detect_container_tool, resolve_build_image
 
 pytestmark = pytest.mark.integration
 
@@ -70,6 +77,7 @@ class TestEchoFixtureBuild:
     def test_manifest_passes_published_schema(self, echo_build: Path) -> None:
         manifest = json.loads((echo_build / "manifest.json").read_text())
         validate_manifest_dict(manifest)
+        assert manifest["source"] == "image"
 
     def test_manifest_parity_with_fixture_artifact_json(self, echo_build: Path) -> None:
         """The CLI and the chunk-1 build.sh path must agree on the mirror fields."""
@@ -101,6 +109,8 @@ class TestEchoFixtureBuild:
         assert doc["kind"] == "Capability"
         assert doc["metadata"]["name"] == "flokoa-cap-echo"
         assert doc["spec"]["artifact"] == "flokoa-cap-echo:integration@sha256:DIGEST-PENDING"
+        assert doc["spec"]["source"] == "image"  # a PATH build is the image tier
+        assert "provenance" not in doc["spec"]
         assert doc["spec"]["entrypoint"] == "flokoa_cap_echo:EchoCapability"
         assert doc["spec"]["requires"] == {"python": "3.13", "pydanticAI": ">=1.107,<2", "flokoaRunner": ">=0.2"}
         # Echo's config schema is derived from the dataclass: the prefix field.
@@ -142,3 +152,35 @@ packages = ["src/broken_cap"]
         assert "module_that_does_not_exist" in result.output
         assert not (output / "broken-cap-artifact.oci.tar").exists()
         assert not (output / "broken-cap.capability.yaml").exists()
+
+
+class TestBuildImageTooling:
+    """The build image must carry the tools the build pipeline shells out to.
+
+    Regression guard for the missing-``git`` Copilot finding: ``--from-git``
+    clones with ``git`` inside the build container, and the whole pipeline needs
+    a usable ``pip``. The fixture builds above only exercise a local PATH build,
+    so they would not catch a build image without ``git``.
+    """
+
+    def _run_in_build_image(self, *cmd: str) -> subprocess.CompletedProcess[str]:
+        tool = detect_container_tool()
+        image = resolve_build_image()
+        return subprocess.run(
+            [tool, "run", "--rm", "--entrypoint", cmd[0], image, *cmd[1:]],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_git_is_available(self) -> None:
+        """`--from-git` shells out to git; the base image must provide it."""
+        result = self._run_in_build_image("git", "--version")
+        assert result.returncode == 0, f"git missing from the build image: {result.stderr}"
+        assert "git version" in result.stdout
+
+    def test_pip_is_available(self) -> None:
+        """The wheelhouse build runs pip; the base image seeds it (pinned)."""
+        result = self._run_in_build_image("/app/.venv/bin/python", "-m", "pip", "--version")
+        assert result.returncode == 0, f"pip missing from the build image: {result.stderr}"
+        assert "pip" in result.stdout

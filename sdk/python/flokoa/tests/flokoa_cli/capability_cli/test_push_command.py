@@ -265,3 +265,42 @@ class TestIndexOption:
         assert result.exit_code != 0
         assert "manifest.json" in result.output
         tools["push_oci_archive"].assert_not_called()
+
+    def test_image_source_recorded_in_index(self, tmp_path: Path, tools: dict[str, mock.Mock]) -> None:
+        # A normal PATH build CR carries source: image — the index mirrors it.
+        dist = make_dist(tmp_path)
+        index_file = tmp_path / "index.json"
+        result = CliRunner().invoke(push, [REF, "--from", str(dist), "--index", str(index_file)])
+        assert result.exit_code == 0, result.output
+        payload = json.loads(index_file.read_text())
+        assert payload["capabilities"][0]["source"] == "image"
+
+    def test_git_source_recorded_in_index(self, tmp_path: Path, tools: dict[str, mock.Mock]) -> None:
+        dist = tmp_path / "dist"
+        dist.mkdir(exist_ok=True)
+        manifest = echo_manifest(
+            source="git",
+            provenance=artifact_mod.Provenance(
+                git=artifact_mod.GitProvenance(url="https://github.com/org/repo", commit="a" * 40)
+            ),
+        )
+        (dist / "flokoa-cap-echo-artifact.oci.tar").write_bytes(b"oci-layout")
+        (dist / "flokoa-cap-echo.capability.yaml").write_text(
+            cr_mod.render_capability_cr("flokoa-cap-echo", "flokoa-cap-echo:0.1.0", manifest)
+        )
+        artifact_mod.write_manifest(manifest, dist / "manifest.json")
+        index_file = tmp_path / "index.json"
+        result = CliRunner().invoke(push, [REF, "--from", str(dist), "--index", str(index_file)])
+        assert result.exit_code == 0, result.output
+        payload = json.loads(index_file.read_text())
+        assert payload["capabilities"][0]["source"] == "git"
+
+    def test_index_source_round_trips_through_load(self, tmp_path: Path, tools: dict[str, mock.Mock]) -> None:
+        from flokoa.capability_cli import index as index_mod
+
+        dist = make_dist(tmp_path)
+        index_file = tmp_path / "index.json"
+        result = CliRunner().invoke(push, [REF, "--from", str(dist), "--index", str(index_file)])
+        assert result.exit_code == 0, result.output
+        loaded = index_mod.load_index(str(index_file))
+        assert loaded.capabilities[0].source == "image"

@@ -62,6 +62,14 @@ type Options struct {
 	// runs the same check; re-running it here closes the hole where a
 	// Capability digest is edited after Agent admission.
 	RequireVerified bool
+
+	// AllowedSources mirrors the capability source-tier policy (§5) at compile
+	// time: an attached Capability whose spec.source is not in this set fails
+	// compilation with a permanent (SpecValid=False) error. An empty set means
+	// "no restriction". Admission runs the same check; re-running it here
+	// closes the hole where a Capability's source is edited after Agent
+	// admission.
+	AllowedSources []agentv1alpha1.CapabilitySource
 }
 
 // CapabilityArtifact is the delivery input one Capability attachment
@@ -421,6 +429,16 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 			return nil, nil, flokoaerrors.NewDependencyf("referenced Capability %s not found: %v", key, err)
 		}
 
+		// allowedSources cluster policy (§5): a disallowed source is a settled
+		// policy decision, not a transient condition — a permanent error so it
+		// surfaces as SpecValid=False until the composition is edited, with
+		// already-running pods kept on the last-good generation.
+		if !capabilitydomain.SourceAllowed(capCR.Spec.Source, c.opts.AllowedSources) {
+			return nil, nil, flokoaerrors.NewPermanentf(
+				"Capability %s has source %q which this cluster does not allow (allowedSources=%v)",
+				key, capCR.Spec.Source, c.opts.AllowedSources)
+		}
+
 		// requireVerified cluster policy: only Verified=True compiles. Always
 		// a dependency (requeue) error — verification may still be in flight,
 		// and a False verdict can flip once a signature is published — with
@@ -465,8 +483,14 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 		}
 
 		entryName := capabilitydomain.EntryName(capCR.Spec.Entrypoint, capCR.Spec.SerializationName)
-		if err := capabilitydomain.ValidateEntryName(entryName); err != nil {
-			return nil, nil, flokoaerrors.NewPermanentf("Capability %s: %v", key, err)
+		// Built-ins serialize under the first-party dotted namespace (e.g.
+		// flokoa.OpenAPI); user capabilities use a bare class name.
+		entryNameErr := capabilitydomain.ValidateEntryName(entryName)
+		if capCR.Spec.Source == agentv1alpha1.CapabilitySourceBuiltin {
+			entryNameErr = capabilitydomain.ValidateBuiltinEntryName(entryName)
+		}
+		if entryNameErr != nil {
+			return nil, nil, flokoaerrors.NewPermanentf("Capability %s: %v", key, entryNameErr)
 		}
 		if owner, dup := entryOwners[entryName]; dup {
 			return nil, nil, flokoaerrors.NewPermanentf(
@@ -474,6 +498,23 @@ func (c *Compiler) resolveCapabilities(ctx context.Context, agent *agentv1alpha1
 				key, entryName, owner)
 		}
 		entryOwners[entryName] = key.String()
+
+		// Built-in tier (architecture §2.5): the capability is baked into the
+		// runner image. Validate the CR against the operator's embedded built-in
+		// metadata (defense in depth: the same check the webhook ran), emit the
+		// spec entry so the runner hydrates it by serializationName, but SKIP
+		// the artifact — there is nothing to deliver, so a built-in contributes
+		// zero mounts/initContainers/volumes downstream (the builder is
+		// untouched). Conflict detection uses dependencies: [] because built-ins
+		// are part of the baseline they would otherwise be checked against.
+		if capCR.Spec.Source == agentv1alpha1.CapabilitySourceBuiltin {
+			if err := validateBuiltinMatch(runnerVersion, capCR, entryName); err != nil {
+				return nil, nil, err
+			}
+			entries = append(entries, capabilityEntry(entryName, config))
+			deps = append(deps, capabilitydomain.Deps{Name: key.String(), Pins: nil})
+			continue
+		}
 
 		entries = append(entries, capabilityEntry(entryName, config))
 		artifacts = append(artifacts, CapabilityArtifact{Name: capCR.Name, Artifact: capCR.Spec.Artifact, EntryName: entryName})
@@ -510,6 +551,62 @@ func checkVerified(capName string, capCR *agentv1alpha1.Capability) error {
 			"Capability %s is not verified (Verified=%s, reason %s) and this cluster requires verified capabilities (requireVerified): %s",
 			capName, cond.Status, cond.Reason, cond.Message)
 	}
+}
+
+// validateBuiltinMatch confirms a source: builtin Capability CR matches the
+// operator's embedded built-in metadata for the resolved runner version
+// (architecture §2.4/§2.5). It is defense in depth — the webhook ran the same
+// check at admission, but the compiler re-runs it because a Capability's source
+// can be edited after Agent admission, and because webhooks may be disabled.
+// A built-in that is unknown for this runner version is a permanent error
+// (SpecValid=False), the same skew surface as an unknown schema.
+func validateBuiltinMatch(runnerVersion string, capCR *agentv1alpha1.Capability, entryName string) error {
+	info, ok := spec.BuiltinCapability(runnerVersion, capCR.Name)
+	if !ok {
+		return flokoaerrors.NewPermanentf(
+			"Capability %s declares source builtin but is not a built-in capability for runner %s; "+
+				"built-in capabilities are baked into the runner image and shipped by the chart",
+			capCR.Name, runnerVersion)
+	}
+	if capCR.Spec.Entrypoint != info.Entrypoint {
+		return flokoaerrors.NewPermanentf(
+			"built-in Capability %s entrypoint %q does not match the runner %s built-in metadata (%q)",
+			capCR.Name, capCR.Spec.Entrypoint, runnerVersion, info.Entrypoint)
+	}
+	// The resolved spec-entry name (serializationName, else the entrypoint attr)
+	// must match what the built-in's class serializes as, or the runner would
+	// hydrate the wrong entry.
+	wantEntry := capabilitydomain.EntryName(info.Entrypoint, info.SerializationName)
+	if entryName != wantEntry {
+		return flokoaerrors.NewPermanentf(
+			"built-in Capability %s serialization name %q does not match the runner %s built-in metadata (%q)",
+			capCR.Name, entryName, runnerVersion, wantEntry)
+	}
+	// Defense in depth: the published config schema must match the built-in's
+	// real schema, so an attacker can't ship a builtin CR with a permissive
+	// schema for a name that admission would otherwise wave through. When the
+	// embedded metadata has a schema, a CR that omits configSchema must be
+	// rejected (not skipped) — otherwise a schema-less CR for a real built-in
+	// name dodges the schema comparison entirely. Mirrors the webhook gate so
+	// the dual-gate stays consistent.
+	if len(info.ConfigSchema) > 0 {
+		if capCR.Spec.ConfigSchema == nil {
+			return flokoaerrors.NewPermanentf(
+				"built-in Capability %s has a configSchema in the runner %s built-in metadata but the CR omits it; "+
+					"built-in CRs are generated by the chart — do not hand-edit them",
+				capCR.Name, runnerVersion)
+		}
+		match, err := capabilitydomain.SchemasMatch(capCR.Spec.ConfigSchema.Raw, info.ConfigSchema)
+		if err != nil {
+			return flokoaerrors.NewPermanentf("built-in Capability %s has an invalid configSchema: %v", capCR.Name, err)
+		}
+		if !match {
+			return flokoaerrors.NewPermanentf(
+				"built-in Capability %s configSchema does not match the runner %s built-in metadata",
+				capCR.Name, runnerVersion)
+		}
+	}
+	return nil
 }
 
 func defaultNS(ns, fallback string) string {

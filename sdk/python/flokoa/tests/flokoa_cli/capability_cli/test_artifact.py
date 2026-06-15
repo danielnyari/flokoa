@@ -58,6 +58,56 @@ class TestArtifactManifestModel:
                 "contractVersion": 2,
             })
 
+    def test_source_defaults_to_image(self) -> None:
+        manifest = artifact.ArtifactManifest(**manifest_kwargs())
+        assert manifest.source == "image"
+        dumped = manifest.to_json_dict()
+        # source is always recorded (it has a non-None default).
+        assert dumped["source"] == "image"
+        assert "provenance" not in dumped
+
+    def test_invalid_source_refused(self) -> None:
+        with pytest.raises(ValidationError):
+            artifact.ArtifactManifest(**manifest_kwargs(source="nope"))
+
+    def test_git_provenance_round_trips(self) -> None:
+        manifest = artifact.ArtifactManifest(
+            **manifest_kwargs(
+                source="git",
+                provenance=artifact.Provenance(
+                    git=artifact.GitProvenance(
+                        url="https://github.com/org/repo",
+                        ref="v1.2.0",
+                        commit="abc1234",
+                        subdirectory="pkg/cap",
+                    )
+                ),
+            )
+        )
+        dumped = manifest.to_json_dict()
+        assert dumped["source"] == "git"
+        assert dumped["provenance"]["git"] == {
+            "url": "https://github.com/org/repo",
+            "ref": "v1.2.0",
+            "commit": "abc1234",
+            "subdirectory": "pkg/cap",
+        }
+
+    def test_pypi_provenance_round_trips(self) -> None:
+        manifest = artifact.ArtifactManifest(
+            **manifest_kwargs(
+                source="pypi",
+                provenance=artifact.Provenance(pypi=artifact.PypiProvenance(requirement="pydantic-ai-foo==1.2.0")),
+            )
+        )
+        dumped = manifest.to_json_dict()
+        assert dumped["source"] == "pypi"
+        assert dumped["provenance"]["pypi"] == {"requirement": "pydantic-ai-foo==1.2.0"}
+
+    def test_git_provenance_short_commit_refused(self) -> None:
+        with pytest.raises(ValidationError):
+            artifact.GitProvenance(url="https://github.com/org/repo", commit="abc")  # < 7 hex
+
 
 class TestManifestSchemaFile:
     """The shipped JSON Schema file and the pydantic model must agree."""
@@ -77,6 +127,49 @@ class TestManifestSchemaFile:
             )
         )
         artifact.validate_manifest_dict(manifest.to_json_dict())  # must not raise
+
+    def test_schema_file_declares_source_and_provenance(self) -> None:
+        schema = artifact.load_manifest_schema()
+        assert schema["properties"]["source"]["enum"] == ["builtin", "image", "git", "pypi"]
+        assert schema["properties"]["source"]["default"] == "image"
+        assert "git" in schema["properties"]["provenance"]["properties"]
+        assert "pypi" in schema["properties"]["provenance"]["properties"]
+
+    def test_schema_file_accepts_git_provenance(self) -> None:
+        manifest = artifact.ArtifactManifest(
+            **manifest_kwargs(
+                source="git",
+                provenance=artifact.Provenance(
+                    git=artifact.GitProvenance(url="https://github.com/org/repo", commit="a" * 40, ref="main")
+                ),
+            )
+        )
+        artifact.validate_manifest_dict(manifest.to_json_dict())  # must not raise
+
+    def test_schema_file_accepts_pypi_provenance(self) -> None:
+        manifest = artifact.ArtifactManifest(
+            **manifest_kwargs(
+                source="pypi",
+                provenance=artifact.Provenance(pypi=artifact.PypiProvenance(requirement="demo-pkg==1.0.0")),
+            )
+        )
+        artifact.validate_manifest_dict(manifest.to_json_dict())  # must not raise
+
+    @pytest.mark.parametrize(
+        ("mutation", "fragment"),
+        [
+            ({"source": "elsewhere"}, "source"),
+            ({"provenance": {"git": {"url": "https://x/y"}}}, "commit"),
+            ({"provenance": {"git": {"url": "https://x/y", "commit": "zz"}}}, "commit"),
+            ({"provenance": {"git": {"url": "https://x/y", "commit": "a" * 40, "extra": 1}}}, "extra"),
+            ({"provenance": {"pypi": {}}}, "requirement"),
+        ],
+    )
+    def test_schema_file_rejects_bad_source_or_provenance(self, mutation: dict[str, Any], fragment: str) -> None:
+        doc = artifact.ArtifactManifest(**manifest_kwargs()).to_json_dict()
+        doc.update(mutation)
+        with pytest.raises(CapabilityCliError, match=fragment):
+            artifact.validate_manifest_dict(doc)
 
     def test_fixture_artifact_json_plus_wheels_satisfies_schema(self) -> None:
         """The chunk-1 echo fixture's artifact.json is schema-compatible."""

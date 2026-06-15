@@ -8,7 +8,7 @@ name: Release
 # The pipeline:
 #   1. Runs unit tests + lint (gate).
 #   2. Builds & pushes all images with the semver tag (+ `latest`):
-#      operator, server, a2a-plugin, flokoa-runner.
+#      operator, server, a2a-plugin, flokoa-runner, flokoa-capability-base.
 #   3. Packages the Helm chart and pushes it to the GHCR OCI registry.
 #   4. Generates a single-file `install.yaml` kustomize bundle.
 #   5. Creates a GitHub Release with the CHANGELOG notes + install.yaml asset.
@@ -115,6 +115,45 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ needs.version.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+
+  # ---------------------------------------------------------------------------
+  # Build & push the capability build base image. It is `FROM` the freshly
+  # published flokoa-runner of the SAME version, so it runs AFTER `images`
+  # (when that tag exists in the registry to pull). It adds one thin layer
+  # (pip + wheel + setuptools) on top of the runner — minimal disk.
+  # ---------------------------------------------------------------------------
+  capability-base:
+    name: Build & push flokoa-capability-base
+    runs-on: ubuntu-latest
+    needs: [version, images]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: sdk/python
+          file: sdk/python/flokoa-capability-base/Dockerfile
+          push: true
+          build-args: |
+            RUNNER_VERSION=${{ needs.version.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/flokoa-capability-base:${{ needs.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/flokoa-capability-base:latest
 
   # ---------------------------------------------------------------------------
   # Package the Helm chart and push it to the GHCR OCI registry.

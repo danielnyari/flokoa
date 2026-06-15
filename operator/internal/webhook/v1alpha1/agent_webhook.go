@@ -70,12 +70,20 @@ type AgentCustomValidator struct {
 	// same check (belt and braces: Capability edits recompile dependent
 	// Agents without re-admission).
 	RequireVerifiedCapabilities bool
+
+	// AllowedSources is the cluster's capability source-tier policy (§5): only
+	// Capabilities whose spec.source is in this set may attach. An empty set
+	// means "no restriction" (allow all four tiers) — the opt-in default. The
+	// compiler re-runs the same check so a Capability whose source is edited
+	// after Agent admission is still caught.
+	AllowedSources []agentv1alpha1.CapabilitySource
 }
 
 var _ webhook.CustomValidator = &AgentCustomValidator{}
 
 // SetupAgentWebhookWithManager registers the webhook for Agent in the manager.
-func SetupAgentWebhookWithManager(mgr ctrl.Manager, requireVerifiedCapabilities bool) error {
+func SetupAgentWebhookWithManager(mgr ctrl.Manager, requireVerifiedCapabilities bool,
+	allowedSources []agentv1alpha1.CapabilitySource) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&agentv1alpha1.Agent{}).
 		WithValidator(&AgentCustomValidator{
@@ -83,6 +91,7 @@ func SetupAgentWebhookWithManager(mgr ctrl.Manager, requireVerifiedCapabilities 
 			CapabilityReader:            mgr.GetAPIReader(),
 			DefaultRunnerVersion:        spec.DefaultRunnerVersion,
 			RequireVerifiedCapabilities: requireVerifiedCapabilities,
+			AllowedSources:              allowedSources,
 		}).
 		Complete()
 }
@@ -310,6 +319,16 @@ func (v *AgentCustomValidator) validateCapabilities(ctx context.Context, agent *
 			warnings = append(warnings, fmt.Sprintf(
 				"referenced Capability %s not found — compatibility and config checks run at compile time once it exists", key))
 			continue
+		}
+
+		// allowedSources cluster policy (§5): refuse a capability whose source
+		// tier this cluster does not trust. Mirrors requireVerified — the
+		// compiler re-checks so a post-admission source edit is still caught.
+		if !capabilitydomain.SourceAllowed(capCR.Spec.Source, v.AllowedSources) {
+			allErrs = append(allErrs, field.Forbidden(attPath, fmt.Sprintf(
+				"Capability %s has source %q, which this cluster does not allow "+
+					"(capabilities.policy.allowedSources = %v); attach a capability from an allowed source",
+				key, capCR.Spec.Source, v.AllowedSources)))
 		}
 
 		// Entry-name uniqueness: two attachments (or an attachment and a

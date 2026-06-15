@@ -9,4 +9,5 @@ resources:
 - agent_v1alpha1_agentworkflow.yaml
 - agent_v1alpha1_agenttrigger.yaml
 - agent_v1alpha1_capability.yaml
+- builtin_capability_flokoa_openapi.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

@@ -71,19 +71,31 @@ runner-manifest: ## Generate runner-manifest.json from runner.lock + schema
 	@echo "🧾 Generating runner manifest"
 	@uv run --package flokoa-runner python flokoa-runner/hack/gen_runner_manifest.py
 
+.PHONY: builtin-capabilities
+builtin-capabilities: ## Generate the source: builtin Capability CRs (chart files + samples)
+	@echo "🧩 Generating built-in capability CRs"
+	@uv run --package flokoa-runner python flokoa-runner/hack/gen_builtin_capabilities.py
+
 .PHONY: runner-contract
-runner-contract: runner-lock gen-agentspec-schema runner-manifest ## Regenerate lockfile + schema + manifest coherently
+# gen_runner_manifest.py emits the built-in metadata block (into the manifest +
+# embedded baseline) and the built-in CRs from the same introspection, so the
+# manifest, baseline, and shipped CRs can never disagree.
+runner-contract: runner-lock gen-agentspec-schema runner-manifest ## Regenerate lockfile + schema + manifest + built-in CRs coherently
 
 .PHONY: verify-runner-contract
-verify-runner-contract: runner-contract ## CI gate: fail on drift between pin, lock, manifest, and embedded schema
-	@# intent-to-add so a NEW runner version's untracked baseline/schema is
+verify-runner-contract: runner-contract ## CI gate: fail on drift between pin, lock, manifest, schema, and built-in CRs
+	@# intent-to-add so a NEW runner version's untracked baseline/schema/CRs are
 	@# caught by git diff (which otherwise ignores untracked files).
 	@git add -N flokoa-runner/runner.lock flokoa-runner/runner-manifest.json \
 		../../operator/internal/spec/schemas \
-		../../operator/internal/spec/baselines 2>/dev/null || true
+		../../operator/internal/spec/baselines \
+		../../operator/charts/flokoa/files/builtin-capabilities \
+		../../operator/config/samples 2>/dev/null || true
 	@git diff --exit-code -- flokoa-runner/runner.lock flokoa-runner/runner-manifest.json \
 		../../operator/internal/spec/schemas \
 		../../operator/internal/spec/baselines \
+		../../operator/charts/flokoa/files/builtin-capabilities \
+		../../operator/config/samples/builtin_capability_*.yaml \
 		|| (echo "❌ runner contract artifacts drifted (or a new one is uncommitted) — run 'make runner-contract' and commit" && exit 1)
 	@! grep -i "pydantic-ai-harness" flokoa-runner/runner.lock \
 		|| (echo "❌ pydantic-ai-harness must not be in the runner baseline (brief §4)" && exit 1)
@@ -105,13 +117,26 @@ export OPENAI_API_KEY
 RUNNER_IMAGE ?= flokoa-runner:local
 AGENT_SPEC   ?= samples/agent-spec.yaml
 
+# The runner release the capability-base image derives from. Aligned with the
+# operator's spec.DefaultRunnerVersion and the CLI's DEFAULT_RUNNER_VERSION by
+# release.yml — don't hand-bump one without the others.
+RUNNER_VERSION             ?= 0.2.0
+CAPABILITY_BASE_IMAGE      ?= flokoa-capability-base:local
+
 .PHONY: docker-build
-docker-build: docker-build-runner ## Build all Docker images
+docker-build: docker-build-runner docker-build-capability-base ## Build all Docker images
 
 .PHONY: docker-build-runner
 docker-build-runner: ## Build the generic runner Docker image
 	@echo "🐳 Building $(RUNNER_IMAGE)"
 	@docker build -f flokoa-runner/Dockerfile -t $(RUNNER_IMAGE) .
+
+.PHONY: docker-build-capability-base
+docker-build-capability-base: ## Build the capability build base image (FROM the runner + pip/wheel/setuptools)
+	@echo "🐳 Building $(CAPABILITY_BASE_IMAGE) (FROM flokoa-runner:$(RUNNER_VERSION))"
+	@docker build -f flokoa-capability-base/Dockerfile \
+		--build-arg RUNNER_VERSION=$(RUNNER_VERSION) \
+		-t $(CAPABILITY_BASE_IMAGE) .
 
 .PHONY: docker-run-runner
 docker-run-runner: docker-build-runner ## Run the runner locally (A2A server on :8080)
